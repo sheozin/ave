@@ -1,0 +1,2977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LEOD — Production Console</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg:       #0d0f17;
+      --surface:  #141721;
+      --surface2: #1d2035;
+      --border:   #2d3050;
+      --text:     #dde3f0;
+      --dim:      #5a6580;
+
+      --c-planned-bg:   #0c1d3a; --c-planned-fg:   #60a5fa;
+      --c-ready-bg:     #261900; --c-ready-fg:     #fbbf24;
+      --c-calling-bg:   #261600; --c-calling-fg:   #f97316;
+      --c-live-bg:      #260707; --c-live-fg:      #f87171;
+      --c-overrun-bg:   #26002f; --c-overrun-fg:   #e879f9;
+      --c-hold-bg:      #261300; --c-hold-fg:      #fb923c;
+      --c-ended-bg:     #141414; --c-ended-fg:     #6b7280;
+      --c-cancelled-bg: #0f0f0f; --c-cancelled-fg: #4b5563;
+
+      --green:   #22c55e; --red:     #ef4444;
+      --amber:   #f59e0b; --blue:    #3b82f6;
+      --purple:  #a855f7; --magenta: #d946ef;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── LOADING OVERLAY ── */
+    #loading-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; z-index: 1000;
+    }
+    .load-logo { font-size: 32px; font-weight: 700; letter-spacing: .2em; }
+    .load-logo span { color: #dc2626; }
+    .load-step { font-size: 12px; color: var(--dim); min-height: 18px; }
+    .spinner {
+      width: 22px; height: 22px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    /* ── LOGIN FORM ── */
+    #login-form {
+      display: none; flex-direction: column; align-items: stretch;
+      gap: 10px; width: 280px;
+    }
+    .lf-title { font-size: 13px; font-weight: 600; color: var(--dim); text-align: center; letter-spacing: .08em; }
+    #login-form input {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      padding: 9px 12px; font-size: 13px; font-family: inherit;
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    #login-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    #login-form button[type=submit] {
+      background: var(--blue); color: #fff; border: none;
+      border-radius: 6px; padding: 9px; font-size: 13px;
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      margin-top: 2px; transition: filter .15s;
+    }
+    #login-form button[type=submit]:hover { filter: brightness(1.1); }
+    #login-form button[type=submit]:disabled { opacity: .5; cursor: default; }
+    #lf-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
+    /* ── LOGOUT BUTTON ── */
+    #logout-btn {
+      background: none; border: none; color: var(--dim);
+      font-size: 14px; cursor: pointer; padding: 0 4px;
+      line-height: 1; opacity: .6;
+    }
+    #logout-btn:hover { opacity: 1; color: var(--red); }
+
+    /* ── BROADCAST BANNER ── */
+    #bc-banner {
+      display: none; flex-shrink: 0;
+      padding: 7px 20px; text-align: center;
+      font-size: 12px; font-weight: 600;
+    }
+    #bc-banner.info     { background:#1e3a5f; color:#93c5fd; border-bottom:1px solid #3b82f6; }
+    #bc-banner.warn     { background:#2d1a00; color:#fde68a; border-bottom:1px solid #f59e0b; }
+    #bc-banner.critical { background:#2d0505; color:#fca5a5; border-bottom:1px solid #ef4444; animation: blink .5s infinite; }
+
+    /* ── HEADER ── */
+    #header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex; align-items: center; gap: 16px;
+      flex-shrink: 0;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: .14em; }
+    .logo span { color: #dc2626; }
+    #event-name { flex: 1; font-size: 11px; color: var(--dim); }
+    #hdr-clock  { font-size: 22px; font-weight: 600; letter-spacing: .04em; color: #f1f5f9; min-width: 88px; text-align: right; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    #hdr-offset { font-size: 11px; color: var(--dim); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    #conn-pill {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; padding: 4px 11px;
+      border-radius: 100px; background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+    #conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
+    #conn-dot.live         { background: var(--green); }
+    #conn-dot.reconnecting { background: var(--amber); animation: blink .8s infinite; }
+
+    /* ── DIAG BAR ── */
+    #diag-bar {
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      padding: 5px 20px;
+      display: flex; gap: 20px; align-items: center;
+      font-size: 11px; color: var(--dim);
+      flex-shrink: 0;
+    }
+    .di { display: flex; align-items: center; gap: 5px; }
+    .dd { width: 6px; height: 6px; border-radius: 50%; background: #374151; }
+    .dd.ok       { background: var(--green); }
+    .dd.error    { background: var(--red); }
+    .dd.checking { background: var(--amber); animation: blink .8s infinite; }
+
+    /* ── ROLE BAR ── */
+    #role-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 6px 20px;
+      display: flex; align-items: center; gap: 6px;
+      flex-shrink: 0;
+    }
+    #role-bar label { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-right: 2px; }
+    .rbtn {
+      padding: 4px 11px; border-radius: 6px;
+      border: 1px solid transparent; background: transparent;
+      color: var(--dim); font-size: 11px; cursor: pointer;
+      font-family: inherit; font-weight: 500; transition: all .12s;
+    }
+    .rbtn:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+    .rbtn.active { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.3); color: #60a5fa; }
+    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
+
+    /* ── MAIN LAYOUT ── */
+    #main { flex: 1; display: flex; overflow: hidden; }
+    #sessions-col { flex: 1; overflow-y: auto; padding: 14px 16px; }
+    #sidebar {
+      width: 272px; border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+    }
+
+    /* ── SESSION CARDS ── */
+    .sc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: 10px; margin-bottom: 9px;
+      overflow: hidden; transition: box-shadow .2s;
+    }
+    .sc.status-PLANNED  { border-left-color: #3b82f6; }
+    .sc.status-READY    { border-left-color: #fbbf24; box-shadow: 0 0 0 1px rgba(251,191,36,.08); }
+    .sc.status-CALLING  { border-left-color: #f97316; box-shadow: 0 0 0 1px rgba(249,115,22,.08); }
+    .sc.status-LIVE     { border-left-color: #ef4444; box-shadow: 0 2px 24px rgba(239,68,68,.12), 0 0 0 1px rgba(239,68,68,.15); }
+    .sc.status-OVERRUN  { border-left-color: #d946ef; box-shadow: 0 2px 24px rgba(217,70,239,.12), 0 0 0 1px rgba(217,70,239,.15); }
+    .sc.status-HOLD     { border-left-color: #fb923c; }
+    .sc.status-ENDED    { opacity: .55; }
+    .sc.status-CANCELLED { opacity: .35; }
+
+    .sc-top {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px 6px;
+    }
+    .sc-num  { font-size: 11px; color: var(--dim); min-width: 18px; font-weight: 500; }
+    .sc-title {
+      flex: 1; font-size: 14px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      letter-spacing: -.01em;
+    }
+    .badge {
+      font-size: 10px; font-weight: 700; letter-spacing: .06em;
+      padding: 3px 9px; border-radius: 100px; flex-shrink: 0;
+    }
+    .badge-PLANNED   { background: var(--c-planned-bg);   color: var(--c-planned-fg); }
+    .badge-READY     { background: var(--c-ready-bg);     color: var(--c-ready-fg); }
+    .badge-CALLING   { background: var(--c-calling-bg);   color: var(--c-calling-fg); animation: pulse-amber 1.2s infinite; }
+    .badge-LIVE      { background: var(--c-live-bg);      color: var(--c-live-fg);    animation: pulse-red 2s infinite; }
+    .badge-OVERRUN   { background: var(--c-overrun-bg);   color: var(--c-overrun-fg); animation: pulse-magenta 1.5s infinite; }
+    .badge-HOLD      { background: var(--c-hold-bg);      color: var(--c-hold-fg);    animation: blink 1s infinite; }
+    .badge-ENDED     { background: var(--c-ended-bg);     color: var(--c-ended-fg); }
+    .badge-CANCELLED { background: var(--c-cancelled-bg); color: var(--c-cancelled-fg); }
+
+    .sc-meta {
+      padding: 0 14px 8px;
+      display: flex; gap: 8px; flex-wrap: wrap;
+      font-size: 11px; color: var(--dim); align-items: center;
+    }
+    .sc-meta .spk { color: var(--text); font-weight: 500; }
+    /* room / type as subtle chips */
+    .sc-meta > span:not(.spk):not([style]) {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 6px; font-size: 10px;
+    }
+
+    .sc-times {
+      padding: 7px 14px;
+      background: rgba(0,0,0,.18);
+      border-top: 1px solid var(--border);
+      display: flex; gap: 20px; align-items: center;
+      font-size: 11px;
+    }
+    .tc { display: flex; flex-direction: column; gap: 2px; }
+    .tl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+    .tv { color: var(--text); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 11px; }
+    .tv.late { color: var(--amber); }
+    .delay-tag {
+      margin-left: auto; font-size: 11px; color: var(--amber);
+      background: rgba(245,158,11,.08); padding: 2px 8px; border-radius: 4px;
+      border: 1px solid rgba(245,158,11,.2);
+    }
+
+    /* Progress bar */
+    .prog-wrap { height: 3px; background: rgba(0,0,0,.25); }
+    .prog-fill { height: 100%; background: #ef4444; transition: width 1s linear; }
+    .prog-fill.ov { background: var(--magenta); }
+
+    /* Live timer */
+    .live-timer {
+      padding: 7px 14px;
+      background: rgba(0,0,0,.18);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 14px;
+      font-size: 12px;
+    }
+    .lt-elapsed { color: var(--dim); font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .lt-remain  { color: var(--green); font-weight: 600; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .lt-remain.ov { color: #e879f9; }
+
+    /* Speaker arrived indicator */
+    .arrived-tag { font-size: 10px; color: var(--green); font-weight: 500; }
+
+    /* Action buttons */
+    .sc-actions { padding: 8px 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .abtn {
+      padding: 5px 12px; border-radius: 6px; border: 1px solid;
+      font-size: 11px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: filter .1s, transform .1s;
+      letter-spacing: .02em;
+    }
+    .abtn:hover  { filter: brightness(1.2); }
+    .abtn:active { transform: scale(.96); }
+    .abtn:disabled { opacity: .3; cursor: not-allowed; }
+    .btn-green  { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.45);  color: #22c55e; }
+    .btn-red    { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.45);  color: #ef4444; }
+    .btn-amber  { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.45); color: #f59e0b; }
+    .btn-blue   { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.45); color: #60a5fa; }
+    .btn-grey   { background: var(--surface2);      border-color: var(--border);        color: var(--dim); }
+    .btn-purple { background: rgba(168,85,247,.08); border-color: rgba(168,85,247,.45); color: #c084fc; }
+    .delay-grp  { margin-left: auto; display: flex; gap: 3px; align-items: center; }
+    .delay-grp .dl { font-size: 10px; color: var(--dim); }
+
+    /* ── SIDEBAR ── */
+    .sb-section { border-bottom: 1px solid var(--border); padding: 12px 14px; flex-shrink: 0; }
+    .sb-title {
+      font-size: 10px; font-weight: 600;
+      letter-spacing: .1em; color: var(--dim);
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+
+    /* Clock */
+    #sb-time    { font-size: 28px; font-weight: 600; letter-spacing: .04em; color: #f1f5f9; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .ck-details { font-size: 11px; color: var(--dim); margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+    .ck-val     { color: var(--text); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 11px; }
+    .ck-val.drifted { color: var(--amber); }
+
+    /* Log */
+    #log-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #log-panel .sb-title { padding: 10px 14px 5px; margin: 0; }
+    #log-feed   { flex: 1; overflow-y: auto; padding: 0 14px 10px; }
+    .le  { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 10px; }
+    .le:last-child { border-bottom: none; }
+    .le-ts  { color: var(--dim); font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .le-act { color: #60a5fa; font-weight: 600; }
+    .le-det { color: var(--dim); margin-top: 2px; }
+
+    /* ── BROADCAST BAR ── */
+    #bc-bar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 8px 20px;
+      display: flex; align-items: center; gap: 8px;
+      flex-shrink: 0;
+    }
+    #bc-bar label { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
+    #bc-input {
+      flex: 1; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 11px; color: var(--text);
+      font-size: 12px; font-family: inherit;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    #bc-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    #bc-pri {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 8px; color: var(--text);
+      font-size: 11px; font-family: inherit;
+    }
+    /* ── BROADCAST IMPROVEMENTS ── */
+    .bc-presets { display:flex; gap:4px; flex-shrink:0; }
+    .bc-preset-btn {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
+      color: var(--dim); font-size: 10px; font-family: inherit; padding: 3px 8px;
+      cursor: pointer; white-space: nowrap; transition: all .12s;
+    }
+    .bc-preset-btn:hover { border-color: var(--blue); color: var(--text); background: rgba(59,130,246,.08); }
+    .bc-char { font-size:10px; color:var(--dim); white-space:nowrap; flex-shrink:0; font-family:'SF Mono','Fira Code','Monaco',monospace; }
+    .bc-char.warn { color:var(--amber); }
+    #bc-banner { position:relative; }
+    .bc-dismiss {
+      position:absolute; right:12px; top:50%; transform:translateY(-50%);
+      background:none; border:none; color:inherit; opacity:.6;
+      font-size:14px; cursor:pointer; padding:0 4px; line-height:1;
+      transition: opacity .12s;
+    }
+    .bc-dismiss:hover { opacity:1; }
+
+    /* ── RECONNECT OVERLAY ── */
+    #rc-overlay {
+      display: none;
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      background: var(--surface2); border: 1px solid var(--amber);
+      border-radius: 8px; padding: 9px 18px;
+      font-size: 12px; color: #fbbf24; z-index: 100;
+      animation: blink .8s infinite;
+    }
+
+    /* ── EMPTY / ERROR STATE ── */
+    #empty { text-align: center; padding: 60px 20px; color: var(--dim); }
+    #empty .ei { font-size: 40px; margin-bottom: 12px; }
+    #empty h2  { font-size: 15px; color: var(--text); margin-bottom: 8px; font-weight: 600; }
+    #empty p   { font-size: 12px; line-height: 1.7; }
+    #empty pre {
+      margin-top: 16px; text-align: left;
+      background: var(--surface2); padding: 14px; border-radius: 6px;
+      font-size: 11px; color: #60a5fa; overflow: auto;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes spin          { to { transform: rotate(360deg); } }
+    @keyframes blink         { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+    @keyframes pulse-red     { 0%,100% { box-shadow: 0 2px 24px rgba(239,68,68,.12), 0 0 0 1px rgba(239,68,68,.15); } 50% { box-shadow: 0 2px 30px rgba(239,68,68,.22), 0 0 0 1px rgba(239,68,68,.25); } }
+    @keyframes pulse-amber   { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+    @keyframes pulse-magenta { 0%,100% { box-shadow: 0 2px 24px rgba(217,70,239,.12), 0 0 0 1px rgba(217,70,239,.15); } 50% { box-shadow: 0 2px 30px rgba(217,70,239,.22), 0 0 0 1px rgba(217,70,239,.25); } }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+    code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+
+    /* ── SIGNAGE PANEL ── */
+    .sp-section { padding: 14px 16px; }
+    .sp-section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .sp-section-title { font-size: 10px; font-weight: 600; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
+    .sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+    .sp-display-card {
+      background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border);
+      border-radius: 8px; padding: 11px 13px; display: flex; flex-direction: column; gap: 6px;
+      transition: border-color .15s;
+    }
+    .sp-display-card:hover { border-color: var(--dim); }
+    .sp-display-card.online   { border-left-color: var(--green); }
+    .sp-display-card.offline  { border-left-color: var(--border); opacity: .7; }
+    .sp-display-card.override-active { border-left-color: var(--amber); }
+    .sp-disp-hdr   { display: flex; align-items: center; gap: 6px; }
+    .sp-disp-dot   { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .sp-disp-dot.online  { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .sp-disp-dot.offline { background: var(--border); }
+    .sp-disp-name  { font-size: 13px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sp-disp-zone  { font-size: 10px; color: var(--dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; flex-shrink: 0; }
+    .sp-disp-meta  { font-size: 10px; color: var(--dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .sp-disp-mode  { color: #60a5fa; font-weight: 500; }
+    .sp-disp-actions { display: flex; gap: 4px; margin-top: 2px; }
+    .sp-disp-actions button {
+      flex: 1; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--dim); font-size: 10px;
+      font-family: inherit; cursor: pointer; transition: all .12s; white-space: nowrap;
+    }
+    .sp-disp-actions button:hover { color: var(--text); border-color: var(--dim); }
+    .sp-disp-actions button.launch, .sp-disp-actions a.launch { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: #60a5fa; text-decoration: none; display: inline-flex; align-items: center; }
+    .sp-disp-actions button.launch:hover, .sp-disp-actions a.launch:hover { background: rgba(59,130,246,.15); }
+    .sp-override-tag { font-size: 10px; color: var(--amber); background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); border-radius: 3px; padding: 1px 6px; align-self: flex-start; }
+    .sp-global-bar {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 13px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;
+    }
+    .sp-global-bar label { font-size: 10px; font-weight: 600; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+    .sp-override-btns { display: flex; gap: 5px; flex-wrap: wrap; }
+    .sp-override-btn {
+      padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--dim); font-size: 11px;
+      font-family: inherit; font-weight: 500; cursor: pointer; transition: all .12s;
+    }
+    .sp-override-btn:hover { background: var(--surface); color: var(--text); border-color: var(--dim); }
+    .sp-sponsor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+    .sp-sponsor-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center;
+      text-align: center; position: relative;
+    }
+    .sp-sponsor-img { width: 80px; height: 44px; object-fit: contain; border-radius: 4px; }
+    .sp-sponsor-placeholder { width: 80px; height: 44px; background: var(--surface2); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); }
+    .sp-sponsor-name { font-size: 11px; font-weight: 500; color: var(--text); }
+    .sp-sponsor-edit { background: none; border: 1px solid var(--border); color: var(--dim); cursor: pointer; font-size: 10px; border-radius: 4px; padding: 2px 7px; font-family: inherit; transition: all .12s; }
+    .sp-sponsor-edit:hover { color: var(--text); border-color: var(--dim); }
+
+    /* ── EVENT MODAL ── */
+    .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px); }
+    .ev-modal-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 26px;min-width:320px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.5); }
+    .ev-modal-title { font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--text); }
+    .ev-modal-card label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase; }
+    .ev-modal-card input,.ev-modal-card select { background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s; }
+    .ev-modal-card input:focus,.ev-modal-card select:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+    .ev-modal-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:4px; }
+    .ev-modal-actions button { padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;font-family:inherit;font-weight:500;transition:filter .15s; }
+    .ev-modal-actions button.primary { background:#1d4ed8;border-color:#2563eb;color:#fff; }
+    .ev-modal-actions button.danger  { background:#7f1d1d;border-color:#991b1b;color:#fca5a5; }
+    .ev-modal-actions button:hover { filter:brightness(1.15); }
+    #evm-error { color:var(--red);font-size:11px;min-height:14px; }
+    .ev-edit-btn { background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px;padding:0 3px;opacity:.5;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
+    .ev-edit-btn:hover { opacity:1;color:var(--text); }
+    /* ── SESSION MODAL extras ── */
+    .sm-chk { display:flex;align-items:center;gap:5px;cursor:pointer; }
+    .sm-chk input[type=checkbox] { width:13px;height:13px;accent-color:var(--blue); }
+    /* ── Card management buttons (▲▼✎) ── */
+    .sc-mgmt { display:flex;gap:2px;margin-left:6px; }
+    .sc-mgmt-btn { background:none;border:none;color:var(--dim);cursor:pointer;
+                   font-size:10px;padding:1px 4px;opacity:.45;font-family:inherit; }
+    .sc-mgmt-btn:hover { opacity:1;color:var(--text); }
+    /* ── DELAY CASCADE VISUALIZER ── */
+    #delay-strip {
+      background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);
+      border-radius:8px;padding:8px 14px;margin-bottom:10px;
+      display:flex;align-items:center;gap:10px;font-size:11px;flex-shrink:0;
+    }
+    #delay-strip .ds-icon  { color:var(--amber);font-size:13px; }
+    #delay-strip .ds-label { color:var(--amber);font-weight:700;letter-spacing:.05em; }
+    #delay-strip .ds-detail{ color:var(--dim); }
+    #delay-strip .ds-anchor{ color:var(--blue);margin-left:4px; }
+    #delay-strip .ds-reset {
+      margin-left:auto;background:none;border:1px solid var(--border);
+      color:var(--dim);border-radius:5px;padding:4px 10px;
+      cursor:pointer;font-size:10px;font-family:inherit;transition:all .12s;
+    }
+    #delay-strip .ds-reset:hover { color:var(--text);border-color:var(--dim); }
+    .sc.delayed      { border-left:4px solid var(--amber) !important; }
+    .sc.delay-origin { border-left:4px solid #f97316 !important; }
+    .delay-break {
+      display:flex;align-items:center;gap:8px;
+      padding:6px 0 10px;font-size:10px;color:var(--dim);letter-spacing:.06em;
+    }
+    .delay-break::before,.delay-break::after { content:'';flex:1;height:1px;background:var(--border); }
+    /* ── FILTER BAR ── */
+    #filter-bar {
+      background:var(--surface2);border-bottom:1px solid var(--border);
+      padding:6px 20px;display:flex;align-items:center;gap:8px;flex-shrink:0;
+    }
+    #fb-search {
+      flex:1;min-width:0;max-width:220px;background:var(--surface);
+      border:1px solid var(--border);border-radius:6px;padding:4px 10px;
+      color:var(--text);font-size:11px;font-family:inherit;outline:none;
+      transition:border-color .15s;
+    }
+    #fb-search:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.08); }
+    #fb-search::placeholder { color:var(--dim); }
+    #fb-status,#fb-room {
+      background:var(--surface);border:1px solid var(--border);border-radius:6px;
+      padding:4px 8px;color:var(--text);font-size:11px;font-family:inherit;
+      outline:none;cursor:pointer;transition:border-color .15s;
+    }
+    #fb-status:focus,#fb-room:focus { border-color:var(--blue); }
+    #fb-clear {
+      padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+      background:transparent;color:var(--dim);font-size:11px;font-family:inherit;
+      cursor:pointer;display:none;transition:all .12s;
+    }
+    #fb-clear:hover { border-color:var(--text);color:var(--text); }
+    #fb-clear.visible { display:block; }
+    #fb-count { font-size:10px;color:var(--dim);white-space:nowrap;margin-left:auto;letter-spacing:.04em; }
+    #fb-count.filtered { color:var(--blue); }
+
+    /* ── CONTEXT PANEL ── */
+    #ctx-wrap { background: var(--surface2); }
+    .ctx-title { font-size: 13px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
+    .ctx-title.ctx-empty { font-size: 11px; color: var(--dim); font-weight: 400; }
+    .ctx-sub { font-size: 10px; color: var(--dim); margin-top: 4px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .ctx-sub-live, .ctx-sub-overrun { color: #f87171; }
+    .ctx-sub-ready, .ctx-sub-calling { color: var(--amber); }
+    #ctx-actions {
+      padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .ctx-section-lbl { font-size: 9px; font-weight: 600; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; padding: 4px 2px 2px; }
+    .ctx-btn {
+      width: 100%; padding: 6px 12px; border-radius: 6px; border: 1px solid;
+      font-size: 11px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: filter .12s; text-align: left;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .ctx-btn:hover { filter: brightness(1.2); }
+    .ctx-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .ctx-booth { font-size: 11px; font-weight: 600; padding: 6px 4px; color: var(--dim); letter-spacing: .05em; }
+    .ctx-booth.ctx-booth-live { color: #f87171; }
+    .ctx-lang-chip {
+      display: inline-block; background: var(--surface2); border: 1px solid rgba(59,130,246,.3);
+      border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600;
+      color: #60a5fa; margin: 2px 3px 2px 0;
+    }
+
+    /* ── STAGE MONITOR ── */
+    #stage-monitor {
+      position: fixed; inset: 0; background: #05060f; z-index: 9000;
+      flex-direction: column; overflow: hidden;
+    }
+    #sm-close {
+      position: absolute; top: 16px; right: 20px; z-index: 2;
+      font-size: 10px; color: var(--dim); letter-spacing: .12em; font-weight: 600;
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      padding: 7px 14px; cursor: pointer; border-radius: 6px;
+      transition: all .12s; font-family: inherit;
+    }
+    #sm-close:hover { color: var(--text); border-color: var(--dim); }
+    #sm-body {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px; text-align: center;
+    }
+    .sm-status-live {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-size: 16px; font-weight: 700; letter-spacing: .3em; color: #ef4444;
+      margin-bottom: 20px;
+    }
+    .sm-live-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #ef4444;
+      box-shadow: 0 0 14px #ef4444; flex-shrink: 0; animation: blink .9s infinite;
+    }
+    .sm-status-standby { font-size: 14px; font-weight: 600; letter-spacing: .25em; color: var(--dim); margin-bottom: 20px; }
+    .sm-title {
+      font-size: clamp(32px, 6vw, 80px); font-weight: 700; color: var(--text);
+      line-height: 1.1; letter-spacing: -.02em; margin-bottom: 12px;
+      max-width: 80vw;
+    }
+    .sm-speaker { font-size: clamp(15px, 2.2vw, 26px); color: var(--dim); margin-bottom: 28px; font-weight: 500; }
+    .sm-timer {
+      font-size: clamp(52px, 10vw, 120px); font-weight: 700; line-height: 1;
+      letter-spacing: .04em; margin-bottom: 10px;
+      font-family: 'SF Mono','Fira Code','Monaco',monospace;
+      transition: color .4s;
+    }
+    .sm-timer-lbl { font-size: clamp(10px, 1.4vw, 13px); letter-spacing: .25em; color: var(--dim); margin-bottom: 36px; font-weight: 600; text-transform: uppercase; }
+    .sm-divider { width: 60px; height: 1px; background: var(--border); margin: 0 auto 24px; }
+    .sm-next-lbl { font-size: 10px; color: var(--dim); letter-spacing: .18em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; }
+    .sm-next-title { font-size: clamp(16px, 2.8vw, 34px); font-weight: 600; color: var(--dim); }
+    .sm-next-time  { font-size: clamp(11px, 1.4vw, 15px); color: #60a5fa; margin-top: 5px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    #sm-footer {
+      flex-shrink: 0; height: 42px; background: rgba(0,0,0,.5);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+    }
+    .sm-footer-evt { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+    .sm-clock { font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 18px; font-weight: 600; color: #60a5fa; letter-spacing: .06em; }
+  </style>
+</head>
+<body>
+
+<!-- LOADING / LOGIN -->
+<div id="loading-overlay">
+  <div class="load-logo">LE<span>O</span>D</div>
+  <div class="spinner" id="load-spinner"></div>
+  <div class="load-step" id="load-step">Connecting…</div>
+  <form id="login-form" onsubmit="handleLoginSubmit(event)">
+    <div class="lf-title">OPERATOR SIGN IN</div>
+    <input id="lf-email"    type="email"    placeholder="Email"    autocomplete="username"         required>
+    <input id="lf-password" type="password" placeholder="Password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div id="lf-error"></div>
+  </form>
+</div>
+
+<!-- BROADCAST BANNER -->
+<div id="bc-banner"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="logo">LE<span>O</span>D</div>
+  <div id="event-name">—</div>
+  <div id="hdr-clock">--:--:--</div>
+  <div id="hdr-offset">offset: —</div>
+  <div id="conn-pill">
+    <div id="conn-dot"></div>
+    <span id="conn-lbl">offline</span>
+  </div>
+  <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
+</div>
+
+<!-- DIAGNOSTICS -->
+<div id="diag-bar">
+  <div class="di"><div class="dd checking" id="dd-db"></div><span id="dl-db">database</span></div>
+  <div class="di"><div class="dd checking" id="dd-rt"></div><span id="dl-rt">realtime</span></div>
+  <div class="di"><div class="dd checking" id="dd-ck"></div><span id="dl-ck">clock</span></div>
+  <div class="di"><div class="dd"          id="dd-ef"></div><span id="dl-ef">edge functions</span></div>
+  <div style="margin-left:auto;color:var(--dim)">sessions: <span id="di-cnt">—</span></div>
+</div>
+
+<!-- ROLE BAR -->
+<div id="role-bar">
+  <label>ROLE</label>
+  <button class="rbtn active" data-role="director" onclick="setRole('director')">director</button>
+  <button class="rbtn"        data-role="stage"    onclick="setRole('stage')">stage</button>
+  <button class="rbtn"        data-role="av"       onclick="setRole('av')">av</button>
+  <button class="rbtn"        data-role="interp"   onclick="setRole('interp')">interp</button>
+  <button class="rbtn"        data-role="reg"      onclick="setRole('reg')">reg</button>
+  <button class="rbtn"        data-role="signage"  onclick="setRole('signage')">signage</button>
+  <div id="ev-select-wrap"></div>
+</div>
+
+<!-- FILTER BAR -->
+<div id="filter-bar"><!-- populated by buildFilterBar() --></div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="sessions-col">
+    <div id="delay-strip" style="display:none"></div>
+    <div id="sessions-list">
+      <div id="empty">
+        <div class="ei">📋</div>
+        <h2>Loading sessions…</h2>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <!-- Context Panel -->
+    <div class="sb-section" id="ctx-wrap">
+      <div class="sb-title">ACTIVE SESSION</div>
+      <div id="ctx-title" class="ctx-title ctx-empty">No active session</div>
+      <div id="ctx-sub" class="ctx-sub"></div>
+    </div>
+    <div id="ctx-actions"></div>
+
+    <!-- Clock -->
+    <div class="sb-section">
+      <div class="sb-title">SERVER CLOCK</div>
+      <div id="sb-time">--:--:--</div>
+      <div class="ck-details">
+        <div>offset: <span class="ck-val" id="ck-off">—</span></div>
+        <div>rtt: <span class="ck-val" id="ck-rtt">—</span></div>
+        <div>synced: <span class="ck-val" id="ck-sync">—</span></div>
+        <div>tick: <span class="ck-val" id="ck-tick">—</span></div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div id="log-panel">
+      <div class="sb-title" style="padding:10px 13px 5px;">EVENT LOG</div>
+      <div id="log-feed">
+        <div style="color:var(--dim);font-size:11px;padding:4px 0">Waiting…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STAGE MONITOR (fullscreen overlay) -->
+<div id="stage-monitor" style="display:none">
+  <button id="sm-close" onclick="closeStageMonitor()">EXIT MONITOR ✕</button>
+  <div id="sm-body">
+    <div id="sm-status" class="sm-status-standby">— STANDBY</div>
+    <div id="sm-title"  class="sm-title">STANDING BY</div>
+    <div id="sm-speaker" class="sm-speaker"></div>
+    <div id="sm-timer"   class="sm-timer" style="color:var(--dim)">--:--</div>
+    <div id="sm-timer-lbl" class="sm-timer-lbl"></div>
+    <div class="sm-divider"></div>
+    <div class="sm-next-lbl">NEXT SESSION</div>
+    <div id="sm-next-title" class="sm-next-title">—</div>
+    <div id="sm-next-time"  class="sm-next-time"></div>
+  </div>
+  <div id="sm-footer">
+    <span id="sm-event-name" class="sm-footer-evt">—</span>
+    <span id="sm-clock"      class="sm-clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- DISPLAY MODAL -->
+<div id="disp-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeDisplayModal()">
+  <div class="ev-modal-card">
+    <div class="ev-modal-title" id="disp-modal-title">Add Display</div>
+    <label>Display Name<input id="dm-name" type="text" placeholder="Lobby Screen A" required></label>
+    <div style="display:flex;gap:8px">
+      <label style="flex:1">Zone
+        <select id="dm-zone">
+          <option value="lobby">Lobby</option>
+          <option value="registration">Registration</option>
+          <option value="prefunction">Prefunction</option>
+          <option value="breakroom">Break Room</option>
+          <option value="stage">Stage / Backstage</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label style="flex:1">Orientation
+        <select id="dm-orient">
+          <option value="landscape">Landscape (16:9)</option>
+          <option value="portrait">Portrait (9:16)</option>
+        </select>
+      </label>
+    </div>
+    <label>Default Content Mode
+      <select id="dm-mode">
+        <option value="schedule">Session Schedule (current + next)</option>
+        <option value="wayfinding">Wayfinding (room directory)</option>
+        <option value="sponsors">Sponsor Carousel</option>
+        <option value="break">Break Screen</option>
+        <option value="custom">Custom Message</option>
+      </select>
+    </label>
+    <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — leave blank to show all)</span>
+      <input id="dm-room" type="text" placeholder="e.g. Main Stage">
+    </label>
+    <div class="ev-modal-actions">
+      <button onclick="closeDisplayModal()">Cancel</button>
+      <button id="dm-del" class="danger" style="display:none" onclick="deleteDisplay()">Delete</button>
+      <button class="primary" onclick="saveDisplay()">Save</button>
+    </div>
+    <div id="dm-error" style="color:var(--red);font-size:11px;min-height:14px"></div>
+  </div>
+</div>
+
+<!-- SPONSOR MODAL -->
+<div id="spon-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeSponsorModal()">
+  <div class="ev-modal-card">
+    <div class="ev-modal-title" id="spon-modal-title">Add Sponsor</div>
+    <label>Sponsor Name<input id="spm-name" type="text" placeholder="TechCorp Poland" required></label>
+    <label>Logo Image
+      <input id="spm-file" type="file" accept="image/*" style="font-size:11px;color:var(--dim);margin-top:3px">
+    </label>
+    <div id="spm-preview" style="display:none;margin:4px 0;background:var(--surface2);border-radius:6px;padding:8px;text-align:center">
+      <img id="spm-preview-img" style="max-height:60px;max-width:220px;object-fit:contain;border-radius:4px">
+    </div>
+    <label>Background Color (shown on display)
+      <input id="spm-bg" type="color" value="#0d0f17" style="height:32px;cursor:pointer;width:80px">
+    </label>
+    <div class="ev-modal-actions">
+      <button onclick="closeSponsorModal()">Cancel</button>
+      <button id="spm-del" class="danger" style="display:none" onclick="deleteSponsorFromModal()">Delete</button>
+      <button class="primary" onclick="saveSponsor()">Save</button>
+    </div>
+    <div id="spm-error" style="color:var(--red);font-size:11px;min-height:14px"></div>
+  </div>
+</div>
+
+<!-- BROADCAST BAR -->
+<div id="bc-bar">
+  <label>BROADCAST</label>
+  <div class="bc-presets" id="bc-presets"></div>
+  <input id="bc-input" type="text" placeholder="Message to all operators…" maxlength="200"
+         oninput="onBCInput()" onkeydown="if(event.key==='Enter')sendBroadcast()">
+  <span id="bc-char" class="bc-char"></span>
+  <select id="bc-pri">
+    <option value="info">info</option>
+    <option value="warn">warn</option>
+    <option value="critical">critical</option>
+  </select>
+  <button class="abtn btn-amber" onclick="sendBroadcast()">SEND</button>
+  <button class="abtn btn-grey"  onclick="clearBroadcast()">CLEAR</button>
+</div>
+
+<div id="rc-overlay">⟳ RECONNECTING — DATA MAY BE STALE</div>
+
+<!-- SESSION MODAL -->
+<div id="sess-modal" class="ev-modal-backdrop" style="display:none"
+     onclick="if(event.target===this)closeSessModal()">
+  <div class="ev-modal-card" style="max-width:480px">
+    <div class="ev-modal-title" id="sess-modal-title">New Session</div>
+
+    <div style="display:flex;gap:8px">
+      <label style="width:64px">#<input id="smv-sort" type="number" min="1" step="1"></label>
+      <label style="flex:1">Title<input id="smv-title" type="text" required></label>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <label style="flex:1">Type
+        <select id="smv-type">
+          <option>Keynote</option><option>Panel</option><option>Break</option>
+          <option>Workshop</option><option>Other</option>
+        </select>
+      </label>
+      <label style="flex:1">Room<input id="smv-room" type="text"></label>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <label style="flex:1">Speaker<input id="smv-spk" type="text"></label>
+      <label style="flex:1">Company<input id="smv-co"  type="text"></label>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <label style="flex:1">Planned Start<input id="smv-start" type="time" required></label>
+      <label style="flex:1">Planned End<input id="smv-end" type="time" required></label>
+    </div>
+
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim)">
+      <label class="sm-chk"><input type="checkbox" id="smv-anchor"> anchor</label>
+      <label class="sm-chk"><input type="checkbox" id="smv-rec">    recording</label>
+      <label class="sm-chk"><input type="checkbox" id="smv-stream"> streaming</label>
+      <label class="sm-chk"><input type="checkbox" id="smv-remote"> remote</label>
+      <label class="sm-chk"><input type="checkbox" id="smv-interp"> interpretation</label>
+      <label class="sm-chk" style="display:flex;align-items:center;gap:4px">
+        mics <input id="smv-mics" type="number" min="0" max="20" step="1"
+                    style="width:44px;padding:2px 5px">
+      </label>
+    </div>
+
+    <div class="ev-modal-actions">
+      <button onclick="closeSessModal()">Cancel</button>
+      <button id="smv-del" class="danger" style="display:none" onclick="deleteSession()">Delete</button>
+      <button class="primary" onclick="submitSessModal()">Save</button>
+    </div>
+    <div id="smv-error" style="color:var(--red);font-size:11px;min-height:14px"></div>
+  </div>
+</div>
+
+<!-- EVENT MODAL -->
+<div id="ev-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeEvModal()">
+  <div class="ev-modal-card">
+    <div class="ev-modal-title" id="ev-modal-title">New Event</div>
+    <label>Name<input id="evm-name" type="text" placeholder="Spring Summit 2026" required></label>
+    <label>Date<input id="evm-date" type="date" required></label>
+    <label>Timezone<input id="evm-tz"  type="text" placeholder="Europe/Warsaw"></label>
+    <label>Venue<input id="evm-venue" type="text" placeholder="Main Hall"></label>
+    <label>Start<input id="evm-start" type="time" required></label>
+    <label>End<input id="evm-end" type="time" required></label>
+    <label id="evm-seed-row" style="display:none">Copy sessions from
+      <select id="evm-seed"></select>
+    </label>
+    <div class="ev-modal-actions">
+      <button onclick="closeEvModal()">Cancel</button>
+      <button id="evm-deact" class="danger" style="display:none" onclick="deactivateEvent()">Deactivate</button>
+      <button class="primary" onclick="submitEvModal()">Save</button>
+    </div>
+    <div id="evm-error"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhd2VrcGd1ZW16dnV2dnVsZmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzk5MTEsImV4cCI6MjA4NzkxNTkxMX0.0zvCmKxdwAmfhmglYf2Gme6zpqtopBghSjI1ZyoVneg';
+const CLOCK_RESYNC_MS  = 300_000;   // 5 min
+const DRIFT_WARN_MS    = 500;
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const S = {
+  sessions:        [],
+  event:           null,
+  events:          [],
+  clockOffset:     0,
+  clockRtt:        0,
+  clockSynced:     0,
+  clockTick:       0,
+  connStatus:      'offline',
+  dbStatus:        'checking',
+  rtStatus:        'offline',
+  ckStatus:        'checking',
+  efStatus:        'unknown',
+  broadcast:       null,
+  log:             [],
+  role:            'director',
+  retries:         0,
+  ctrlChan:        null,
+  user:            null,   // supabase auth user object
+  userRole:        null,   // role from leod_users table
+  displays:        [],     // leod_signage_displays rows
+  sponsors:        [],     // leod_signage_sponsors rows
+};
+
+// ── Filter state (separate from S) ──
+const F = { text: '', status: '', room: '' };
+
+// ── State Machine ──────────────────────────────────
+const ALLOWED = {
+  PLANNED:   ['READY','CANCELLED'],
+  READY:     ['CALLING','LIVE','PLANNED','CANCELLED'],
+  CALLING:   ['LIVE','HOLD','READY','CANCELLED'],
+  LIVE:      ['HOLD','ENDED'],
+  OVERRUN:   ['ENDED','HOLD'],
+  HOLD:      ['LIVE','ENDED','CALLING','READY'],
+  ENDED:     [],
+  CANCELLED: ['PLANNED'],
+};
+
+const ROLE_WRITE = {
+  director: ['READY','CALLING','LIVE','HOLD','ENDED','CANCELLED','PLANNED'],
+  stage:    ['READY','CALLING','LIVE','HOLD','ENDED'],
+  av:       ['HOLD'],
+  interp:   [], reg: [], signage: [],
+};
+const ROLE_DELAY = { director: true, stage: true };
+
+// EF name map
+const EF_MAP = {
+  LIVE:'go-live', ENDED:'end-session', READY:'set-ready',
+  HOLD:'hold-stage', CALLING:'call-speaker',
+  CANCELLED:'cancel-session', PLANNED:'reinstate',
+};
+
+// Button config
+const BTN_CFG = {
+  LIVE:      { label:'GO LIVE',      cls:'btn-green'  },
+  READY:     { label:'SET READY',    cls:'btn-amber'  },
+  CALLING:   { label:'CALL SPEAKER', cls:'btn-amber'  },
+  HOLD:      { label:'HOLD',         cls:'btn-red'    },
+  ENDED:     { label:'END SESSION',  cls:'btn-red'    },
+  PLANNED:   { label:'DE-ARM',       cls:'btn-grey'   },
+  CANCELLED: { label:'CANCEL',       cls:'btn-grey'   },
+};
+const BTN_LABEL_OVERRIDE = {
+  'HOLD→LIVE':      'RESUME',
+  'CANCELLED→PLANNED': 'REINSTATE',
+  'CALLING→READY':  'PULL BACK',
+  'CALLING→LIVE':   'CONFIRM ON STAGE',
+};
+
+// ═══════════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════════
+async function syncClock() {
+  const SAMPLES = 3;
+  const results = [];
+  for (let i = 0; i < SAMPLES; i++) {
+    const t0 = performance.now();
+    // Use RPC so the server writes NOW() at the moment of the call —
+    // the stored leod_clock.server_time would be stale without a cron job.
+    const { data, error } = await sb.rpc('get_server_clock');
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    const t1  = performance.now();
+    const rtt = t1 - t0;
+    const sMs = new Date(row.server_time).getTime();
+    results.push({ offset: sMs - Date.now() + rtt / 2, rtt, tick: row.tick });
+    if (i < SAMPLES - 1) await sleep(200);
+  }
+  results.sort((a, b) => a.rtt - b.rtt);
+  const best = results[0];
+  const drift = Math.abs(best.offset - S.clockOffset);
+  if (S.ckStatus === 'ok' && drift > DRIFT_WARN_MS)
+    pushLog('CLOCK_DRIFT', `${Math.round(drift)}ms — resynced`, null);
+  S.clockOffset = best.offset;
+  S.clockRtt    = best.rtt;
+  S.clockSynced = Date.now();
+  S.clockTick   = best.tick;
+  S.ckStatus    = 'ok';
+  refreshDiag();
+  refreshClockUI();
+}
+
+const correctedNow = () => Date.now() + S.clockOffset;
+
+function correctedHMS() {
+  const d  = new Date(correctedNow());
+  const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
+  return `${hh}:${mm}:${ss}`;
+}
+
+// ═══════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════
+async function loadEvents() {
+  const { data, error } = await sb
+    .from('leod_events').select('*').eq('active', true).order('date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function loadSnapshot(eventId) {
+  const { data, error } = await sb
+    .from('leod_sessions').select('*').eq('event_id', eventId).order('sort_order');
+  if (error) throw error;
+  S.sessions  = data || [];
+  S.dbStatus  = 'ok';
+  refreshDiag();
+  renderSessions();
+  buildFilterBar();
+}
+
+async function loadBroadcast(eventId) {
+  const { data } = await sb
+    .from('leod_broadcast').select('*').eq('event_id', eventId).single();
+  if (data?.message) { S.broadcast = data; showBCBanner(data); }
+}
+
+async function loadLog(eventId) {
+  const { data } = await sb
+    .from('leod_event_log').select('*')
+    .eq('event_id', eventId).order('ts', { ascending: false }).limit(25);
+  if (data) data.reverse().forEach(r => pushLogFromRow(r));
+}
+
+// ═══════════════════════════════════════════════════
+// REALTIME
+// ═══════════════════════════════════════════════════
+function subscribeControl(eventId) {
+  S.ctrlChan?.unsubscribe();
+  S.ctrlChan = sb
+    .channel(`leod-ctrl-${eventId}`)
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'leod_sessions', filter: `event_id=eq.${eventId}` },
+        onSessionChange)
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'leod_event_log', filter: `event_id=eq.${eventId}` },
+        p => { if (p.eventType === 'INSERT' && p.new) pushLogFromRow(p.new); })
+    .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'leod_broadcast', filter: `event_id=eq.${eventId}` },
+        p => { if (p.new) { S.broadcast = p.new; showBCBanner(p.new); } })
+    .subscribe(st => {
+      S.rtStatus = st === 'SUBSCRIBED' ? 'ok' : 'error';
+      setConn(st === 'SUBSCRIBED' ? 'live' : 'reconnecting');
+      refreshDiag();
+      if (st === 'SUBSCRIBED') {
+        S.retries = 0;
+        pushLog('SYSTEM', 'realtime channel connected', null);
+        document.getElementById('rc-overlay').style.display = 'none';
+      } else if (st === 'CHANNEL_ERROR') {
+        onDisconnect();
+      }
+    });
+}
+
+function onSessionChange(payload) {
+  const row = payload.new || payload.old;
+  if (!row) return;
+  if (payload.eventType === 'DELETE') {
+    S.sessions = S.sessions.filter(s => s.id !== row.id);
+    // Clear ghost room filter if deleted session was the only one in that room
+    if (F.room && !S.sessions.some(s => s.room === F.room)) F.room = '';
+    buildFilterBar();
+  } else if (payload.eventType === 'INSERT') {
+    if (!S.sessions.find(s => s.id === row.id)) {
+      S.sessions.push(row);
+      S.sessions.sort((a, b) => a.sort_order - b.sort_order);
+    }
+    buildFilterBar();
+  } else {
+    const idx = S.sessions.findIndex(s => s.id === row.id);
+    if (idx >= 0) {
+      if (S.sessions[idx].version > row.version) return; // stale
+      const prev = S.sessions[idx];
+      S.sessions[idx] = row;
+      if (prev.status !== row.status)
+        pushLog('STATUS', `${trunc(row.title, 22)}: ${prev.status} → ${row.status}`, row.id);
+    } else {
+      S.sessions.push(row);
+      S.sessions.sort((a, b) => a.sort_order - b.sort_order);
+    }
+  }
+  renderSessions();
+}
+
+// ═══════════════════════════════════════════════════
+// TRANSITIONS
+// ═══════════════════════════════════════════════════
+async function transition(sessionId, toStatus) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s) return;
+
+  if (!(ALLOWED[s.status] || []).includes(toStatus)) {
+    pushLog('ERROR', `forbidden: ${s.status} → ${toStatus}`, sessionId); return;
+  }
+  if (!(ROLE_WRITE[S.role] || []).includes(toStatus)) {
+    pushLog('ERROR', `role ${S.role} cannot set ${toStatus}`, sessionId); return;
+  }
+
+  // Capture flags BEFORE optimistic mutation so DB write uses same values
+  const prevStatus       = s.status;
+  const prevVer          = s.version;
+  const needsActualStart = toStatus === 'LIVE'  && !s.actual_start;
+  const needsActualEnd   = toStatus === 'ENDED';
+  const actualStartTs    = new Date(correctedNow()).toISOString();
+  const actualEndTs      = new Date(correctedNow()).toISOString();
+
+  // Optimistic update
+  s.status = toStatus;
+  if (needsActualStart) s.actual_start = actualStartTs;
+  if (needsActualEnd)   s.actual_end   = actualEndTs;
+  renderSessions();
+
+  const cmdId = crypto.randomUUID();
+  let success = false;
+
+  // 1. Try Edge Function
+  const efName = EF_MAP[toStatus];
+  if (efName) {
+    try {
+      const { data, error } = await sb.functions.invoke(efName, {
+        body: { session_id: sessionId, command_id: cmdId, version: prevVer, operator_role: S.role },
+      });
+      if (!error && data) {
+        success = true;
+        S.efStatus = 'ok';
+        pushLog('EF', `${toStatus} via /${efName} ✓`, sessionId);
+        refreshDiag();
+      } else if (error) {
+        // Read the error body to detect specific failure modes
+        let errBody = {};
+        try {
+          if (typeof error.context?.json === 'function') errBody = await error.context.json();
+          else if (error.context && typeof error.context === 'object') errBody = error.context;
+        } catch {}
+
+        if (errBody?.error === 'Version conflict') {
+          // Rollback — session was updated by another operator between read and write
+          s.status = prevStatus; s.version = prevVer;
+          if (toStatus === 'LIVE')  s.actual_start = null;
+          if (toStatus === 'ENDED') s.actual_end   = null;
+          renderSessions();
+          pushLog('ERROR', 'Version conflict — session changed by another operator', sessionId);
+          if (S.event) loadSessions(S.event.id);
+          return;
+        }
+        if (errBody?.error === 'IN_FLIGHT') {
+          // Duplicate command already processing — realtime will confirm the result
+          success = true;
+          return;
+        }
+        // Other EF errors fall through to direct DB attempt
+      }
+    } catch { /* network error — fall through */ }
+  }
+
+  // 2. Direct DB update (requires service role or relaxed RLS)
+  if (!success) {
+    const upd = {
+      status: toStatus,
+      state_changed_at: new Date(correctedNow()).toISOString(),   // FIX: use clock-corrected time
+      version: prevVer + 1,
+    };
+    if (needsActualStart) upd.actual_start = actualStartTs;
+    if (needsActualEnd)   upd.actual_end   = actualEndTs;
+
+    const { error } = await sb
+      .from('leod_sessions').update(upd)
+      .eq('id', sessionId).eq('version', prevVer);
+
+    if (error) {
+      // Rollback
+      s.status = prevStatus; s.version = prevVer;
+      if (toStatus === 'LIVE') s.actual_start = null;
+      if (toStatus === 'ENDED') s.actual_end = null;
+      renderSessions();
+      const hint = error.code === '42501'
+        ? `RLS blocked write — deploy /${efName} or add service key`
+        : error.message;
+      pushLog('ERROR', hint, sessionId);
+      if (S.efStatus !== 'ok') S.efStatus = 'not-deployed';
+      refreshDiag();
+    } else {
+      success = true;
+      pushLog('DB', `${toStatus} via direct write ✓`, sessionId);
+      // Write to event_log (best-effort)
+      sb.from('leod_event_log').insert({
+        event_id: S.event?.id, session_id: sessionId,
+        action: 'SESSION_STATUS_CHANGE',
+        from_status: prevStatus, to_status: toStatus,
+        operator_role: S.role,
+        payload: { command_id: cmdId, client: 'console' },
+        server_time_ms: correctedNow(),
+      }).then(() => {}).catch(() => {});
+    }
+  }
+}
+
+async function applyDelay(sessionId, minutes) {
+  if (!ROLE_DELAY[S.role]) {
+    pushLog('ERROR', `role ${S.role} cannot add delay`, sessionId); return;
+  }
+  // Try EF
+  try {
+    const { data, error } = await sb.functions.invoke('apply-delay', {
+      body: { session_id: sessionId, minutes, command_id: crypto.randomUUID(), operator_role: S.role },
+    });
+    if (!error && data) {
+      pushLog('DELAY', `+${minutes}min via /apply-delay ✓`, sessionId); return;
+    }
+  } catch { /* fall through */ }
+
+  // Client-side cascade
+  const idx = S.sessions.findIndex(s => s.id === sessionId);
+  if (idx < 0) return;
+  const affected = [];
+  for (let j = idx; j < S.sessions.length; j++) {
+    const s = S.sessions[j];
+    if (s.status === 'ENDED' || s.status === 'CANCELLED') continue;
+    if (j > idx && s.is_anchor) break;
+    S.sessions[j] = {
+      ...s,
+      scheduled_start:  addMinutes(s.scheduled_start, minutes),
+      scheduled_end:    addMinutes(s.scheduled_end,   minutes),
+      cumulative_delay: (s.cumulative_delay || 0) + minutes,
+      ...(j === idx ? { delay_minutes: (s.delay_minutes || 0) + minutes } : {}),
+    };
+    affected.push(S.sessions[j]);
+  }
+  renderSessions();
+
+  // Write cascade to DB (best-effort)
+  for (const s of affected) {
+    sb.from('leod_sessions').update({
+      scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
+      cumulative_delay: s.cumulative_delay, delay_minutes: s.delay_minutes,
+    }).eq('id', s.id).then(() => {}).catch(() => {});
+  }
+  pushLog('DELAY', `+${minutes}min cascaded → ${affected.length} sessions`, sessionId);
+}
+
+async function markArrived(sessionId, arrived) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s) return;
+  s.speaker_arrived = arrived;
+  renderSessions();
+  await sb.from('leod_sessions').update({ speaker_arrived: arrived }).eq('id', sessionId)
+    .then(() => pushLog('ARRIVED', `${trunc(s.title,20)}: speaker ${arrived?'confirmed':'cleared'}`, sessionId))
+    .catch(e => pushLog('ERROR', e.message, sessionId));
+}
+
+// ═══════════════════════════════════════════════════
+// BROADCAST
+// ═══════════════════════════════════════════════════
+async function sendBroadcast() {
+  const msg = document.getElementById('bc-input').value.trim();
+  const pri = document.getElementById('bc-pri').value;
+  if (!msg || !S.event) return;
+  const { error } = await sb.from('leod_broadcast').upsert({
+    id: 'global', event_id: S.event.id,
+    message: msg, priority: pri, sent_at: new Date().toISOString(),
+  });
+  if (!error) {
+    document.getElementById('bc-input').value = '';
+    pushLog('BROADCAST', `"${trunc(msg,28)}" [${pri}]`, null);
+  } else {
+    pushLog('ERROR', error.message, null);
+  }
+}
+
+async function clearBroadcast() {
+  if (!S.event) return;
+  await sb.from('leod_broadcast')
+    .update({ message: '', sent_at: new Date().toISOString() })
+    .eq('id', 'global').eq('event_id', S.event.id);
+  hideBCBanner();
+  pushLog('BROADCAST', 'cleared', null);
+}
+
+// ═══════════════════════════════════════════════════
+// DISCONNECT / RECONNECT
+// ═══════════════════════════════════════════════════
+function onDisconnect() {
+  setConn('reconnecting');
+  document.getElementById('rc-overlay').style.display = 'block';
+  scheduleReconnect();
+}
+
+function scheduleReconnect() {
+  const delay = Math.min(1000 * 2 ** S.retries, 30_000) + Math.random() * 500;
+  S.retries++;
+  setTimeout(doReconnect, delay);
+}
+
+async function doReconnect() {
+  try {
+    await syncClock();
+    await loadSnapshot(S.event.id);
+    subscribeControl(S.event.id);
+    S.retries = 0;
+    setConn('live');
+    document.getElementById('rc-overlay').style.display = 'none';
+    pushLog('RESYNC', `reconnected`, null);
+  } catch { scheduleReconnect(); }
+}
+
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && S.event) {
+    await syncClock();
+    if (S.ctrlChan?.state !== 'joined') await doReconnect();
+    else await loadSnapshot(S.event.id);
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// FILTERING
+// ═══════════════════════════════════════════════════
+function isFilterActive() { return !!(F.text || F.status || F.room); }
+
+function applyFilters() {
+  if (!isFilterActive()) return S.sessions; // fast path — no allocation
+  const needle = F.text.trim().toLowerCase();
+  return S.sessions.filter(s => {
+    if (needle) {
+      const hit = (s.title||'').toLowerCase().includes(needle)
+               || (s.speaker||'').toLowerCase().includes(needle);
+      if (!hit) return false;
+    }
+    if (F.status && s.status !== F.status) return false;
+    if (F.room   && s.room   !== F.room)   return false;
+    return true;
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// RENDERING
+// ═══════════════════════════════════════════════════
+function renderSessions() {
+  // Signage role gets its own dedicated management panel
+  if (S.role === 'signage') {
+    document.getElementById('delay-strip').style.display = 'none';
+    renderSignagePanel();
+    return;
+  }
+
+  const list    = document.getElementById('sessions-list');
+  const visible = applyFilters();
+  const total   = S.sessions.length;
+
+  document.getElementById('di-cnt').textContent = visible.length;
+
+  // Update filter bar count + clear-button visibility
+  const cntEl    = document.getElementById('fb-count');
+  const clearBtn = document.getElementById('fb-clear');
+  if (cntEl) {
+    const active = isFilterActive() && visible.length < total;
+    cntEl.textContent = active ? `${visible.length} of ${total}` : '';
+    cntEl.className   = active ? 'filtered' : '';
+  }
+  if (clearBtn) clearBtn.classList.toggle('visible', isFilterActive());
+
+  // Empty: no sessions at all
+  if (!total) {
+    list.innerHTML = `<div id="empty">
+      <div class="ei">📋</div>
+      <h2>No sessions found</h2>
+      <p>Add sessions to <code>leod_sessions</code> for this event, or check the event is active.</p>
+      <pre>-- Quick seed:
+INSERT INTO leod_sessions
+  (event_id, sort_order, title, type, planned_start, planned_end, scheduled_start, scheduled_end)
+VALUES
+  ('${S.event?.id || 'YOUR_EVENT_ID'}', 1, 'Opening Ceremony', 'Keynote',
+   '09:00', '09:30', '09:00', '09:30'),
+  ('${S.event?.id || 'YOUR_EVENT_ID'}', 2, 'Keynote: Main Talk', 'Keynote',
+   '09:30', '10:15', '09:30', '10:15');</pre>
+    </div>`;
+    return;
+  }
+
+  // Empty: filters returned nothing
+  if (!visible.length) {
+    list.innerHTML = `<div id="empty">
+      <div class="ei">🔍</div>
+      <h2>No sessions match the filters</h2>
+      <p>Try adjusting or clearing the filters.</p>
+      <button class="abtn btn-grey" style="margin-top:10px" onclick="clearFilters()">Clear filters</button>
+    </div>`;
+    return;
+  }
+
+  const nowMs = correctedNow();
+
+  // Build cards with anchor-break dividers
+  const cards = [];
+  let wasDelayed = false;
+  for (const s of visible) {
+    const isDelayed = (s.cumulative_delay || 0) > 0;
+    if (wasDelayed && s.is_anchor && !isDelayed) {
+      cards.push(`<div class="delay-break">⚓ delay break — sessions below run on original schedule</div>`);
+    }
+    cards.push(cardHTML(s, nowMs));
+    wasDelayed = isDelayed;
+  }
+  list.innerHTML = cards.join('');
+
+  if (S.role === 'director' || S.userRole === 'director') {
+    list.innerHTML += `<div style="padding:10px 0;text-align:center">
+      <button class="abtn btn-blue" onclick="openSessModal('add')">＋ ADD SESSION</button>
+    </div>`;
+  }
+
+  updateDelayStrip(); // always uses S.sessions (full set) — intentional
+  buildCtxPanel();
+}
+
+function updateDelayStrip() {
+  const strip = document.getElementById('delay-strip');
+  const delayed = S.sessions.filter(s => (s.cumulative_delay || 0) > 0);
+  if (!delayed.length) { strip.style.display = 'none'; return; }
+
+  const maxDelay = Math.max(...delayed.map(s => s.cumulative_delay));
+  const nextAnchor = S.sessions.find(s => s.is_anchor && !((s.cumulative_delay || 0) > 0));
+  const anchorHTML = nextAnchor
+    ? `<span class="ds-anchor">· ⚓ ${esc(nextAnchor.title)} (${(nextAnchor.scheduled_start||'').substring(0,5)})</span>`
+    : '';
+
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  const resetBtn = isDirector
+    ? `<button class="ds-reset" id="ds-reset-btn" onclick="resetAllDelays()">Reset delays</button>`
+    : '';
+
+  strip.innerHTML = `
+    <span class="ds-icon">⏱</span>
+    <span class="ds-label">RUNNING +${maxDelay} MIN</span>
+    <span class="ds-detail">${delayed.length} session${delayed.length > 1 ? 's' : ''} affected${anchorHTML}</span>
+    ${resetBtn}`;
+  strip.style.display = 'flex';
+}
+
+async function resetAllDelays() {
+  const btn = document.getElementById('ds-reset-btn');
+  if (!btn) return;
+  if (btn.dataset.armed !== 'yes') {
+    btn.dataset.armed = 'yes'; btn.textContent = 'Confirm reset?';
+    setTimeout(() => { if (btn) { btn.dataset.armed = ''; btn.textContent = 'Reset delays'; } }, 3000);
+    return;
+  }
+  btn.dataset.armed = ''; btn.textContent = 'Reset delays';
+
+  const toReset = S.sessions.filter(s => (s.cumulative_delay || 0) > 0 || (s.delay_minutes || 0) > 0);
+  for (const s of toReset) {
+    const idx = S.sessions.indexOf(s);
+    S.sessions[idx] = { ...s, scheduled_start: s.planned_start, scheduled_end: s.planned_end,
+                             cumulative_delay: 0, delay_minutes: 0 };
+  }
+  renderSessions();
+
+  for (const s of toReset) {
+    sb.from('leod_sessions').update({
+      scheduled_start: s.planned_start, scheduled_end: s.planned_end,
+      cumulative_delay: 0, delay_minutes: 0,
+    }).eq('id', s.id).then(() => {}).catch(() => {});
+  }
+  pushLog('DELAY', `reset · ${toReset.length} sessions cleared`, null);
+}
+
+function cardHTML(s, nowMs) {
+  const delayed = (s.cumulative_delay || 0) > 0;
+  const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
+
+  let progHTML = '', timerHTML = '';
+  if (isLive && s.actual_start) {
+    const startMs   = new Date(s.actual_start).getTime();
+    const elapsed   = nowMs - startMs;
+    const durMs     = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
+    const remain    = durMs - elapsed;
+    const pct       = Math.min(100, (elapsed / durMs) * 100);
+    const overrun   = remain < 0;
+    progHTML  = `<div class="prog-wrap"><div class="prog-fill ${overrun?'ov':''}" style="width:${pct}%"></div></div>`;
+    timerHTML = `<div class="live-timer">
+      <span class="lt-elapsed">elapsed ${fmtDur(elapsed)}</span>
+      <span class="lt-remain ${overrun?'ov':''}">${overrun?'OVERRUN +'+fmtDur(-remain):fmtDur(remain)+' left'}</span>
+      ${s.speaker_arrived?'<span class="arrived-tag">✓ arrived</span>':''}
+    </div>`;
+  }
+
+  const actions = buildButtons(s);
+  const flags   = buildFlags(s);
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  const mgmt = isDirector
+    ? `<span class="sc-mgmt">
+         <button class="sc-mgmt-btn" onclick="reorderSession('${s.id}','up')"   title="Move up">▲</button>
+         <button class="sc-mgmt-btn" onclick="reorderSession('${s.id}','down')" title="Move down">▼</button>
+         <button class="sc-mgmt-btn" onclick="openSessModal('edit','${s.id}')"  title="Edit session">✎</button>
+       </span>`
+    : '';
+  const delayClass = (s.delay_minutes || 0) > 0
+    ? 'delay-origin'
+    : (s.cumulative_delay || 0) > 0 ? 'delayed' : '';
+
+  return `<div class="sc status-${s.status} ${delayClass}" id="card-${s.id}">
+  ${progHTML}
+  <div class="sc-top">
+    <span class="sc-num">${s.sort_order}</span>
+    <span class="sc-title">${esc(s.title)}</span>
+    <span class="badge badge-${s.status}">${s.status}</span>
+    ${mgmt}
+  </div>
+  <div class="sc-meta">
+    ${s.speaker ? `<span class="spk">${esc(s.speaker)}${s.company?` · ${esc(s.company)}`:''}</span>` : ''}
+    ${s.room    ? `<span>${esc(s.room)}</span>` : ''}
+    <span>${esc(s.type)}</span>
+    ${flags}
+  </div>
+  <div class="sc-times">
+    <div class="tc"><span class="tl">PLANNED</span><span class="tv">${s.planned_start}–${s.planned_end}</span></div>
+    <div class="tc"><span class="tl">SCHEDULED</span><span class="tv ${delayed?'late':''}">${s.scheduled_start}–${s.scheduled_end}</span></div>
+    ${s.actual_start ? `<div class="tc"><span class="tl">STARTED</span><span class="tv">${fmtTS(s.actual_start)}</span></div>` : ''}
+    ${delayed ? `<span class="delay-tag">+${s.cumulative_delay}min</span>` : ''}
+  </div>
+  ${timerHTML}
+  ${actions}
+</div>`;
+}
+
+function buildButtons(s) {
+  const allowed  = ALLOWED[s.status] || [];
+  const canWrite = ROLE_WRITE[S.role] || [];
+  const possible = allowed.filter(t => canWrite.includes(t));
+
+  const canDelay = ROLE_DELAY[S.role] && ['LIVE','OVERRUN','HOLD','READY','CALLING'].includes(s.status);
+  const canArrive = (S.role === 'director' || S.role === 'stage') && s.speaker && !['ENDED','CANCELLED'].includes(s.status);
+
+  if (!possible.length && !canDelay && !canArrive) return '';
+
+  const btnHtml = possible.map(to => {
+    const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
+    const label = BTN_LABEL_OVERRIDE[`${s.status}→${to}`] || cfg.label;
+    return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
+  }).join('');
+
+  const arriveHtml = canArrive
+    ? `<button class="abtn ${s.speaker_arrived ? 'btn-grey' : 'btn-blue'}"
+         onclick="markArrived('${s.id}', ${!s.speaker_arrived})"
+         title="Toggle speaker arrival">${s.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED'}</button>`
+    : '';
+
+  const delayHtml = canDelay
+    ? `<div class="delay-grp">
+         <span class="dl">+MIN</span>
+         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',5)">5</button>
+         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',10)">10</button>
+         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',15)">15</button>
+       </div>`
+    : '';
+
+  return `<div class="sc-actions">${btnHtml}${arriveHtml}${delayHtml}</div>`;
+}
+
+function buildFlags(s) {
+  const f = [];
+  if (s.remote)         f.push('📡 remote');
+  if (s.streaming)      f.push('🔴 stream');
+  if (s.recording)      f.push('⏺ rec');
+  if (s.interpretation) f.push(`🌐 ${(s.languages||[]).join('/')}`);
+  if (s.mics > 0)       f.push(`🎤×${s.mics}`);
+  if (!f.length) return '';
+  return `<span style="margin-left:auto;font-size:10px;color:var(--dim)">${f.join(' · ')}</span>`;
+}
+
+// ═══════════════════════════════════════════════════
+// CONTEXT PANEL + STAGE MONITOR
+// ═══════════════════════════════════════════════════
+
+function buildCtxPanel() {
+  const titleEl   = document.getElementById('ctx-title');
+  const subEl     = document.getElementById('ctx-sub');
+  const actionsEl = document.getElementById('ctx-actions');
+  if (!titleEl || !actionsEl) return;
+
+  // Active target: LIVE/OVERRUN → CALLING → READY
+  const tgt = S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN')
+           || S.sessions.find(s => s.status === 'CALLING')
+           || S.sessions.find(s => s.status === 'READY')
+           || null;
+
+  if (tgt) {
+    titleEl.className = 'ctx-title';
+    titleEl.textContent = tgt.title;
+    const delayNote = (tgt.cumulative_delay || 0) > 0 ? ` +${tgt.cumulative_delay}m` : '';
+    subEl.textContent = tgt.status + (tgt.speaker ? ` · ${tgt.speaker}` : '') + delayNote;
+    subEl.className = `ctx-sub ctx-sub-${tgt.status.toLowerCase()}`;
+  } else {
+    titleEl.className = 'ctx-title ctx-empty';
+    titleEl.textContent = 'No active session';
+    subEl.textContent = '';
+    subEl.className = 'ctx-sub';
+  }
+
+  const role = S.role;
+  let html = '';
+  const cbtn = (label, cls, action, icon = '') =>
+    `<button class="ctx-btn ${cls}" onclick="${action}">${icon ? icon + ' ' : ''}${label}</button>`;
+  const lbl = t => `<div class="ctx-section-lbl">${t}</div>`;
+
+  if (role === 'director' || role === 'stage') {
+    if (tgt) {
+      html += lbl('QUICK ACTIONS');
+      const possible = (ALLOWED[tgt.status] || []).filter(t => (ROLE_WRITE[role] || []).includes(t));
+      possible.forEach(to => {
+        const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
+        const label = BTN_LABEL_OVERRIDE[`${tgt.status}→${to}`] || cfg.label;
+        html += cbtn(label, cfg.cls, `transition('${esc(tgt.id)}','${to}')`);
+      });
+      if (role === 'stage' && tgt.speaker && !['ENDED','CANCELLED'].includes(tgt.status))
+        html += cbtn(tgt.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED',
+                     tgt.speaker_arrived ? 'btn-grey' : 'btn-blue',
+                     `markArrived('${esc(tgt.id)}', ${!tgt.speaker_arrived})`);
+    }
+    html += lbl('MONITOR');
+    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
+
+  } else if (role === 'av') {
+    if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
+      html += lbl('AV CONTROL');
+      html += cbtn('HOLD SESSION', 'btn-amber', `transition('${esc(tgt.id)}','HOLD')`, '⏸');
+    }
+    html += lbl('MONITOR');
+    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
+
+  } else if (role === 'signage') {
+    const dispCount = S.displays.length;
+    const onlineCount = S.displays.filter(d => {
+      const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
+      return t && (Date.now() - t) < 60_000;
+    }).length;
+    html += lbl('DISPLAYS');
+    html += `<div style="font-size:11px;color:var(--dim);padding:2px 2px 5px">${dispCount} registered · <span style="color:var(--green)">${onlineCount} online</span></div>`;
+    html += lbl('GLOBAL OVERRIDE');
+    html += cbtn('☕ Break Screen',  'btn-purple', "sendGlobalOverride('break')");
+    html += cbtn('⚡ 5-Min Recall', 'btn-amber',  "sendGlobalOverride('recall')");
+    html += cbtn('🏢 Sponsor Reel', 'btn-blue',   "sendGlobalOverride('sponsors')");
+    html += cbtn('📋 Back to Schedule','btn-grey', "sendGlobalOverride('schedule')");
+    if (S.displays.some(d => d.override_content?.mode))
+      html += cbtn('✕ Clear Override','btn-grey','clearGlobalOverride()');
+    html += lbl('MONITOR');
+    html += cbtn('⊡ STAGE MONITOR', 'btn-blue', 'openStageMonitor()');
+
+  } else if (role === 'reg') {
+    html += lbl('LOBBY');
+    if (tgt) html += cbtn('ANNOUNCE SESSION', 'btn-blue',
+      `sendBroadcastQuick('📢 ${esc(tgt.title).substring(0,40)} — starting now. Please take your seats.','info')`, '📢');
+    html += cbtn('BREAK ALERT', 'btn-amber', "sendBroadcastQuick('☕ Coffee break starting now','info')", '☕');
+
+  } else if (role === 'interp') {
+    if (tgt) {
+      html += lbl('BOOTH STATUS');
+      const isActive = tgt.status === 'LIVE' || tgt.status === 'OVERRUN';
+      html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${isActive ? '◉ SESSION LIVE' : '◈ STANDBY'}</div>`;
+      if (tgt.interpretation && tgt.languages?.length) {
+        html += lbl('CHANNELS');
+        tgt.languages.forEach(lang => { html += `<span class="ctx-lang-chip">${esc(lang)}</span>`; });
+      }
+    }
+  }
+
+  actionsEl.innerHTML = html;
+}
+
+function sendBroadcastQuick(text, priority) {
+  const inp = document.getElementById('bc-input');
+  const pri = document.getElementById('bc-pri');
+  if (!inp || !pri) return;
+  inp.value = text; pri.value = priority;
+  onBCInput(); sendBroadcast();
+}
+
+// ═══════════════════════════════════════════════════
+// SIGNAGE — DISPLAYS & SPONSORS
+// SQL schema needed in Supabase:
+//   CREATE TABLE leod_signage_displays (
+//     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//     event_id UUID REFERENCES leod_events(id),
+//     name TEXT NOT NULL,
+//     zone_type TEXT NOT NULL DEFAULT 'lobby',
+//     orientation TEXT NOT NULL DEFAULT 'landscape',
+//     content_mode TEXT NOT NULL DEFAULT 'schedule',
+//     filter_room TEXT,
+//     override_content JSONB,
+//     last_seen_at TIMESTAMPTZ,
+//     created_at TIMESTAMPTZ DEFAULT NOW()
+//   );
+//   CREATE TABLE leod_signage_sponsors (
+//     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+//     event_id UUID REFERENCES leod_events(id),
+//     name TEXT NOT NULL,
+//     logo_url TEXT,
+//     bg_color TEXT DEFAULT '#0d0f17',
+//     sort_order SMALLINT DEFAULT 0,
+//     active BOOLEAN DEFAULT true
+//   );
+// ═══════════════════════════════════════════════════
+let _dispModalId  = null;
+let _sponModalId  = null;
+
+async function loadDisplays(eventId) {
+  try {
+    const { data } = await sb.from('leod_signage_displays')
+      .select('*').eq('event_id', eventId).order('zone_type').order('name');
+    S.displays = data || [];
+  } catch { S.displays = []; }
+}
+
+async function loadSponsors(eventId) {
+  try {
+    const { data } = await sb.from('leod_signage_sponsors')
+      .select('*').eq('event_id', eventId).eq('active', true)
+      .order('sort_order').order('name');
+    S.sponsors = data || [];
+  } catch { S.sponsors = []; }
+}
+
+function subscribeDisplays(eventId) {
+  sb.channel('leod-signage')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_displays',
+        filter: `event_id=eq.${eventId}` }, p => {
+      if (p.eventType === 'DELETE') {
+        S.displays = S.displays.filter(d => d.id !== p.old.id);
+      } else {
+        const idx = S.displays.findIndex(d => d.id === p.new.id);
+        if (idx >= 0) S.displays[idx] = p.new; else S.displays.push(p.new);
+      }
+      if (S.role === 'signage') renderSignagePanel();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_sponsors',
+        filter: `event_id=eq.${eventId}` }, p => {
+      if (p.eventType === 'DELETE') {
+        S.sponsors = S.sponsors.filter(s => s.id !== p.old.id);
+      } else {
+        const idx = S.sponsors.findIndex(s => s.id === p.new.id);
+        if (idx >= 0) S.sponsors[idx] = p.new; else S.sponsors.push(p.new);
+        S.sponsors.sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+      }
+      if (S.role === 'signage') renderSignagePanel();
+    })
+    .subscribe(st => {
+      if (st === 'CHANNEL_ERROR') {
+        // Reload signage data and re-subscribe after a short delay with jitter
+        setTimeout(async () => {
+          if (!S.event) return;
+          await loadDisplays(S.event.id);
+          await loadSponsors(S.event.id);
+          subscribeDisplays(S.event.id);
+          if (S.role === 'signage') renderSignagePanel();
+        }, 3_000 + Math.random() * 2_000);
+      }
+    });
+}
+
+function renderSignagePanel() {
+  const list = document.getElementById('sessions-list');
+  if (!list) return;
+  const now = Date.now();
+  const ONLINE_MS = 60_000;
+
+  const displayCards = S.displays.length
+    ? S.displays.map(d => {
+        const lastSeen = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
+        const online   = lastSeen && (now - lastSeen) < ONLINE_MS;
+        const hasOverride = !!(d.override_content?.mode);
+        const cardCls  = hasOverride ? 'override-active' : (online ? 'online' : 'offline');
+        const dot      = online ? 'online' : 'offline';
+        const orientIcon = d.orientation === 'portrait' ? '▯' : '▭';
+        const displayUrl = buildDisplayUrl(d);
+        return `<div class="sp-display-card ${cardCls}">
+          <div class="sp-disp-hdr">
+            <div class="sp-disp-dot ${dot}"></div>
+            <div class="sp-disp-name">${esc(d.name)}</div>
+            <span class="sp-disp-zone">${esc(d.zone_type)}</span>
+          </div>
+          <div class="sp-disp-meta">
+            <span class="sp-disp-mode">${esc(d.content_mode)}</span>
+            <span>${orientIcon} ${esc(d.orientation)}</span>
+            ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
+            <span style="color:${online?'var(--green)':'var(--dim)'}">${online?'● online':'○ offline'}</span>
+          </div>
+          ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
+          <div class="sp-disp-actions">
+            <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer">▶ Launch</a>
+            <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
+            ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')
+    : `<div style="color:var(--dim);font-size:11px;padding:16px 0;text-align:center">No displays registered yet — add one to get started.</div>`;
+
+  const sponsorCards = S.sponsors.length
+    ? S.sponsors.map(s => `
+        <div class="sp-sponsor-card">
+          ${s.logo_url
+            ? `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`
+            : `<div class="sp-sponsor-placeholder">no logo</div>`}
+          <div class="sp-sponsor-name">${esc(s.name)}</div>
+          <button class="sp-sponsor-edit" onclick="openSponsorModal('edit','${esc(s.id)}')">✎</button>
+        </div>`).join('')
+    : `<div style="color:var(--dim);font-size:11px;padding:12px 0">No sponsors added yet.</div>`;
+
+  const activeOverride = S.displays.some(d => d.override_content?.mode);
+  const overrideModes = [
+    { key: 'break',    label: '☕ Break Screen' },
+    { key: 'recall',   label: '⚡ 5-Min Recall' },
+    { key: 'sponsors', label: '🏢 Sponsors' },
+    { key: 'wifi',     label: '📶 WiFi Info' },
+    { key: 'schedule', label: '📋 Schedule' },
+  ];
+
+  list.innerHTML = `
+  <div style="border-bottom:1px solid var(--border)">
+    <div class="sp-section">
+      <div class="sp-section-hdr">
+        <span class="sp-section-title">GLOBAL DISPLAY OVERRIDE</span>
+        ${activeOverride ? `<button class="abtn btn-grey" style="font-size:10px;padding:4px 10px" onclick="clearGlobalOverride()">✕ Clear All</button>` : ''}
+      </div>
+      <div class="sp-global-bar">
+        <label>PUSH ALL →</label>
+        <div class="sp-override-btns">
+          ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-bottom:1px solid var(--border)">
+    <div class="sp-section">
+      <div class="sp-section-hdr">
+        <span class="sp-section-title">REGISTERED DISPLAYS (${S.displays.length})</span>
+        <button class="abtn btn-blue" style="font-size:10px;padding:4px 10px" onclick="openDisplayModal('add')">＋ Add Display</button>
+      </div>
+      <div class="sp-grid">${displayCards}</div>
+    </div>
+  </div>
+
+  <div style="border-bottom:1px solid var(--border)">
+    <div class="sp-section">
+      <div class="sp-section-hdr">
+        <span class="sp-section-title">SPONSOR LIBRARY (${S.sponsors.length})</span>
+        <button class="abtn btn-blue" style="font-size:10px;padding:4px 10px" onclick="openSponsorModal('add')">＋ Add Sponsor</button>
+      </div>
+      <div class="sp-sponsor-grid">${sponsorCards}</div>
+    </div>
+  </div>
+
+  <div class="sp-section" style="color:var(--dim);font-size:11px;line-height:1.8">
+    <span class="sp-section-title" style="display:block;margin-bottom:6px">DISPLAY URL FORMAT</span>
+    Displays connect via:<br>
+    <code>LEOD-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
+    Open in any browser — supports landscape &amp; portrait. Heartbeat every 30s.
+  </div>`;
+}
+
+function buildDisplayUrl(d) {
+  const base = window.location.href.replace(/LEOD-console(\.html)?.*$/, 'LEOD-display.html');
+  // Use hash params — work reliably with both file:// and http:// protocols
+  const hash = `#url=${encodeURIComponent(SUPABASE_URL)}&key=${encodeURIComponent(SUPABASE_ANON_KEY)}&id=${encodeURIComponent(d.id)}`;
+  return base.split('?')[0].split('#')[0] + hash;
+}
+
+function launchDisplay(url) {
+  // Store params in localStorage so display page can read them even if
+  // query string is stripped (common with file:// protocol)
+  try {
+    const p = new URL(url);
+    localStorage.setItem('leod_display_cfg', JSON.stringify({
+      url: p.searchParams.get('url'),
+      key: p.searchParams.get('key'),
+      id:  p.searchParams.get('id'),
+    }));
+  } catch(_) {}
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+// ── Display modal ──
+function openDisplayModal(mode, id) {
+  _dispModalId = id || null;
+  const err = document.getElementById('dm-error');
+  if (err) err.textContent = '';
+  const delBtn = document.getElementById('dm-del');
+  document.getElementById('disp-modal-title').textContent = mode === 'edit' ? 'Edit Display' : 'Add Display';
+  if (delBtn) delBtn.style.display = mode === 'edit' ? '' : 'none';
+
+  if (mode === 'edit' && id) {
+    const d = S.displays.find(d => d.id === id);
+    if (!d) return;
+    document.getElementById('dm-name').value   = d.name        || '';
+    document.getElementById('dm-zone').value   = d.zone_type   || 'lobby';
+    document.getElementById('dm-orient').value = d.orientation || 'landscape';
+    document.getElementById('dm-mode').value   = d.content_mode|| 'schedule';
+    document.getElementById('dm-room').value   = d.filter_room || '';
+  } else {
+    document.getElementById('dm-name').value   = '';
+    document.getElementById('dm-zone').value   = 'lobby';
+    document.getElementById('dm-orient').value = 'landscape';
+    document.getElementById('dm-mode').value   = 'schedule';
+    document.getElementById('dm-room').value   = '';
+  }
+  document.getElementById('disp-modal').style.display = 'flex';
+}
+
+function closeDisplayModal() {
+  document.getElementById('disp-modal').style.display = 'none';
+  _dispModalId = null;
+}
+
+async function saveDisplay() {
+  const err  = document.getElementById('dm-error');
+  err.textContent = '';
+  const name   = document.getElementById('dm-name').value.trim();
+  const zone   = document.getElementById('dm-zone').value;
+  const orient = document.getElementById('dm-orient').value;
+  const mode   = document.getElementById('dm-mode').value;
+  const room   = document.getElementById('dm-room').value.trim() || null;
+  if (!name) { err.textContent = 'Display name is required.'; return; }
+  if (!S.event) { err.textContent = 'No active event selected.'; return; }
+
+  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room };
+  const { error } = _dispModalId
+    ? await sb.from('leod_signage_displays').update(payload).eq('id', _dispModalId)
+    : await sb.from('leod_signage_displays').insert(payload);
+
+  if (error) { err.textContent = error.message; return; }
+  closeDisplayModal();
+  await loadDisplays(S.event.id);
+  renderSignagePanel();
+  pushLog('SIGNAGE', `display ${_dispModalId ? 'updated' : 'added'}: ${name}`, null);
+}
+
+async function deleteDisplay() {
+  if (!_dispModalId) return;
+  const { error } = await sb.from('leod_signage_displays').delete().eq('id', _dispModalId);
+  if (error) { document.getElementById('dm-error').textContent = error.message; return; }
+  closeDisplayModal();
+  await loadDisplays(S.event.id);
+  renderSignagePanel();
+}
+
+// ── Global overrides ──
+async function sendGlobalOverride(mode) {
+  if (!S.event) return;
+  if (!S.displays.length) { pushLog('SIGNAGE', 'no displays registered', null); return; }
+  const overrideContent = { mode, pushed_at: new Date().toISOString() };
+  await Promise.all(S.displays.map(d =>
+    sb.from('leod_signage_displays').update({ override_content: overrideContent }).eq('id', d.id)
+  ));
+  await loadDisplays(S.event.id);
+  renderSignagePanel();
+  pushLog('SIGNAGE', `global override → ${mode} (${S.displays.length} displays)`, null);
+}
+
+async function clearGlobalOverride() {
+  if (!S.event || !S.displays.length) return;
+  await Promise.all(S.displays.map(d =>
+    sb.from('leod_signage_displays').update({ override_content: null }).eq('id', d.id)
+  ));
+  await loadDisplays(S.event.id);
+  renderSignagePanel();
+  pushLog('SIGNAGE', 'global override cleared', null);
+}
+
+async function clearDisplayOverride(id) {
+  await sb.from('leod_signage_displays').update({ override_content: null }).eq('id', id);
+  const idx = S.displays.findIndex(d => d.id === id);
+  if (idx >= 0) { S.displays[idx] = { ...S.displays[idx], override_content: null }; }
+  renderSignagePanel();
+}
+
+// ── Sponsor modal ──
+function openSponsorModal(mode, id) {
+  _sponModalId = id || null;
+  const err = document.getElementById('spm-error');
+  if (err) err.textContent = '';
+  const delBtn = document.getElementById('spm-del');
+  document.getElementById('spon-modal-title').textContent = mode === 'edit' ? 'Edit Sponsor' : 'Add Sponsor';
+  if (delBtn) delBtn.style.display = mode === 'edit' ? '' : 'none';
+  document.getElementById('spm-preview').style.display = 'none';
+  document.getElementById('spm-file').value = '';
+
+  if (mode === 'edit' && id) {
+    const s = S.sponsors.find(s => s.id === id);
+    if (!s) return;
+    document.getElementById('spm-name').value = s.name     || '';
+    document.getElementById('spm-bg').value   = s.bg_color || '#0d0f17';
+    if (s.logo_url) {
+      document.getElementById('spm-preview').style.display = 'block';
+      document.getElementById('spm-preview-img').src = s.logo_url;
+    }
+  } else {
+    document.getElementById('spm-name').value = '';
+    document.getElementById('spm-bg').value   = '#0d0f17';
+  }
+
+  document.getElementById('spm-file').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('spm-preview').style.display = 'block';
+      document.getElementById('spm-preview-img').src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  document.getElementById('spon-modal').style.display = 'flex';
+}
+
+function closeSponsorModal() {
+  document.getElementById('spon-modal').style.display = 'none';
+  _sponModalId = null;
+}
+
+async function saveSponsor() {
+  const err = document.getElementById('spm-error');
+  err.textContent = '';
+  const name = document.getElementById('spm-name').value.trim();
+  const bg   = document.getElementById('spm-bg').value;
+  const file = document.getElementById('spm-file').files[0];
+  if (!name) { err.textContent = 'Sponsor name is required.'; return; }
+  if (!S.event) { err.textContent = 'No active event.'; return; }
+
+  let logo_url = _sponModalId ? (S.sponsors.find(s => s.id === _sponModalId)?.logo_url ?? null) : null;
+
+  if (file) {
+    const ext  = file.name.split('.').pop().toLowerCase();
+    const path = `sponsors/${S.event.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('leod-assets').upload(path, file, { contentType: file.type, upsert: true });
+    if (upErr) {
+      err.textContent = `Logo upload failed: ${upErr.message}`;
+      return;
+    } else {
+      const { data: { publicUrl } } = sb.storage.from('leod-assets').getPublicUrl(path);
+      logo_url = publicUrl;
+    }
+  }
+
+  const payload = { event_id: S.event.id, name, logo_url, bg_color: bg, active: true };
+  const { error } = _sponModalId
+    ? await sb.from('leod_signage_sponsors').update(payload).eq('id', _sponModalId)
+    : await sb.from('leod_signage_sponsors').insert(payload);
+
+  if (error) { err.textContent = error.message; return; }
+  closeSponsorModal();
+  await loadSponsors(S.event.id);
+  renderSignagePanel();
+  pushLog('SIGNAGE', `sponsor ${_sponModalId ? 'updated' : 'added'}: ${name}`, null);
+}
+
+async function deleteSponsorFromModal() {
+  if (!_sponModalId) return;
+  const { error } = await sb.from('leod_signage_sponsors').delete().eq('id', _sponModalId);
+  if (error) { document.getElementById('spm-error').textContent = error.message; return; }
+  closeSponsorModal();
+  await loadSponsors(S.event.id);
+  renderSignagePanel();
+}
+
+function openStageMonitor() {
+  document.getElementById('stage-monitor').style.display = 'flex';
+  updateStageMonitor();
+}
+function closeStageMonitor() {
+  document.getElementById('stage-monitor').style.display = 'none';
+}
+function updateStageMonitor() {
+  const mon = document.getElementById('stage-monitor');
+  if (!mon || mon.style.display === 'none') return;
+
+  const nowMs = Date.now() + (S.clockOffset || 0);
+  const live  = S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN');
+  const ready = S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING');
+  const cur   = live || ready;
+  const next  = cur
+    ? S.sessions.find(s => s.sort_order > cur.sort_order && !['ENDED','CANCELLED'].includes(s.status))
+    : S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+
+  const smStatus   = document.getElementById('sm-status');
+  const smTitle    = document.getElementById('sm-title');
+  const smSpk      = document.getElementById('sm-speaker');
+  const smTimer    = document.getElementById('sm-timer');
+  const smLbl      = document.getElementById('sm-timer-lbl');
+  const smNextTitle= document.getElementById('sm-next-title');
+  const smNextTime = document.getElementById('sm-next-time');
+  const smClock    = document.getElementById('sm-clock');
+  const smEvt      = document.getElementById('sm-event-name');
+
+  // Footer clock + event name
+  if (smClock) smClock.textContent = correctedHMS();
+  if (smEvt && S.currentEvent) smEvt.textContent = (S.currentEvent.name || '—').toUpperCase();
+
+  if (live && live.actual_start) {
+    const startMs = new Date(live.actual_start).getTime();
+    const elapsed = nowMs - startMs;
+    const durMs   = (toMins(live.scheduled_end) - toMins(live.scheduled_start)) * 60_000;
+    const remain  = durMs - elapsed;
+    const overrun = remain < 0;
+    const abs     = overrun ? -remain : remain;
+    const m       = Math.floor(abs / 60_000);
+    const s       = Math.floor((abs % 60_000) / 1000);
+
+    smStatus.innerHTML = `<span class="sm-live-dot"></span>YOU ARE LIVE`;
+    smStatus.className = 'sm-status-live';
+    smTitle.textContent  = live.title;
+    smSpk.textContent    = live.speaker || '';
+    smTimer.textContent  = `${m}:${String(s).padStart(2,'0')}`;
+    smTimer.style.color  = overrun ? '#ef4444' : remain <= 2*60_000 ? '#ef4444' : remain <= 5*60_000 ? '#f59e0b' : '#22c55e';
+    smLbl.textContent    = overrun ? 'OVERTIME' : remain <= 2*60_000 ? 'ENDING NOW' : remain <= 5*60_000 ? 'WRAPPING UP' : 'REMAINING';
+
+  } else if (ready) {
+    smStatus.innerHTML  = '◈ STANDING BY — STARTING SHORTLY';
+    smStatus.className  = 'sm-status-standby';
+    smTitle.textContent = ready.title;
+    smSpk.textContent   = ready.speaker || '';
+    smTimer.textContent = ready.scheduled_start || '--:--';
+    smTimer.style.color = '#f59e0b';
+    smLbl.textContent   = 'SCHEDULED START';
+
+  } else {
+    smStatus.innerHTML  = '— STANDBY';
+    smStatus.className  = 'sm-status-standby';
+    smTitle.textContent = S.currentEvent?.name ? S.currentEvent.name.toUpperCase() : 'STANDING BY';
+    smSpk.textContent   = '';
+    smTimer.textContent = '--:--';
+    smTimer.style.color = 'var(--dim)';
+    smLbl.textContent   = '';
+  }
+
+  if (next && next !== cur) {
+    smNextTitle.textContent = next.title;
+    smNextTime.textContent  = (next.scheduled_start || '') + (next.speaker ? ` · ${next.speaker}` : '');
+  } else {
+    smNextTitle.textContent = '—';
+    smNextTime.textContent  = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════
+function setConn(st) {
+  S.connStatus = st;
+  const dot = document.getElementById('conn-dot');
+  dot.className = st;
+  document.getElementById('conn-lbl').textContent = st;
+}
+
+function refreshClockUI() {
+  const ts  = correctedHMS();
+  const off = Math.round(S.clockOffset);
+  const rtt = Math.round(S.clockRtt);
+  const offStr = `${off >= 0 ? '+' : ''}${off}ms`;
+
+  document.getElementById('hdr-clock').textContent = ts;
+  document.getElementById('sb-time').textContent   = ts;
+  document.getElementById('hdr-offset').textContent = `offset: ${offStr}`;
+
+  const ckOff = document.getElementById('ck-off');
+  ckOff.textContent = offStr;
+  ckOff.className   = `ck-val${Math.abs(off) > DRIFT_WARN_MS ? ' drifted' : ''}`;
+
+  document.getElementById('ck-rtt').textContent  = `${rtt}ms`;
+  document.getElementById('ck-tick').textContent = S.clockTick;
+  document.getElementById('ck-sync').textContent = S.clockSynced ? timeSince(S.clockSynced) + ' ago' : '—';
+  updateStageMonitor();
+}
+
+function refreshDiag() {
+  const map = {
+    db: { el: ['dd-db','dl-db'], st: S.dbStatus, ok:'database ✓', error:'database ✗', checking:'database…', '':'database' },
+    rt: { el: ['dd-rt','dl-rt'], st: S.rtStatus, ok:'realtime ✓', error:'realtime ✗', '':'realtime' },
+    ck: { el: ['dd-ck','dl-ck'], st: S.ckStatus, ok:'clock sync ✓', error:'clock sync ✗', checking:'clock…', '':'clock sync' },
+    ef: { el: ['dd-ef','dl-ef'], st: S.efStatus, ok:'edge functions ✓', 'not-deployed':'edge functions (not deployed)', unknown:'edge functions', '':'edge functions' },
+  };
+  for (const [, cfg] of Object.entries(map)) {
+    const dot = document.getElementById(cfg.el[0]);
+    const lbl = document.getElementById(cfg.el[1]);
+    dot.className = `dd ${cfg.st === 'ok' ? 'ok' : cfg.st === 'error' || cfg.st === 'not-deployed' ? 'error' : cfg.st === 'checking' ? 'checking' : ''}`;
+    lbl.textContent = cfg[cfg.st] || cfg[''];
+  }
+}
+
+function pushLog(action, detail, sessionId) {
+  S.log.unshift({ action, detail, sessionId, ts: correctedNow() });
+  if (S.log.length > 60) S.log.pop();
+  renderLog();
+}
+
+function pushLogFromRow(row) {
+  const detail = row.from_status
+    ? `${row.from_status} → ${row.to_status}`
+    : String(JSON.stringify(row.payload || '')).substring(0, 45);
+  pushLog(row.action, detail, row.session_id);
+}
+
+function renderLog() {
+  const feed = document.getElementById('log-feed');
+  if (!S.log.length) {
+    feed.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">No events yet…</div>';
+    return;
+  }
+  feed.innerHTML = S.log.slice(0, 25).map(e => `
+    <div class="le">
+      <span class="le-ts">${new Date(e.ts).toTimeString().substring(0,8)}</span>
+      <span class="le-act"> ${e.action}</span>
+      ${e.detail ? `<div class="le-det">${esc(e.detail)}</div>` : ''}
+    </div>`).join('');
+}
+
+function showBCBanner(b) {
+  const el = document.getElementById('bc-banner');
+  if (!b?.message) { hideBCBanner(); return; }
+  el.className = b.priority;
+  el.style.display = 'block';
+  el.innerHTML = `📢 ${esc(b.message)}<button class="bc-dismiss" onclick="dismissBanner()" title="Dismiss locally">✕</button>`;
+}
+function hideBCBanner()  { document.getElementById('bc-banner').style.display = 'none'; }
+function dismissBanner() { document.getElementById('bc-banner').style.display = 'none'; }
+
+const BC_PRESETS = [
+  { label: '☕ Break',   text: '☕ Coffee break starting now' },
+  { label: '🎤 Seats',  text: '🎤 Please take your seats — next session starting soon' },
+  { label: '⏱ Delay',  text: '⏱ Running a few minutes behind schedule' },
+  { label: '🔇 Phones', text: '🔇 Please silence your phones' },
+  { label: '🚨 Hold',   text: '🚨 HOLD — please stand by' },
+];
+
+function buildBCPresets() {
+  const wrap = document.getElementById('bc-presets');
+  if (!wrap) return;
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  if (!isDirector) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = BC_PRESETS.map(p =>
+    `<button class="bc-preset-btn" onclick="fillPreset(${JSON.stringify(p.text)})">${p.label}</button>`
+  ).join('');
+}
+
+function fillPreset(text) {
+  const inp = document.getElementById('bc-input');
+  inp.value = text;
+  inp.focus();
+  onBCInput();
+}
+
+function onBCInput() {
+  const inp = document.getElementById('bc-input');
+  const len = inp?.value.length || 0;
+  const el  = document.getElementById('bc-char');
+  if (!el) return;
+  el.textContent = len > 0 ? `${len}/200` : '';
+  el.className   = `bc-char${len > 160 ? ' warn' : ''}`;
+}
+
+function setRole(role) {
+  S.role = role;
+  document.querySelectorAll('.rbtn[data-role]').forEach(b => b.classList.toggle('active', b.dataset.role === role));
+  renderSessions();
+  buildBCPresets();
+  buildCtxPanel();
+}
+
+function buildEvSelect(events) {
+  const wrap = document.getElementById('ev-select-wrap');
+  let html = 'EVENT: ';
+  html += events.map(e => {
+    const active = e.id === S.event?.id;
+    const editBtn = active
+      ? `<button class="ev-edit-btn" onclick="openEvModal('edit','${e.id}')" title="Edit event">✎</button>`
+      : '';
+    return `<button class="rbtn ${active ? 'active' : ''}" onclick="switchEvent('${e.id}')">${esc(e.name)}</button>${editBtn}`;
+  }).join('');
+  html += `<button class="rbtn" onclick="openEvModal('create')" title="New event">＋</button>`;
+  wrap.innerHTML = html;
+}
+
+function buildFilterBar() {
+  const bar = document.getElementById('filter-bar');
+  if (!bar) return;
+  const rooms = [...new Set(S.sessions.map(s => s.room).filter(Boolean))].sort();
+  const roomOpts = rooms.map(r =>
+    `<option value="${esc(r)}" ${F.room===r?'selected':''}>${esc(r)}</option>`).join('');
+  const statuses = ['PLANNED','READY','CALLING','LIVE','HOLD','ENDED','CANCELLED'];
+  const stOpts = statuses.map(st =>
+    `<option value="${st}" ${F.status===st?'selected':''}>${st}</option>`).join('');
+  bar.innerHTML = `
+    <input  id="fb-search" type="search" placeholder="search title / speaker…"
+            value="${esc(F.text)}" oninput="onFilterInput(event)">
+    <select id="fb-status" onchange="onFilterChange()">
+      <option value="" ${!F.status?'selected':''}>All statuses</option>${stOpts}
+    </select>
+    <select id="fb-room" onchange="onFilterChange()">
+      <option value="" ${!F.room?'selected':''}>All rooms</option>${roomOpts}
+    </select>
+    <button id="fb-clear" class="${isFilterActive()?'visible':''}" onclick="clearFilters()">✕ clear</button>
+    <span   id="fb-count"></span>`;
+}
+
+function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
+function onFilterChange() {
+  F.status = document.getElementById('fb-status').value;
+  F.room   = document.getElementById('fb-room').value;
+  renderSessions();
+}
+function clearFilters() {
+  F.text = ''; F.status = ''; F.room = '';
+  buildFilterBar();
+  renderSessions();
+}
+
+async function switchEvent(eventId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  S.event = ev;
+  setStep(`Loading ${ev.name}…`);
+  F.text = ''; F.status = ''; F.room = ''; // clear filters on event switch
+  await loadSnapshot(eventId);
+  await loadBroadcast(eventId).catch(() => {});
+  await loadLog(eventId).catch(() => {});
+  subscribeControl(eventId);
+  document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
+  buildEvSelect(S.events);
+}
+
+// ═══════════════════════════════════════════════════
+// EVENT MODAL
+// ═══════════════════════════════════════════════════
+let evModalMode = 'create', evModalId = null;
+let sessModalMode = 'add', sessModalId = null;
+
+function openEvModal(mode, eventId) {
+  evModalMode = mode;
+  evModalId   = eventId || null;
+  document.getElementById('evm-error').textContent = '';
+
+  if (mode === 'create') {
+    document.getElementById('ev-modal-title').textContent = 'New Event';
+    document.getElementById('evm-name').value  = '';
+    document.getElementById('evm-date').value  = new Date().toISOString().substring(0, 10);
+    document.getElementById('evm-tz').value    = S.event?.timezone || 'Europe/Warsaw';
+    document.getElementById('evm-venue').value = '';
+    document.getElementById('evm-start').value = '09:00';
+    document.getElementById('evm-end').value   = '18:00';
+    // Populate seed dropdown
+    const sel = document.getElementById('evm-seed');
+    sel.innerHTML = '<option value="">— none —</option>' +
+      S.events.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
+    document.getElementById('evm-seed-row').style.display = S.events.length ? '' : 'none';
+    document.getElementById('evm-deact').style.display = 'none';
+  } else {
+    const ev = S.events.find(e => e.id === eventId);
+    if (!ev) return;
+    document.getElementById('ev-modal-title').textContent = 'Edit Event';
+    document.getElementById('evm-name').value  = ev.name  || '';
+    document.getElementById('evm-date').value  = ev.date  || '';
+    document.getElementById('evm-tz').value    = ev.timezone || '';
+    document.getElementById('evm-venue').value = ev.venue || '';
+    document.getElementById('evm-start').value = (ev.event_start || '').substring(0, 5);
+    document.getElementById('evm-end').value   = (ev.event_end   || '').substring(0, 5);
+    document.getElementById('evm-seed-row').style.display = 'none';
+    document.getElementById('evm-deact').style.display = '';
+  }
+  document.getElementById('ev-modal').style.display = 'flex';
+}
+
+function closeEvModal() {
+  document.getElementById('ev-modal').style.display = 'none';
+  document.getElementById('evm-error').textContent = '';
+}
+
+async function submitEvModal() {
+  const name  = document.getElementById('evm-name').value.trim();
+  const date  = document.getElementById('evm-date').value;
+  const tz    = document.getElementById('evm-tz').value.trim();
+  const venue = document.getElementById('evm-venue').value.trim();
+  const start = document.getElementById('evm-start').value;
+  const end   = document.getElementById('evm-end').value;
+  const errEl = document.getElementById('evm-error');
+
+  if (!name || !date || !tz || !start || !end) {
+    errEl.textContent = 'Name, date, timezone, start and end are required.'; return;
+  }
+
+  const saveBtn = document.querySelector('.ev-modal-actions button.primary');
+  saveBtn.disabled = true;
+  errEl.textContent = '';
+
+  try {
+    if (evModalMode === 'create') {
+      const { data: ev, error } = await sb.from('leod_events')
+        .insert({ name, date, timezone: tz, event_start: start, event_end: end,
+                  venue: venue || null, active: true })
+        .select().single();
+      if (error) { errEl.textContent = error.message; return; }
+
+      const seedId = document.getElementById('evm-seed').value;
+      if (seedId) await seedSessions(seedId, ev.id);
+
+      S.events.push(ev);
+      closeEvModal();
+      buildEvSelect(S.events);
+      await switchEvent(ev.id);
+
+    } else {
+      const { error } = await sb.from('leod_events')
+        .update({ name, date, timezone: tz, event_start: start, event_end: end,
+                  venue: venue || null })
+        .eq('id', evModalId);
+      if (error) { errEl.textContent = error.message; return; }
+
+      const idx = S.events.findIndex(e => e.id === evModalId);
+      if (idx !== -1) {
+        S.events[idx] = { ...S.events[idx], name, date, timezone: tz,
+                          event_start: start + ':00', event_end: end + ':00',
+                          venue: venue || null };
+      }
+      if (S.event?.id === evModalId) {
+        S.event = S.events[idx];
+        document.getElementById('event-name').textContent = `${name} · ${date} · ${tz}`;
+      }
+      closeEvModal();
+      buildEvSelect(S.events);
+    }
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function deactivateEvent() {
+  const ev = S.events.find(e => e.id === evModalId);
+  if (!ev) return;
+  // Two-step: first click arms the button, second click confirms
+  const btn = document.getElementById('evm-deact');
+  if (btn.dataset.armed !== 'yes') {
+    btn.dataset.armed = 'yes';
+    btn.textContent = 'Confirm?';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Deactivate'; }, 3000);
+    return;
+  }
+  btn.dataset.armed = '';
+  btn.textContent = 'Deactivate';
+
+  const { error } = await sb.from('leod_events').update({ active: false }).eq('id', evModalId);
+  if (error) { document.getElementById('evm-error').textContent = error.message; return; }
+
+  S.events = S.events.filter(e => e.id !== evModalId);
+  closeEvModal();
+
+  if (S.event?.id === evModalId) {
+    if (S.events.length) {
+      await switchEvent(S.events[0].id);
+    } else {
+      S.event = null;
+      S.ctrlChan?.unsubscribe();
+      document.getElementById('event-name').textContent = 'No active events';
+      document.getElementById('sessions-list').innerHTML = `
+        <div id="empty">
+          <div class="ei">📅</div>
+          <h2>No active events</h2>
+          <p>Use the <strong>＋</strong> button above to create a new event.</p>
+        </div>`;
+    }
+  }
+  buildEvSelect(S.events);
+}
+
+async function seedSessions(fromEventId, toEventId) {
+  const { data: sessions } = await sb
+    .from('leod_sessions').select('*').eq('event_id', fromEventId).order('sort_order');
+  if (!sessions?.length) return 0;
+
+  const inserts = sessions.map(({ id: _id, ...s }) => ({
+    event_id:         toEventId,
+    sort_order:       s.sort_order,
+    title:            s.title,
+    type:             s.type,
+    speaker:          s.speaker,
+    company:          s.company,
+    room:             s.room,
+    is_anchor:        s.is_anchor,
+    planned_start:    s.planned_start,
+    planned_end:      s.planned_end,
+    scheduled_start:  s.planned_start,
+    scheduled_end:    s.planned_end,
+    remote:           s.remote,
+    streaming:        s.streaming,
+    recording:        s.recording,
+    interpretation:   s.interpretation,
+    languages:        s.languages,
+    mics:             s.mics,
+    status:           'PLANNED',
+    version:          0,
+    cumulative_delay: 0,
+    delay_minutes:    0,
+    speaker_arrived:  false,
+    actual_start:     null,
+    actual_end:       null,
+  }));
+
+  await sb.from('leod_sessions').insert(inserts);
+  return inserts.length;
+}
+
+// ═══════════════════════════════════════════════════
+// SESSION MODAL
+// ═══════════════════════════════════════════════════
+function openSessModal(mode, sessionId) {
+  sessModalMode = mode;
+  sessModalId   = sessionId || null;
+  document.getElementById('smv-error').textContent = '';
+
+  if (mode === 'add') {
+    document.getElementById('sess-modal-title').textContent = 'New Session';
+    const maxSort = S.sessions.reduce((m, s) => Math.max(m, s.sort_order || 0), 0);
+    document.getElementById('smv-sort').value   = maxSort + 1;
+    document.getElementById('smv-title').value  = '';
+    document.getElementById('smv-type').value   = 'Keynote';
+    document.getElementById('smv-room').value   = '';
+    document.getElementById('smv-spk').value    = '';
+    document.getElementById('smv-co').value     = '';
+    document.getElementById('smv-start').value  = '';
+    document.getElementById('smv-end').value    = '';
+    document.getElementById('smv-anchor').checked = false;
+    document.getElementById('smv-rec').checked    = false;
+    document.getElementById('smv-stream').checked = false;
+    document.getElementById('smv-remote').checked = false;
+    document.getElementById('smv-interp').checked = false;
+    document.getElementById('smv-mics').value   = 0;
+    document.getElementById('smv-del').style.display = 'none';
+  } else {
+    const s = S.sessions.find(x => x.id === sessionId);
+    if (!s) return;
+    document.getElementById('sess-modal-title').textContent = 'Edit Session';
+    document.getElementById('smv-sort').value   = s.sort_order || '';
+    document.getElementById('smv-title').value  = s.title      || '';
+    document.getElementById('smv-type').value   = s.type       || 'Keynote';
+    document.getElementById('smv-room').value   = s.room       || '';
+    document.getElementById('smv-spk').value    = s.speaker    || '';
+    document.getElementById('smv-co').value     = s.company    || '';
+    document.getElementById('smv-start').value  = (s.planned_start || '').substring(0, 5);
+    document.getElementById('smv-end').value    = (s.planned_end   || '').substring(0, 5);
+    document.getElementById('smv-anchor').checked = !!s.is_anchor;
+    document.getElementById('smv-rec').checked    = !!s.recording;
+    document.getElementById('smv-stream').checked = !!s.streaming;
+    document.getElementById('smv-remote').checked = !!s.remote;
+    document.getElementById('smv-interp').checked = !!s.interpretation;
+    document.getElementById('smv-mics').value   = s.mics || 0;
+    document.getElementById('smv-del').style.display = '';
+  }
+  document.getElementById('sess-modal').style.display = 'flex';
+}
+
+function closeSessModal() {
+  document.getElementById('sess-modal').style.display = 'none';
+  document.getElementById('smv-error').textContent = '';
+  // Reset the delete button armed state
+  const btn = document.getElementById('smv-del');
+  btn.dataset.armed = '';
+  btn.textContent   = 'Delete';
+}
+
+async function submitSessModal() {
+  const title = document.getElementById('smv-title').value.trim();
+  const start = document.getElementById('smv-start').value;
+  const end   = document.getElementById('smv-end').value;
+  const errEl = document.getElementById('smv-error');
+
+  if (!title || !start || !end) {
+    errEl.textContent = 'Title, planned start and end are required.'; return;
+  }
+
+  const saveBtn = document.querySelector('#sess-modal .ev-modal-actions button.primary');
+  saveBtn.disabled = true;
+  errEl.textContent = '';
+
+  const fields = {
+    title,
+    type:           document.getElementById('smv-type').value,
+    room:           document.getElementById('smv-room').value.trim()  || null,
+    speaker:        document.getElementById('smv-spk').value.trim()   || null,
+    company:        document.getElementById('smv-co').value.trim()    || null,
+    planned_start:  start,
+    planned_end:    end,
+    sort_order:     parseInt(document.getElementById('smv-sort').value, 10) || 1,
+    is_anchor:      document.getElementById('smv-anchor').checked,
+    recording:      document.getElementById('smv-rec').checked,
+    streaming:      document.getElementById('smv-stream').checked,
+    remote:         document.getElementById('smv-remote').checked,
+    interpretation: document.getElementById('smv-interp').checked,
+    mics:           parseInt(document.getElementById('smv-mics').value, 10) || 0,
+  };
+
+  try {
+    if (sessModalMode === 'add') {
+      const { error } = await sb.from('leod_sessions').insert({
+        ...fields,
+        event_id:         S.event.id,
+        scheduled_start:  start,
+        scheduled_end:    end,
+        status:           'PLANNED',
+        version:          0,
+        cumulative_delay: 0,
+        delay_minutes:    0,
+        speaker_arrived:  false,
+        actual_start:     null,
+        actual_end:       null,
+      });
+      if (error) { errEl.textContent = error.message; return; }
+      // Realtime will push the new session into S.sessions automatically
+      closeSessModal();
+    } else {
+      const { error } = await sb.from('leod_sessions')
+        .update(fields)
+        .eq('id', sessModalId);
+      if (error) { errEl.textContent = error.message; return; }
+      // Update local state and re-render
+      const idx = S.sessions.findIndex(x => x.id === sessModalId);
+      if (idx !== -1) S.sessions[idx] = { ...S.sessions[idx], ...fields };
+      closeSessModal();
+      renderSessions();
+      buildFilterBar(); // room may have changed
+    }
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+async function deleteSession() {
+  const btn = document.getElementById('smv-del');
+  if (btn.dataset.armed !== 'yes') {
+    btn.dataset.armed  = 'yes';
+    btn.textContent    = 'Confirm?';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; }, 3000);
+    return;
+  }
+  btn.dataset.armed = '';
+  btn.textContent   = 'Delete';
+
+  const { error } = await sb.from('leod_sessions').delete().eq('id', sessModalId);
+  if (error) { document.getElementById('smv-error').textContent = error.message; return; }
+
+  S.sessions = S.sessions.filter(s => s.id !== sessModalId);
+  // Clear ghost room filter if this was the last session in that room
+  if (F.room && !S.sessions.some(s => s.room === F.room)) F.room = '';
+  closeSessModal();
+  renderSessions();
+  buildFilterBar();
+}
+
+async function reorderSession(id, dir) {
+  const idx = S.sessions.findIndex(s => s.id === id);
+  if (idx === -1) return;
+
+  const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= S.sessions.length) return;
+
+  const a = S.sessions[idx];
+  const b = S.sessions[swapIdx];
+  const aOrder = a.sort_order;
+  const bOrder = b.sort_order;
+
+  // Swap sort_order values in DB
+  const [res1, res2] = await Promise.all([
+    sb.from('leod_sessions').update({ sort_order: bOrder }).eq('id', a.id),
+    sb.from('leod_sessions').update({ sort_order: aOrder }).eq('id', b.id),
+  ]);
+  if (res1.error || res2.error) return; // silently fail — realtime will sync
+
+  // Update local state and re-render
+  a.sort_order = bOrder;
+  b.sort_order = aOrder;
+  S.sessions.sort((x, y) => x.sort_order - y.sort_order);
+  renderSessions();
+}
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+const pad  = n => String(n).padStart(2, '0');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function toMins(t) {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function addMinutes(t, min) {
+  if (!t) return t;
+  const total = toMins(t) + min;
+  return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+}
+
+function fmtDur(ms) {
+  const s = Math.floor(Math.abs(ms) / 1000);
+  return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+}
+
+function fmtTS(ts) {
+  return ts ? new Date(ts).toTimeString().substring(0, 8) : '—';
+}
+
+function timeSince(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  return `${Math.floor(s / 3600)}h`;
+}
+
+function trunc(s, n) { return s && s.length > n ? s.substring(0, n) + '…' : (s || ''); }
+
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setStep(msg) { document.getElementById('load-step').textContent = msg; }
+
+// ═══════════════════════════════════════════════════
+// LOCAL TICK — 1s interval
+// ═══════════════════════════════════════════════════
+let _lastTick = performance.now();
+
+setInterval(() => {
+  const now = performance.now();
+  const gap = now - _lastTick;
+  _lastTick = now;
+  // Sleep/wake detection
+  if (gap > 5000 && S.event) {
+    console.warn(`LEOD: sleep/wake detected (${Math.round(gap)}ms gap)`);
+    syncClock().then(() => {
+      if (S.ctrlChan?.state !== 'joined') doReconnect();
+      else loadSnapshot(S.event.id);
+    });
+  }
+  refreshClockUI();
+  // Re-render if any LIVE/OVERRUN session for live timer
+  if (S.sessions.some(s => s.status === 'LIVE' || s.status === 'OVERRUN')) renderSessions();
+}, 1000);
+
+setInterval(syncClock, CLOCK_RESYNC_MS);
+
+// ═══════════════════════════════════════════════════
+// CHECK EDGE FUNCTIONS
+// ═══════════════════════════════════════════════════
+async function checkEF() {
+  try {
+    const { error } = await sb.functions.invoke('go-live', { body: { _ping: true } });
+    if (!error) {
+      // No error → function responded successfully
+      S.efStatus = 'ok';
+    } else if (error.name === 'FunctionsFetchError') {
+      // Fetch-level failure (endpoint unreachable) → not deployed
+      S.efStatus = 'not-deployed';
+    } else if (error.message?.includes('404') || error.message?.toLowerCase().includes('not found')) {
+      // HTTP 404 from the functions gateway → not deployed
+      S.efStatus = 'not-deployed';
+    } else {
+      // FunctionsHttpError (4xx/5xx from the function itself) → it IS deployed, just errored
+      S.efStatus = 'ok';
+    }
+  } catch (e) {
+    // JS-level exception — can't determine
+    S.efStatus = 'unknown';
+  }
+  refreshDiag();
+}
+
+// ═══════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════
+function showLoginForm() {
+  document.getElementById('load-spinner').style.display = 'none';
+  document.getElementById('load-step').style.display    = 'none';
+  document.getElementById('login-form').style.display   = 'flex';
+}
+
+function hideLoginForm() {
+  document.getElementById('login-form').style.display   = 'none';
+  document.getElementById('load-spinner').style.display = '';
+  document.getElementById('load-step').style.display    = '';
+}
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const email    = document.getElementById('lf-email').value.trim();
+  const password = document.getElementById('lf-password').value;
+  const btn      = document.querySelector('#login-form button[type=submit]');
+  const errEl    = document.getElementById('lf-error');
+  btn.disabled   = true;
+  btn.textContent = 'Signing in…';
+  errEl.textContent = '';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent   = error.message;
+    btn.disabled        = false;
+    btn.textContent     = 'Sign in';
+    return;
+  }
+  S.user = data.user;
+  hideLoginForm();
+  await boot();
+}
+
+async function loadUserRole() {
+  if (!S.user) return;
+  const { data } = await sb.from('leod_users')
+    .select('role, name')
+    .eq('id', S.user.id)
+    .single();
+  if (!data) return; // no leod_users row → keep default director role
+
+  S.userRole = data.role;
+  setRole(data.role);
+
+  // Lock role switcher for non-directors
+  const roleBar = document.getElementById('role-bar');
+  if (data.role !== 'director') {
+    roleBar.querySelectorAll('.rbtn[data-role]').forEach(b => b.style.display = 'none');
+    const lbl = roleBar.querySelector('label');
+    lbl.textContent = `${data.name || S.user.email} · ${data.role}`;
+  }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    S.user = session.user;
+    await boot();
+  } else {
+    showLoginForm();
+  }
+}
+
+// Reload on sign-out (e.g. from another tab or token expiry)
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') location.reload();
+});
+
+// ═══════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════
+async function boot() {
+  const overlay = document.getElementById('loading-overlay');
+  try {
+    // 0. User role
+    if (S.user) {
+      setStep('Loading user…');
+      await loadUserRole();
+      document.getElementById('logout-btn').style.display = '';
+    }
+
+    // 1. Clock
+    setStep('Syncing server clock…');
+    try {
+      await syncClock();
+    } catch (e) {
+      pushLog('WARN', `clock sync failed: ${e.message}`, null);
+      S.ckStatus = 'error'; refreshDiag();
+    }
+
+    // 2. Events
+    setStep('Loading events…');
+    let events;
+    try {
+      events = await loadEvents();
+      S.events = events;
+      S.dbStatus = 'ok'; refreshDiag();
+    } catch (e) {
+      S.dbStatus = 'error'; refreshDiag();
+      document.getElementById('sessions-list').innerHTML = `
+        <div id="empty">
+          <div class="ei">⚠️</div>
+          <h2>Database schema not found</h2>
+          <p>The <code>leod_events</code> table doesn't exist yet.<br>
+             Run the DDL from the implementation spec, then refresh.</p>
+          <pre>-- Supabase SQL Editor:
+CREATE TABLE leod_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL,
+  date       DATE NOT NULL,
+  venue      TEXT,
+  timezone   TEXT NOT NULL DEFAULT 'Europe/Warsaw',
+  active     BOOLEAN NOT NULL DEFAULT true,
+  event_start TIME(0) NOT NULL,
+  event_end   TIME(0) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE leod_clock (
+  id          TEXT PRIMARY KEY DEFAULT 'master',
+  server_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  tick        BIGINT NOT NULL DEFAULT 0
+);
+
+INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
+        </div>`;
+      document.getElementById('event-name').textContent = 'Schema not found — see console';
+      overlay.style.display = 'none';
+      return;
+    }
+
+    if (!events.length) {
+      document.getElementById('sessions-list').innerHTML = `
+        <div id="empty">
+          <div class="ei">📅</div>
+          <h2>No active events</h2>
+          <p>Use the <strong>＋</strong> button above to create a new event.</p>
+        </div>`;
+      document.getElementById('event-name').textContent = 'No active events';
+      buildEvSelect([]);
+      overlay.style.display = 'none';
+      return;
+    }
+
+    // 3. Select event
+    const ev = events[0];
+    S.event = ev;
+    document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
+    buildEvSelect(events);
+
+    // 4. Sessions
+    setStep(`Loading sessions for "${ev.name}"…`);
+    await loadSnapshot(ev.id);
+
+    // 5. Broadcast
+    await loadBroadcast(ev.id).catch(() => {});
+
+    // 6. Event log
+    setStep('Loading event log…');
+    await loadLog(ev.id).catch(() => {});
+
+    // 7. Realtime
+    setStep('Subscribing to realtime…');
+    subscribeControl(ev.id);
+
+    // 8. Signage displays & sponsors (non-blocking — tables may not exist yet)
+    loadDisplays(ev.id).then(() => {
+      loadSponsors(ev.id).then(() => {
+        subscribeDisplays(ev.id);
+        if (S.role === 'signage') renderSignagePanel();
+      });
+    });
+
+    // 9. Edge Functions (background check)
+    checkEF();
+
+    overlay.style.display = 'none';
+    pushLog('BOOT', `connected · ${ev.name} · ${S.sessions.length} sessions`, null);
+
+  } catch (e) {
+    setStep(`Boot error: ${e.message}`);
+    console.error('LEOD boot failed:', e);
+    setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+  }
+}
+
+initAuth();
+</script>
+</body>
+</html>

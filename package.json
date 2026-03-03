@@ -1,0 +1,20 @@
+{
+  "name": "leod-production-console",
+  "version": "1.0.0",
+  "description": "LEOD Live Event Operations Dashboard — test suite",
+  "private": true,
+  "scripts": {
+    "test":       "vitest run",
+    "test:watch": "vitest",
+    "test:ui":    "vitest --ui",
+    "test:e2e":   "playwright test",
+    "test:all":   "vitest run && playwright test",
+    "verify":     "bash scripts/verify-leod.sh 7230"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
+    "typescript": "^5.5.0",
+    "@playwright/test": "^1.47.0"
+  }
+}

@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LEOD Display</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#05060f}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;color:#eef2f7;
+}
+
+/* ── SETUP SCREEN ── */
+#setup{
+  position:fixed;inset:0;background:#05060f;
+  display:flex;align-items:center;justify-content:center;z-index:9999;
+}
+#setup-card{
+  background:#0d1520;border:1px solid rgba(255,255,255,.09);
+  border-top:2px solid #3b82f6;border-radius:14px;padding:36px;
+  max-width:420px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.8);
+}
+.su-logo{font-size:24px;font-weight:800;letter-spacing:.06em;margin-bottom:4px}
+.su-logo span{color:#dc2626}
+.su-sub{font-size:11px;color:#4a6278;letter-spacing:.2em;margin-bottom:24px}
+.su-lbl{font-size:10px;color:#4a6278;letter-spacing:.16em;margin-bottom:5px;display:block;text-transform:uppercase}
+.su-input{
+  width:100%;background:#111e2e;border:1px solid rgba(255,255,255,.09);
+  color:#eef2f7;font-size:12px;padding:9px 13px;border-radius:7px;
+  outline:none;margin-bottom:12px;font-family:inherit;
+  transition:border-color .12s;
+}
+.su-input:focus{border-color:#3b82f6}
+.su-btn{
+  width:100%;padding:12px;background:#3b82f6;color:#fff;border:none;
+  border-radius:8px;font-size:15px;font-weight:700;letter-spacing:.1em;
+  cursor:pointer;transition:background .12s;
+}
+.su-btn:hover{background:#2563eb}
+.su-err{color:#ef4444;font-size:11px;margin-bottom:10px;min-height:16px}
+.su-hint{font-size:10px;color:#4a6278;margin-top:10px;line-height:1.7}
+
+/* ── LOADING ── */
+#loading{
+  position:fixed;inset:0;background:#05060f;
+  display:none;align-items:center;justify-content:center;z-index:9998;
+}
+.ld-spin{
+  width:28px;height:28px;border:2px solid rgba(255,255,255,.09);
+  border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── RECONNECT OVERLAY ── */
+#reconnect-banner{
+  position:fixed;bottom:52px;left:50%;transform:translateX(-50%);
+  background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);
+  border-radius:8px;padding:8px 20px;font-size:12px;color:#fbbf24;
+  letter-spacing:.08em;z-index:500;display:none;
+  animation:blink .9s infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── DISPLAY FRAME ── */
+#display{display:none;width:100%;height:100%;position:relative}
+
+/* ── SHARED LAYOUT ── */
+.d-header{
+  flex-shrink:0;height:46px;background:rgba(0,0,0,.5);
+  border-bottom:1px solid rgba(255,255,255,.05);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;
+}
+.d-header-event{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase}
+.d-header-clock{font-family:'SF Mono','Fira Code',monospace;font-size:18px;font-weight:600;color:#60a5fa;letter-spacing:.06em}
+.d-header-status{font-size:10px;letter-spacing:.14em;font-weight:700}
+.d-header-status.live{color:#ef4444}
+.d-header-status.ready{color:#fbbf24}
+.d-header-status.standby{color:rgba(255,255,255,.3)}
+
+/* ── CONTENT AREA ── */
+#content-area{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:32px;text-align:center;overflow:hidden;
+  position:relative;
+}
+
+/* ── SCHEDULE MODE ── */
+.sc-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:700;letter-spacing:.28em;
+  margin-bottom:20px;
+}
+.sc-tag-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.sc-tag.live .sc-tag-dot{background:#ef4444;box-shadow:0 0 12px #ef4444;animation:blink .9s infinite}
+.sc-tag.live{color:#ef4444}
+.sc-tag.ready .sc-tag-dot{background:#fbbf24}
+.sc-tag.ready{color:#fbbf24}
+.sc-tag.standby{color:rgba(255,255,255,.3)}
+.sc-tag.standby .sc-tag-dot{background:rgba(255,255,255,.3)}
+.d-big-title{
+  font-size:clamp(28px,6vw,80px);font-weight:700;line-height:1.1;
+  letter-spacing:-.02em;margin-bottom:14px;max-width:90vw;
+}
+.d-big-title.live{color:#fff}
+.d-big-title.standby{color:rgba(255,255,255,.5)}
+.d-speaker{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.6);margin-bottom:28px;font-weight:400}
+.d-timer{
+  font-size:clamp(48px,10vw,120px);font-weight:700;line-height:1;
+  letter-spacing:.04em;margin-bottom:10px;
+  font-family:'SF Mono','Fira Code',monospace;transition:color .4s;
+}
+.d-timer-lbl{font-size:clamp(10px,1.5vw,14px);letter-spacing:.25em;color:rgba(255,255,255,.4);margin-bottom:36px;font-weight:600;text-transform:uppercase}
+.d-divider{width:60px;height:1px;background:rgba(255,255,255,.1);margin:0 auto 28px}
+.d-next-lbl{font-size:clamp(9px,1.2vw,12px);color:rgba(255,255,255,.3);letter-spacing:.2em;margin-bottom:10px;font-weight:600;text-transform:uppercase}
+.d-next-title{font-size:clamp(16px,3vw,36px);font-weight:600;color:rgba(255,255,255,.4)}
+.d-next-time{font-size:clamp(12px,1.6vw,18px);color:#60a5fa;margin-top:6px;font-family:'SF Mono','Fira Code',monospace;letter-spacing:.06em}
+
+/* ── WAYFINDING MODE ── */
+.wf-table{border-collapse:collapse;min-width:min(640px,90vw);max-width:90vw}
+.wf-table th{
+  font-size:clamp(9px,1.2vw,12px);letter-spacing:.2em;color:rgba(255,255,255,.35);
+  text-transform:uppercase;padding:0 20px 16px;text-align:left;font-weight:600;
+}
+.wf-table td{padding:10px 20px;border-top:1px solid rgba(255,255,255,.06)}
+.wf-room{font-size:clamp(14px,2vw,20px);font-weight:700;color:#60a5fa;white-space:nowrap}
+.wf-title{font-size:clamp(12px,1.8vw,18px);color:#eef2f7}
+.wf-time{font-size:clamp(11px,1.4vw,14px);color:rgba(255,255,255,.4);font-family:'SF Mono','Fira Code',monospace;white-space:nowrap}
+.wf-status{font-size:10px;letter-spacing:.12em;font-weight:700;padding:2px 8px;border-radius:3px;white-space:nowrap}
+.wf-status.LIVE{background:rgba(239,68,68,.15);color:#f87171}
+.wf-status.READY{background:rgba(251,191,36,.1);color:#fbbf24}
+.wf-title-hdr{font-size:clamp(16px,2.5vw,26px);font-weight:700;color:rgba(255,255,255,.6);margin-bottom:28px;letter-spacing:.04em}
+
+/* ── SPONSORS MODE ── */
+.sp-sponsor-display{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;width:100%;height:100%;
+}
+.sp-sponsor-logo{max-width:60vw;max-height:40vh;object-fit:contain}
+.sp-sponsor-name-big{
+  font-size:clamp(20px,4vw,48px);font-weight:700;color:#eef2f7;
+  letter-spacing:-.01em;opacity:.9;
+}
+.sp-sponsor-type{font-size:clamp(10px,1.4vw,14px);color:rgba(255,255,255,.35);letter-spacing:.22em;text-transform:uppercase;margin-top:-10px}
+
+/* ── BREAK MODE ── */
+.break-icon{font-size:clamp(48px,10vw,100px);margin-bottom:20px;opacity:.8}
+.break-title{font-size:clamp(24px,5vw,64px);font-weight:700;color:#eef2f7;letter-spacing:.02em;margin-bottom:12px}
+.break-sub{font-size:clamp(14px,2vw,22px);color:rgba(255,255,255,.45)}
+
+/* ── WIFI MODE ── */
+.wifi-wrap{display:flex;flex-direction:column;align-items:center;gap:18px;padding:32px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:16px;max-width:500px;width:90vw}
+.wifi-icon{font-size:52px;opacity:.7}
+.wifi-lbl{font-size:clamp(9px,1.2vw,12px);color:rgba(255,255,255,.35);letter-spacing:.22em;text-transform:uppercase;margin-bottom:-6px}
+.wifi-val{font-size:clamp(20px,3.5vw,40px);font-weight:700;color:#60a5fa;font-family:'SF Mono','Fira Code',monospace;letter-spacing:.06em}
+
+/* ── RECALL MODE ── */
+.recall-timer{font-size:clamp(64px,16vw,160px);font-weight:700;color:#fbbf24;font-family:'SF Mono','Fira Code',monospace;line-height:1}
+.recall-lbl{font-size:clamp(12px,2vw,20px);letter-spacing:.25em;color:rgba(255,255,255,.45);text-transform:uppercase;margin-top:12px;margin-bottom:28px}
+.recall-title{font-size:clamp(18px,3vw,36px);font-weight:600;color:rgba(255,255,255,.6)}
+
+/* ── CUSTOM MESSAGE MODE ── */
+.custom-message{
+  font-size:clamp(20px,4vw,52px);font-weight:700;line-height:1.3;
+  letter-spacing:.01em;max-width:80vw;
+}
+
+/* ── PORTRAIT ADJUSTMENTS ── */
+body.portrait .d-header{height:52px}
+body.portrait .d-big-title{font-size:clamp(28px,7vw,60px)}
+body.portrait .d-timer{font-size:clamp(52px,14vw,100px)}
+body.portrait .wf-table{min-width:min(90vw,400px)}
+
+/* ── LIVE BORDER GLOW ── */
+body.is-live #display{
+  box-shadow:inset 0 0 0 3px rgba(239,68,68,.35),inset 0 0 40px rgba(239,68,68,.06);
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fade-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.fade-in{animation:fade-in .4s ease both}
+</style>
+</head>
+<body>
+
+<!-- SETUP (shown when URL params are missing) -->
+<div id="setup">
+  <div id="setup-card">
+    <div class="su-logo">LE<span>O</span>D <span style="font-size:16px;font-weight:600;letter-spacing:.2em;color:#4a6278">DISPLAY</span></div>
+    <div class="su-sub">DIGITAL SIGNAGE</div>
+    <div class="su-err" id="su-err"></div>
+    <label class="su-lbl">SUPABASE PROJECT URL</label>
+    <input class="su-input" id="su-url" type="text" placeholder="https://xxxx.supabase.co">
+    <label class="su-lbl">ANON KEY</label>
+    <input class="su-input" id="su-key" type="text" placeholder="eyJhbGci…">
+    <label class="su-lbl">DISPLAY ID (from console)</label>
+    <input class="su-input" id="su-id"  type="text" placeholder="UUID of your display">
+    <button class="su-btn" onclick="connectDisplay()">CONNECT DISPLAY →</button>
+    <div class="su-hint">
+      Or configure via URL:<br>
+      <code style="font-size:10px;color:#4a6278">LEOD-display.html?url=…&amp;key=…&amp;id=…</code>
+    </div>
+  </div>
+</div>
+
+<div id="loading"><div class="ld-spin"></div></div>
+<div id="reconnect-banner">⟳ RECONNECTING — DATA MAY BE STALE</div>
+
+<!-- DISPLAY FRAME (filled by JS) -->
+<div id="display" style="display:none;flex-direction:column">
+  <div class="d-header">
+    <span class="d-header-event" id="d-event-name">—</span>
+    <span class="d-header-status standby" id="d-status-lbl">STANDBY</span>
+    <span class="d-header-clock" id="d-clock">--:--:--</span>
+  </div>
+  <div id="content-area"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let sb    = null;
+let D     = null;  // display row from leod_signage_displays
+let S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null };
+let _chan  = null;
+let _tick  = null;
+let _heartbeat = null;
+let _sponsorIdx = 0;
+let _sponsorTimer = null;
+let _retries = 0;
+
+// ═══════════════════════════════════════════════════
+// BOOT FROM URL PARAMS
+// ═══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  // Try hash params first (works with file://), then query params (works with http://)
+  const fromHash  = new URLSearchParams(window.location.hash.slice(1));
+  const fromQuery = new URLSearchParams(window.location.search);
+  const get = k => fromHash.get(k) || fromQuery.get(k);
+
+  const url = get('url'), key = get('key'), id = get('id');
+
+  // Pre-fill form in case auto-boot fails
+  if (url) document.getElementById('su-url').value = url;
+  if (key) document.getElementById('su-key').value = key;
+  if (id)  document.getElementById('su-id').value  = id;
+
+  if (url && key && id) {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+    bootDisplay(url, key, id);
+  }
+});
+
+async function connectDisplay() {
+  const url = document.getElementById('su-url').value.trim();
+  const key = document.getElementById('su-key').value.trim();
+  const id  = document.getElementById('su-id').value.trim();
+  const err = document.getElementById('su-err');
+  err.textContent = '';
+  if (!url || !key || !id) { err.textContent = 'All fields are required.'; return; }
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  await bootDisplay(url, key, id);
+}
+
+// ═══════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════════════
+async function bootDisplay(url, key, id) {
+  try {
+    sb = supabase.createClient(url, key);
+
+    // 1. Sync clock
+    await syncClock();
+
+    // 2. Load display config
+    const { data: disp, error: dErr } = await sb.from('leod_signage_displays')
+      .select('*').eq('id', id).single();
+    if (dErr || !disp) throw new Error(dErr?.message || 'Display not found');
+    D = disp;
+
+    // Apply orientation to body
+    if (D.orientation === 'portrait') document.body.classList.add('portrait');
+
+    // 3. Load event
+    const { data: ev } = await sb.from('leod_events')
+      .select('*').eq('id', D.event_id).single();
+    S.event = ev;
+
+    // 4. Load sessions
+    const { data: sessions } = await sb.from('leod_sessions')
+      .select('*').eq('event_id', D.event_id).order('sort_order');
+    S.sessions = sessions || [];
+
+    // 5. Load sponsors (if needed)
+    const { data: sponsors } = await sb.from('leod_signage_sponsors')
+      .select('*').eq('event_id', D.event_id).eq('active', true)
+      .order('sort_order').order('name');
+    S.sponsors = sponsors || [];
+
+    // 6. Subscribe to changes
+    subscribeAll();
+
+    // 7. Show display
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('display').style.display = 'flex';
+
+    // 8. Start clock tick
+    _tick = setInterval(tick, 1000);
+    tick();
+
+    // 9. Start heartbeat (update last_seen_at every 30s)
+    sendHeartbeat();
+    _heartbeat = setInterval(sendHeartbeat, 30_000);
+
+    // 10. Resync clock every 5 min
+    setInterval(syncClock, 300_000);
+
+    render();
+  } catch (e) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('setup').style.display = 'flex';
+    document.getElementById('su-err').textContent = `Connection failed: ${e.message}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// CLOCK SYNC
+// ═══════════════════════════════════════════════════
+async function syncClock() {
+  try {
+    const t0 = performance.now();
+    const { data } = await sb.from('leod_clock').select('server_time').eq('id', 'master').single();
+    const t1 = performance.now();
+    if (!data) return;
+    const rtt = t1 - t0;
+    const serverMs = new Date(data.server_time).getTime();
+    S.clockOffset = serverMs - t1 + rtt / 2;
+  } catch { /* continue with local time */ }
+}
+
+function correctedNow() { return Date.now() + (S.clockOffset || 0); }
+
+function correctedHMS() {
+  const d = new Date(correctedNow());
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════════════════
+// REALTIME
+// ═══════════════════════════════════════════════════
+function subscribeAll() {
+  if (_chan) _chan.unsubscribe();
+  _chan = sb.channel('display-' + D.id)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_sessions',
+        filter: `event_id=eq.${D.event_id}` }, p => {
+      if (p.eventType === 'DELETE') {
+        S.sessions = S.sessions.filter(s => s.id !== p.old.id);
+      } else {
+        const idx = S.sessions.findIndex(s => s.id === p.new.id);
+        if (idx >= 0) S.sessions[idx] = p.new; else S.sessions.push(p.new);
+        S.sessions.sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+      }
+      render();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leod_signage_displays',
+        filter: `id=eq.${D.id}` }, p => {
+      D = p.new;
+      render();
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_sponsors',
+        filter: `event_id=eq.${D.event_id}` }, p => {
+      if (p.eventType === 'DELETE') {
+        S.sponsors = S.sponsors.filter(s => s.id !== p.old.id);
+      } else {
+        const idx = S.sponsors.findIndex(s => s.id === p.new.id);
+        if (idx >= 0) S.sponsors[idx] = p.new; else S.sponsors.push(p.new);
+        S.sponsors.sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
+      }
+      if (activeMode() === 'sponsors') render();
+    })
+    .subscribe(status => {
+      const banner = document.getElementById('reconnect-banner');
+      if (status === 'SUBSCRIBED') {
+        _retries = 0;
+        if (banner) banner.style.display = 'none';
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (banner) banner.style.display = 'block';
+        scheduleReconnect();
+      }
+    });
+}
+
+function scheduleReconnect() {
+  const delay = Math.min(1000 * 2 ** _retries, 30_000) + Math.random() * 500;
+  _retries++;
+  setTimeout(async () => {
+    try {
+      await syncClock();
+      const { data: sessions } = await sb.from('leod_sessions')
+        .select('*').eq('event_id', D.event_id).order('sort_order');
+      S.sessions = sessions || [];
+      const { data: disp } = await sb.from('leod_signage_displays').select('*').eq('id', D.id).single();
+      if (disp) D = disp;
+      subscribeAll();
+      render();
+    } catch { scheduleReconnect(); }
+  }, delay);
+}
+
+// ═══════════════════════════════════════════════════
+// HEARTBEAT
+// ═══════════════════════════════════════════════════
+async function sendHeartbeat() {
+  if (!D?.id || !sb) return;
+  await sb.from('leod_signage_displays')
+    .update({ last_seen_at: new Date().toISOString() }).eq('id', D.id);
+}
+
+// ═══════════════════════════════════════════════════
+// CONTENT RESOLVER
+// ═══════════════════════════════════════════════════
+function activeMode() {
+  // Override takes priority over default content_mode
+  if (D?.override_content?.mode) return D.override_content.mode;
+  return D?.content_mode || 'schedule';
+}
+
+function liveSession() { return S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN'); }
+function readySession() { return S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING'); }
+
+// ═══════════════════════════════════════════════════
+// TICK
+// ═══════════════════════════════════════════════════
+function tick() {
+  const clockEl = document.getElementById('d-clock');
+  if (clockEl) clockEl.textContent = correctedHMS();
+
+  const lv = liveSession();
+  const rd = readySession();
+
+  // Update header status label
+  const statusEl = document.getElementById('d-status-lbl');
+  if (statusEl) {
+    if (lv) { statusEl.textContent = '● LIVE'; statusEl.className = 'd-header-status live'; }
+    else if (rd) { statusEl.textContent = '◈ READY'; statusEl.className = 'd-header-status ready'; }
+    else { statusEl.textContent = 'STANDBY'; statusEl.className = 'd-header-status standby'; }
+  }
+
+  document.body.classList.toggle('is-live', !!lv);
+
+  // Lightweight timer update (no full re-render)
+  const mode = activeMode();
+  if (mode === 'schedule' || mode === 'recall') updateTimerInPlace();
+}
+
+function updateTimerInPlace() {
+  const timerEl = document.getElementById('d-live-timer');
+  const timerLbl = document.getElementById('d-live-timer-lbl');
+  const recallEl = document.getElementById('d-recall-timer');
+  const lv = liveSession();
+  const rd = readySession();
+
+  if (timerEl && lv && lv.actual_start) {
+    const startMs  = new Date(lv.actual_start).getTime();
+    const elapsed  = correctedNow() - startMs;
+    const durMs    = schedDurMs(lv);
+    const remain   = durMs - elapsed;
+    const ov       = remain < 0;
+    timerEl.textContent = fmtTimer(remain);
+    const tc = ov ? '#ef4444' : (remain < 120_000 ? '#ef4444' : remain < 300_000 ? '#fbbf24' : '#22c55e');
+    timerEl.style.color = tc;
+    if (timerLbl) timerLbl.textContent = ov ? 'OVERTIME' : remain < 120_000 ? 'ENDING NOW' : remain < 300_000 ? 'WRAPPING UP' : 'REMAINING';
+  } else if (timerEl && rd) {
+    const start = toMs(rd.scheduled_start);
+    const now   = toTimeMs(correctedNow());
+    const diff  = start - now;
+    timerEl.textContent = fmtCountdown(diff);
+    timerEl.style.color = '#fbbf24';
+    if (timerLbl) timerLbl.textContent = 'TO START';
+  }
+
+  if (recallEl && rd) {
+    const start = toMs(rd.scheduled_start);
+    const now   = toTimeMs(correctedNow());
+    const diff  = start - now;
+    recallEl.textContent = fmtCountdown(Math.max(0, diff));
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER — main render switch
+// ═══════════════════════════════════════════════════
+function render() {
+  const mode = activeMode();
+  const area = document.getElementById('content-area');
+  if (!area) return;
+
+  // Clear sponsor rotation if leaving sponsor mode
+  if (mode !== 'sponsors' && _sponsorTimer) {
+    clearInterval(_sponsorTimer); _sponsorTimer = null;
+  }
+
+  switch (mode) {
+    case 'schedule':  area.innerHTML = renderSchedule(); break;
+    case 'wayfinding':area.innerHTML = renderWayfinding(); break;
+    case 'sponsors':  renderSponsors(area); break;
+    case 'break':     area.innerHTML = renderBreak(); break;
+    case 'wifi':      area.innerHTML = renderWifi(); break;
+    case 'recall':    area.innerHTML = renderRecall(); break;
+    case 'custom':    area.innerHTML = renderCustom(); break;
+    default:          area.innerHTML = renderSchedule();
+  }
+
+  // Update event name in header
+  const evEl = document.getElementById('d-event-name');
+  if (evEl && S.event) evEl.textContent = (S.event.name || '').toUpperCase() + (D?.zone_type ? ` · ${D.zone_type.toUpperCase()}` : '');
+
+  // Run timer update immediately
+  updateTimerInPlace();
+}
+
+// ═══════════════════════════════════════════════════
+// SCHEDULE MODE
+// ═══════════════════════════════════════════════════
+function renderSchedule() {
+  const lv = liveSession(), rd = readySession();
+  const cur = lv || rd;
+  const next = cur
+    ? S.sessions.find(s => (s.sort_order||0) > (cur.sort_order||0) && !['ENDED','CANCELLED'].includes(s.status))
+    : S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+
+  if (!cur && !next) {
+    return `<div class="fade-in">
+      <div class="sc-tag standby"><div class="sc-tag-dot"></div>STANDBY</div>
+      <div class="d-big-title standby">NO ACTIVE SESSION</div>
+    </div>`;
+  }
+
+  const tagCls = lv ? 'live' : rd ? 'ready' : 'standby';
+  const tagLbl = lv ? '● YOU ARE LIVE' : rd ? '◈ STARTING SHORTLY' : 'STANDBY';
+
+  const timerHtml = cur
+    ? `<div class="d-timer" id="d-live-timer" style="color:#22c55e">--:--</div>
+       <div class="d-timer-lbl" id="d-live-timer-lbl">REMAINING</div>`
+    : '';
+
+  const nextHtml = next
+    ? `<div class="d-divider"></div>
+       <div class="d-next-lbl">NEXT SESSION</div>
+       <div class="d-next-title">${esc(next.title)}</div>
+       <div class="d-next-time">${(next.scheduled_start||next.planned_start||'').substring(0,5)}</div>`
+    : '';
+
+  return `<div class="fade-in">
+    <div class="sc-tag ${tagCls}"><div class="sc-tag-dot"></div>${tagLbl}</div>
+    <div class="d-big-title ${lv?'live':''}">${esc(cur?.title || next?.title || '—')}</div>
+    ${cur?.speaker ? `<div class="d-speaker">${esc(cur.speaker)}${cur.company?` · ${esc(cur.company)}`:''}</div>` : ''}
+    ${timerHtml}
+    ${nextHtml}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// WAYFINDING MODE
+// ═══════════════════════════════════════════════════
+function renderWayfinding() {
+  // Group active sessions by room
+  const active = S.sessions.filter(s => !['ENDED','CANCELLED'].includes(s.status) && s.room);
+  // Apply filter_room if set
+  const filtered = D?.filter_room
+    ? active.filter(s => s.room === D.filter_room)
+    : active;
+
+  // Group by room, keep only the first active session per room
+  const byRoom = {};
+  for (const s of filtered) {
+    if (!byRoom[s.room]) byRoom[s.room] = s;
+  }
+  const rooms = Object.values(byRoom).sort((a,b) => a.room.localeCompare(b.room));
+
+  if (!rooms.length) {
+    return `<div class="fade-in">
+      <div class="wf-title-hdr">SESSION DIRECTORY</div>
+      <div style="color:rgba(255,255,255,.3);font-size:18px">No active sessions</div>
+    </div>`;
+  }
+
+  const rows = rooms.map(s => {
+    const isLive = s.status === 'LIVE' || s.status === 'OVERRUN';
+    const isReady = s.status === 'READY' || s.status === 'CALLING';
+    const stLbl = isLive ? 'LIVE' : isReady ? 'READY' : s.status;
+    const stCls = isLive ? 'LIVE' : isReady ? 'READY' : '';
+    return `<tr>
+      <td class="wf-room">${esc(s.room)}</td>
+      <td class="wf-title">${esc(s.title)}</td>
+      <td class="wf-time">${(s.scheduled_start||s.planned_start||'').substring(0,5)}</td>
+      <td>${stCls ? `<span class="wf-status ${stCls}">${stLbl}</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="fade-in">
+    <div class="wf-title-hdr">ROOM DIRECTORY</div>
+    <table class="wf-table">
+      <thead><tr>
+        <th>ROOM</th><th>SESSION</th><th>TIME</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// SPONSORS MODE — rotating carousel
+// ═══════════════════════════════════════════════════
+function renderSponsors(area) {
+  if (!S.sponsors.length) {
+    area.innerHTML = `<div class="fade-in sp-sponsor-display">
+      <div style="color:rgba(255,255,255,.3);font-size:20px">No sponsors configured</div>
+    </div>`;
+    return;
+  }
+
+  const showSponsor = (idx) => {
+    const s = S.sponsors[idx % S.sponsors.length];
+    area.style.background = s.bg_color || '#05060f';
+    area.innerHTML = `<div class="fade-in sp-sponsor-display">
+      ${s.logo_url
+        ? `<img class="sp-sponsor-logo" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`
+        : `<div class="sp-sponsor-name-big">${esc(s.name)}</div>`}
+      ${s.logo_url ? `<div class="sp-sponsor-name-big">${esc(s.name)}</div>` : ''}
+    </div>`;
+  };
+
+  showSponsor(_sponsorIdx);
+  if (_sponsorTimer) clearInterval(_sponsorTimer);
+  _sponsorTimer = setInterval(() => {
+    _sponsorIdx = (_sponsorIdx + 1) % S.sponsors.length;
+    showSponsor(_sponsorIdx);
+  }, 6000); // rotate every 6 seconds
+}
+
+// ═══════════════════════════════════════════════════
+// BREAK MODE
+// ═══════════════════════════════════════════════════
+function renderBreak() {
+  const msg = D?.override_content?.message;
+  return `<div class="fade-in">
+    <div class="break-icon">☕</div>
+    <div class="break-title">${esc(msg || 'COFFEE BREAK')}</div>
+    <div class="break-sub">We'll be back shortly</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// WIFI MODE
+// ═══════════════════════════════════════════════════
+function renderWifi() {
+  const msg  = D?.override_content?.message || '';
+  const parts = msg.split('|').map(p => p.trim());
+  const ssid  = parts[0] || 'EventNet';
+  const pass  = parts[1] || '';
+  return `<div class="fade-in">
+    <div class="wifi-wrap">
+      <div class="wifi-icon">📶</div>
+      <div class="wifi-lbl">NETWORK</div>
+      <div class="wifi-val">${esc(ssid)}</div>
+      ${pass ? `<div class="wifi-lbl" style="margin-top:12px">PASSWORD</div>
+      <div class="wifi-val" style="color:#fbbf24">${esc(pass)}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// RECALL MODE
+// ═══════════════════════════════════════════════════
+function renderRecall() {
+  const rd = readySession();
+  const next = rd || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+  return `<div class="fade-in">
+    <div class="sc-tag ready"><div class="sc-tag-dot"></div>RESUMING SHORTLY</div>
+    <div class="recall-timer" id="d-recall-timer">05:00</div>
+    <div class="recall-lbl">PLEASE RETURN TO YOUR SEATS</div>
+    ${next ? `<div class="recall-title">${esc(next.title)}</div>` : ''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// CUSTOM MESSAGE MODE
+// ═══════════════════════════════════════════════════
+function renderCustom() {
+  const msg = D?.override_content?.message || D?.name || 'LEOD DISPLAY';
+  return `<div class="fade-in">
+    <div class="custom-message">${esc(msg)}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toMs(t) {
+  // Convert "HH:MM" or "HH:MM:SS" to ms from midnight
+  if (!t) return 0;
+  const parts = t.substring(0,8).split(':').map(Number);
+  return (parts[0]*3600 + (parts[1]||0)*60 + (parts[2]||0)) * 1000;
+}
+
+function toTimeMs(epochMs) {
+  // ms within the current day (local time aligned to server offset)
+  const d = new Date(epochMs);
+  return (d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds()) * 1000;
+}
+
+function schedDurMs(s) {
+  return (toMs(s.scheduled_end) - toMs(s.scheduled_start)) || 2700_000;
+}
+
+function fmtTimer(remainMs) {
+  const abs = Math.abs(remainMs);
+  const m = Math.floor(abs / 60_000);
+  const s = Math.floor((abs % 60_000) / 1000);
+  return `${remainMs < 0 ? '+' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function fmtCountdown(ms) {
+  const m = Math.floor(Math.max(0,ms) / 60_000);
+  const s = Math.floor((Math.max(0,ms) % 60_000) / 1000);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// Handle device wake-up (laptop lid open)
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && sb) {
+    await syncClock();
+    if (_chan?.state !== 'joined') { _retries = 0; scheduleReconnect(); }  // reset backoff on wake
+    else {
+      const { data: sessions } = await sb.from('leod_sessions')
+        .select('*').eq('event_id', D.event_id).order('sort_order');
+      S.sessions = sessions || [];
+      render();
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment secrets — never commit these
+.env
+.env.local
+.env.production
+.env.*.local
+supabase/.env
+
+# Supabase local dev
+supabase/.branches/
+supabase/.temp/
+
+# macOS
+.DS_Store
+
+# Build artifacts / test output
+test-results/
+playwright-report/
+
+# Editor
+.vscode/
+.idea/
+
+# Backup / scratch files
+*.bak
+"files 2"/
