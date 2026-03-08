@@ -9,25 +9,71 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     :root {
-      --bg:       #0d0f17;
-      --surface:  #141721;
-      --surface2: #1d2035;
-      --border:   #2d3050;
-      --text:     #dde3f0;
-      --dim:      #5a6580;
+      /* ── SURFACE ELEVATION (5 levels, darkest → lightest) ── */
+      --bg:        #0B0F14;   /* page background */
+      --surface:   #111827;   /* sidebar / panels */
+      --card:      #141D2B;   /* session cards */
+      --card-hi:   #1A2640;   /* elevated / selected card */
+      --input-bg:  #0F1520;   /* inputs & controls */
+      --hover:     #1E2D45;   /* hover state */
 
-      --c-planned-bg:   #0c1d3a; --c-planned-fg:   #60a5fa;
-      --c-ready-bg:     #261900; --c-ready-fg:     #fbbf24;
-      --c-calling-bg:   #261600; --c-calling-fg:   #f97316;
-      --c-live-bg:      #260707; --c-live-fg:      #f87171;
-      --c-overrun-bg:   #26002f; --c-overrun-fg:   #e879f9;
-      --c-hold-bg:      #261300; --c-hold-fg:      #fb923c;
-      --c-ended-bg:     #141414; --c-ended-fg:     #6b7280;
-      --c-cancelled-bg: #0f0f0f; --c-cancelled-fg: #4b5563;
+      /* ── TEXT ── */
+      --text-primary:   #E5E7EB;
+      --text-secondary: #9CA3AF;
+      --text-muted:     #6B7280;
+      --text-dim:       #4B5563;
 
-      --green:   #22c55e; --red:     #ef4444;
-      --amber:   #f59e0b; --blue:    #3b82f6;
-      --purple:  #a855f7; --magenta: #d946ef;
+      /* ── BORDERS ── */
+      --border:         rgba(148,163,184,0.10);
+      --border-strong:  rgba(148,163,184,0.20);
+      --border-subtle:  rgba(148,163,184,0.06);
+      --border-section: rgba(148,163,184,0.08);
+
+      /* ── STATUS ACCENT COLORS (left-border / glow source) ── */
+      --c-planned:  #3B82F6;
+      --c-ready:    #22C55E;
+      --c-calling:  #F97316;
+      --c-live:     #FF3B30;
+      --c-overrun:  #FF00A8;
+      --c-hold:     #F97316;
+      --c-ended:    rgba(148,163,184,0.15);
+      --c-cancelled:rgba(148,163,184,0.08);
+      --c-break:    #8B5CF6;
+
+      /* ── BADGE TEXT COLORS ── */
+      --c-planned-fg:   #93C5FD;
+      --c-ready-fg:     #86EFAC;
+      --c-calling-fg:   #FDBA74;
+      --c-live-fg:      #FF8B85;
+      --c-overrun-fg:   #FF80D4;
+      --c-hold-fg:      #FDBA74;
+      --c-ended-fg:     #6B7280;
+      --c-cancelled-fg: #4B5563;
+
+      /* ── BADGE BACKGROUND TINTS (for badge pill backgrounds) ── */
+      --c-planned-bg:   rgba(59,130,246,0.12);
+      --c-ready-bg:     rgba(34,197,94,0.12);
+      --c-calling-bg:   rgba(249,115,22,0.12);
+      --c-live-bg:      rgba(255,59,48,0.15);
+      --c-overrun-bg:   rgba(255,0,168,0.15);
+      --c-hold-bg:      rgba(249,115,22,0.12);
+      --c-ended-bg:     rgba(107,114,128,0.10);
+      --c-cancelled-bg: rgba(75,85,99,0.08);
+
+      /* ── UTILITY COLORS ── */
+      --green:     #22C55E; --green-lt:  #86EFAC;
+      --amber:     #F97316; --amber-lt:  #FDBA74;
+      --red:       #FF3B30; --red-lt:    #F87171;
+      --blue:      #3B82F6; --blue-lt:   #60A5FA;
+      --purple:    #8B5CF6; --purple-lt: #C4B5FD;
+      --magenta:   #FF00A8; --magenta-lt:#FF80D4;
+
+      /* ── BACKWARD-COMPAT ALIASES (used throughout existing HTML/JS) ── */
+      --text:     #E5E7EB;               /* → --text-primary */
+      --dim:      #6B7280;               /* → --text-muted */
+      --surface2: #1A2640;               /* → --card-hi */
+      --fg:       #E5E7EB;               /* was undefined; alias to --text-primary */
+      --border2:  rgba(148,163,184,0.08);/* was undefined; alias to --border-section */
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -85,6 +131,68 @@
     #login-form button[type=submit]:hover { filter: brightness(1.1); }
     #login-form button[type=submit]:disabled { opacity: .5; cursor: default; }
     #lf-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
+    /* ── REGISTER FORM ── */
+    #register-form {
+      display: none; flex-direction: column; align-items: stretch;
+      gap: 10px; width: 280px;
+    }
+    #register-form input {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      padding: 9px 12px; font-size: 13px; font-family: inherit;
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    #register-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    #register-form button[type=submit] {
+      background: var(--blue); color: #fff; border: none;
+      border-radius: 6px; padding: 9px; font-size: 13px;
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      margin-top: 2px; transition: filter .15s;
+    }
+    #register-form button[type=submit]:hover { filter: brightness(1.1); }
+    #register-form button[type=submit]:disabled { opacity: .5; cursor: default; }
+    #rf-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
+    #rf-success { font-size: 11px; color: var(--green); text-align: center; line-height: 1.5; }
+    .lf-toggle-link {
+      display: block; text-align: center; margin-top: 2px;
+      font-size: 11px; color: var(--dim); text-decoration: none;
+    }
+    .lf-toggle-link:hover { color: var(--fg); }
+    /* ── PENDING SCREEN ── */
+    #pending-screen {
+      display: none; flex-direction: column; align-items: center;
+      gap: 14px; text-align: center; max-width: 300px;
+    }
+    #pending-screen .ps-icon { font-size: 32px; }
+    #pending-screen .ps-title { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    #pending-screen .ps-msg { font-size: 12px; color: var(--dim); line-height: 1.6; }
+    #pending-screen .ps-email { color: var(--blue); }
+    #pending-screen button {
+      background: none; border: 1px solid var(--border); color: var(--dim);
+      border-radius: 6px; padding: 7px 18px; font-size: 12px;
+      font-family: inherit; cursor: pointer; transition: all .15s;
+    }
+    #pending-screen button:hover { border-color: var(--red); color: var(--red); }
+    /* ── USERS MODAL ── */
+    .um-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border2); }
+    .um-row:last-child { border-bottom:none; }
+    .um-name { flex:1; font-size:12px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .um-email { font-size:10px; color:var(--dim); }
+    .um-role-sel { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:4px 6px; border-radius:5px; font-size:11px; font-family:inherit; }
+    .um-approve-btn { background:rgba(34,197,94,.15); border:1px solid rgba(34,197,94,.4); color:var(--green); border-radius:5px; padding:4px 10px; font-size:11px; font-family:inherit; cursor:pointer; white-space:nowrap; }
+    .um-approve-btn:hover { background:rgba(34,197,94,.25); }
+    .um-empty { font-size:12px; color:var(--dim); text-align:center; padding:12px 0; }
+    #users-btn {
+      display:none; align-items:center; gap:5px; position:relative;
+      background:none; border:1px solid var(--border); color:var(--dim);
+      border-radius:5px; padding:3px 9px; font-size:11px;
+      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
+    }
+    #users-btn:hover { border-color:var(--blue); color:var(--fg); }
+    #users-badge {
+      display:none; background:var(--red); color:#fff;
+      border-radius:8px; padding:1px 5px; font-size:9px; font-weight:700;
+    }
     /* ── LOGOUT BUTTON ── */
     #logout-btn {
       background: none; border: none; color: var(--dim);
@@ -99,228 +207,351 @@
       padding: 7px 20px; text-align: center;
       font-size: 12px; font-weight: 600;
     }
-    #bc-banner.info     { background:#1e3a5f; color:#93c5fd; border-bottom:1px solid #3b82f6; }
-    #bc-banner.warn     { background:#2d1a00; color:#fde68a; border-bottom:1px solid #f59e0b; }
-    #bc-banner.critical { background:#2d0505; color:#fca5a5; border-bottom:1px solid #ef4444; animation: blink .5s infinite; }
+    #bc-banner.info     { background:#1e3a5f; color:#93c5fd; border-bottom:1px solid var(--blue); }
+    #bc-banner.warn     { background:#2d1a00; color:#fde68a; border-bottom:1px solid var(--amber); }
+    #bc-banner.critical { background:#2d0505; color:#fca5a5; border-bottom:1px solid var(--red); animation: blink .5s infinite; }
 
     /* ── HEADER ── */
     #header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 20px;
+      background: rgba(11,15,20,0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(148,163,184,0.10);
+      padding: 0 20px;
+      height: 52px;
       display: flex; align-items: center; gap: 16px;
       flex-shrink: 0;
     }
     .logo { font-size: 18px; font-weight: 700; letter-spacing: .14em; }
-    .logo span { color: #dc2626; }
-    #event-name { flex: 1; font-size: 11px; color: var(--dim); }
-    #hdr-clock  { font-size: 22px; font-weight: 600; letter-spacing: .04em; color: #f1f5f9; min-width: 88px; text-align: right; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    #hdr-offset { font-size: 11px; color: var(--dim); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .logo span { color: #FF3B30; }
+    #event-name { flex: 1; font-size: 11px; color: var(--text-muted); }
+    #hdr-clock  { font-size: 26px; font-weight: 700; letter-spacing: .02em; color: #F1F5F9; min-width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
+    #hdr-offset { font-size: 10px; color: var(--text-muted); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
     #conn-pill {
       display: flex; align-items: center; gap: 5px;
-      font-size: 11px; padding: 4px 11px;
-      border-radius: 100px; background: var(--surface2);
+      font-size: 10px; padding: 4px 10px;
+      border-radius: 100px; background: rgba(255,255,255,0.03);
       border: 1px solid var(--border);
     }
-    #conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); }
-    #conn-dot.live         { background: var(--green); }
+    #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    #conn-dot.live         { background: var(--green); box-shadow: 0 0 6px var(--green); }
     #conn-dot.reconnecting { background: var(--amber); animation: blink .8s infinite; }
 
     /* ── DIAG BAR ── */
     #diag-bar {
-      background: var(--surface2);
-      border-bottom: 1px solid var(--border);
-      padding: 5px 20px;
-      display: flex; gap: 20px; align-items: center;
-      font-size: 11px; color: var(--dim);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-section);
+      padding: 4px 20px;
+      display: flex; gap: 16px; align-items: center;
+      font-size: 10px; color: var(--text-muted);
       flex-shrink: 0;
     }
-    .di { display: flex; align-items: center; gap: 5px; }
-    .dd { width: 6px; height: 6px; border-radius: 50%; background: #374151; }
-    .dd.ok       { background: var(--green); }
+    .di { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border-radius: 4px; padding: 3px 8px; }
+    .dd { width: 8px; height: 8px; border-radius: 50%; background: #374151; }
+    .dd.ok       { background: var(--green); box-shadow: 0 0 4px rgba(34,197,94,0.5); }
     .dd.error    { background: var(--red); }
     .dd.checking { background: var(--amber); animation: blink .8s infinite; }
 
     /* ── ROLE BAR ── */
     #role-bar {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 6px 20px;
-      display: flex; align-items: center; gap: 6px;
+      border-bottom: 1px solid var(--border-section);
+      padding: 5px 20px;
+      display: flex; align-items: center; gap: 4px;
       flex-shrink: 0;
     }
-    #role-bar label { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; margin-right: 2px; }
+    #role-bar label { font-size: 10px; color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase; margin-right: 4px; font-weight: 600; }
     .rbtn {
-      padding: 4px 11px; border-radius: 6px;
-      border: 1px solid transparent; background: transparent;
-      color: var(--dim); font-size: 11px; cursor: pointer;
-      font-family: inherit; font-weight: 500; transition: all .12s;
+      padding: 0 14px; height: 30px; border-radius: 6px;
+      border: 1px solid rgba(148,163,184,0.15); background: transparent;
+      color: var(--text-muted); font-size: 11px; cursor: pointer;
+      font-family: inherit; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; transition: all .12s;
     }
-    .rbtn:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
-    .rbtn.active { background: rgba(59,130,246,.12); border-color: rgba(59,130,246,.3); color: #60a5fa; }
+    .rbtn:hover { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.25); }
+    .rbtn.active { background: #1A2640; color: #E5E7EB; border-color: rgba(148,163,184,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
     #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
 
     /* ── MAIN LAYOUT ── */
-    #main { flex: 1; display: flex; overflow: hidden; }
-    #sessions-col { flex: 1; overflow-y: auto; padding: 14px 16px; }
+    #main { flex: 1; display: flex; overflow: hidden; background: var(--bg); }
+    #sessions-col { flex: 1; overflow-y: auto; padding: 14px 16px; background: var(--bg); }
     #sidebar {
-      width: 272px; border-left: 1px solid var(--border);
+      width: 280px; border-left: 1px solid var(--border-section);
       display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+      background: var(--surface);
     }
 
     /* ── SESSION CARDS ── */
     .sc {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-left: 4px solid var(--border);
-      border-radius: 10px; margin-bottom: 9px;
-      overflow: hidden; transition: box-shadow .2s;
+      background: var(--card);
+      border: 1px solid rgba(148,163,184,0.10);
+      border-left: 3px solid transparent;
+      border-radius: 8px; margin-bottom: 8px;
+      overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
-    .sc.status-PLANNED  { border-left-color: #3b82f6; }
-    .sc.status-READY    { border-left-color: #fbbf24; box-shadow: 0 0 0 1px rgba(251,191,36,.08); }
-    .sc.status-CALLING  { border-left-color: #f97316; box-shadow: 0 0 0 1px rgba(249,115,22,.08); }
-    .sc.status-LIVE     { border-left-color: #ef4444; box-shadow: 0 2px 24px rgba(239,68,68,.12), 0 0 0 1px rgba(239,68,68,.15); }
-    .sc.status-OVERRUN  { border-left-color: #d946ef; box-shadow: 0 2px 24px rgba(217,70,239,.12), 0 0 0 1px rgba(217,70,239,.15); }
-    .sc.status-HOLD     { border-left-color: #fb923c; }
-    .sc.status-ENDED    { opacity: .55; }
-    .sc.status-CANCELLED { opacity: .35; }
+    .sc:focus { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .sc:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    /* Per-status card styles */
+    .sc.status-PLANNED {
+      border-left-color: #3B82F6;
+    }
+    .sc.status-READY {
+      border-left-color: #22C55E;
+      border-color: rgba(34,197,94,0.20);
+      box-shadow: 0 0 12px rgba(34,197,94,0.12);
+    }
+    .sc.status-CALLING {
+      border-left-color: #F97316;
+      border-color: rgba(249,115,22,0.20);
+    }
+    .sc.status-LIVE {
+      background: linear-gradient(135deg, rgba(255,59,48,0.07) 0%, #141D2B 60%);
+      border: 1px solid rgba(255,59,48,0.25);
+      border-left: 4px solid #FF3B30;
+      animation: badge-pulse-live 2s ease-in-out infinite;
+    }
+    .sc.status-OVERRUN {
+      background: linear-gradient(135deg, rgba(255,0,168,0.08) 0%, #141D2B 60%);
+      border: 1px solid rgba(255,0,168,0.30);
+      border-left: 4px solid #FF00A8;
+      animation: badge-pulse-overrun 1.6s ease-in-out infinite;
+    }
+    .sc.status-HOLD {
+      border-left-color: #F97316;
+      border-color: rgba(249,115,22,0.20);
+    }
+    .sc.status-ENDED {
+      border: 1px solid rgba(148,163,184,0.07);
+      border-left: 3px solid rgba(148,163,184,0.15);
+      opacity: 0.50;
+    }
+    .sc.status-CANCELLED {
+      background: transparent;
+      border: 1px solid rgba(148,163,184,0.06);
+      border-left: none;
+      opacity: 0.35;
+    }
 
     .sc-top {
       display: flex; align-items: center; gap: 8px;
-      padding: 10px 14px 6px;
+      padding: 14px 16px 6px;
     }
-    .sc-num  { font-size: 11px; color: var(--dim); min-width: 18px; font-weight: 500; }
+    .sc-num  { font-size: 11px; color: var(--text-muted); min-width: 18px; font-weight: 500; }
     .sc-title {
       flex: 1; font-size: 14px; font-weight: 600;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      letter-spacing: -.01em;
+      letter-spacing: -.01em; color: var(--text-primary);
     }
+    .sc.status-CANCELLED .sc-title { text-decoration: line-through; }
+
+    /* ── BADGES ── */
     .badge {
       font-size: 10px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase;
       padding: 3px 9px; border-radius: 100px; flex-shrink: 0;
     }
     .badge-PLANNED   { background: var(--c-planned-bg);   color: var(--c-planned-fg); }
-    .badge-READY     { background: var(--c-ready-bg);     color: var(--c-ready-fg); }
-    .badge-CALLING   { background: var(--c-calling-bg);   color: var(--c-calling-fg); animation: pulse-amber 1.2s infinite; }
-    .badge-LIVE      { background: var(--c-live-bg);      color: var(--c-live-fg);    animation: pulse-red 2s infinite; }
-    .badge-OVERRUN   { background: var(--c-overrun-bg);   color: var(--c-overrun-fg); animation: pulse-magenta 1.5s infinite; }
-    .badge-HOLD      { background: var(--c-hold-bg);      color: var(--c-hold-fg);    animation: blink 1s infinite; }
+    .badge-READY     { background: var(--c-ready-bg);     color: var(--c-ready-fg);   animation: badge-pulse 1.4s infinite; }
+    .badge-CALLING   { background: var(--c-calling-bg);   color: var(--c-calling-fg); animation: badge-pulse 1.2s infinite; }
+    .badge-LIVE      { background: var(--c-live-bg);      color: var(--c-live-fg);    animation: badge-pulse-live 1.4s infinite; }
+    .badge-OVERRUN   { background: var(--c-overrun-bg);   color: var(--c-overrun-fg); animation: badge-pulse-overrun 1.2s infinite; }
+    .badge-HOLD      { background: var(--c-hold-bg);      color: var(--c-hold-fg);    animation: badge-blink 1.0s infinite; }
     .badge-ENDED     { background: var(--c-ended-bg);     color: var(--c-ended-fg); }
     .badge-CANCELLED { background: var(--c-cancelled-bg); color: var(--c-cancelled-fg); }
 
     .sc-meta {
-      padding: 0 14px 8px;
+      padding: 0 16px 8px;
       display: flex; gap: 8px; flex-wrap: wrap;
-      font-size: 11px; color: var(--dim); align-items: center;
+      font-size: 12px; color: var(--text-muted); align-items: center;
     }
-    .sc-meta .spk { color: var(--text); font-weight: 500; }
+    .sc-meta .spk { color: var(--text-primary); font-weight: 500; }
     /* room / type as subtle chips */
     .sc-meta > span:not(.spk):not([style]) {
-      background: var(--surface2); border: 1px solid var(--border);
+      background: var(--card-hi); border: 1px solid var(--border);
       border-radius: 4px; padding: 1px 6px; font-size: 10px;
     }
 
     .sc-times {
-      padding: 7px 14px;
-      background: rgba(0,0,0,.18);
-      border-top: 1px solid var(--border);
+      padding: 7px 16px;
+      background: rgba(0,0,0,.15);
+      border-top: 1px solid rgba(148,163,184,0.07);
       display: flex; gap: 20px; align-items: center;
       font-size: 11px;
     }
     .tc { display: flex; flex-direction: column; gap: 2px; }
-    .tl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
-    .tv { color: var(--text); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 11px; }
+    .tl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .tv { color: var(--text-primary); font-variant-numeric: tabular-nums; font-size: 11px; }
     .tv.late { color: var(--amber); }
     .delay-tag {
       margin-left: auto; font-size: 11px; color: var(--amber);
-      background: rgba(245,158,11,.08); padding: 2px 8px; border-radius: 4px;
-      border: 1px solid rgba(245,158,11,.2);
+      background: rgba(249,115,22,.08); padding: 2px 8px; border-radius: 4px;
+      border: 1px solid rgba(249,115,22,.2);
     }
 
     /* Progress bar */
     .prog-wrap { height: 3px; background: rgba(0,0,0,.25); }
-    .prog-fill { height: 100%; background: #ef4444; transition: width 1s linear; }
+    .prog-fill { height: 100%; background: var(--red); transition: width 1s linear; }
     .prog-fill.ov { background: var(--magenta); }
 
     /* Live timer */
     .live-timer {
-      padding: 7px 14px;
-      background: rgba(0,0,0,.18);
-      border-top: 1px solid var(--border);
+      padding: 7px 16px;
+      background: rgba(0,0,0,.15);
+      border-top: 1px solid rgba(148,163,184,0.07);
       display: flex; align-items: center; gap: 14px;
       font-size: 12px;
     }
-    .lt-elapsed { color: var(--dim); font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    .lt-remain  { color: var(--green); font-weight: 600; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    .lt-remain.ov { color: #e879f9; }
+    .lt-elapsed { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .lt-remain  { color: var(--green); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .lt-remain.ov { color: #FF00A8; }
 
     /* Speaker arrived indicator */
     .arrived-tag { font-size: 10px; color: var(--green); font-weight: 500; }
 
     /* Action buttons */
-    .sc-actions { padding: 8px 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .sc-actions { padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .abtn {
-      padding: 5px 12px; border-radius: 6px; border: 1px solid;
-      font-size: 11px; font-family: inherit; font-weight: 600;
+      padding: 0 14px; height: 32px; border-radius: 6px; border: 1px solid;
+      font-size: 12px; font-family: inherit; font-weight: 600;
       cursor: pointer; transition: filter .1s, transform .1s;
-      letter-spacing: .02em;
+      letter-spacing: .03em; display: inline-flex; align-items: center;
     }
-    .abtn:hover  { filter: brightness(1.2); }
-    .abtn:active { transform: scale(.96); }
+    /* Tier 1 — Primary (GO LIVE, SET READY) */
+    .abtn.tier-1 { height: 36px; font-size: 13px; font-weight: 700; padding: 0 20px; text-transform: uppercase; letter-spacing: .04em; }
+    .abtn:hover  { filter: brightness(1.15); }
+    .abtn:active { transform: scale(.97); }
     .abtn:disabled { opacity: .3; cursor: not-allowed; }
-    .btn-green  { background: rgba(34,197,94,.08);  border-color: rgba(34,197,94,.45);  color: #22c55e; }
-    .btn-red    { background: rgba(239,68,68,.08);  border-color: rgba(239,68,68,.45);  color: #ef4444; }
-    .btn-amber  { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.45); color: #f59e0b; }
-    .btn-blue   { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.45); color: #60a5fa; }
-    .btn-grey   { background: var(--surface2);      border-color: var(--border);        color: var(--dim); }
-    .btn-purple { background: rgba(168,85,247,.08); border-color: rgba(168,85,247,.45); color: #c084fc; }
+    .btn-green  { background: rgba(34,197,94,.10);  border-color: rgba(34,197,94,.40);  color: #86EFAC; }
+    .btn-red    { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.35);  color: #F87171; }
+    .btn-amber  { background: rgba(249,115,22,.10); border-color: rgba(249,115,22,.40); color: #FDBA74; }
+    .btn-blue   { background: rgba(59,130,246,.10); border-color: rgba(59,130,246,.40); color: var(--blue-lt); }
+    .btn-grey   { background: var(--card-hi);       border-color: var(--border);        color: var(--text-muted); }
+    .btn-purple { background: rgba(168,85,247,.10); border-color: rgba(168,85,247,.40); color: #C4B5FD; }
+    /* Dangerous action style (END SESSION, CANCEL) */
+    .btn-red:hover { background: rgba(239,68,68,.20); }
+    .abtn.confirm-pending { background: rgba(239,68,68,.25); border-color: #ef4444; color: #F87171; animation: pulse-confirm .5s ease-in-out infinite alternate; }
+    @keyframes pulse-confirm { from { opacity:.85; } to { opacity:1; } }
+    @keyframes pulse-red { from { opacity:.85; } to { opacity:1; } }
     .delay-grp  { margin-left: auto; display: flex; gap: 3px; align-items: center; }
     .delay-grp .dl { font-size: 10px; color: var(--dim); }
 
+    /* ── SIDEBAR ACTION BUTTONS (AI Agents, Stage Monitor, etc.) ── */
+    .sb-action-btn {
+      width: 100%; height: 38px;
+      display: flex; align-items: center; gap: 9px;
+      padding: 0 12px; border-radius: 6px; border: 1px solid;
+      font-size: 12px; font-family: inherit; font-weight: 600;
+      cursor: pointer; transition: filter .12s, transform .1s;
+      letter-spacing: .02em; text-align: left;
+    }
+    .sb-action-btn:hover  { filter: brightness(1.18); }
+    .sb-action-btn:active { transform: scale(.98); }
+    .sb-action-btn:disabled { opacity: .35; cursor: not-allowed; }
+    .sb-action-btn .sb-btn-icon { font-size: 14px; flex-shrink: 0; }
+
+    /* AI key row */
+    .ai-key-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 8px; border-radius: 6px;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid var(--border-section);
+      margin-bottom: 10px;
+    }
+    .ai-key-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #ef4444; flex-shrink: 0; transition: background .3s;
+    }
+    .ai-key-dot.active { background: var(--green); box-shadow: 0 0 5px rgba(34,197,94,.5); }
+    .ai-key-label { font-size: 10px; color: var(--text-muted); letter-spacing: .04em; font-weight: 600; flex: 1; }
+    .ai-key-clear {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 11px; padding: 0 2px; line-height: 1;
+      display: none; transition: color .12s;
+    }
+    .ai-key-clear:hover { color: var(--red-lt); }
+    .ai-key-input-row { display: flex; gap: 5px; margin-bottom: 10px; }
+    .ai-key-input {
+      flex: 1; min-width: 0;
+      background: var(--input-bg); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--text-primary);
+      font-size: 10px; padding: 5px 8px; outline: none;
+      font-family: 'SF Mono','Fira Code','Monaco',monospace;
+      transition: border-color .15s;
+    }
+    .ai-key-input:focus { border-color: var(--blue); }
+    .ai-key-set {
+      background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.35);
+      color: var(--blue-lt); border-radius: 5px;
+      font-size: 11px; font-weight: 600; padding: 0 10px;
+      cursor: pointer; white-space: nowrap; transition: background .12s;
+      font-family: inherit;
+    }
+    .ai-key-set:hover { background: rgba(59,130,246,.25); }
+
     /* ── SIDEBAR ── */
-    .sb-section { border-bottom: 1px solid var(--border); padding: 12px 14px; flex-shrink: 0; }
+    #sidebar { background: var(--surface); }
+    .sb-section { border-bottom: 1px solid var(--border-section); padding: 14px; flex-shrink: 0; }
     .sb-title {
       font-size: 10px; font-weight: 600;
-      letter-spacing: .1em; color: var(--dim);
+      letter-spacing: .08em; color: var(--text-muted);
       text-transform: uppercase; margin-bottom: 8px;
     }
 
     /* Clock */
-    #sb-time    { font-size: 28px; font-weight: 600; letter-spacing: .04em; color: #f1f5f9; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    .ck-details { font-size: 11px; color: var(--dim); margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
-    .ck-val     { color: var(--text); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 11px; }
+    #sb-time    { font-size: 36px; font-weight: 200; letter-spacing: .04em; color: #E5E7EB; font-variant-numeric: tabular-nums; }
+    .ck-details { font-size: 10px; color: var(--text-muted); margin-top: 6px; display: flex; flex-direction: column; gap: 3px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .ck-val     { color: var(--text-primary); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 10px; }
     .ck-val.drifted { color: var(--amber); }
 
     /* Log */
     #log-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     #log-panel .sb-title { padding: 10px 14px 5px; margin: 0; }
-    #log-feed   { flex: 1; overflow-y: auto; padding: 0 14px 10px; }
-    .le  { padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 10px; }
-    .le:last-child { border-bottom: none; }
-    .le-ts  { color: var(--dim); font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    .le-act { color: #60a5fa; font-weight: 600; }
-    .le-det { color: var(--dim); margin-top: 2px; }
+    #log-feed   { flex: 1; overflow-y: auto; padding: 0 6px 10px; }
+    .le {
+      padding: 5px 10px; margin-bottom: 2px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 0 4px 4px 0;
+      border-left: 2px solid var(--border-section);
+      font-size: 10px;
+    }
+    .le.le-state     { border-left-color: #22C55E; }
+    .le.le-system    { border-left-color: #3B82F6; }
+    .le.le-error     { border-left-color: #FF3B30; }
+    .le.le-broadcast { border-left-color: #F97316; }
+    .le.le-delay     { border-left-color: #FF00A8; }
+    /* Action text colour matches border per entry type */
+    .le.le-state     .le-act { color: #86EFAC; }
+    .le.le-system    .le-act { color: #93C5FD; }
+    .le.le-error     .le-act { color: #FF8B85; }
+    .le.le-broadcast .le-act { color: #FDBA74; }
+    .le.le-delay     .le-act { color: #FF80D4; }
+    .le-ts  { color: var(--text-muted); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-variant-numeric: tabular-nums; }
+    .le-act { color: var(--text-secondary); font-weight: 700; letter-spacing: .04em; }
+    .le-det { color: var(--text-primary); margin-top: 2px; font-size: 11px; }
 
     /* ── BROADCAST BAR ── */
     #bc-bar {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 8px 20px;
+      background: rgba(15,21,32,0.97);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(148,163,184,0.10);
+      padding: 10px 16px;
       display: flex; align-items: center; gap: 8px;
       flex-shrink: 0;
     }
-    #bc-bar label { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
+    #bc-bar label { font-size: 10px; color: var(--text-muted); letter-spacing: .1em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
     #bc-input {
-      flex: 1; background: var(--surface2);
-      border: 1px solid var(--border); border-radius: 6px;
-      padding: 6px 11px; color: var(--text);
-      font-size: 12px; font-family: inherit;
+      flex: 1; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(148,163,184,0.15); border-radius: 6px;
+      padding: 0 11px; height: 38px; color: var(--text-primary);
+      font-size: 13px; font-family: inherit;
       transition: border-color .15s, box-shadow .15s;
     }
     #bc-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
     #bc-pri {
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 6px; padding: 6px 8px; color: var(--text);
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(148,163,184,0.15);
+      border-radius: 6px; padding: 0 8px; height: 38px; color: var(--text-primary);
       font-size: 11px; font-family: inherit;
     }
     /* ── BROADCAST IMPROVEMENTS ── */
@@ -342,6 +573,53 @@
     }
     .bc-dismiss:hover { opacity:1; }
 
+    /* ── WRAP-UP WARNING STATES ── */
+    .sc.warn-amber { border-left-color: var(--amber) !important; box-shadow: 0 0 0 1px rgba(245,158,11,.2), 0 2px 16px rgba(245,158,11,.08); }
+    .sc.warn-red   { border-left-color: var(--red)   !important; box-shadow: 0 0 0 1px rgba(239,68,68,.35), 0 2px 20px rgba(239,68,68,.14); animation: pulse-red 1.2s ease-in-out infinite; }
+    .lt-remain.warn-amber { color: var(--amber) !important; }
+    .lt-remain.warn-red   { color: var(--red)   !important; font-weight: 700; }
+
+    /* ── SESSION NOTES ── */
+    .sc-notes-toggle {
+      font-size: 10px; color: var(--dim); background: none; border: none;
+      cursor: pointer; padding: 2px 14px 8px; text-align: left;
+      font-family: inherit; transition: color .12s; display: block; width: 100%;
+    }
+    .sc-notes-toggle:hover { color: var(--text); }
+    .sc-notes-body {
+      padding: 6px 14px 10px; font-size: 11px; color: var(--dim);
+      background: rgba(0,0,0,.15); border-top: 1px solid var(--border);
+      white-space: pre-wrap; line-height: 1.5;
+    }
+    .sc-notes-body.hidden { display: none; }
+
+    /* ── CSV IMPORT ── */
+    #csv-import-input { display: none; }
+    .import-btn {
+      background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.3);
+      color: #a5b4fc; border-radius: 5px; padding: 5px 11px;
+      font-size: 11px; font-family: inherit; cursor: pointer; transition: all .12s;
+    }
+    .import-btn:hover { background: rgba(99,102,241,.16); }
+
+    /* ── AUTO-START TOGGLE ── */
+    #auto-start-btn {
+      display: none; background: none; border: 1px solid var(--border);
+      color: var(--dim); border-radius: 5px; padding: 3px 9px;
+      font-size: 11px; font-family: inherit; cursor: pointer;
+      transition: all .15s; white-space: nowrap;
+    }
+    #auto-start-btn.enabled { border-color: rgba(34,197,94,.4); color: var(--green); background: rgba(34,197,94,.08); }
+    #auto-start-btn:hover   { border-color: var(--green); color: var(--green); }
+
+    /* ── LOG EXPORT ── */
+    .log-export-btn {
+      font-size: 10px; background: none; border: 1px solid var(--border);
+      color: var(--dim); border-radius: 4px; padding: 2px 7px;
+      cursor: pointer; font-family: inherit; transition: all .12s;
+    }
+    .log-export-btn:hover { border-color: var(--blue); color: var(--blue-lt); }
+
     /* ── RECONNECT OVERLAY ── */
     #rc-overlay {
       display: none;
@@ -360,15 +638,30 @@
     #empty pre {
       margin-top: 16px; text-align: left;
       background: var(--surface2); padding: 14px; border-radius: 6px;
-      font-size: 11px; color: #60a5fa; overflow: auto;
+      font-size: 11px; color: var(--blue-lt); overflow: auto;
     }
 
     /* ── ANIMATIONS ── */
-    @keyframes spin          { to { transform: rotate(360deg); } }
-    @keyframes blink         { 0%,100% { opacity:1; } 50% { opacity:.3; } }
-    @keyframes pulse-red     { 0%,100% { box-shadow: 0 2px 24px rgba(239,68,68,.12), 0 0 0 1px rgba(239,68,68,.15); } 50% { box-shadow: 0 2px 30px rgba(239,68,68,.22), 0 0 0 1px rgba(239,68,68,.25); } }
-    @keyframes pulse-amber   { 0%,100% { opacity:1; } 50% { opacity:.6; } }
-    @keyframes pulse-magenta { 0%,100% { box-shadow: 0 2px 24px rgba(217,70,239,.12), 0 0 0 1px rgba(217,70,239,.15); } 50% { box-shadow: 0 2px 30px rgba(217,70,239,.22), 0 0 0 1px rgba(217,70,239,.25); } }
+    @keyframes spin               { to { transform: rotate(360deg); } }
+    @keyframes blink              { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+    /* Badge pulse — generic (READY, CALLING) */
+    @keyframes badge-pulse        { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+    /* Badge pulse — LIVE (brighter red glow on card) */
+    @keyframes badge-pulse-live   {
+      0%,100% { box-shadow: 0 0 24px rgba(255,59,48,.20), 0 2px 8px rgba(0,0,0,.50); }
+      50%      { box-shadow: 0 0 32px rgba(255,59,48,.35), 0 2px 8px rgba(0,0,0,.50); }
+    }
+    /* Badge pulse — OVERRUN (magenta glow on card) */
+    @keyframes badge-pulse-overrun {
+      0%,100% { box-shadow: 0 0 20px rgba(255,0,168,.25), 0 2px 8px rgba(0,0,0,.50); }
+      50%      { box-shadow: 0 0 30px rgba(255,0,168,.40), 0 2px 8px rgba(0,0,0,.50); }
+    }
+    /* Badge blink — HOLD */
+    @keyframes badge-blink        { 0%,100% { opacity:1; } 50% { opacity:0; } }
+    /* Legacy pulse-red alias (used by wrap-up warning) */
+    @keyframes pulse-red          { 0%,100% { box-shadow: 0 2px 24px rgba(255,59,48,.12), 0 0 0 1px rgba(255,59,48,.15); } 50% { box-shadow: 0 2px 30px rgba(255,59,48,.28), 0 0 0 1px rgba(255,59,48,.28); } }
+    @keyframes pulse-amber        { 0%,100% { opacity:1; } 50% { opacity:.6; } }
+    @keyframes pulse-magenta      { 0%,100% { box-shadow: 0 2px 24px rgba(255,0,168,.12), 0 0 0 1px rgba(255,0,168,.15); } 50% { box-shadow: 0 2px 30px rgba(255,0,168,.28), 0 0 0 1px rgba(255,0,168,.28); } }
 
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -398,16 +691,24 @@
     .sp-disp-name  { font-size: 13px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .sp-disp-zone  { font-size: 10px; color: var(--dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; flex-shrink: 0; }
     .sp-disp-meta  { font-size: 10px; color: var(--dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .sp-disp-mode  { color: #60a5fa; font-weight: 500; }
+    .sp-disp-mode  { color: var(--blue-lt); font-weight: 500; }
     .sp-disp-actions { display: flex; gap: 4px; margin-top: 2px; }
-    .sp-disp-actions button {
+    .sp-disp-actions button, .sp-disp-actions a.launch {
       flex: 1; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border);
       background: var(--surface2); color: var(--dim); font-size: 10px;
       font-family: inherit; cursor: pointer; transition: all .12s; white-space: nowrap;
     }
     .sp-disp-actions button:hover { color: var(--text); border-color: var(--dim); }
-    .sp-disp-actions button.launch, .sp-disp-actions a.launch { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: #60a5fa; text-decoration: none; display: inline-flex; align-items: center; }
+    .sp-disp-actions button.launch, .sp-disp-actions a.launch { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: var(--blue-lt); text-decoration: none; display: inline-flex; align-items: center; }
     .sp-disp-actions button.launch:hover, .sp-disp-actions a.launch:hover { background: rgba(59,130,246,.15); }
+    .sp-disp-actions button.qr-btn { flex: 0 0 auto; background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.3); color: var(--green); }
+    .sp-disp-actions button.qr-btn:hover { background: rgba(34,197,94,.15); }
+    /* ── QR MODAL ── */
+    #qr-modal .ev-modal-card { align-items: center; max-width: 320px; text-align: center; }
+    #qr-modal .qr-name { font-size: 16px; font-weight: 700; color: var(--text); }
+    #qr-modal .qr-sub  { font-size: 11px; color: var(--dim); margin-top: -4px; }
+    #qr-modal .qr-img  { width: 240px; height: 240px; border-radius: 8px; background: #fff; padding: 8px; }
+    #qr-modal .qr-hint { font-size: 11px; color: var(--dim); line-height: 1.5; }
     .sp-override-tag { font-size: 10px; color: var(--amber); background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); border-radius: 3px; padding: 1px 6px; align-self: flex-start; }
     .sp-global-bar {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
@@ -434,16 +735,16 @@
     .sp-sponsor-edit:hover { color: var(--text); border-color: var(--dim); }
 
     /* ── EVENT MODAL ── */
-    .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px); }
-    .ev-modal-card { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 26px;min-width:320px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.5); }
-    .ev-modal-title { font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--text); }
-    .ev-modal-card label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase; }
-    .ev-modal-card input,.ev-modal-card select { background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s; }
+    .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.70);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px); }
+    .ev-modal-card { background:var(--surface);border:1px solid rgba(148,163,184,0.12);border-radius:12px;padding:24px 26px;min-width:320px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.60); }
+    .ev-modal-title { font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--text-primary); }
+    .ev-modal-card label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase; }
+    .ev-modal-card input,.ev-modal-card select { background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s; }
     .ev-modal-card input:focus,.ev-modal-card select:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1); }
     .ev-modal-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:4px; }
-    .ev-modal-actions button { padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;font-family:inherit;font-weight:500;transition:filter .15s; }
+    .ev-modal-actions button { padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--card-hi);color:var(--text-primary);cursor:pointer;font-size:11px;font-family:inherit;font-weight:500;transition:filter .15s; }
     .ev-modal-actions button.primary { background:#1d4ed8;border-color:#2563eb;color:#fff; }
-    .ev-modal-actions button.danger  { background:#7f1d1d;border-color:#991b1b;color:#fca5a5; }
+    .ev-modal-actions button.danger  { background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#F87171; }
     .ev-modal-actions button:hover { filter:brightness(1.15); }
     #evm-error { color:var(--red);font-size:11px;min-height:14px; }
     .ev-edit-btn { background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px;padding:0 3px;opacity:.5;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
@@ -481,20 +782,20 @@
     .delay-break::before,.delay-break::after { content:'';flex:1;height:1px;background:var(--border); }
     /* ── FILTER BAR ── */
     #filter-bar {
-      background:var(--surface2);border-bottom:1px solid var(--border);
+      background:var(--surface);border-bottom:1px solid var(--border-section);
       padding:6px 20px;display:flex;align-items:center;gap:8px;flex-shrink:0;
     }
     #fb-search {
-      flex:1;min-width:0;max-width:220px;background:var(--surface);
+      flex:1;min-width:0;max-width:220px;background:var(--input-bg);
       border:1px solid var(--border);border-radius:6px;padding:4px 10px;
-      color:var(--text);font-size:11px;font-family:inherit;outline:none;
+      color:var(--text-primary);font-size:12px;font-family:inherit;outline:none;
       transition:border-color .15s;
     }
     #fb-search:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.08); }
-    #fb-search::placeholder { color:var(--dim); }
+    #fb-search::placeholder { color:var(--text-muted); }
     #fb-status,#fb-room {
-      background:var(--surface);border:1px solid var(--border);border-radius:6px;
-      padding:4px 8px;color:var(--text);font-size:11px;font-family:inherit;
+      background:var(--input-bg);border:1px solid var(--border);border-radius:6px;
+      padding:4px 8px;color:var(--text-primary);font-size:12px;font-family:inherit;
       outline:none;cursor:pointer;transition:border-color .15s;
     }
     #fb-status:focus,#fb-room:focus { border-color:var(--blue); }
@@ -533,7 +834,7 @@
     .ctx-lang-chip {
       display: inline-block; background: var(--surface2); border: 1px solid rgba(59,130,246,.3);
       border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600;
-      color: #60a5fa; margin: 2px 3px 2px 0;
+      color: var(--blue-lt); margin: 2px 3px 2px 0;
     }
 
     /* ── STAGE MONITOR ── */
@@ -556,12 +857,12 @@
     }
     .sm-status-live {
       display: flex; align-items: center; justify-content: center; gap: 10px;
-      font-size: 16px; font-weight: 700; letter-spacing: .3em; color: #ef4444;
+      font-size: 16px; font-weight: 700; letter-spacing: .3em; color: var(--red);
       margin-bottom: 20px;
     }
     .sm-live-dot {
-      width: 10px; height: 10px; border-radius: 50%; background: #ef4444;
-      box-shadow: 0 0 14px #ef4444; flex-shrink: 0; animation: blink .9s infinite;
+      width: 10px; height: 10px; border-radius: 50%; background: var(--red);
+      box-shadow: 0 0 14px var(--red); flex-shrink: 0; animation: blink .9s infinite;
     }
     .sm-status-standby { font-size: 14px; font-weight: 600; letter-spacing: .25em; color: var(--dim); margin-bottom: 20px; }
     .sm-title {
@@ -580,17 +881,85 @@
     .sm-divider { width: 60px; height: 1px; background: var(--border); margin: 0 auto 24px; }
     .sm-next-lbl { font-size: 10px; color: var(--dim); letter-spacing: .18em; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; }
     .sm-next-title { font-size: clamp(16px, 2.8vw, 34px); font-weight: 600; color: var(--dim); }
-    .sm-next-time  { font-size: clamp(11px, 1.4vw, 15px); color: #60a5fa; margin-top: 5px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
+    .sm-next-time  { font-size: clamp(11px, 1.4vw, 15px); color: var(--blue-lt); margin-top: 5px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
     #sm-footer {
       flex-shrink: 0; height: 42px; background: rgba(0,0,0,.5);
       border-top: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
     }
     .sm-footer-evt { font-size: 10px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
-    .sm-clock { font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 18px; font-weight: 600; color: #60a5fa; letter-spacing: .06em; }
+    .sm-clock { font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 18px; font-weight: 600; color: var(--blue-lt); letter-spacing: .06em; }
+
+    /* ── NEXT UP label (PR-011) ─────────────────────────────────────────────── */
+    .next-up-label {
+      font-size: 10px; font-weight: 700; letter-spacing: .18em;
+      color: var(--blue); text-transform: uppercase;
+      padding: 6px 16px 2px; opacity: .7;
+    }
+
+    /* ── Operator presence indicator (PR-009) ──────────────────────────────── */
+    #presence-bar { display: flex; align-items: center; gap: 10px; }
+    .pr-role { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--dim); letter-spacing: .05em; cursor: default; }
+    .pr-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); transition: background .3s; flex-shrink: 0; }
+    .pr-dot.online { background: var(--green); }
+
+    /* ── Timeline view (PR-020) ────────────────────────────────────────────── */
+    #timeline-wrap { padding: 12px 8px; overflow-x: auto; }
+    #timeline-wrap svg { display: block; }
+    .tl-room-label { font-size: 10px; fill: var(--dim); font-family: inherit; }
+    .tl-time-label { font-size: 9px; fill: var(--dim); font-family: 'SF Mono','Fira Code',monospace; }
+    .tl-now-line   { stroke: var(--amber); stroke-width: 1.5; stroke-dasharray: 4,3; }
+    .tl-bar        { rx: 4; cursor: pointer; opacity: .85; transition: opacity .15s; }
+    .tl-bar:hover  { opacity: 1; }
+    .tl-bar-label  { font-size: 9px; fill: #fff; pointer-events: none; font-family: inherit; font-weight: 600; }
+
+    /* ── Toast notification system ─────────────────────────────────────────── */
+    #toast-container {
+      position: fixed; top: 14px; right: 14px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 500; /* below modals/loading, above session cards */
+      pointer-events: none;
+    }
+    .toast {
+      display: flex; align-items: flex-start; gap: 8px;
+      min-width: 220px; max-width: 340px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-left-width: 3px; border-radius: 5px;
+      padding: 9px 10px; font-size: 12px; line-height: 1.4;
+      box-shadow: 0 4px 16px rgba(0,0,0,.45);
+      pointer-events: auto;
+      animation: toast-in 200ms ease-out both;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .toast.toast-out {
+      animation: toast-out 150ms ease-in forwards;
+    }
+    @keyframes toast-out {
+      to { opacity: 0; transform: translateX(12px); }
+    }
+    .toast.toast-error  { border-left-color: #dc2626; }
+    .toast.toast-warn   { border-left-color: #d97706; }
+    .toast.toast-success{ border-left-color: #16a34a; }
+    .toast.toast-info   { border-left-color: var(--blue); }
+    .toast-msg { flex: 1; color: var(--fg); }
+    .toast-close {
+      flex-shrink: 0; cursor: pointer; color: var(--dim);
+      font-size: 14px; line-height: 1; padding: 0 2px;
+      background: none; border: none;
+    }
+    .toast-close:hover { color: var(--fg); }
+    @media (prefers-reduced-motion: reduce) {
+      .toast, .toast.toast-out { animation: none; }
+    }
   </style>
 </head>
 <body>
+
+<!-- TOAST NOTIFICATIONS -->
+<div id="toast-container"></div>
 
 <!-- LOADING / LOGIN -->
 <div id="loading-overlay">
@@ -603,7 +972,25 @@
     <input id="lf-password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
     <div id="lf-error"></div>
+    <a href="#" class="lf-toggle-link" onclick="showRegisterForm();return false">Create account</a>
   </form>
+  <form id="register-form" onsubmit="handleRegisterSubmit(event)">
+    <div class="lf-title">CREATE ACCOUNT</div>
+    <input id="rf-email"    type="email"    placeholder="Email"            autocomplete="username" required>
+    <input id="rf-password" type="password" placeholder="Password (8+ chars)" autocomplete="new-password" required minlength="8">
+    <input id="rf-confirm"  type="password" placeholder="Confirm Password"    autocomplete="new-password" required>
+    <input id="rf-code"     type="text"     placeholder="Invite Code"         autocomplete="off"     required>
+    <button type="submit">Create Account</button>
+    <div id="rf-error"></div>
+    <div id="rf-success" style="display:none">Account created. A director will assign your role — you can sign in once approved.</div>
+    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
+  </form>
+  <div id="pending-screen">
+    <div class="ps-icon">⏳</div>
+    <div class="ps-title">Account Pending Approval</div>
+    <div class="ps-msg">Signed in as <span class="ps-email" id="pending-email"></span><br>A director needs to assign your role before you can access the console.</div>
+    <button onclick="doLogout()">Sign Out</button>
+  </div>
 </div>
 
 <!-- BROADCAST BANNER -->
@@ -613,14 +1000,20 @@
 <div id="header">
   <div class="logo">LE<span>O</span>D</div>
   <div id="event-name">—</div>
+  <div id="presence-bar"></div>
   <div id="hdr-clock">--:--:--</div>
   <div id="hdr-offset">offset: —</div>
   <div id="conn-pill">
     <div id="conn-dot"></div>
     <span id="conn-lbl">offline</span>
   </div>
+  <button id="auto-start-btn" onclick="toggleAutoStart()" title="Auto-start sessions at planned time">⏱ AUTO</button>
+  <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
+    Operators <span id="users-badge"></span>
+  </button>
   <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
 </div>
+<input type="file" id="csv-import-input" accept=".csv,text/csv">
 
 <!-- DIAGNOSTICS -->
 <div id="diag-bar">
@@ -667,6 +1060,44 @@
     </div>
     <div id="ctx-actions"></div>
 
+    <!-- AI Agents panel (hidden until boot, director only) -->
+    <div class="sb-section" id="ai-agents-wrap" style="display:none">
+      <div class="sb-title">AI AGENTS</div>
+
+      <!-- API Key status + input -->
+      <div class="ai-key-row" style="margin-top:6px">
+        <span id="ai-key-dot" class="ai-key-dot"></span>
+        <span id="ai-key-label" class="ai-key-label">NO API KEY</span>
+        <button id="ai-key-clear" class="ai-key-clear" onclick="clearAgentKey()" title="Remove saved key">✕</button>
+      </div>
+      <div class="ai-key-input-row">
+        <input id="ai-key-input" type="password" placeholder="sk-ant-api03-…"
+          class="ai-key-input"
+          onkeydown="if(event.key==='Enter')saveAgentKey()">
+        <button class="ai-key-set" onclick="saveAgentKey()">Set</button>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="sb-action-btn btn-red"
+          title="Manually trigger an incident advisory modal"
+          onclick="ensureAgentsInited();LEODIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test — check signal path and connections',timestamp:new Date().toLocaleTimeString()})">
+          <span class="sb-btn-icon">⚠</span> Test Incident Alert
+        </button>
+        <button class="sb-action-btn btn-blue"
+          title="Fire a demo pre-cue modal (as if 8 min before next session)"
+          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(Date.now()+8*60000).toISOString(),room:'Main Stage'};LEODCueEngine.triggerCue(LEODCueEngine.adaptLEODSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(Date.now()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(Date.now()+8*60000));})()">
+          <span class="sb-btn-icon">⏱</span> Test Cue Alert
+        </button>
+        <button class="sb-action-btn btn-green"
+          id="ai-report-btn"
+          title="Generate AI post-event report (auto-loads all session + incident data)"
+          onclick="ensureAgentsInited();LEODReportAgent.triggerFromLEOD()">
+          <span class="sb-btn-icon">📋</span> Generate Report
+        </button>
+      </div>
+    </div>
+
     <!-- Clock -->
     <div class="sb-section">
       <div class="sb-title">SERVER CLOCK</div>
@@ -681,7 +1112,10 @@
 
     <!-- Log -->
     <div id="log-panel">
-      <div class="sb-title" style="padding:10px 13px 5px;">EVENT LOG</div>
+      <div class="sb-title" style="padding:10px 13px 5px;display:flex;align-items:center;justify-content:space-between;">
+        EVENT LOG
+        <button class="log-export-btn" onclick="exportLog()" title="Download log as CSV">⬇ CSV</button>
+      </div>
       <div id="log-feed">
         <div style="color:var(--dim);font-size:11px;padding:4px 0">Waiting…</div>
       </div>
@@ -737,6 +1171,7 @@
         <option value="schedule">Session Schedule (current + next)</option>
         <option value="wayfinding">Wayfinding (room directory)</option>
         <option value="sponsors">Sponsor Carousel</option>
+        <option value="agenda">Full Agenda (Room Grid)</option>
         <option value="break">Break Screen</option>
         <option value="custom">Custom Message</option>
       </select>
@@ -744,6 +1179,19 @@
     <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — leave blank to show all)</span>
       <input id="dm-room" type="text" placeholder="e.g. Main Stage">
     </label>
+
+    <!-- Sequence builder -->
+    <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;font-size:12px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="dm-seq-enable" onchange="toggleSeqBuilder()">
+        <span style="font-weight:600">Enable Sequence (auto-rotate slides)</span>
+      </label>
+      <div id="dm-seq-builder" style="display:none">
+        <div id="dm-seq-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+        <button type="button" onclick="addSeqSlide()" class="abtn btn-blue" style="font-size:11px;padding:4px 10px">＋ Add Slide</button>
+      </div>
+    </div>
+
     <div class="ev-modal-actions">
       <button onclick="closeDisplayModal()">Cancel</button>
       <button id="dm-del" class="danger" style="display:none" onclick="deleteDisplay()">Delete</button>
@@ -758,12 +1206,16 @@
   <div class="ev-modal-card">
     <div class="ev-modal-title" id="spon-modal-title">Add Sponsor</div>
     <label>Sponsor Name<input id="spm-name" type="text" placeholder="TechCorp Poland" required></label>
-    <label>Logo Image
-      <input id="spm-file" type="file" accept="image/*" style="font-size:11px;color:var(--dim);margin-top:3px">
+    <label>Logo / Video File
+      <input id="spm-file" type="file" accept="image/*,.mp4,.webm" style="font-size:11px;color:var(--dim);margin-top:3px">
     </label>
     <div id="spm-preview" style="display:none;margin:4px 0;background:var(--surface2);border-radius:6px;padding:8px;text-align:center">
       <img id="spm-preview-img" style="max-height:60px;max-width:220px;object-fit:contain;border-radius:4px">
     </div>
+    <div style="text-align:center;color:var(--dim);font-size:10px;padding:2px 0">— or paste a URL —</div>
+    <label style="text-transform:none;letter-spacing:0;font-size:11px">Image or video URL (.mp4, .webm, .png, etc.)
+      <input id="spm-url" type="url" placeholder="https://..." style="font-size:12px;margin-top:3px">
+    </label>
     <label>Background Color (shown on display)
       <input id="spm-bg" type="color" value="#0d0f17" style="height:32px;cursor:pointer;width:80px">
     </label>
@@ -773,6 +1225,32 @@
       <button class="primary" onclick="saveSponsor()">Save</button>
     </div>
     <div id="spm-error" style="color:var(--red);font-size:11px;min-height:14px"></div>
+  </div>
+</div>
+
+<!-- USERS MODAL -->
+<div id="users-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeUsersModal()">
+  <div class="ev-modal-card" style="max-width:480px">
+    <div class="ev-modal-title">Operator Accounts</div>
+    <div id="users-modal-body">
+      <div class="um-empty">Loading…</div>
+    </div>
+    <div class="ev-modal-actions">
+      <button onclick="closeUsersModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR MODAL -->
+<div id="qr-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeQR()">
+  <div class="ev-modal-card">
+    <div class="qr-name" id="qr-display-name"></div>
+    <div class="qr-sub">Scan to open on this screen</div>
+    <img class="qr-img" id="qr-img" src="" alt="QR Code">
+    <div class="qr-hint">Point the kiosk browser camera at this code.<br>The display will load and connect automatically.</div>
+    <div class="ev-modal-actions">
+      <button onclick="closeQR()">Close</button>
+    </div>
   </div>
 </div>
 
@@ -788,7 +1266,7 @@
     <option value="warn">warn</option>
     <option value="critical">critical</option>
   </select>
-  <button class="abtn btn-amber" onclick="sendBroadcast()">SEND</button>
+  <button class="abtn btn-blue" style="background:#3B82F6;border-color:#3B82F6;color:#fff;font-weight:700;height:38px;padding:0 16px;border-radius:6px;" onclick="sendBroadcast()">SEND</button>
   <button class="abtn btn-grey"  onclick="clearBroadcast()">CLEAR</button>
 </div>
 
@@ -837,6 +1315,13 @@
       </label>
     </div>
 
+    <label>Notes <span style="font-size:10px;color:var(--dim)">(operator-only)</span>
+      <textarea id="smv-notes" rows="3" placeholder="Tech rider, cue notes, special instructions…"
+        style="resize:vertical;min-height:60px;width:100%;background:var(--surface);border:1px solid var(--border);
+               color:var(--text);border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;
+               outline:none;transition:border-color .15s"></textarea>
+    </label>
+
     <div class="ev-modal-actions">
       <button onclick="closeSessModal()">Cancel</button>
       <button id="smv-del" class="danger" style="display:none" onclick="deleteSession()">Delete</button>
@@ -877,6 +1362,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const CLOCK_RESYNC_MS  = 300_000;   // 5 min
 const DRIFT_WARN_MS    = 500;
 
+// AI Agents — Anthropic API key (paste 'sk-ant-...' to enable live AI responses)
+// Without a key all 3 agents run in fallback mode — UI still fully works.
+const ANTHROPIC_API_KEY = '';       // ← operators: set before each event
+window.LEOD_API_KEY     = ANTHROPIC_API_KEY;
+
 // ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
@@ -904,6 +1394,13 @@ const S = {
   userRole:        null,   // role from leod_users table
   displays:        [],     // leod_signage_displays rows
   sponsors:        [],     // leod_signage_sponsors rows
+  seqMap:          {},     // PR-006: sessionId → last seen seq for gap detection
+  lastSyncAt:      0,      // PR-016: ms timestamp of last successful loadSnapshot()
+  presence:        {},     // PR-009: role → count of connected operators
+  viewMode:        'list', // PR-020: 'list' | 'timeline'
+  autoStart:       false,  // auto go-live at planned start time
+  _autoStarted:    new Set(), // session IDs already auto-started this session
+  chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
 };
 
 // ── Filter state (separate from S) ──
@@ -1010,9 +1507,16 @@ async function loadSnapshot(eventId) {
   if (error) throw error;
   S.sessions  = data || [];
   S.dbStatus  = 'ok';
+  S.lastSyncAt = Date.now(); // PR-016: record sync time for diag tooltip
+  // PR-006: seed seqMap from snapshot so first realtime event doesn't trigger false gap
+  for (const s of S.sessions) { if (s.seq != null) S.seqMap[s.id] = s.seq; }
   refreshDiag();
   renderSessions();
   buildFilterBar();
+  // PR-008: cleanup commands older than 24h (best-effort, non-blocking)
+  sb.rpc('cleanup_old_commands').then(() => {}).catch(() => {});
+  // AI Agents: refresh Cue Engine schedule whenever sessions are reloaded
+  if (typeof LEODCueEngine !== 'undefined') LEODCueEngine.reinit(S.sessions);
 }
 
 async function loadBroadcast(eventId) {
@@ -1033,6 +1537,8 @@ async function loadLog(eventId) {
 // ═══════════════════════════════════════════════════
 function subscribeControl(eventId) {
   S.ctrlChan?.unsubscribe();
+  S.presence = {};
+  refreshPresence();
   S.ctrlChan = sb
     .channel(`leod-ctrl-${eventId}`)
     .on('postgres_changes',
@@ -1044,7 +1550,20 @@ function subscribeControl(eventId) {
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'leod_broadcast', filter: `event_id=eq.${eventId}` },
         p => { if (p.new) { S.broadcast = p.new; showBCBanner(p.new); } })
-    .subscribe(st => {
+    .on('presence', { event: 'sync' }, () => {
+      // PR-009: aggregate presence by role
+      const state = S.ctrlChan.presenceState();
+      const counts = {};
+      for (const entries of Object.values(state)) {
+        for (const entry of entries) {
+          const r = entry.role;
+          if (r) counts[r] = (counts[r] || 0) + 1;
+        }
+      }
+      S.presence = counts;
+      refreshPresence();
+    })
+    .subscribe(async st => {
       S.rtStatus = st === 'SUBSCRIBED' ? 'ok' : 'error';
       setConn(st === 'SUBSCRIBED' ? 'live' : 'reconnecting');
       refreshDiag();
@@ -1052,6 +1571,8 @@ function subscribeControl(eventId) {
         S.retries = 0;
         pushLog('SYSTEM', 'realtime channel connected', null);
         document.getElementById('rc-overlay').style.display = 'none';
+        // PR-009: track own presence
+        if (S.user) await S.ctrlChan.track({ role: S.role, userId: S.user.id }).catch(() => {});
       } else if (st === 'CHANNEL_ERROR') {
         onDisconnect();
       }
@@ -1062,20 +1583,41 @@ function onSessionChange(payload) {
   const row = payload.new || payload.old;
   if (!row) return;
   if (payload.eventType === 'DELETE') {
+    delete S.seqMap[row.id];
     S.sessions = S.sessions.filter(s => s.id !== row.id);
     // Clear ghost room filter if deleted session was the only one in that room
     if (F.room && !S.sessions.some(s => s.room === F.room)) F.room = '';
     buildFilterBar();
   } else if (payload.eventType === 'INSERT') {
+    if (row.seq != null) S.seqMap[row.id] = row.seq;
     if (!S.sessions.find(s => s.id === row.id)) {
       S.sessions.push(row);
       S.sessions.sort((a, b) => a.sort_order - b.sort_order);
     }
     buildFilterBar();
   } else {
+    // PR-006: Sequence gap detection for UPDATE events
+    if (row.seq != null) {
+      const lastSeq = S.seqMap[row.id];
+      if (lastSeq != null) {
+        if (row.seq <= lastSeq) {
+          // Out-of-order or duplicate — discard and re-sync to get authoritative state
+          pushLog('SYSTEM', `stale event seq ${row.seq}≤${lastSeq} on "${trunc(row.title,18)}" — re-syncing`, null);
+          if (S.event) loadSessions(S.event.id);
+          return;
+        }
+        if (row.seq > lastSeq + 1) {
+          // Gap: at least one event was dropped — re-sync and still apply this update
+          pushLog('SYSTEM', `seq gap ${lastSeq}→${row.seq} on "${trunc(row.title,18)}" — re-syncing`, null);
+          if (S.event) loadSessions(S.event.id);
+        }
+      }
+      S.seqMap[row.id] = row.seq;
+    }
+
     const idx = S.sessions.findIndex(s => s.id === row.id);
     if (idx >= 0) {
-      if (S.sessions[idx].version > row.version) return; // stale
+      if (S.sessions[idx].version > row.version) return; // stale (version check)
       const prev = S.sessions[idx];
       S.sessions[idx] = row;
       if (prev.status !== row.status)
@@ -1091,6 +1633,32 @@ function onSessionChange(payload) {
 // ═══════════════════════════════════════════════════
 // TRANSITIONS
 // ═══════════════════════════════════════════════════
+
+// PR-015: Inline two-step CANCEL confirmation.
+// First click → button turns red + shows "CONFIRM CANCEL", starts 2s timer.
+// Second click within 2s → proceeds with transition.
+// Timer expiry → reverts to original label.
+const _cancelPending = new Map(); // sessionId → timer id
+function confirmCancel(sessionId, btn) {
+  if (_cancelPending.has(sessionId)) {
+    // Second click — proceed
+    clearTimeout(_cancelPending.get(sessionId));
+    _cancelPending.delete(sessionId);
+    btn.textContent = 'CANCEL';
+    btn.classList.remove('confirm-pending');
+    transition(sessionId, 'CANCELLED');
+  } else {
+    // First click — show confirm state
+    btn.textContent = 'CONFIRM CANCEL';
+    btn.classList.add('confirm-pending');
+    const t = setTimeout(() => {
+      _cancelPending.delete(sessionId);
+      if (btn.isConnected) { btn.textContent = 'CANCEL'; btn.classList.remove('confirm-pending'); }
+    }, 2000);
+    _cancelPending.set(sessionId, t);
+  }
+}
+
 async function transition(sessionId, toStatus) {
   const s = S.sessions.find(x => x.id === sessionId);
   if (!s) return;
@@ -1146,6 +1714,7 @@ async function transition(sessionId, toStatus) {
           if (toStatus === 'ENDED') s.actual_end   = null;
           renderSessions();
           pushLog('ERROR', 'Version conflict — session changed by another operator', sessionId);
+          pushToast('⚠ Updated by another operator — refreshing', 'warn');
           if (S.event) loadSessions(S.event.id);
           return;
         }
@@ -1183,6 +1752,7 @@ async function transition(sessionId, toStatus) {
         ? `RLS blocked write — deploy /${efName} or add service key`
         : error.message;
       pushLog('ERROR', hint, sessionId);
+      pushToast(`✕ ${hint}`, 'error');
       if (S.efStatus !== 'ok') S.efStatus = 'not-deployed';
       refreshDiag();
     } else {
@@ -1196,7 +1766,7 @@ async function transition(sessionId, toStatus) {
         operator_role: S.role,
         payload: { command_id: cmdId, client: 'console' },
         server_time_ms: correctedNow(),
-      }).then(() => {}).catch(() => {});
+      }).catch((e) => { pushLog('WARN', `event_log write failed: ${e?.message ?? e}`, sessionId); });
     }
   }
 }
@@ -1211,7 +1781,18 @@ async function applyDelay(sessionId, minutes) {
       body: { session_id: sessionId, minutes, command_id: crypto.randomUUID(), operator_role: S.role },
     });
     if (!error && data) {
-      pushLog('DELAY', `+${minutes}min via /apply-delay ✓`, sessionId); return;
+      const affected = data?.affected ?? '?';
+      pushLog('DELAY', `+${minutes}min via /apply-delay ✓`, sessionId);
+      pushToast(`✓ Delay applied — ${affected} session${affected === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
+      return;
+    }
+    if (error) {
+      let errBody = {};
+      try { if (typeof error.context?.json === 'function') errBody = await error.context.json(); } catch {}
+      if (errBody?.error === 'IN_FLIGHT') {
+        pushToast('⚠ Another delay is being applied — wait and retry', 'warn');
+        return;
+      }
     }
   } catch { /* fall through */ }
 
@@ -1239,9 +1820,10 @@ async function applyDelay(sessionId, minutes) {
     sb.from('leod_sessions').update({
       scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
       cumulative_delay: s.cumulative_delay, delay_minutes: s.delay_minutes,
-    }).eq('id', s.id).then(() => {}).catch(() => {});
+    }).eq('id', s.id).then(() => {}).catch((e) => { pushLog('WARN', `delay cascade write failed: ${e?.message ?? e}`, s.id); });
   }
   pushLog('DELAY', `+${minutes}min cascaded → ${affected.length} sessions`, sessionId);
+  pushToast(`✓ Delay applied — ${affected.length} session${affected.length === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
 }
 
 async function markArrived(sessionId, arrived) {
@@ -1317,6 +1899,47 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 
+// PR-019: Global keyboard shortcuts — director only
+// Shortcuts are disabled when focus is inside an input, textarea, or modal.
+document.addEventListener('keydown', e => {
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  if (!isDirector) return;
+  const tag  = document.activeElement?.tagName?.toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+  const inModal = !!document.activeElement?.closest('.ev-modal-backdrop');
+
+  if (e.key === 'Escape') {
+    // Close any open modal first; then clear filter if active
+    const openModal = document.querySelector('.ev-modal-backdrop[style*="flex"]');
+    if (openModal) {
+      if (openModal.id === 'sess-modal')  { closeSessModal(); return; }
+      if (openModal.id === 'ev-modal')    { closeEvModal();   return; }
+      if (openModal.id === 'disp-modal')  { closeDisplayModal(); return; }
+      if (openModal.id === 'spon-modal')  { closeSponsorModal(); return; }
+    }
+    if (isFilterActive()) { clearFilters(); return; }
+    return;
+  }
+  if (inInput || inModal) return; // don't intercept typing
+
+  switch (e.key) {
+    case '/':
+      e.preventDefault();
+      document.getElementById('fb-search')?.focus();
+      break;
+    case 'b':
+    case 'B':
+      document.getElementById('bc-input')?.focus();
+      break;
+    case 'r':
+    case 'R':
+      if (!S.event) return;
+      loadSnapshot(S.event.id).catch(() => {});
+      pushToast('Refreshed', 'info');
+      break;
+  }
+});
+
 // ═══════════════════════════════════════════════════
 // FILTERING
 // ═══════════════════════════════════════════════════
@@ -1345,6 +1968,12 @@ function renderSessions() {
   if (S.role === 'signage') {
     document.getElementById('delay-strip').style.display = 'none';
     renderSignagePanel();
+    return;
+  }
+
+  // PR-020: Timeline view mode
+  if (S.viewMode === 'timeline') {
+    renderTimeline();
     return;
   }
 
@@ -1395,7 +2024,11 @@ VALUES
 
   const nowMs = correctedNow();
 
-  // Build cards with anchor-break dividers
+  // PR-011: find which session gets the NEXT UP label (first non-terminal after LIVE)
+  const liveNow = S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN');
+  const nextUp  = S.role !== 'signage' ? getNextSession(S.sessions, liveNow) : null;
+
+  // Build cards with anchor-break dividers and NEXT UP label
   const cards = [];
   let wasDelayed = false;
   for (const s of visible) {
@@ -1403,18 +2036,153 @@ VALUES
     if (wasDelayed && s.is_anchor && !isDelayed) {
       cards.push(`<div class="delay-break">⚓ delay break — sessions below run on original schedule</div>`);
     }
+    if (nextUp && s.id === nextUp.id) {
+      cards.push(`<div class="next-up-label">▸ NEXT UP</div>`);
+    }
     cards.push(cardHTML(s, nowMs));
     wasDelayed = isDelayed;
   }
   list.innerHTML = cards.join('');
 
   if (S.role === 'director' || S.userRole === 'director') {
-    list.innerHTML += `<div style="padding:10px 0;text-align:center">
+    list.innerHTML += `<div style="padding:10px 0;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
       <button class="abtn btn-blue" onclick="openSessModal('add')">＋ ADD SESSION</button>
+      <button class="import-btn" onclick="triggerCSVImport()" title="Import sessions from CSV spreadsheet">⬆ IMPORT CSV</button>
     </div>`;
   }
 
   updateDelayStrip(); // always uses S.sessions (full set) — intentional
+  buildCtxPanel();
+}
+
+// PR-020: Toggle between list and timeline views
+function toggleViewMode() {
+  S.viewMode = S.viewMode === 'timeline' ? 'list' : 'timeline';
+  buildFilterBar(); // re-render toggle button label
+  renderSessions();
+}
+
+// PR-020: Render sessions as a horizontal SVG timeline
+// Rows = rooms (or single row if no rooms assigned).
+// X axis = time, marked every 30 minutes.
+// A vertical 'now' line shows the current corrected time.
+function renderTimeline() {
+  const list = document.getElementById('sessions-list');
+  document.getElementById('delay-strip').style.display = 'none';
+
+  const visible = applyFilters();
+  if (!visible.length) {
+    list.innerHTML = `<div id="timeline-wrap"><p style="color:var(--dim);padding:24px;text-align:center">No sessions to display in timeline.</p></div>`;
+    buildCtxPanel();
+    return;
+  }
+
+  // ── Time bounds ──
+  function toMinsFromMidnight(timeStr) {
+    if (!timeStr) return null;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+  }
+  const startTimes = visible.map(s => toMinsFromMidnight(s.scheduled_start)).filter(v => v != null);
+  const endTimes   = visible.map(s => toMinsFromMidnight(s.scheduled_end)).filter(v => v != null);
+  if (!startTimes.length) {
+    list.innerHTML = `<div id="timeline-wrap"><p style="color:var(--dim);padding:24px;text-align:center">Sessions have no time data.</p></div>`;
+    buildCtxPanel();
+    return;
+  }
+
+  const minMins  = Math.max(0, Math.min(...startTimes) - 15);
+  const maxMins  = Math.min(1440, Math.max(...endTimes) + 15);
+  const spanMins = maxMins - minMins;
+
+  // ── Layout constants ──
+  const ROW_H    = 44;
+  const LABEL_W  = 90;
+  const PAD_TOP  = 24; // space for time labels
+  const BAR_H    = 26;
+  const BAR_PAD  = (ROW_H - BAR_H) / 2;
+  const SVG_W    = Math.max(600, Math.min(1200, window.innerWidth - 60));
+  const CHART_W  = SVG_W - LABEL_W;
+
+  function xPos(mins) {
+    return LABEL_W + ((mins - minMins) / spanMins) * CHART_W;
+  }
+
+  // ── Group sessions by room ──
+  const roomSet  = new Set(visible.map(s => s.room || '').filter(Boolean));
+  const rooms    = roomSet.size ? [...roomSet].sort() : [''];
+  const SVG_H    = PAD_TOP + rooms.length * ROW_H + 20;
+
+  // ── Status → color map ──
+  const STATUS_COLOR = {
+    PLANNED: '#3b82f6', READY: '#fbbf24', CALLING: '#f97316',
+    LIVE: '#ef4444', OVERRUN: '#d946ef', HOLD: '#fb923c',
+    ENDED: '#374151', CANCELLED: '#1f2937',
+  };
+
+  // ── Time tick marks ──
+  const tickStep = spanMins <= 120 ? 15 : spanMins <= 360 ? 30 : 60;
+  const firstTick = Math.ceil(minMins / tickStep) * tickStep;
+  let ticksSvg = '';
+  for (let t = firstTick; t <= maxMins; t += tickStep) {
+    const x = xPos(t);
+    const h = String(Math.floor(t / 60)).padStart(2, '0');
+    const m = String(t % 60).padStart(2, '0');
+    ticksSvg += `<line x1="${x}" y1="${PAD_TOP - 4}" x2="${x}" y2="${SVG_H - 10}" stroke="var(--border)" stroke-width="1"/>`;
+    ticksSvg += `<text class="tl-time-label" x="${x}" y="${PAD_TOP - 7}" text-anchor="middle">${h}:${m}</text>`;
+  }
+
+  // ── Row labels + session bars ──
+  let rowsSvg = '';
+  rooms.forEach((room, rowIdx) => {
+    const rowY = PAD_TOP + rowIdx * ROW_H;
+    // Row label
+    if (room) {
+      rowsSvg += `<text class="tl-room-label" x="${LABEL_W - 6}" y="${rowY + ROW_H/2 + 4}" text-anchor="end">${esc(room)}</text>`;
+    }
+    // Row background alternate
+    if (rowIdx % 2 === 0) {
+      rowsSvg += `<rect x="${LABEL_W}" y="${rowY}" width="${CHART_W}" height="${ROW_H}" fill="rgba(255,255,255,.015)"/>`;
+    }
+    // Sessions in this room
+    const roomSessions = visible.filter(s => (s.room || '') === room);
+    for (const sess of roomSessions) {
+      const sMin = toMinsFromMidnight(sess.scheduled_start);
+      const eMin = toMinsFromMidnight(sess.scheduled_end);
+      if (sMin == null || eMin == null) continue;
+      const bx  = xPos(sMin);
+      const bw  = Math.max(4, xPos(eMin) - bx);
+      const by  = rowY + BAR_PAD;
+      const col = STATUS_COLOR[sess.status] || '#6b7280';
+      const lbl = sess.title.length > 20 ? sess.title.substring(0, 18) + '…' : sess.title;
+      rowsSvg += `<rect class="tl-bar" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" fill="${col}" fill-opacity=".75" rx="4"
+        onclick="document.getElementById('card-${sess.id}')?.scrollIntoView({behavior:'smooth',block:'nearest'})" >
+        <title>${esc(sess.title)} · ${(sess.scheduled_start||'').substring(0,5)}–${(sess.scheduled_end||'').substring(0,5)} · ${sess.status}</title>
+      </rect>`;
+      if (bw > 28) {
+        rowsSvg += `<text class="tl-bar-label" x="${bx + 5}" y="${by + BAR_H/2 + 4}"
+          style="clip-path:inset(0 0 0 0 round 4px)">${esc(lbl)}</text>`;
+      }
+    }
+  });
+
+  // ── Now line ──
+  const nowMins = correctedNow() / 60_000 % 1440;
+  let nowLineSvg = '';
+  if (nowMins >= minMins && nowMins <= maxMins) {
+    const nx = xPos(nowMins);
+    nowLineSvg = `<line class="tl-now-line" x1="${nx}" y1="${PAD_TOP - 4}" x2="${nx}" y2="${SVG_H - 10}"/>
+      <text class="tl-time-label" x="${nx}" y="${SVG_H - 2}" text-anchor="middle" fill="var(--amber)">NOW</text>`;
+  }
+
+  list.innerHTML = `<div id="timeline-wrap">
+    <svg width="${SVG_W}" height="${SVG_H}" style="overflow:visible">
+      ${ticksSvg}
+      ${rowsSvg}
+      ${nowLineSvg}
+    </svg>
+  </div>`;
+
   buildCtxPanel();
 }
 
@@ -1464,7 +2232,7 @@ async function resetAllDelays() {
     sb.from('leod_sessions').update({
       scheduled_start: s.planned_start, scheduled_end: s.planned_end,
       cumulative_delay: 0, delay_minutes: 0,
-    }).eq('id', s.id).then(() => {}).catch(() => {});
+    }).eq('id', s.id).then(() => {}).catch((e) => { pushLog('WARN', `delay reset write failed: ${e?.message ?? e}`, s.id); });
   }
   pushLog('DELAY', `reset · ${toReset.length} sessions cleared`, null);
 }
@@ -1473,21 +2241,38 @@ function cardHTML(s, nowMs) {
   const delayed = (s.cumulative_delay || 0) > 0;
   const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
 
+  // Compute timing up-front (needed for warn class + timer display)
+  let remain = null, overrun = false, elapsed = 0, durMs = 0;
   let progHTML = '', timerHTML = '';
   if (isLive && s.actual_start) {
-    const startMs   = new Date(s.actual_start).getTime();
-    const elapsed   = nowMs - startMs;
-    const durMs     = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
-    const remain    = durMs - elapsed;
-    const pct       = Math.min(100, (elapsed / durMs) * 100);
-    const overrun   = remain < 0;
+    const startMs = new Date(s.actual_start).getTime();
+    elapsed = nowMs - startMs;
+    durMs   = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
+    remain  = durMs - elapsed;
+    overrun = remain < 0;
+    const pct = Math.min(100, (elapsed / Math.max(1, durMs)) * 100);
     progHTML  = `<div class="prog-wrap"><div class="prog-fill ${overrun?'ov':''}" style="width:${pct}%"></div></div>`;
+    const remClass = overrun ? 'ov' : remain < 60_000 ? 'warn-red' : remain < 300_000 ? 'warn-amber' : '';
     timerHTML = `<div class="live-timer">
       <span class="lt-elapsed">elapsed ${fmtDur(elapsed)}</span>
-      <span class="lt-remain ${overrun?'ov':''}">${overrun?'OVERRUN +'+fmtDur(-remain):fmtDur(remain)+' left'}</span>
+      <span class="lt-remain ${remClass}" data-sid="${s.id}">${overrun?'OVERRUN +'+fmtDur(-remain):fmtDur(remain)+' left'}</span>
       ${s.speaker_arrived?'<span class="arrived-tag">✓ arrived</span>':''}
     </div>`;
   }
+
+  // Warn class on card border
+  let warnClass = '';
+  if (isLive && remain !== null && !overrun) {
+    if (remain < 60_000)       warnClass = 'warn-red';
+    else if (remain < 300_000) warnClass = 'warn-amber';
+  }
+
+  // Notes section (operator-only, collapsed by default)
+  const hasNotes = s.notes && s.notes.trim();
+  const notesHtml = hasNotes
+    ? `<button class="sc-notes-toggle" onclick="toggleNotes('${s.id}')">📋 Notes</button>
+       <div class="sc-notes-body hidden" id="notes-${s.id}">${esc(s.notes)}</div>`
+    : '';
 
   const actions = buildButtons(s);
   const flags   = buildFlags(s);
@@ -1503,7 +2288,9 @@ function cardHTML(s, nowMs) {
     ? 'delay-origin'
     : (s.cumulative_delay || 0) > 0 ? 'delayed' : '';
 
-  return `<div class="sc status-${s.status} ${delayClass}" id="card-${s.id}">
+  return `<div class="sc status-${s.status} ${delayClass} ${warnClass}" id="card-${s.id}"
+    tabindex="0" aria-label="${esc(s.title)} — ${s.status}"
+    onkeydown="handleCardKey(event,'${s.id}')">
   ${progHTML}
   <div class="sc-top">
     <span class="sc-num">${s.sort_order}</span>
@@ -1524,8 +2311,20 @@ function cardHTML(s, nowMs) {
     ${delayed ? `<span class="delay-tag">+${s.cumulative_delay}min</span>` : ''}
   </div>
   ${timerHTML}
+  ${notesHtml}
   ${actions}
 </div>`;
+}
+
+// PR-017: Arrow key navigation between session cards
+function handleCardKey(event, sessionId) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+  event.preventDefault();
+  const cards = [...document.querySelectorAll('#session-list .sc[tabindex="0"]')];
+  const idx   = cards.findIndex(c => c.id === `card-${sessionId}`);
+  if (idx < 0) return;
+  const next = event.key === 'ArrowDown' ? cards[idx + 1] : cards[idx - 1];
+  if (next) next.focus();
 }
 
 function buildButtons(s) {
@@ -1541,6 +2340,10 @@ function buildButtons(s) {
   const btnHtml = possible.map(to => {
     const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
     const label = BTN_LABEL_OVERRIDE[`${s.status}→${to}`] || cfg.label;
+    // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
+    if (to === 'CANCELLED') {
+      return `<button class="abtn ${cfg.cls}" onclick="confirmCancel('${s.id}',this)">${label}</button>`;
+    }
     return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
   }).join('');
 
@@ -1559,7 +2362,18 @@ function buildButtons(s) {
        </div>`
     : '';
 
-  return `<div class="sc-actions">${btnHtml}${arriveHtml}${delayHtml}</div>`;
+  // Nudge buttons: ±1min on THIS session's end only (no cascade)
+  const isLiveNow = s.status === 'LIVE' || s.status === 'OVERRUN';
+  const canNudge  = isLiveNow && (S.role === 'director' || S.role === 'stage');
+  const nudgeHtml = canNudge
+    ? `<div class="delay-grp">
+         <span class="dl">NUDGE</span>
+         <button class="abtn btn-grey"  onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
+         <button class="abtn btn-amber" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
+       </div>`
+    : '';
+
+  return `<div class="sc-actions">${btnHtml}${arriveHtml}${delayHtml}${nudgeHtml}</div>`;
 }
 
 function buildFlags(s) {
@@ -1707,6 +2521,51 @@ function sendBroadcastQuick(text, priority) {
 // ═══════════════════════════════════════════════════
 let _dispModalId  = null;
 let _sponModalId  = null;
+let _seqSlides    = [];   // local state for sequence builder while modal is open
+
+// ── Sequence builder helpers (display modal) ──
+const SEQ_MODES = ['schedule','sponsors','agenda','wayfinding','break','recall','wifi','custom'];
+
+function toggleSeqBuilder() {
+  const on = document.getElementById('dm-seq-enable')?.checked;
+  const builder = document.getElementById('dm-seq-builder');
+  if (builder) builder.style.display = on ? '' : 'none';
+}
+
+function addSeqSlide(mode = 'sponsors', duration = 15) {
+  _seqSlides.push({ mode, duration });
+  renderSeqList();
+}
+
+function removeSeqSlide(i) {
+  _seqSlides.splice(i, 1);
+  renderSeqList();
+}
+
+function renderSeqList() {
+  const el = document.getElementById('dm-seq-list');
+  if (!el) return;
+  if (!_seqSlides.length) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--dim);text-align:center;padding:8px 0">No slides yet — click Add Slide</div>`;
+    return;
+  }
+  el.innerHTML = _seqSlides.map((s, i) => `
+    <div style="display:grid;grid-template-columns:1fr 72px 28px;gap:6px;align-items:center">
+      <select onchange="_seqSlides[${i}].mode=this.value"
+        style="background:var(--surface2);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:12px">
+        ${SEQ_MODES.map(m => `<option value="${m}"${s.mode === m ? ' selected' : ''}>${m}</option>`).join('')}
+      </select>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input type="number" value="${s.duration}" min="5" max="300" step="5"
+          onchange="_seqSlides[${i}].duration=+this.value"
+          style="width:42px;background:var(--surface2);color:var(--fg);border:1px solid var(--border);border-radius:4px;padding:3px 5px;font-size:12px">
+        <span style="font-size:10px;color:var(--dim)">s</span>
+      </div>
+      <button onclick="removeSeqSlide(${i})"
+        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1">✕</button>
+    </div>
+  `).join('');
+}
 
 async function loadDisplays(eventId) {
   try {
@@ -1787,11 +2646,14 @@ function renderSignagePanel() {
             <span class="sp-disp-mode">${esc(d.content_mode)}</span>
             <span>${orientIcon} ${esc(d.orientation)}</span>
             ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
+            ${d.sequence?.length ? `<span style="color:#c084fc">⟳ ${d.sequence.length} slides</span>` : ''}
             <span style="color:${online?'var(--green)':'var(--dim)'}">${online?'● online':'○ offline'}</span>
           </div>
           ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
           <div class="sp-disp-actions">
             <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer">▶ Launch</a>
+            <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
+            <button onclick="identifyDisplay('${esc(d.id)}')" title="Flash screen to identify it" style="background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.3);color:#c084fc">⚡ ID</button>
             <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
             ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
           </div>
@@ -1803,7 +2665,9 @@ function renderSignagePanel() {
     ? S.sponsors.map(s => `
         <div class="sp-sponsor-card">
           ${s.logo_url
-            ? `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`
+            ? (/\.(mp4|webm|ogg)(\?|$)/i.test(s.logo_url)
+                ? `<div class="sp-sponsor-placeholder" style="color:#c084fc;font-size:11px">▶ video</div>`
+                : `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`)
             : `<div class="sp-sponsor-placeholder">no logo</div>`}
           <div class="sp-sponsor-name">${esc(s.name)}</div>
           <button class="sp-sponsor-edit" onclick="openSponsorModal('edit','${esc(s.id)}')">✎</button>
@@ -1815,6 +2679,7 @@ function renderSignagePanel() {
     { key: 'break',    label: '☕ Break Screen' },
     { key: 'recall',   label: '⚡ 5-Min Recall' },
     { key: 'sponsors', label: '🏢 Sponsors' },
+    { key: 'agenda',   label: '📊 Agenda Grid' },
     { key: 'wifi',     label: '📶 WiFi Info' },
     { key: 'schedule', label: '📋 Schedule' },
   ];
@@ -1863,11 +2728,28 @@ function renderSignagePanel() {
   </div>`;
 }
 
+// ── QR Code modal ──────────────────────────────────────────
+function showQR(displayUrl, displayName) {
+  document.getElementById('qr-display-name').textContent = displayName;
+  // Use qrserver.com — free, no library needed, handles long URLs
+  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&ecc=L&data=' + encodeURIComponent(displayUrl);
+  document.getElementById('qr-img').src = qrSrc;
+  document.getElementById('qr-modal').style.display = 'flex';
+}
+function closeQR() {
+  document.getElementById('qr-modal').style.display = 'none';
+  document.getElementById('qr-img').src = '';
+}
+
 function buildDisplayUrl(d) {
-  const base = window.location.href.replace(/LEOD-console(\.html)?.*$/, 'LEOD-display.html');
-  // Use hash params — work reliably with both file:// and http:// protocols
-  const hash = `#url=${encodeURIComponent(SUPABASE_URL)}&key=${encodeURIComponent(SUPABASE_ANON_KEY)}&id=${encodeURIComponent(d.id)}`;
-  return base.split('?')[0].split('#')[0] + hash;
+  const loc = window.location;
+  // Production (Vercel): app.cuedeck.io/display#id=...  (clean URL via vercel.json rewrite)
+  // Local dev (python http.server): keep .html so the file resolves directly
+  const isLocal = loc.hostname === '127.0.0.1' || loc.hostname === 'localhost';
+  const base = isLocal
+    ? loc.href.replace(/LEOD-console(\.html)?.*$/, 'LEOD-display.html')
+    : loc.origin + '/display';
+  return base.split('?')[0].split('#')[0] + '#id=' + encodeURIComponent(d.id);
 }
 
 function launchDisplay(url) {
@@ -1901,13 +2783,20 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-orient').value = d.orientation || 'landscape';
     document.getElementById('dm-mode').value   = d.content_mode|| 'schedule';
     document.getElementById('dm-room').value   = d.filter_room || '';
+    // Populate sequence builder
+    _seqSlides = (d.sequence || []).map(s => ({ ...s }));
+    document.getElementById('dm-seq-enable').checked = _seqSlides.length > 0;
   } else {
     document.getElementById('dm-name').value   = '';
     document.getElementById('dm-zone').value   = 'lobby';
     document.getElementById('dm-orient').value = 'landscape';
     document.getElementById('dm-mode').value   = 'schedule';
     document.getElementById('dm-room').value   = '';
+    _seqSlides = [];
+    document.getElementById('dm-seq-enable').checked = false;
   }
+  toggleSeqBuilder();
+  renderSeqList();
   document.getElementById('disp-modal').style.display = 'flex';
 }
 
@@ -1927,7 +2816,9 @@ async function saveDisplay() {
   if (!name) { err.textContent = 'Display name is required.'; return; }
   if (!S.event) { err.textContent = 'No active event selected.'; return; }
 
-  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room };
+  const seqEnabled = document.getElementById('dm-seq-enable').checked;
+  const sequence   = seqEnabled && _seqSlides.length ? _seqSlides : null;
+  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence };
   const { error } = _dispModalId
     ? await sb.from('leod_signage_displays').update(payload).eq('id', _dispModalId)
     : await sb.from('leod_signage_displays').insert(payload);
@@ -1988,6 +2879,8 @@ function openSponsorModal(mode, id) {
   if (delBtn) delBtn.style.display = mode === 'edit' ? '' : 'none';
   document.getElementById('spm-preview').style.display = 'none';
   document.getElementById('spm-file').value = '';
+  const urlFld = document.getElementById('spm-url');
+  if (urlFld) urlFld.value = '';
 
   if (mode === 'edit' && id) {
     const s = S.sponsors.find(s => s.id === id);
@@ -1996,7 +2889,10 @@ function openSponsorModal(mode, id) {
     document.getElementById('spm-bg').value   = s.bg_color || '#0d0f17';
     if (s.logo_url) {
       document.getElementById('spm-preview').style.display = 'block';
-      document.getElementById('spm-preview-img').src = s.logo_url;
+      // Show video placeholder or image
+      const isVideo = /\.(mp4|webm|ogg)(\?|$)/i.test(s.logo_url);
+      document.getElementById('spm-preview-img').src = isVideo ? '' : s.logo_url;
+      if (isVideo && urlFld) urlFld.value = s.logo_url;
     }
   } else {
     document.getElementById('spm-name').value = '';
@@ -2032,17 +2928,21 @@ async function saveSponsor() {
 
   let logo_url = _sponModalId ? (S.sponsors.find(s => s.id === _sponModalId)?.logo_url ?? null) : null;
 
+  const pastedUrl = document.getElementById('spm-url')?.value.trim();
   if (file) {
     const ext  = file.name.split('.').pop().toLowerCase();
     const path = `sponsors/${S.event.id}/${Date.now()}.${ext}`;
-    const { error: upErr } = await sb.storage.from('leod-assets').upload(path, file, { contentType: file.type, upsert: true });
+    const mime = file.type || (ext === 'mp4' ? 'video/mp4' : ext === 'webm' ? 'video/webm' : 'application/octet-stream');
+    const { error: upErr } = await sb.storage.from('leod-assets').upload(path, file, { contentType: mime, upsert: true });
     if (upErr) {
-      err.textContent = `Logo upload failed: ${upErr.message}`;
+      err.textContent = `Upload failed: ${upErr.message}`;
       return;
     } else {
       const { data: { publicUrl } } = sb.storage.from('leod-assets').getPublicUrl(path);
       logo_url = publicUrl;
     }
+  } else if (pastedUrl) {
+    logo_url = pastedUrl;  // Use direct URL (image or video)
   }
 
   const payload = { event_id: S.event.id, name, logo_url, bg_color: bg, active: true };
@@ -2136,12 +3036,31 @@ function updateStageMonitor() {
     smLbl.textContent   = '';
   }
 
-  if (next && next !== cur) {
-    smNextTitle.textContent = next.title;
-    smNextTime.textContent  = (next.scheduled_start || '') + (next.speaker ? ` · ${next.speaker}` : '');
+  // PR-010: Hide NEXT UP section when no next session exists
+  const nextSession = getNextSession(S.sessions, live || ready);
+  const nextWrap = document.querySelector('#stage-monitor .sm-divider')?.parentElement;
+  const smDivider = mon.querySelector('.sm-divider');
+  const smNextLbl = mon.querySelector('.sm-next-lbl');
+  if (nextSession) {
+    if (smDivider) smDivider.style.display = '';
+    if (smNextLbl) smNextLbl.style.display = '';
+    if (smNextTitle) {
+      smNextTitle.style.display = '';
+      smNextTitle.textContent = nextSession.title;
+    }
+    if (smNextTime) {
+      smNextTime.style.display = '';
+      smNextTime.textContent = [
+        nextSession.scheduled_start,
+        nextSession.speaker,
+        nextSession.room,
+      ].filter(Boolean).join(' · ');
+    }
   } else {
-    smNextTitle.textContent = '—';
-    smNextTime.textContent  = '';
+    if (smDivider) smDivider.style.display = 'none';
+    if (smNextLbl) smNextLbl.style.display = 'none';
+    if (smNextTitle) smNextTitle.style.display = 'none';
+    if (smNextTime) smNextTime.style.display = 'none';
   }
 }
 
@@ -2173,6 +3092,8 @@ function refreshClockUI() {
   document.getElementById('ck-tick').textContent = S.clockTick;
   document.getElementById('ck-sync').textContent = S.clockSynced ? timeSince(S.clockSynced) + ' ago' : '—';
   updateStageMonitor();
+  checkChimes();
+  if (S.autoStart) checkAutoStart();
 }
 
 function refreshDiag() {
@@ -2188,12 +3109,269 @@ function refreshDiag() {
     dot.className = `dd ${cfg.st === 'ok' ? 'ok' : cfg.st === 'error' || cfg.st === 'not-deployed' ? 'error' : cfg.st === 'checking' ? 'checking' : ''}`;
     lbl.textContent = cfg[cfg.st] || cfg[''];
   }
+  // PR-016: show last sync timestamp as tooltip on DB pill
+  const dbLbl = document.getElementById('dl-db');
+  if (dbLbl) {
+    dbLbl.title = S.lastSyncAt
+      ? `Last sync: ${new Date(S.lastSyncAt).toLocaleTimeString()}`
+      : 'Not yet synced';
+  }
+}
+
+// PR-009: Refresh operator presence dots in header (director role sees all roles)
+const PRESENCE_ROLES = ['director', 'stage', 'av', 'interp', 'reg'];
+function refreshPresence() {
+  const bar = document.getElementById('presence-bar');
+  if (!bar || S.role === 'signage') { if (bar) bar.innerHTML = ''; return; }
+  bar.innerHTML = PRESENCE_ROLES.map(r => {
+    const online = (S.presence[r] || 0) > 0;
+    return `<div class="pr-role" title="${r}${online ? ` (${S.presence[r]})` : ' (offline)'}">
+      <div class="pr-dot${online ? ' online' : ''}"></div>${r}</div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+// STAGETIMER-INSPIRED FEATURES
+// ═══════════════════════════════════════════════════
+
+// ── Wrap-up Chimes ──────────────────────────────────
+let _audioCtx = null;
+function playChime(freq, durMs) {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = _audioCtx.createOscillator();
+    const gain = _audioCtx.createGain();
+    osc.connect(gain); gain.connect(_audioCtx.destination);
+    osc.frequency.setValueAtTime(freq, _audioCtx.currentTime);
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.25, _audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + durMs / 1000);
+    osc.start(_audioCtx.currentTime);
+    osc.stop(_audioCtx.currentTime + durMs / 1000 + 0.1);
+  } catch(e) { /* audio not available */ }
+}
+
+function checkChimes() {
+  const nowMs = correctedNow();
+  for (const s of S.sessions) {
+    if (s.status !== 'LIVE' || !s.actual_start) continue;
+    const startMs = new Date(s.actual_start).getTime();
+    const durMs   = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
+    const remain  = durMs - (nowMs - startMs);
+    if (remain < 0) continue;
+    if (!S.chimedSessions[s.id]) S.chimedSessions[s.id] = new Set();
+    const c = S.chimedSessions[s.id];
+    if (remain <= 300_000 && !c.has('5min')) { c.add('5min'); playChime(880, 250); }
+    if (remain <= 60_000  && !c.has('1min')) { c.add('1min'); playChime(1320, 350); }
+  }
+  for (const sid of Object.keys(S.chimedSessions)) {
+    if (!S.sessions.find(s => s.id === sid && (s.status === 'LIVE' || s.status === 'OVERRUN')))
+      delete S.chimedSessions[sid];
+  }
+}
+
+// ── Fractional Seconds (final 60s, 200ms interval) ──
+setInterval(() => {
+  const nowMs = correctedNow();
+  document.querySelectorAll('.lt-remain[data-sid]').forEach(el => {
+    const s = S.sessions.find(x => x.id === el.dataset.sid);
+    if (!s || !s.actual_start || (s.status !== 'LIVE' && s.status !== 'OVERRUN')) return;
+    const startMs = new Date(s.actual_start).getTime();
+    const durMs   = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
+    const remain  = durMs - (nowMs - startMs);
+    if (Math.abs(remain) >= 60_000) return;
+    const abs   = Math.abs(remain);
+    const m     = Math.floor(abs / 60_000);
+    const sec   = Math.floor((abs % 60_000) / 1000);
+    const tenth = Math.floor((abs % 1000) / 100);
+    el.textContent = remain < 0
+      ? `OVERRUN +${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${tenth}`
+      : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${tenth} left`;
+  });
+}, 200);
+
+// ── Nudge Session (±1min, this session's end only) ──
+async function nudgeSession(sessionId, minutes) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s) return;
+  const endStr = s.scheduled_end || s.planned_end || '';
+  if (!endStr) return;
+  const [h, m] = endStr.split(':').map(Number);
+  const totalMins = h * 60 + m + minutes;
+  const nh = Math.floor(((totalMins % 1440) + 1440) % 1440 / 60);
+  const nm = ((totalMins % 60) + 60) % 60;
+  const newEnd = `${String(nh).padStart(2,'0')}:${String(nm).padStart(2,'0')}`;
+  const prevEnd = s.scheduled_end;
+  s.scheduled_end = newEnd; // optimistic
+  renderSessions(); buildCtxPanel();
+  const { error } = await sb.from('leod_sessions').update({ scheduled_end: newEnd }).eq('id', sessionId);
+  if (error) {
+    pushToast(`Nudge failed: ${error.message}`, 'error');
+    s.scheduled_end = prevEnd; renderSessions(); return;
+  }
+  pushLog('NUDGE', `${minutes > 0 ? '+' : ''}${minutes}min end → ${newEnd}`, sessionId);
+  pushToast(`${minutes > 0 ? '+' : ''}${minutes}min nudge applied`, 'info');
+}
+
+// ── Scheduled Auto-Start ─────────────────────────────
+function toggleAutoStart() {
+  S.autoStart = !S.autoStart;
+  if (!S.autoStart) S._autoStarted = new Set();
+  const btn = document.getElementById('auto-start-btn');
+  if (btn) btn.classList.toggle('enabled', S.autoStart);
+  pushToast(S.autoStart ? '⏱ Auto-start enabled' : 'Auto-start disabled', 'info');
+}
+
+function checkAutoStart() {
+  const nowMs   = correctedNow();
+  const nowDate = new Date(nowMs);
+  const nowMins = nowDate.getHours() * 60 + nowDate.getMinutes() + nowDate.getSeconds() / 60;
+  const toStart = S.sessions.find(s => {
+    if (s.status !== 'READY' || !s.planned_start) return false;
+    const diff = nowMins - toMins(s.planned_start);
+    return diff >= 0 && diff < 1;
+  });
+  if (!toStart || S._autoStarted.has(toStart.id)) return;
+  if (!(ROLE_WRITE[S.role] || []).includes('LIVE')) return;
+  S._autoStarted.add(toStart.id);
+  transition(toStart.id, 'LIVE');
+  pushToast(`⏱ Auto-started: ${toStart.title}`, 'info');
+  pushLog('AUTO-START', `auto go-live: ${toStart.title}`, toStart.id);
+}
+
+// ── Event Log Export ─────────────────────────────────
+function exportLog() {
+  if (!S.log.length) { pushToast('Log is empty', 'warn'); return; }
+  const lines = ['Time,Action,Detail,SessionId'];
+  for (const e of S.log) {
+    const ts  = new Date(e.ts).toTimeString().substring(0, 8);
+    const act = (e.action  || '').replace(/,/g, ';');
+    const det = (e.detail  || '').replace(/,/g, ';').replace(/\n/g, ' ');
+    lines.push(`${ts},${act},"${det}",${e.sessionId || ''}`);
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `leod-log-${new Date().toISOString().substring(0, 10)}.csv`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── CSV Schedule Import ──────────────────────────────
+function triggerCSVImport() {
+  document.getElementById('csv-import-input').click();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const csvInput = document.getElementById('csv-import-input');
+  if (csvInput) csvInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    e.target.value = ''; await handleCSVImport(file);
+  });
+});
+
+async function handleCSVImport(file) {
+  if (!S.event) { pushToast('Select an event first', 'warn'); return; }
+  let text; try { text = await file.text(); } catch(e) { pushToast('Could not read file', 'error'); return; }
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) { pushToast('CSV appears empty', 'error'); return; }
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  const col = (...names) => { for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i; } return -1; };
+  const cTitle = col('title','name','session','topic');
+  const cStart = col('planned_start','start','start_time','from');
+  const cEnd   = col('planned_end','end','end_time','to');
+  const cSpk   = col('speaker','presenter','panelist','host');
+  const cRoom  = col('room','location','hall','venue');
+  const cType  = col('type','format','category');
+  const cNotes = col('notes','note','instructions','tech rider');
+  if (cTitle === -1 || cStart === -1 || cEnd === -1) {
+    pushToast('CSV needs: title, start, end columns', 'error'); return;
+  }
+  const cell = (row, idx) => idx === -1 ? null : ((row[idx] || '').replace(/^"|"$/g,'').trim() || null);
+  const maxSort = Math.max(0, ...S.sessions.map(s => s.sort_order || 0));
+  const sessions = [];
+  for (let i = 1; i < lines.length; i++) {
+    const row = lines[i].split(',');
+    const title = cell(row, cTitle), start = cell(row, cStart), end = cell(row, cEnd);
+    if (!title || !start || !end) continue;
+    sessions.push({
+      event_id: S.event.id, title, status: 'PLANNED', version: 0,
+      planned_start: start, planned_end: end, scheduled_start: start, scheduled_end: end,
+      sort_order: maxSort + i,
+      speaker: cell(row, cSpk), room: cell(row, cRoom),
+      type: cell(row, cType) || 'Other', notes: cell(row, cNotes),
+      cumulative_delay: 0, delay_minutes: 0, speaker_arrived: false,
+      actual_start: null, actual_end: null,
+    });
+  }
+  if (!sessions.length) { pushToast('No valid rows found', 'warn'); return; }
+  const { error } = await sb.from('leod_sessions').insert(sessions);
+  if (error) { pushToast(`Import failed: ${error.message}`, 'error'); return; }
+  pushToast(`✓ Imported ${sessions.length} session${sessions.length !== 1 ? 's' : ''}`, 'success');
+  pushLog('IMPORT', `CSV: ${sessions.length} sessions from ${file.name}`, null);
+}
+
+// ── Flash / Identify Display ─────────────────────────
+async function identifyDisplay(displayId) {
+  const d    = S.displays.find(x => x.id === displayId);
+  const prev = d?.global_override || null;
+  await sb.from('leod_signage_displays').update({ global_override: { type: 'identify' } }).eq('id', displayId);
+  pushLog('SIGNAGE', `identify flash: ${d?.name || displayId}`, null);
+  setTimeout(async () => {
+    await sb.from('leod_signage_displays').update({ global_override: prev }).eq('id', displayId);
+  }, 4000);
+}
+
+// ── Notes Toggle ─────────────────────────────────────
+function toggleNotes(sessionId) {
+  const el = document.getElementById(`notes-${sessionId}`);
+  if (el) el.classList.toggle('hidden');
+}
+
+// PR-010: Pure function — testable without browser context
+// Returns first non-ENDED/CANCELLED session after the given live session in sort order.
+function getNextSession(sessions, liveSession) {
+  if (!liveSession) return null;
+  return sessions.find(s =>
+    s.sort_order > liveSession.sort_order &&
+    !['ENDED', 'CANCELLED'].includes(s.status)
+  ) || null;
 }
 
 function pushLog(action, detail, sessionId) {
   S.log.unshift({ action, detail, sessionId, ts: correctedNow() });
   if (S.log.length > 60) S.log.pop();
   renderLog();
+}
+
+// ── Toast notifications ──────────────────────────────────────────────────────
+// type: 'success' | 'error' | 'warn' | 'info'
+// Auto-dismisses after 3s (error/warn) or 2s (success/info). Max 3 visible.
+const _toastQueue = [];
+function pushToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  // Enforce max 3 — remove oldest if at cap
+  while (_toastQueue.length >= 3) dismissToast(_toastQueue[0]);
+
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.innerHTML = `<span class="toast-msg">${esc(msg)}</span><button class="toast-close" aria-label="Dismiss">×</button>`;
+  container.appendChild(el);
+  _toastQueue.push(el);
+
+  const dismiss = () => dismissToast(el);
+  el.querySelector('.toast-close').addEventListener('click', dismiss);
+  const delay = (type === 'error' || type === 'warn') ? 3000 : 2000;
+  el._toastTimer = setTimeout(dismiss, delay);
+}
+
+function dismissToast(el) {
+  if (!el || !el.isConnected) return;
+  clearTimeout(el._toastTimer);
+  const idx = _toastQueue.indexOf(el);
+  if (idx !== -1) _toastQueue.splice(idx, 1);
+  el.classList.add('toast-out');
+  el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
 function pushLogFromRow(row) {
@@ -2206,11 +3384,22 @@ function pushLogFromRow(row) {
 function renderLog() {
   const feed = document.getElementById('log-feed');
   if (!S.log.length) {
-    feed.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">No events yet…</div>';
+    feed.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:4px 0">No events yet…</div>';
     return;
   }
+  // Colour-code log entries by action type (spec §10.1)
+  function leClass(action) {
+    if (!action) return '';
+    const a = action.toUpperCase();
+    if (['SESSION_STATUS_CHANGE','GO_LIVE','END_SESSION','SET_READY','HOLD_STAGE','CALL_SPEAKER','CANCEL_SESSION','REINSTATE'].some(k=>a.includes(k))) return 'le-state';
+    if (['BOOT','SYSTEM','CLOCK'].some(k=>a.includes(k))) return 'le-system';
+    if (['ESCALATION','ERROR','FAIL'].some(k=>a.includes(k))) return 'le-error';
+    if (a.includes('BROADCAST')) return 'le-broadcast';
+    if (a.includes('DELAY')) return 'le-delay';
+    return '';
+  }
   feed.innerHTML = S.log.slice(0, 25).map(e => `
-    <div class="le">
+    <div class="le ${leClass(e.action)}">
       <span class="le-ts">${new Date(e.ts).toTimeString().substring(0,8)}</span>
       <span class="le-act"> ${e.action}</span>
       ${e.detail ? `<div class="le-det">${esc(e.detail)}</div>` : ''}
@@ -2261,9 +3450,29 @@ function onBCInput() {
   el.className   = `bc-char${len > 160 ? ' warn' : ''}`;
 }
 
+// PR-018: Role-adaptive filter defaults — each role gets a sensible status preset
+const ROLE_FILTER_DEFAULT = {
+  director: '',         // see everything
+  stage:    'LIVE',     // stage crew only cares about what's live right now
+  av:       'LIVE',     // AV same as stage
+  interp:   'LIVE',
+  reg:      'PLANNED',  // registration monitors upcoming sessions
+  signage:  '',
+};
 function setRole(role) {
   S.role = role;
+  // Apply default status filter for the new role (only when the filter isn't already set by user)
+  if (ROLE_FILTER_DEFAULT[role] !== undefined) {
+    F.status = ROLE_FILTER_DEFAULT[role];
+  }
   document.querySelectorAll('.rbtn[data-role]').forEach(b => b.classList.toggle('active', b.dataset.role === role));
+  // Show auto-start button for director/stage only
+  const autoBtn = document.getElementById('auto-start-btn');
+  if (autoBtn) autoBtn.style.display = (role === 'director' || role === 'stage') ? '' : 'none';
+  // Show AI agents panel for director only
+  const aiWrap = document.getElementById('ai-agents-wrap');
+  if (aiWrap) aiWrap.style.display = role === 'director' ? '' : 'none';
+  buildFilterBar();
   renderSessions();
   buildBCPresets();
   buildCtxPanel();
@@ -2302,7 +3511,11 @@ function buildFilterBar() {
       <option value="" ${!F.room?'selected':''}>All rooms</option>${roomOpts}
     </select>
     <button id="fb-clear" class="${isFilterActive()?'visible':''}" onclick="clearFilters()">✕ clear</button>
-    <span   id="fb-count"></span>`;
+    <span   id="fb-count"></span>
+    <button id="fb-view" class="abtn btn-grey" title="Toggle view mode" onclick="toggleViewMode()"
+            style="margin-left:auto;padding:3px 9px;font-size:10px">
+      ${S.viewMode === 'timeline' ? '☰ List' : '⏱ Timeline'}
+    </button>`;
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
@@ -2535,6 +3748,7 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-remote').checked = false;
     document.getElementById('smv-interp').checked = false;
     document.getElementById('smv-mics').value   = 0;
+    document.getElementById('smv-notes').value  = '';
     document.getElementById('smv-del').style.display = 'none';
   } else {
     const s = S.sessions.find(x => x.id === sessionId);
@@ -2553,7 +3767,8 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-stream').checked = !!s.streaming;
     document.getElementById('smv-remote').checked = !!s.remote;
     document.getElementById('smv-interp').checked = !!s.interpretation;
-    document.getElementById('smv-mics').value   = s.mics || 0;
+    document.getElementById('smv-mics').value   = s.mics  || 0;
+    document.getElementById('smv-notes').value  = s.notes || '';
     document.getElementById('smv-del').style.display = '';
   }
   document.getElementById('sess-modal').style.display = 'flex';
@@ -2597,6 +3812,7 @@ async function submitSessModal() {
     remote:         document.getElementById('smv-remote').checked,
     interpretation: document.getElementById('smv-interp').checked,
     mics:           parseInt(document.getElementById('smv-mics').value, 10) || 0,
+    notes:          document.getElementById('smv-notes').value.trim() || null,
   };
 
   try {
@@ -2726,6 +3942,45 @@ function esc(s) {
 function setStep(msg) { document.getElementById('load-step').textContent = msg; }
 
 // ═══════════════════════════════════════════════════
+// OVERRUN auto-detection
+// ═══════════════════════════════════════════════════
+// Tracks sessions we've already called set-overrun for in this session.
+// Prevents hammering the EF every tick. Cleared when status leaves LIVE.
+const _overrunAttempted = new Set();
+
+function checkOverrunSessions() {
+  if (!S.event || !S.user) return;
+  if (!['director', 'stage', 'av'].includes(S.role)) return;
+  const nowMs = correctedNow();
+  // Prune attempted set — remove sessions no longer LIVE
+  for (const id of _overrunAttempted) {
+    const s = S.sessions.find(x => x.id === id);
+    if (!s || s.status !== 'LIVE') _overrunAttempted.delete(id);
+  }
+  for (const s of S.sessions) {
+    if (s.status !== 'LIVE' || !s.actual_start) continue;
+    if (_overrunAttempted.has(s.id)) continue;
+    const elapsed = nowMs - new Date(s.actual_start).getTime();
+    const durMs   = (toMins(s.scheduled_end) - toMins(s.scheduled_start)) * 60_000;
+    if (elapsed > durMs && durMs > 0) {
+      _overrunAttempted.add(s.id);
+      const cmdId = crypto.randomUUID();
+      sb.functions.invoke('set-overrun', {
+        body: { session_id: s.id, version: s.version, command_id: cmdId, operator_role: S.role },
+      }).then(({ error }) => {
+        if (error) {
+          const msg = String(error?.message ?? '');
+          // Keep in attempted if duplicate (IN_FLIGHT/conflict) — no retry needed.
+          // Remove if unexpected error so next tick can retry.
+          if (!msg.includes('IN_FLIGHT') && !msg.includes('conflict')) {
+            _overrunAttempted.delete(s.id);
+          }
+        }
+      }).catch(() => { _overrunAttempted.delete(s.id); });
+    }
+  }
+}
+
 // LOCAL TICK — 1s interval
 // ═══════════════════════════════════════════════════
 let _lastTick = performance.now();
@@ -2745,6 +4000,8 @@ setInterval(() => {
   refreshClockUI();
   // Re-render if any LIVE/OVERRUN session for live timer
   if (S.sessions.some(s => s.status === 'LIVE' || s.status === 'OVERRUN')) renderSessions();
+  // OVERRUN auto-detection (director/stage/av only)
+  checkOverrunSessions();
 }, 1000);
 
 setInterval(syncClock, CLOCK_RESYNC_MS);
@@ -2778,12 +4035,6 @@ async function checkEF() {
 // ═══════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════
-function showLoginForm() {
-  document.getElementById('load-spinner').style.display = 'none';
-  document.getElementById('load-step').style.display    = 'none';
-  document.getElementById('login-form').style.display   = 'flex';
-}
-
 function hideLoginForm() {
   document.getElementById('login-form').style.display   = 'none';
   document.getElementById('load-spinner').style.display = '';
@@ -2812,13 +4063,160 @@ async function handleLoginSubmit(e) {
   await boot();
 }
 
+// ── Registration form toggles ──────────────────────────────
+function showRegisterForm() {
+  document.getElementById('login-form').style.display    = 'none';
+  document.getElementById('register-form').style.display = 'flex';
+  document.getElementById('rf-email').focus();
+}
+function showLoginForm() {
+  document.getElementById('load-spinner').style.display  = 'none';
+  document.getElementById('load-step').style.display     = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display    = 'flex';
+  document.getElementById('lf-email').focus();
+}
+
+// ── Registration submit ────────────────────────────────────
+async function handleRegisterSubmit(e) {
+  e.preventDefault();
+  const email   = document.getElementById('rf-email').value.trim();
+  const pass    = document.getElementById('rf-password').value;
+  const confirm = document.getElementById('rf-confirm').value;
+  const code    = document.getElementById('rf-code').value.trim();
+  const errEl   = document.getElementById('rf-error');
+  const btn     = document.querySelector('#register-form button[type=submit]');
+
+  errEl.textContent = '';
+  if (pass !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Creating…';
+
+  // 1. Validate invite code against leod_config
+  const { data: cfg, error: cfgErr } = await sb.from('leod_config')
+    .select('value').eq('key', 'signup_code').single();
+  if (cfgErr || !cfg || cfg.value !== code) {
+    errEl.textContent = 'Invalid invite code.';
+    btn.disabled = false; btn.textContent = 'Create Account';
+    return;
+  }
+
+  // 2. Create Supabase auth account
+  const { data, error } = await sb.auth.signUp({ email, password: pass });
+  if (error) {
+    errEl.textContent = error.message;
+    btn.disabled = false; btn.textContent = 'Create Account';
+    return;
+  }
+
+  // 3. Insert leod_users row with pending role
+  await sb.from('leod_users').insert({
+    id: data.user.id, email, role: 'pending',
+    name: email.split('@')[0], active: true
+  });
+
+  document.getElementById('rf-success').style.display = '';
+  btn.style.display = 'none';
+}
+
+// ── Pending screen ─────────────────────────────────────────
+function showPendingScreen(email) {
+  // Keep loading-overlay visible (it IS the fullscreen backdrop)
+  // Just hide all sibling content and show the pending screen
+  document.getElementById('load-spinner').style.display  = 'none';
+  document.getElementById('load-step').style.display     = 'none';
+  document.getElementById('login-form').style.display    = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('pending-screen').style.display = 'flex';
+  document.getElementById('pending-email').textContent    = email;
+}
+
+// ── Users / approval modal (director only) ─────────────────
+async function openUsersModal() {
+  document.getElementById('users-modal').style.display = 'flex';
+  await refreshUsersModal();
+}
+function closeUsersModal() {
+  document.getElementById('users-modal').style.display = 'none';
+}
+
+async function refreshUsersModal() {
+  const body = document.getElementById('users-modal-body');
+  body.innerHTML = '<div class="um-empty">Loading…</div>';
+
+  const { data, error } = await sb.from('leod_users')
+    .select('id, name, email, role').order('role').order('name');
+  if (error || !data || data.length === 0) {
+    body.innerHTML = '<div class="um-empty">No operator accounts found.</div>'; return;
+  }
+
+  const ROLES = ['director','stage','av','interp','reg','signage','pending'];
+  body.innerHTML = data.map(u => `
+    <div class="um-row" data-uid="${esc(u.id)}">
+      <div style="flex:1;min-width:0">
+        <div class="um-name">${esc(u.name || '—')}</div>
+        <div class="um-email">${esc(u.email || '')}</div>
+      </div>
+      <select class="um-role-sel" data-uid="${esc(u.id)}">
+        ${ROLES.map(r => `<option value="${r}"${r === u.role ? ' selected' : ''}>${r}</option>`).join('')}
+      </select>
+      <button class="um-approve-btn" onclick="approveUser('${esc(u.id)}', this.closest('.um-row').querySelector('.um-role-sel').value)">
+        ${u.role === 'pending' ? 'Approve' : 'Update'}
+      </button>
+    </div>
+  `).join('');
+
+  // Update approve/update label on role change
+  body.querySelectorAll('.um-role-sel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const btn = sel.closest('.um-row').querySelector('.um-approve-btn');
+      const orig = data.find(u => u.id === sel.dataset.uid);
+      btn.textContent = (sel.value === orig?.role) ? 'Update' : (orig?.role === 'pending' ? 'Approve' : 'Update');
+    });
+  });
+}
+
+async function approveUser(userId, role) {
+  const { error } = await sb.from('leod_users').update({ role }).eq('id', userId);
+  if (error) { showToast('Failed: ' + error.message, 'error'); return; }
+  await refreshUsersModal();
+  await loadPendingBadge();
+}
+
+async function loadPendingBadge() {
+  if (S.userRole !== 'director') return;
+  const { count } = await sb.from('leod_users')
+    .select('id', { count: 'exact', head: true }).eq('role', 'pending');
+  const badge = document.getElementById('users-badge');
+  const btn   = document.getElementById('users-btn');
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = '';
+    btn.style.borderColor = 'rgba(239,68,68,.5)';
+  } else {
+    badge.style.display = 'none';
+    btn.style.borderColor = '';
+  }
+}
+
 async function loadUserRole() {
   if (!S.user) return;
   const { data } = await sb.from('leod_users')
     .select('role, name')
     .eq('id', S.user.id)
     .single();
-  if (!data) return; // no leod_users row → keep default director role
+  if (!data) {
+    // no leod_users row → implicit director (show users button)
+    document.getElementById('users-btn').style.display = 'flex';
+    loadPendingBadge();
+    return;
+  }
+
+  // Block access for pending accounts
+  if (data.role === 'pending') {
+    showPendingScreen(S.user.email);
+    throw new Error('pending'); // abort boot()
+  }
 
   S.userRole = data.role;
   setRole(data.role);
@@ -2829,6 +4227,12 @@ async function loadUserRole() {
     roleBar.querySelectorAll('.rbtn[data-role]').forEach(b => b.style.display = 'none');
     const lbl = roleBar.querySelector('label');
     lbl.textContent = `${data.name || S.user.email} · ${data.role}`;
+  }
+
+  // Show Users button and pending badge for directors
+  if (data.role === 'director') {
+    document.getElementById('users-btn').style.display = 'flex';
+    loadPendingBadge();
   }
 }
 
@@ -2961,10 +4365,42 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     // 9. Edge Functions (background check)
     checkEF();
 
+    // 10. AI Agents — init once per session (guard prevents duplicate modal injection)
+    if (typeof LEODIncidentAdvisor !== 'undefined' && !window._leodAgentsInit) {
+      window._leodAgentsInit = true;
+      LEODIncidentAdvisor.init({
+        supabaseClient: sb,
+        getEventId:     () => S.event?.id,
+        getRole:        () => S.role,
+        onEscalate:     (inc) => {
+          // Relay escalation as a LEOD broadcast so all operators see it
+          pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null);
+        }
+      });
+      LEODReportAgent.init({
+        supabaseClient: sb,
+        getEventId:     () => S.event?.id,
+        getEvent:       () => S.event,
+        getSessions:    () => S.sessions
+      });
+      LEODCueEngine.init([], {
+        correctedNow,                  // LEOD 3-sample RTT clock sync
+        leodSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
+        alertMinutesBefore: 8
+      });
+    }
+    // Show AI agents sidebar panel for director only, restore saved key
+    if (S.role === 'director') {
+      const aiWrap = document.getElementById('ai-agents-wrap');
+      if (aiWrap) aiWrap.style.display = '';
+      loadAgentKey();   // restore key from localStorage and update status dot
+    }
+
     overlay.style.display = 'none';
     pushLog('BOOT', `connected · ${ev.name} · ${S.sessions.length} sessions`, null);
 
   } catch (e) {
+    if (e.message === 'pending') return; // handled by showPendingScreen()
     setStep(`Boot error: ${e.message}`);
     console.error('LEOD boot failed:', e);
     setTimeout(() => { overlay.style.display = 'none'; }, 3000);
@@ -2972,6 +4408,95 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
 }
 
 initAuth();
+
+// ═══ AI AGENT KEY MANAGEMENT ══════════════════════════════════════════════
+// API key stored in localStorage — never sent anywhere except Anthropic API
+// called by the AI AGENTS sidebar panel inputs
+
+function _setKeyUI(hasKey) {
+  const dot   = document.getElementById('ai-key-dot');
+  const label = document.getElementById('ai-key-label');
+  const clear = document.getElementById('ai-key-clear');
+  const input = document.getElementById('ai-key-input');
+  if (!dot) return;
+  if (hasKey) {
+    dot.classList.add('active');
+    label.textContent   = 'AI ACTIVE';
+    label.style.color   = 'var(--green)';
+    clear.style.display = '';
+    input.value         = '';
+    input.placeholder   = '●●●●●●●●●●●●●●●● (key set)';
+  } else {
+    dot.classList.remove('active');
+    label.textContent   = 'NO API KEY';
+    label.style.color   = '';     /* falls back to .ai-key-label CSS */
+    clear.style.display = 'none';
+    input.placeholder   = 'sk-ant-api03-…';
+  }
+}
+
+function saveAgentKey() {
+  const input = document.getElementById('ai-key-input');
+  const key   = input?.value.trim();
+  if (!key || !key.startsWith('sk-ant-')) {
+    input.style.borderColor = '#ef4444';
+    setTimeout(() => input.style.borderColor = '', 1200);
+    return;
+  }
+  localStorage.setItem('leod_agent_key', key);
+  window.LEOD_API_KEY = key;
+  _setKeyUI(true);
+}
+
+function clearAgentKey() {
+  localStorage.removeItem('leod_agent_key');
+  window.LEOD_API_KEY = '';
+  _setKeyUI(false);
+}
+
+function loadAgentKey() {
+  const saved = localStorage.getItem('leod_agent_key');
+  if (saved) {
+    window.LEOD_API_KEY = saved;
+    _setKeyUI(true);
+  } else {
+    _setKeyUI(false);
+  }
+}
+
+// Called before every agent button — ensures init() ran even if boot() missed it
+function ensureAgentsInited() {
+  if (window._leodAgentsInit) return;
+  if (typeof LEODIncidentAdvisor === 'undefined') return;
+  window._leodAgentsInit = true;
+  LEODIncidentAdvisor.init({
+    supabaseClient: typeof sb !== 'undefined' ? sb : null,
+    getEventId:     () => S?.event?.id || null,
+    getRole:        () => S?.role || 'director',
+    onEscalate:     (inc) => { try { pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null); } catch(e){} }
+  });
+  LEODReportAgent.init({
+    supabaseClient: typeof sb !== 'undefined' ? sb : null,
+    getEventId:     () => S?.event?.id || null,
+    getEvent:       () => S?.event || null,
+    getSessions:    () => S?.sessions || []
+  });
+  LEODCueEngine.init([], {
+    correctedNow:        typeof correctedNow === 'function' ? correctedNow : () => Date.now(),
+    leodSessions:        S?.sessions || [],
+    alertMinutesBefore: 8
+  });
+}
+// ══════════════════════════════════════════════════════════════════════════
 </script>
+
+<!-- ═══ AI AGENT MODULES ════════════════════════════════════════
+     Drop the 3 JS files from /ss/ into the same folder as this file.
+     Set ANTHROPIC_API_KEY (see CONFIG section above) to enable live AI.
+     Without a key all agents run in fallback mode — UI still fully works.
+═══════════════════════════════════════════════════════════════ -->
+<script src="leod-agent-1-incident-advisor.js"></script>
+<script src="leod-agent-2-cue-engine.js"></script>
+<script src="leod-agent-3-report-generator.js"></script>
 </body>
 </html>
