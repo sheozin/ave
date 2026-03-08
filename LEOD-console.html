@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LEOD — Production Console</title>
+  <title>CueDeck — Production Console</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -98,8 +98,8 @@
       align-items: center; justify-content: center;
       gap: 14px; z-index: 1000;
     }
-    .load-logo { font-size: 32px; font-weight: 700; letter-spacing: .2em; }
-    .load-logo span { color: #dc2626; }
+    .load-logo { font-size: 28px; font-weight: 800; letter-spacing: -.5px; }
+    .load-logo span { color: #3b82f6; }
     .load-step { font-size: 12px; color: var(--dim); min-height: 18px; }
     .spinner {
       width: 22px; height: 22px;
@@ -221,8 +221,8 @@
       display: flex; align-items: center; gap: 16px;
       flex-shrink: 0;
     }
-    .logo { font-size: 18px; font-weight: 700; letter-spacing: .14em; }
-    .logo span { color: #FF3B30; }
+    .logo { font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
+    .logo span { color: #3b82f6; }
     #event-name { flex: 1; font-size: 11px; color: var(--text-muted); }
     #hdr-clock  { font-size: 26px; font-weight: 700; letter-spacing: .02em; color: #F1F5F9; min-width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
     #hdr-offset { font-size: 10px; color: var(--text-muted); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
@@ -963,7 +963,7 @@
 
 <!-- LOADING / LOGIN -->
 <div id="loading-overlay">
-  <div class="load-logo">LE<span>O</span>D</div>
+  <div class="load-logo">Cue<span>Deck</span></div>
   <div class="spinner" id="load-spinner"></div>
   <div class="load-step" id="load-step">Connecting…</div>
   <form id="login-form" onsubmit="handleLoginSubmit(event)">
@@ -998,7 +998,7 @@
 
 <!-- HEADER -->
 <div id="header">
-  <div class="logo">LE<span>O</span>D</div>
+  <div class="logo">Cue<span>Deck</span></div>
   <div id="event-name">—</div>
   <div id="presence-bar"></div>
   <div id="hdr-clock">--:--:--</div>
@@ -3252,7 +3252,7 @@ function exportLog() {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
-  a.download = `leod-log-${new Date().toISOString().substring(0, 10)}.csv`;
+  a.download = `cuedeck-log-${new Date().toISOString().substring(0, 10)}.csv`;
   a.click(); URL.revokeObjectURL(a.href);
 }
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LEOD Display</title>
+<title>CueDeck Display</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ── RESET & BASE ── */
@@ -142,6 +142,29 @@ body{
   gap:24px;width:100%;height:100%;
 }
 .sp-sponsor-logo{max-width:60vw;max-height:40vh;object-fit:contain}
+video.sp-sponsor-logo{max-height:55vh;border-radius:4px;object-fit:contain}
+
+/* ── AGENDA MODE ── */
+.ag-grid{display:grid;grid-template-columns:repeat(var(--col-count,3),1fr);
+  gap:clamp(8px,1.5vw,20px);width:100%;height:100%;
+  padding:clamp(8px,2vw,24px);box-sizing:border-box;overflow:hidden}
+.ag-col{display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.ag-room-header{background:rgba(255,255,255,.06);border-radius:6px;
+  padding:8px 12px;font-size:clamp(10px,.9vw,14px);font-weight:700;
+  letter-spacing:.08em;color:rgba(255,255,255,.4);text-transform:uppercase;flex-shrink:0}
+.ag-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
+  border-radius:6px;padding:10px 12px;flex-shrink:0}
+.ag-card.live{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.35)}
+.ag-card.ready{background:rgba(96,165,250,.08);border-color:rgba(96,165,250,.3)}
+.ag-card.empty{color:rgba(255,255,255,.25);font-size:11px;text-align:center;padding:20px}
+.ag-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;margin-bottom:4px}
+.ag-card.live .ag-badge{color:#22c55e}
+.ag-card.ready .ag-badge{color:#60a5fa}
+.ag-time{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.35);margin-bottom:2px}
+.ag-title{font-size:clamp(11px,1vw,16px);font-weight:600;line-height:1.3;color:#eef2f7}
+.ag-speaker{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.4);margin-top:3px}
+.ag-empty{display:flex;align-items:center;justify-content:center;
+  height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
 .sp-sponsor-name-big{
   font-size:clamp(20px,4vw,48px);font-weight:700;color:#eef2f7;
   letter-spacing:-.01em;opacity:.9;
@@ -194,17 +217,15 @@ body.is-live #display{
     <div class="su-logo">LE<span>O</span>D <span style="font-size:16px;font-weight:600;letter-spacing:.2em;color:#4a6278">DISPLAY</span></div>
     <div class="su-sub">DIGITAL SIGNAGE</div>
     <div class="su-err" id="su-err"></div>
-    <label class="su-lbl">SUPABASE PROJECT URL</label>
-    <input class="su-input" id="su-url" type="text" placeholder="https://xxxx.supabase.co">
-    <label class="su-lbl">ANON KEY</label>
-    <input class="su-input" id="su-key" type="text" placeholder="eyJhbGci…">
     <label class="su-lbl">DISPLAY ID (from console)</label>
-    <input class="su-input" id="su-id"  type="text" placeholder="UUID of your display">
+    <input class="su-input" id="su-id" type="text" placeholder="e.g. a18fd6bd-084b-4699-…" autocomplete="off">
     <button class="su-btn" onclick="connectDisplay()">CONNECT DISPLAY →</button>
     <div class="su-hint">
-      Or configure via URL:<br>
-      <code style="font-size:10px;color:#4a6278">LEOD-display.html?url=…&amp;key=…&amp;id=…</code>
+      Short URL: <code style="font-size:10px;color:#4a6278">display.html#id=YOUR-DISPLAY-ID</code>
     </div>
+    <!-- Hidden fields — override hardcoded credentials if needed -->
+    <input id="su-url" type="hidden" value="">
+    <input id="su-key" type="hidden" value="">
   </div>
 </div>
 
@@ -221,19 +242,35 @@ body.is-live #display{
   <div id="content-area"></div>
 </div>
 
+<!-- Session progress bar — thin strip at bottom, green → amber → red -->
+<div id="d-progress-bar" style="position:fixed;bottom:0;left:0;height:4px;background:#22c55e;
+  transition:width 1s linear,background .5s;width:0;z-index:50;pointer-events:none;"></div>
+
+<!-- Identify flash overlay — triggered by console ⚡ ID button -->
+<div id="identify-flash" style="display:none;position:fixed;inset:0;background:#fff;
+  z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.3s;"></div>
+
 <script>
+// ═══════════════════════════════════════════════════
+// CREDENTIALS (hardcoded — only Display ID needed in URL)
+// ═══════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhd2VrcGd1ZW16dnV2dnVsZmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzk5MTEsImV4cCI6MjA4NzkxNTkxMX0.0zvCmKxdwAmfhmglYf2Gme6zpqtopBghSjI1ZyoVneg';
+
 // ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
 let sb    = null;
-let D     = null;  // display row from leod_signage_displays
-let S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null };
+var D     = null;  // display row from leod_signage_displays  (var → window.D for E2E tests)
+var S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null }; // var → window.S
 let _chan  = null;
 let _tick  = null;
-let _heartbeat = null;
-let _sponsorIdx = 0;
+let _heartbeat   = null;
+let _sponsorIdx  = 0;
 let _sponsorTimer = null;
-let _retries = 0;
+let _retries     = 0;
+let _seqIdx      = 0;      // current slide index in sequence playlist
+let _seqTimer    = null;   // setTimeout handle for sequence advance
 
 // ═══════════════════════════════════════════════════
 // BOOT FROM URL PARAMS
@@ -244,14 +281,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const fromQuery = new URLSearchParams(window.location.search);
   const get = k => fromHash.get(k) || fromQuery.get(k);
 
-  const url = get('url'), key = get('key'), id = get('id');
+  const id  = get('id');
+  const url = get('url') || SUPABASE_URL;   // fall back to hardcoded
+  const key = get('key') || SUPABASE_ANON_KEY;
 
-  // Pre-fill form in case auto-boot fails
-  if (url) document.getElementById('su-url').value = url;
-  if (key) document.getElementById('su-key').value = key;
   if (id)  document.getElementById('su-id').value  = id;
+  // Pre-fill hidden inputs so connectDisplay() and tests can read them back
+  document.getElementById('su-url').value = url;
+  document.getElementById('su-key').value = key;
 
-  if (url && key && id) {
+  // Auto-boot if we have a display ID (url+key are always available via hardcoded fallback)
+  if (id) {
     document.getElementById('setup').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
     bootDisplay(url, key, id);
@@ -259,12 +299,12 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 async function connectDisplay() {
-  const url = document.getElementById('su-url').value.trim();
-  const key = document.getElementById('su-key').value.trim();
+  const url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
+  const key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
   const id  = document.getElementById('su-id').value.trim();
   const err = document.getElementById('su-err');
   err.textContent = '';
-  if (!url || !key || !id) { err.textContent = 'All fields are required.'; return; }
+  if (!id) { err.textContent = 'Display ID is required.'; return; }
   document.getElementById('setup').style.display = 'none';
   document.getElementById('loading').style.display = 'flex';
   await bootDisplay(url, key, id);
@@ -324,6 +364,7 @@ async function bootDisplay(url, key, id) {
     setInterval(syncClock, 300_000);
 
     render();
+    startSequence();  // Begin cycling if display has a sequence playlist
   } catch (e) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('setup').style.display = 'flex';
@@ -336,9 +377,9 @@ async function bootDisplay(url, key, id) {
 // ═══════════════════════════════════════════════════
 async function syncClock() {
   try {
-    const t0 = performance.now();
+    const t0 = Date.now();
     const { data } = await sb.from('leod_clock').select('server_time').eq('id', 'master').single();
-    const t1 = performance.now();
+    const t1 = Date.now();
     if (!data) return;
     const rtt = t1 - t0;
     const serverMs = new Date(data.server_time).getTime();
@@ -372,8 +413,13 @@ function subscribeAll() {
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leod_signage_displays',
         filter: `id=eq.${D.id}` }, p => {
+      if (p.new?.global_override?.type === 'identify') flashIdentify();
+      const prevSeq = JSON.stringify(D?.sequence);
       D = p.new;
+      // Reset sequence index if playlist changed remotely
+      if (JSON.stringify(D.sequence) !== prevSeq) _seqIdx = 0;
       render();
+      startSequence();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_sponsors',
         filter: `event_id=eq.${D.event_id}` }, p => {
@@ -428,9 +474,34 @@ async function sendHeartbeat() {
 // CONTENT RESOLVER
 // ═══════════════════════════════════════════════════
 function activeMode() {
-  // Override takes priority over default content_mode
+  // Priority: override → sequence slide → static content_mode
   if (D?.override_content?.mode) return D.override_content.mode;
+  const seq = D?.sequence;
+  if (seq && seq.length) return seq[_seqIdx % seq.length].mode;
   return D?.content_mode || 'schedule';
+}
+
+// ═══════════════════════════════════════════════════
+// SEQUENCE CYCLING ENGINE
+// ═══════════════════════════════════════════════════
+function stopSequence() {
+  if (_seqTimer) { clearTimeout(_seqTimer); _seqTimer = null; }
+}
+
+function startSequence() {
+  stopSequence();
+  const seq = D?.sequence;
+  if (!seq || !seq.length) return;         // No sequence — use static content_mode
+  if (D?.override_content?.mode) return;  // Override active — pause sequence
+
+  const advance = () => {
+    _seqIdx = (_seqIdx + 1) % seq.length;
+    render();
+    const dur = Math.max(5, (seq[_seqIdx % seq.length].duration || 15)) * 1000;
+    _seqTimer = setTimeout(advance, dur);
+  };
+  const dur = Math.max(5, (seq[0].duration || 15)) * 1000;
+  _seqTimer = setTimeout(advance, dur);
 }
 
 function liveSession() { return S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN'); }
@@ -478,6 +549,13 @@ function updateTimerInPlace() {
     const tc = ov ? '#ef4444' : (remain < 120_000 ? '#ef4444' : remain < 300_000 ? '#fbbf24' : '#22c55e');
     timerEl.style.color = tc;
     if (timerLbl) timerLbl.textContent = ov ? 'OVERTIME' : remain < 120_000 ? 'ENDING NOW' : remain < 300_000 ? 'WRAPPING UP' : 'REMAINING';
+    // Progress bar
+    const pb = document.getElementById('d-progress-bar');
+    if (pb) {
+      const pct = Math.min(100, (elapsed / Math.max(1, durMs)) * 100);
+      pb.style.width      = `${pct}%`;
+      pb.style.background = ov ? '#ef4444' : remain < 120_000 ? '#f59e0b' : '#22c55e';
+    }
   } else if (timerEl && rd) {
     const start = toMs(rd.scheduled_start);
     const now   = toTimeMs(correctedNow());
@@ -485,6 +563,12 @@ function updateTimerInPlace() {
     timerEl.textContent = fmtCountdown(diff);
     timerEl.style.color = '#fbbf24';
     if (timerLbl) timerLbl.textContent = 'TO START';
+    // Clear progress bar when no live session
+    const pb = document.getElementById('d-progress-bar');
+    if (pb) pb.style.width = '0';
+  } else {
+    const pb = document.getElementById('d-progress-bar');
+    if (pb) pb.style.width = '0';
   }
 
   if (recallEl && rd) {
@@ -516,6 +600,7 @@ function render() {
     case 'wifi':      area.innerHTML = renderWifi(); break;
     case 'recall':    area.innerHTML = renderRecall(); break;
     case 'custom':    area.innerHTML = renderCustom(); break;
+    case 'agenda':    renderAgenda(area); break;
     default:          area.innerHTML = renderSchedule();
   }
 
@@ -628,13 +713,22 @@ function renderSponsors(area) {
     return;
   }
 
+  // Auto-detect video vs image by file extension
+  const mediaHtml = (s) => {
+    if (!s.logo_url) return `<div class="sp-sponsor-name-big">${esc(s.name)}</div>`;
+    const isVideo = /\.(mp4|webm|ogg)(\?|$)/i.test(s.logo_url);
+    if (isVideo) {
+      return `<video class="sp-sponsor-logo" src="${esc(s.logo_url)}"
+        autoplay muted loop playsinline preload="auto"></video>`;
+    }
+    return `<img class="sp-sponsor-logo" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`;
+  };
+
   const showSponsor = (idx) => {
     const s = S.sponsors[idx % S.sponsors.length];
     area.style.background = s.bg_color || '#05060f';
     area.innerHTML = `<div class="fade-in sp-sponsor-display">
-      ${s.logo_url
-        ? `<img class="sp-sponsor-logo" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`
-        : `<div class="sp-sponsor-name-big">${esc(s.name)}</div>`}
+      ${mediaHtml(s)}
       ${s.logo_url ? `<div class="sp-sponsor-name-big">${esc(s.name)}</div>` : ''}
     </div>`;
   };
@@ -696,10 +790,52 @@ function renderRecall() {
 // CUSTOM MESSAGE MODE
 // ═══════════════════════════════════════════════════
 function renderCustom() {
-  const msg = D?.override_content?.message || D?.name || 'LEOD DISPLAY';
+  const msg = D?.override_content?.message || D?.name || 'CueDeck Display';
   return `<div class="fade-in">
     <div class="custom-message">${esc(msg)}</div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// AGENDA MODE — room grid view
+// ═══════════════════════════════════════════════════
+function renderAgenda(area) {
+  area.style.background = '';
+  const active = S.sessions.filter(s => !['CANCELLED','ENDED'].includes(s.status) && s.room);
+  const rooms  = [...new Set(active.map(s => s.room))].sort();
+
+  if (!rooms.length) {
+    area.innerHTML = `<div class="ag-empty fade-in">No sessions scheduled</div>`;
+    return;
+  }
+
+  const colCount = Math.min(rooms.length, 4);  // max 4 cols for readability
+
+  const cols = rooms.slice(0, colCount).map(room => {
+    const roomSessions = active.filter(s => s.room === room)
+      .sort((a,b) => (a.planned_start||'').localeCompare(b.planned_start||''));
+
+    const cards = roomSessions.map(s => {
+      const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
+      const isReady = s.status === 'READY' || s.status === 'CALLING';
+      const badge   = isLive ? '● LIVE' : isReady ? '◈ READY' : '';
+      const cls     = `ag-card${isLive ? ' live' : isReady ? ' ready' : ''}`;
+      const time    = (s.planned_start || s.scheduled_start || '').slice(11, 16);
+      return `<div class="${cls}">
+        ${badge ? `<div class="ag-badge">${badge}</div>` : ''}
+        <div class="ag-time">${esc(time)}</div>
+        <div class="ag-title">${esc(s.title)}</div>
+        ${s.speaker ? `<div class="ag-speaker">${esc(s.speaker)}</div>` : ''}
+      </div>`;
+    }).join('') || `<div class="ag-card empty">No sessions</div>`;
+
+    return `<div class="ag-col">
+      <div class="ag-room-header">${esc(room)}</div>
+      ${cards}
+    </div>`;
+  }).join('');
+
+  area.innerHTML = `<div class="ag-grid fade-in" style="--col-count:${colCount}">${cols}</div>`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -728,15 +864,31 @@ function schedDurMs(s) {
 
 function fmtTimer(remainMs) {
   const abs = Math.abs(remainMs);
-  const m = Math.floor(abs / 60_000);
-  const s = Math.floor((abs % 60_000) / 1000);
-  return `${remainMs < 0 ? '+' : ''}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const m   = Math.floor(abs / 60_000);
+  const s   = Math.floor((abs % 60_000) / 1000);
+  const prefix = remainMs < 0 ? '+' : '';
+  // Fractional tenths in final 60 seconds
+  if (abs < 60_000) {
+    const tenth = Math.floor((abs % 1000) / 100);
+    return `${prefix}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${tenth}`;
+  }
+  return `${prefix}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
 function fmtCountdown(ms) {
   const m = Math.floor(Math.max(0,ms) / 60_000);
   const s = Math.floor((Math.max(0,ms) % 60_000) / 1000);
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ── Identify flash (triggered by console ⚡ ID button) ──
+function flashIdentify() {
+  const el = document.getElementById('identify-flash');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.opacity = '0.9';
+  setTimeout(() => { el.style.opacity  = '0'; },   500);
+  setTimeout(() => { el.style.display  = 'none'; }, 900);
 }
 
 // Handle device wake-up (laptop lid open)
