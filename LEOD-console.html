@@ -154,6 +154,28 @@
     #rf-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
     #rf-success { font-size: 11px; color: var(--green); text-align: center; line-height: 1.5; }
     .rf-hint { font-size: 10px; color: var(--dim); text-align: center; margin: -4px 0 0; }
+    /* ── RESET PASSWORD FORM ── */
+    #reset-form {
+      display: none; flex-direction: column; align-items: stretch;
+      gap: 10px; width: 280px;
+    }
+    #reset-form input {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      padding: 9px 12px; font-size: 13px; font-family: inherit;
+      outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    #reset-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
+    #reset-form button[type=submit] {
+      background: var(--blue); color: #fff; border: none;
+      border-radius: 6px; padding: 9px; font-size: 13px;
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      margin-top: 2px; transition: filter .15s;
+    }
+    #reset-form button[type=submit]:hover { filter: brightness(1.1); }
+    #reset-form button[type=submit]:disabled { opacity: .5; cursor: default; }
+    #rst-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
+    #rst-success { font-size: 11px; color: var(--green); text-align: center; line-height: 1.5; }
     /* Honeypot — hidden from humans, visible to bots */
     .rf-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden; tabindex: -1; }
     .lf-toggle-link {
@@ -975,7 +997,18 @@
     <input id="lf-password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
     <div id="lf-error"></div>
-    <a href="#" class="lf-toggle-link" onclick="showRegisterForm();return false">Create account</a>
+    <div style="display:flex;justify-content:space-between;gap:8px">
+      <a href="#" class="lf-toggle-link" onclick="showResetForm();return false">Forgot password?</a>
+      <a href="#" class="lf-toggle-link" onclick="showRegisterForm();return false">Create account</a>
+    </div>
+  </form>
+  <form id="reset-form" onsubmit="handleResetSubmit(event)">
+    <div class="lf-title">RESET PASSWORD</div>
+    <input id="rst-email" type="email" placeholder="Email" autocomplete="username" required>
+    <button type="submit">Send Reset Link</button>
+    <div id="rst-error"></div>
+    <div id="rst-success" style="display:none">Check your inbox for a password reset link.</div>
+    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
   </form>
   <form id="register-form" onsubmit="handleRegisterSubmit(event)">
     <div class="lf-title">CREATE ACCOUNT</div>
@@ -4070,18 +4103,49 @@ async function handleLoginSubmit(e) {
   await boot();
 }
 
-// ── Registration form toggles ──────────────────────────────
+// ── Auth form toggles ───────────────────────────────────────
 function showRegisterForm() {
   document.getElementById('login-form').style.display    = 'none';
+  document.getElementById('reset-form').style.display    = 'none';
   document.getElementById('register-form').style.display = 'flex';
-  document.getElementById('rf-email').focus();
+  document.getElementById('rf-name').focus();
 }
 function showLoginForm() {
   document.getElementById('load-spinner').style.display  = 'none';
   document.getElementById('load-step').style.display     = 'none';
   document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display    = 'none';
   document.getElementById('login-form').style.display    = 'flex';
   document.getElementById('lf-email').focus();
+}
+function showResetForm() {
+  document.getElementById('login-form').style.display    = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display    = 'flex';
+  document.getElementById('rst-email').focus();
+}
+
+// ── Password reset submit ───────────────────────────────────
+async function handleResetSubmit(e) {
+  e.preventDefault();
+  const email  = document.getElementById('rst-email').value.trim();
+  const errEl  = document.getElementById('rst-error');
+  const btn    = document.querySelector('#reset-form button[type=submit]');
+
+  errEl.textContent = '';
+  btn.disabled = true; btn.textContent = 'Sending…';
+
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + '/'
+  });
+  if (error) {
+    errEl.textContent = error.message;
+    btn.disabled = false; btn.textContent = 'Send Reset Link';
+    return;
+  }
+
+  document.getElementById('rst-success').style.display = '';
+  btn.style.display = 'none';
 }
 
 // ── Registration submit ────────────────────────────────────
@@ -4154,6 +4218,7 @@ function showPendingScreen(email) {
   document.getElementById('load-step').style.display     = 'none';
   document.getElementById('login-form').style.display    = 'none';
   document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display    = 'none';
   document.getElementById('pending-screen').style.display = 'flex';
   document.getElementById('pending-email').textContent    = email;
 }
