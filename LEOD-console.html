@@ -153,6 +153,9 @@
     #register-form button[type=submit]:disabled { opacity: .5; cursor: default; }
     #rf-error { font-size: 11px; color: var(--red); text-align: center; min-height: 16px; }
     #rf-success { font-size: 11px; color: var(--green); text-align: center; line-height: 1.5; }
+    .rf-hint { font-size: 10px; color: var(--dim); text-align: center; margin: -4px 0 0; }
+    /* Honeypot — hidden from humans, visible to bots */
+    .rf-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; overflow: hidden; tabindex: -1; }
     .lf-toggle-link {
       display: block; text-align: center; margin-top: 2px;
       font-size: 11px; color: var(--dim); text-decoration: none;
@@ -976,9 +979,14 @@
   </form>
   <form id="register-form" onsubmit="handleRegisterSubmit(event)">
     <div class="lf-title">CREATE ACCOUNT</div>
-    <input id="rf-email"    type="email"    placeholder="Email"            autocomplete="username" required>
-    <input id="rf-password" type="password" placeholder="Password (8+ chars)" autocomplete="new-password" required minlength="8">
-    <input id="rf-confirm"  type="password" placeholder="Confirm Password"    autocomplete="new-password" required>
+    <input id="rf-name"     type="text"     placeholder="Full Name"             autocomplete="name"             required>
+    <input id="rf-org"      type="text"     placeholder="Organization / Company" autocomplete="organization"     required>
+    <input id="rf-email"    type="email"    placeholder="Work Email"             autocomplete="username"         required>
+    <input id="rf-password" type="password" placeholder="Password (8+ chars)"    autocomplete="new-password"     required minlength="8">
+    <div class="rf-hint">Use 12+ characters for a strong password</div>
+    <input id="rf-confirm"  type="password" placeholder="Confirm Password"       autocomplete="new-password"     required>
+    <!-- Honeypot: hidden from humans, bots auto-fill it -->
+    <input id="rf-website" type="text" class="rf-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
     <button type="submit">Create Account</button>
     <div id="rf-error"></div>
     <div id="rf-success" style="display:none">Account created! A director will assign your role — you can sign in once approved.</div>
@@ -4077,8 +4085,12 @@ function showLoginForm() {
 }
 
 // ── Registration submit ────────────────────────────────────
+const REGISTER_COOLDOWN_MS = 30000; // 30 seconds between attempts
+
 async function handleRegisterSubmit(e) {
   e.preventDefault();
+  const name    = document.getElementById('rf-name').value.trim();
+  const org     = document.getElementById('rf-org').value.trim();
   const email   = document.getElementById('rf-email').value.trim();
   const pass    = document.getElementById('rf-password').value;
   const confirm = document.getElementById('rf-confirm').value;
@@ -4086,9 +4098,30 @@ async function handleRegisterSubmit(e) {
   const btn     = document.querySelector('#register-form button[type=submit]');
 
   errEl.textContent = '';
+
+  // Honeypot check — bots fill hidden fields, humans don't
+  if (document.getElementById('rf-website').value) {
+    // Fake success to not reveal the trap
+    document.getElementById('rf-success').style.display = '';
+    btn.style.display = 'none';
+    return;
+  }
+
+  // Rate limiter — prevent rapid-fire submissions
+  const lastAttempt = parseInt(sessionStorage.getItem('rf_last_attempt') || '0', 10);
+  const elapsed = Date.now() - lastAttempt;
+  if (elapsed < REGISTER_COOLDOWN_MS) {
+    const wait = Math.ceil((REGISTER_COOLDOWN_MS - elapsed) / 1000);
+    errEl.textContent = `Please wait ${wait}s before trying again.`;
+    return;
+  }
+
+  if (!name) { errEl.textContent = 'Full name is required.'; return; }
+  if (!org)  { errEl.textContent = 'Organization is required.'; return; }
   if (pass !== confirm) { errEl.textContent = 'Passwords do not match.'; return; }
 
   btn.disabled = true; btn.textContent = 'Creating…';
+  sessionStorage.setItem('rf_last_attempt', String(Date.now()));
 
   // 1. Create Supabase auth account
   const { data, error } = await sb.auth.signUp({ email, password: pass });
@@ -4101,7 +4134,7 @@ async function handleRegisterSubmit(e) {
   // 2. Insert leod_users row with pending role
   const { error: insertErr } = await sb.from('leod_users').insert({
     id: data.user.id, email, role: 'pending',
-    name: email.split('@')[0], active: true
+    name, organization: org, active: true
   });
   if (insertErr) {
     errEl.textContent = 'Account created but profile setup failed. Contact a director.';
@@ -4139,7 +4172,7 @@ async function refreshUsersModal() {
   body.innerHTML = '<div class="um-empty">Loading…</div>';
 
   const { data, error } = await sb.from('leod_users')
-    .select('id, name, email, role').order('role').order('name');
+    .select('id, name, email, role, organization').order('role').order('name');
   if (error || !data || data.length === 0) {
     body.innerHTML = '<div class="um-empty">No operator accounts found.</div>'; return;
   }
@@ -4148,7 +4181,7 @@ async function refreshUsersModal() {
   body.innerHTML = data.map(u => `
     <div class="um-row" data-uid="${esc(u.id)}">
       <div style="flex:1;min-width:0">
-        <div class="um-name">${esc(u.name || '—')}</div>
+        <div class="um-name">${esc(u.name || '—')}${u.organization ? ` <span style="color:var(--dim);font-weight:400;font-size:11px">· ${esc(u.organization)}</span>` : ''}</div>
         <div class="um-email">${esc(u.email || '')}</div>
       </div>
       <select class="um-role-sel" data-uid="${esc(u.id)}">
