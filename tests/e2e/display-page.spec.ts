@@ -35,14 +35,16 @@ test.describe('Display: page load — no params', () => {
     await expect(page.locator('#setup')).toBeVisible();
   });
 
-  test('03 Supabase URL input is present', async ({ page }) => {
+  test('03 Supabase URL input is present (hidden — pre-filled via hash/hardcoded)', async ({ page }) => {
     await page.goto(DISP_URL);
-    await expect(page.locator('#su-url')).toBeVisible();
+    // #su-url is type="hidden"; it exists in DOM but is not user-visible
+    await expect(page.locator('#su-url')).toBeAttached();
   });
 
-  test('04 anon key input is present', async ({ page }) => {
+  test('04 anon key input is present (hidden — pre-filled via hash/hardcoded)', async ({ page }) => {
     await page.goto(DISP_URL);
-    await expect(page.locator('#su-key')).toBeVisible();
+    // #su-key is type="hidden"; it exists in DOM but is not user-visible
+    await expect(page.locator('#su-key')).toBeAttached();
   });
 
   test('05 display ID input is present', async ({ page }) => {
@@ -86,23 +88,21 @@ test.describe('Display: page load — no params', () => {
 
 test.describe('Display: setup form validation', () => {
 
-  test('11 submitting empty form shows all-fields-required error', async ({ page }) => {
+  test('11 submitting without display ID shows required error', async ({ page }) => {
     await page.goto(DISP_URL);
-    // Clear all inputs and click Connect
-    await page.locator('#su-url').fill('');
-    await page.locator('#su-key').fill('');
+    // #su-url and #su-key are hidden inputs (pre-filled from hardcoded constants).
+    // Only #su-id is user-editable. Leave it empty and submit.
     await page.locator('#su-id').fill('');
     await page.locator('button:has-text("CONNECT DISPLAY")').click();
-    await expect(page.locator('#su-err')).toHaveText(/All fields are required/i);
+    await expect(page.locator('#su-err')).toHaveText(/Display ID is required/i);
   });
 
-  test('12 submitting with only URL filled still shows required error', async ({ page }) => {
+  test('12 submitting with only ID left empty still shows required error', async ({ page }) => {
     await page.goto(DISP_URL);
-    await page.locator('#su-url').fill('https://example.supabase.co');
-    await page.locator('#su-key').fill('');
+    // URL and key fall back to hardcoded values; ID is the only required user input.
     await page.locator('#su-id').fill('');
     await page.locator('button:has-text("CONNECT DISPLAY")').click();
-    await expect(page.locator('#su-err')).toHaveText(/All fields are required/i);
+    await expect(page.locator('#su-err')).toHaveText(/Display ID is required/i);
   });
 
   test('13 error message is empty before any submit', async ({ page }) => {
