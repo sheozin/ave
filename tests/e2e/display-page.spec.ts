@@ -27,7 +27,7 @@ test.describe('Display: page load — no params', () => {
 
   test('01 page loads with correct title', async ({ page }) => {
     await page.goto(DISP_URL);
-    await expect(page).toHaveTitle(/LEOD Display/i);
+    await expect(page).toHaveTitle(/CueDeck Display/i);
   });
 
   test('02 setup form is visible when no params provided', async ({ page }) => {
@@ -57,9 +57,9 @@ test.describe('Display: page load — no params', () => {
     await expect(page.locator('button:has-text("CONNECT DISPLAY")')).toBeVisible();
   });
 
-  test('07 LEOD DISPLAY branding is visible', async ({ page }) => {
+  test('07 CueDeck Display branding is visible', async ({ page }) => {
     await page.goto(DISP_URL);
-    // Use class selector — text=LEOD matches su-logo AND the hint <code> element
+    // Use class selector — text=CueDeck matches su-logo AND the hint <code> element
     await expect(page.locator('.su-logo')).toBeVisible();
     await expect(page.locator('.su-sub')).toBeVisible(); // "DIGITAL SIGNAGE" subtitle
   });
