@@ -979,10 +979,9 @@
     <input id="rf-email"    type="email"    placeholder="Email"            autocomplete="username" required>
     <input id="rf-password" type="password" placeholder="Password (8+ chars)" autocomplete="new-password" required minlength="8">
     <input id="rf-confirm"  type="password" placeholder="Confirm Password"    autocomplete="new-password" required>
-    <input id="rf-code"     type="text"     placeholder="Invite Code"         autocomplete="off"     required>
     <button type="submit">Create Account</button>
     <div id="rf-error"></div>
-    <div id="rf-success" style="display:none">Account created. A director will assign your role — you can sign in once approved.</div>
+    <div id="rf-success" style="display:none">Account created! A director will assign your role — you can sign in once approved.</div>
     <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
   </form>
   <div id="pending-screen">
@@ -4083,7 +4082,6 @@ async function handleRegisterSubmit(e) {
   const email   = document.getElementById('rf-email').value.trim();
   const pass    = document.getElementById('rf-password').value;
   const confirm = document.getElementById('rf-confirm').value;
-  const code    = document.getElementById('rf-code').value.trim();
   const errEl   = document.getElementById('rf-error');
   const btn     = document.querySelector('#register-form button[type=submit]');
 
@@ -4092,16 +4090,7 @@ async function handleRegisterSubmit(e) {
 
   btn.disabled = true; btn.textContent = 'Creating…';
 
-  // 1. Validate invite code against leod_config
-  const { data: cfg, error: cfgErr } = await sb.from('leod_config')
-    .select('value').eq('key', 'signup_code').single();
-  if (cfgErr || !cfg || cfg.value !== code) {
-    errEl.textContent = 'Invalid invite code.';
-    btn.disabled = false; btn.textContent = 'Create Account';
-    return;
-  }
-
-  // 2. Create Supabase auth account
+  // 1. Create Supabase auth account
   const { data, error } = await sb.auth.signUp({ email, password: pass });
   if (error) {
     errEl.textContent = error.message;
@@ -4109,11 +4098,16 @@ async function handleRegisterSubmit(e) {
     return;
   }
 
-  // 3. Insert leod_users row with pending role
-  await sb.from('leod_users').insert({
+  // 2. Insert leod_users row with pending role
+  const { error: insertErr } = await sb.from('leod_users').insert({
     id: data.user.id, email, role: 'pending',
     name: email.split('@')[0], active: true
   });
+  if (insertErr) {
+    errEl.textContent = 'Account created but profile setup failed. Contact a director.';
+    btn.disabled = false; btn.textContent = 'Create Account';
+    return;
+  }
 
   document.getElementById('rf-success').style.display = '';
   btn.style.display = 'none';
