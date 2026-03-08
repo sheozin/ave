@@ -4105,6 +4105,8 @@ async function handleLoginSubmit(e) {
 
 // ── Auth form toggles ───────────────────────────────────────
 function showRegisterForm() {
+  document.getElementById('load-spinner').style.display  = 'none';
+  document.getElementById('load-step').style.display     = 'none';
   document.getElementById('login-form').style.display    = 'none';
   document.getElementById('reset-form').style.display    = 'none';
   document.getElementById('register-form').style.display = 'flex';
@@ -4119,6 +4121,8 @@ function showLoginForm() {
   document.getElementById('lf-email').focus();
 }
 function showResetForm() {
+  document.getElementById('load-spinner').style.display  = 'none';
+  document.getElementById('load-step').style.display     = 'none';
   document.getElementById('login-form').style.display    = 'none';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('reset-form').style.display    = 'flex';
