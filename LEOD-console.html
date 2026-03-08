@@ -4339,7 +4339,13 @@ async function initAuth() {
     S.user = session.user;
     await boot();
   } else {
-    showLoginForm();
+    // Marketing site links use #signup to deep-link to registration
+    if (location.hash === '#signup') {
+      showRegisterForm();
+      history.replaceState(null, '', location.pathname); // clean URL
+    } else {
+      showLoginForm();
+    }
   }
 }
 
