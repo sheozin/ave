@@ -62,6 +62,138 @@ test.describe('Auth: login form structure', () => {
 
 });
 
+// ── REGISTRATION FORM (structural — no auth required) ────────────────────
+
+test.describe('Auth: registration form structure', () => {
+
+  test('R01 register form is present in the DOM', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#register-form')).toBeAttached();
+  });
+
+  test('R02 register form has full name input', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#rf-name')).toBeAttached();
+    await expect(page.locator('#rf-name')).toHaveAttribute('required', '');
+  });
+
+  test('R03 register form has organization input', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#rf-org')).toBeAttached();
+    await expect(page.locator('#rf-org')).toHaveAttribute('required', '');
+  });
+
+  test('R04 register form has work email input', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#rf-email')).toBeAttached();
+    await expect(page.locator('#rf-email')).toHaveAttribute('type', 'email');
+  });
+
+  test('R05 register form has password + confirm inputs', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#rf-password')).toBeAttached();
+    await expect(page.locator('#rf-password')).toHaveAttribute('type', 'password');
+    await expect(page.locator('#rf-confirm')).toBeAttached();
+  });
+
+  test('R06 password hint is visible in register form', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('.rf-hint')).toBeAttached();
+    await expect(page.locator('.rf-hint')).toContainText('12+');
+  });
+
+  test('R07 honeypot field is present but visually hidden', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    const hp = page.locator('#rf-website');
+    await expect(hp).toBeAttached();
+    await expect(hp).toHaveAttribute('aria-hidden', 'true');
+    await expect(hp).toHaveAttribute('tabindex', '-1');
+    await expect(hp).toHaveClass(/rf-hp/);
+  });
+
+  test('R08 no invite code field exists', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    // Invite code was removed — ensure it's gone
+    await expect(page.locator('#rf-code')).not.toBeAttached();
+  });
+
+  test('R09 showRegisterForm() toggles to register view', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.waitForTimeout(500);
+    // Call JS toggle directly — overlay blocks pointer events on embedded links
+    await page.evaluate(() => (window as any).showRegisterForm());
+    await expect(page.locator('#register-form')).toHaveCSS('display', 'flex');
+    await expect(page.locator('#login-form')).toHaveCSS('display', 'none');
+    await expect(page.locator('#reset-form')).toHaveCSS('display', 'none');
+  });
+
+  test('R10 showLoginForm() from register returns to login', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as any).showRegisterForm());
+    await expect(page.locator('#register-form')).toHaveCSS('display', 'flex');
+    await page.evaluate(() => (window as any).showLoginForm());
+    await expect(page.locator('#login-form')).toHaveCSS('display', 'flex');
+    await expect(page.locator('#register-form')).toHaveCSS('display', 'none');
+  });
+
+});
+
+// ── RESET PASSWORD FORM (structural — no auth required) ──────────────────
+
+test.describe('Auth: reset password form structure', () => {
+
+  test('P01 reset form is present in the DOM', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#reset-form')).toBeAttached();
+  });
+
+  test('P02 reset form has email input', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#rst-email')).toBeAttached();
+    await expect(page.locator('#rst-email')).toHaveAttribute('type', 'email');
+  });
+
+  test('P03 reset form has send button', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await expect(page.locator('#reset-form button[type="submit"]')).toBeAttached();
+  });
+
+  test('P04 showResetForm() toggles to reset view', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as any).showResetForm());
+    await expect(page.locator('#reset-form')).toHaveCSS('display', 'flex');
+    await expect(page.locator('#login-form')).toHaveCSS('display', 'none');
+    await expect(page.locator('#register-form')).toHaveCSS('display', 'none');
+  });
+
+  test('P05 showLoginForm() from reset returns to login', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as any).showResetForm());
+    await expect(page.locator('#reset-form')).toHaveCSS('display', 'flex');
+    await page.evaluate(() => (window as any).showLoginForm());
+    await expect(page.locator('#login-form')).toHaveCSS('display', 'flex');
+    await expect(page.locator('#reset-form')).toHaveCSS('display', 'none');
+  });
+
+});
+
+// ── SIGNUP DEEP LINK ─────────────────────────────────────────────────────
+
+test.describe('Auth: #signup deep link', () => {
+
+  test('D01 #signup hash shows register form directly', async ({ page }) => {
+    await page.goto(`${BASE}/LEOD-console.html#signup`);
+    // Wait for Supabase to initialise and the hash to be consumed
+    await page.waitForTimeout(3000);
+    await expect(page.locator('#register-form')).toHaveCSS('display', 'flex');
+    await expect(page.locator('#login-form')).toHaveCSS('display', 'none');
+  });
+
+});
+
 // ── DIRECTOR PANEL STRUCTURE ──────────────────────────────────────────────
 
 test.describe('Director: panel structure', () => {
