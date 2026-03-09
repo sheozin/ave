@@ -133,18 +133,25 @@ fi
 # ── 8. Migrations present ────────────────────
 info "Migrations"
 PROJ=$(dirname "$0")/../supabase/migrations
-if [ -f "$PROJ/001_remove_dev_policies.sql" ]; then
-  green "Migration 001_remove_dev_policies.sql present"
-  PASS=$((PASS+1))
-else
-  red "Migration 001_remove_dev_policies.sql MISSING"
-fi
-if [ -f "$PROJ/002_add_commands_table.sql" ]; then
-  green "Migration 002_add_commands_table.sql present"
-  PASS=$((PASS+1))
-else
-  red "Migration 002_add_commands_table.sql MISSING"
-fi
+migrations=(
+  "001_remove_dev_policies.sql"
+  "002_add_commands_table.sql"
+  "004_add_seq_column.sql"
+  "005_commands_cleanup_rpc.sql"
+  "006_user_registration.sql"
+  "007_session_notes.sql"
+  "008_signage_sequence.sql"
+  "009_users_organization.sql"
+  "010_invite_audit.sql"
+)
+for mig in "${migrations[@]}"; do
+  if [ -f "$PROJ/$mig" ]; then
+    green "Migration $mig present"
+    PASS=$((PASS+1))
+  else
+    red "Migration $mig MISSING"
+  fi
+done
 
 # ── 9. No hardcoded secrets ───────────────────
 info "Secrets"

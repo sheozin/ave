@@ -7,7 +7,7 @@ No exceptions. No "we'll fix it later."
 
 ## Gate 1 — Structural Integrity
 
-Run: `bash scripts/verify-leod.sh 7230`
+Run: `bash scripts/verify-cuedeck.sh 7230`
 
 - [x] All 33 structural checks pass (exit code 0) *(33/33 verified)*
 - [x] No JS errors in browser console on page load
@@ -116,5 +116,5 @@ Run: `bash scripts/verify-leod.sh 7230`
 
 1. Before starting any feature: confirm which gates apply.
 2. After completing a feature: check off every applicable gate.
-3. Before handing off to user testing: run `bash scripts/verify-leod.sh 7230` AND confirm Gate 1 fully passes.
+3. Before handing off to user testing: run `bash scripts/verify-cuedeck.sh 7230` AND confirm Gate 1 fully passes.
 4. Before production deploy: ALL gates must pass. Known Gaps must be resolved.
