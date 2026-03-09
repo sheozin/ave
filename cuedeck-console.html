@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CueDeck — Production Console</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://js.stripe.com/v3/"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -198,6 +199,47 @@
       font-family: inherit; cursor: pointer; transition: all .15s;
     }
     #pending-screen button:hover { border-color: var(--red); color: var(--red); }
+    /* ── TRIAL EXPIRED / SUBSCRIPTION EXPIRED SCREEN ── */
+    #trial-expired-screen {
+      display: none; flex-direction: column; align-items: center;
+      gap: 16px; text-align: center; max-width: 640px;
+    }
+    #trial-expired-screen .te-icon { font-size: 32px; }
+    #trial-expired-screen .te-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    #trial-expired-screen .te-msg { font-size: 12px; color: var(--dim); line-height: 1.6; max-width: 420px; }
+    .te-toggle { display:flex; gap:4px; background:var(--card); border-radius:100px; padding:3px; }
+    .te-toggle button { background:none; border:none; color:var(--dim); font:500 11px/1 'Inter',sans-serif;
+      padding:5px 14px; border-radius:100px; cursor:pointer; transition:all .15s; }
+    .te-toggle button.active { background:var(--blue); color:#fff; }
+    .te-plans { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; }
+    .te-plan { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; text-align:left; position:relative; }
+    .te-plan.popular { border-color:var(--blue); }
+    .te-plan .te-badge { position:absolute; top:-9px; right:12px; background:var(--blue); color:#fff; font-size:9px;
+      font-weight:700; padding:2px 8px; border-radius:100px; text-transform:uppercase; letter-spacing:.05em; }
+    .te-plan .te-plan-name { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+    .te-plan .te-price { font-size:28px; font-weight:700; color:var(--text); }
+    .te-plan .te-price span { font-size:13px; font-weight:400; color:var(--dim); }
+    .te-plan .te-desc { font-size:11px; color:var(--text-secondary); margin:8px 0 12px; line-height:1.5; }
+    .te-plan ul { list-style:none; padding:0; margin:0 0 14px; }
+    .te-plan li { font-size:11px; color:var(--text-secondary); padding:3px 0; }
+    .te-plan li::before { content:'✓ '; color:var(--green); font-weight:700; }
+    .te-plan .te-cta { display:block; width:100%; padding:8px 0; border:none; border-radius:6px;
+      font:600 12px/1 'Inter',sans-serif; cursor:pointer; transition:all .15s; text-align:center; }
+    .te-plan .te-cta.primary { background:var(--blue); color:#fff; }
+    .te-plan .te-cta.primary:hover { filter:brightness(1.1); }
+    .te-plan .te-cta.secondary { background:var(--card-hi); color:var(--text); border:1px solid var(--border); }
+    .te-plan .te-cta.secondary:hover { border-color:var(--blue); }
+    /* ── PLAN BADGE ── */
+    #plan-badge { display:none; font-size:10px; padding:3px 8px; border-radius:100px;
+      background:rgba(59,130,246,0.12); color:#93C5FD; border:1px solid rgba(59,130,246,0.25); font-weight:500; white-space:nowrap; }
+    #plan-badge.trial { background:rgba(249,115,22,0.12); color:#FDBA74; border-color:rgba(249,115,22,0.25); }
+    #plan-badge.past_due { background:rgba(239,68,68,0.12); color:#F87171; border-color:rgba(239,68,68,0.25); }
+    /* ── BILLING MODAL ── */
+    #billing-modal { display:none; }
+    .bm-plans { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }
+    .bm-current { font-size:12px; color:var(--dim); margin-bottom:12px; }
+    .bm-current strong { color:var(--text); }
+    .bm-manage { margin-top:12px; }
     .ps-roles-section { width:100%; margin-top:4px; }
     .ps-roles-title { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; }
     .ps-roles-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
@@ -1048,6 +1090,57 @@
     </div>
     <button onclick="doLogout()">Sign Out</button>
   </div>
+  <!-- TRIAL EXPIRED / SUBSCRIPTION PAYWALL -->
+  <div id="trial-expired-screen">
+    <div class="te-icon">⏰</div>
+    <div class="te-title" id="te-title">Your 3-day trial has ended</div>
+    <div class="te-msg">Choose a plan to continue using CueDeck. All plans include all 6 operator roles, real-time sync, and delay cascade.</div>
+    <div class="te-toggle">
+      <button class="active" onclick="toggleBillingInterval('month',this)">Monthly</button>
+      <button onclick="toggleBillingInterval('year',this)">Annual (save 20%)</button>
+    </div>
+    <div class="te-plans" id="te-plans">
+      <div class="te-plan">
+        <div class="te-plan-name">Per-Event</div>
+        <div class="te-price">€39<span> / event</span></div>
+        <div class="te-desc">Perfect for freelancers and one-off productions.</div>
+        <ul>
+          <li>1 event</li>
+          <li>Up to 5 operators</li>
+          <li>Basic signage (2 displays)</li>
+        </ul>
+        <button class="te-cta secondary" onclick="startCheckout('perevent')">Buy single event</button>
+      </div>
+      <div class="te-plan">
+        <div class="te-plan-name">Starter</div>
+        <div class="te-price" id="te-price-starter">€59<span> / month</span></div>
+        <div class="te-desc">For small teams running regular events.</div>
+        <ul>
+          <li>1 active event at a time</li>
+          <li>Up to 5 operators</li>
+          <li>5 signage displays</li>
+          <li>Post-event reports</li>
+        </ul>
+        <button class="te-cta secondary" onclick="startCheckout('starter')">Start Starter</button>
+      </div>
+      <div class="te-plan popular">
+        <div class="te-badge">Most Popular</div>
+        <div class="te-plan-name">Pro</div>
+        <div class="te-price" id="te-price-pro">€99<span> / month</span></div>
+        <div class="te-desc">Full power for production companies.</div>
+        <ul>
+          <li>Unlimited active events</li>
+          <li>Up to 20 operators</li>
+          <li>Unlimited signage displays</li>
+          <li>AI Incident Advisor</li>
+          <li>AI post-event reports</li>
+          <li>Priority support</li>
+        </ul>
+        <button class="te-cta primary" onclick="startCheckout('pro')">Start Pro</button>
+      </div>
+    </div>
+    <button onclick="doLogout()" style="background:none;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:7px 18px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:4px;">Sign Out</button>
+  </div>
 </div>
 
 <!-- BROADCAST BANNER -->
@@ -1057,6 +1150,7 @@
 <div id="header">
   <div class="logo">Cue<span>Deck</span></div>
   <div id="event-name">—</div>
+  <div id="plan-badge"></div>
   <div id="presence-bar"></div>
   <div id="hdr-clock">--:--:--</div>
   <div id="hdr-offset">offset: —</div>
@@ -1065,6 +1159,7 @@
     <span id="conn-lbl">offline</span>
   </div>
   <button id="auto-start-btn" onclick="toggleAutoStart()" title="Auto-start sessions at planned time">⏱ AUTO</button>
+  <button id="billing-btn" onclick="openBillingModal()" title="Manage billing" style="display:none">Billing</button>
   <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
     Operators <span id="users-badge"></span>
   </button>
@@ -1329,6 +1424,43 @@
   </div>
 </div>
 
+<!-- BILLING MODAL -->
+<div id="billing-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeBillingModal()">
+  <div class="ev-modal-card" style="max-width:640px">
+    <div class="ev-modal-title">Billing & Plan</div>
+    <div class="bm-current" id="bm-current"></div>
+    <div class="te-toggle" style="justify-content:center;margin-bottom:4px">
+      <button class="active" onclick="toggleBillingInterval('month',this)">Monthly</button>
+      <button onclick="toggleBillingInterval('year',this)">Annual (save 20%)</button>
+    </div>
+    <div class="bm-plans" id="bm-plans">
+      <div class="te-plan">
+        <div class="te-plan-name">Per-Event</div>
+        <div class="te-price">€39<span> / event</span></div>
+        <ul><li>1 event</li><li>5 operators</li><li>2 signage displays</li></ul>
+        <button class="te-cta secondary" onclick="startCheckout('perevent')">Buy event</button>
+      </div>
+      <div class="te-plan">
+        <div class="te-plan-name">Starter</div>
+        <div class="te-price" id="bm-price-starter">€59<span> / month</span></div>
+        <ul><li>1 active event</li><li>5 operators</li><li>5 signage displays</li><li>Post-event reports</li></ul>
+        <button class="te-cta secondary" onclick="startCheckout('starter')">Upgrade</button>
+      </div>
+      <div class="te-plan popular">
+        <div class="te-badge">Most Popular</div>
+        <div class="te-plan-name">Pro</div>
+        <div class="te-price" id="bm-price-pro">€99<span> / month</span></div>
+        <ul><li>Unlimited events</li><li>20 operators</li><li>Unlimited signage</li><li>AI agents</li></ul>
+        <button class="te-cta primary" onclick="startCheckout('pro')">Upgrade</button>
+      </div>
+    </div>
+    <div class="bm-manage" id="bm-manage" style="display:none;text-align:center">
+      <button class="te-cta secondary" style="display:inline-block;width:auto;padding:8px 20px" onclick="openCustomerPortal()">Manage Subscription</button>
+    </div>
+    <div class="ev-modal-actions"><button onclick="closeBillingModal()">Close</button></div>
+  </div>
+</div>
+
 <!-- QR MODAL -->
 <div id="qr-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeQR()">
   <div class="ev-modal-card">
@@ -1489,6 +1621,9 @@ const S = {
   autoStart:       false,  // auto go-live at planned start time
   _autoStarted:    new Set(), // session IDs already auto-started this session
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
+  subscription:    null,   // { plan, status, trial_ends_at, ... }
+  planLimits:      null,   // resolved PLAN_LIMITS entry
+  stripePrices:    {},     // key → Stripe price ID (loaded from leod_config)
 };
 
 // ── Filter state (separate from S) ──
@@ -1513,6 +1648,16 @@ const ROLE_WRITE = {
   interp:   [], reg: [], signage: [],
 };
 const ROLE_DELAY = { director: true, stage: true };
+
+// ── Plan Limits ──────────────────────────────────────────
+const STRIPE_PK = 'pk_live_ZmVtedke2g0xrq3EOUAddf25';
+const PLAN_LIMITS = {
+  trial:      { events: 1,   operators: 999, displays: 2,   reports: true,  ai: true,  label: 'Trial' },
+  perevent:   { events: 1,   operators: 5,   displays: 2,   reports: false, ai: false, label: 'Per-Event' },
+  starter:    { events: 1,   operators: 5,   displays: 5,   reports: true,  ai: false, label: 'Starter' },
+  pro:        { events: 999, operators: 20,  displays: 999, reports: true,  ai: true,  label: 'Pro' },
+  enterprise: { events: 999, operators: 999, displays: 999, reports: true,  ai: true,  label: 'Enterprise' },
+};
 
 // EF name map
 const EF_MAP = {
@@ -3697,6 +3842,20 @@ async function submitEvModal() {
 
   try {
     if (evModalMode === 'create') {
+      // Plan limit: check active event count
+      if (S.planLimits && S.planLimits.events !== 999) {
+        const activeCount = S.events.filter(e => e.active).length;
+        if (activeCount >= S.planLimits.events) {
+          errEl.textContent = `Your ${PLAN_LIMITS[S.subscription?.plan]?.label || ''} plan allows ${S.planLimits.events} active event(s). Upgrade to create more.`;
+          saveBtn.disabled = false; return;
+        }
+      }
+      // Per-event plan: check purchased credits
+      if (S.subscription?.plan === 'perevent' && S.subscription.events_used >= S.subscription.events_purchased) {
+        errEl.textContent = 'No remaining event credits. Purchase another event pass to continue.';
+        saveBtn.disabled = false; return;
+      }
+
       const { data: ev, error } = await sb.from('leod_events')
         .insert({ name, date, timezone: tz, event_start: start, event_end: end,
                   venue: venue || null, active: true })
@@ -3705,6 +3864,14 @@ async function submitEvModal() {
 
       const seedId = document.getElementById('evm-seed').value;
       if (seedId) await seedSessions(seedId, ev.id);
+
+      // Track per-event credit usage
+      if (S.subscription?.plan === 'perevent') {
+        await sb.from('leod_subscriptions')
+          .update({ events_used: (S.subscription.events_used || 0) + 1 })
+          .eq('director_id', S.user.id);
+        S.subscription.events_used = (S.subscription.events_used || 0) + 1;
+      }
 
       S.events.push(ev);
       closeEvModal();
@@ -4364,6 +4531,16 @@ async function inviteOperator() {
 
   if (!email) { status.innerHTML = '<span style="color:var(--red)">Email is required</span>'; return; }
 
+  // Plan limit: check operator count
+  if (S.planLimits && S.planLimits.operators !== 999) {
+    const { count } = await sb.from('leod_users')
+      .select('id', { count: 'exact', head: true }).neq('role', 'pending');
+    if (count >= S.planLimits.operators) {
+      status.innerHTML = `<span style="color:var(--red)">Your plan allows ${S.planLimits.operators} operators. Upgrade to invite more.</span>`;
+      return;
+    }
+  }
+
   btn.disabled = true;
   btn.textContent = 'Sending…';
   status.textContent = '';
@@ -4414,6 +4591,194 @@ async function loadPendingBadge() {
     badge.style.display = 'none';
     btn.style.borderColor = '';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ── SUBSCRIPTION & BILLING ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+
+let _billingInterval = 'month'; // 'month' or 'year' — toggled by UI
+
+async function loadSubscription() {
+  const { data, error } = await sb.rpc('get_subscription_for_user');
+
+  if (error || !data || (Array.isArray(data) && data.length === 0)) {
+    // No subscription row — create trial for directors
+    if (S.userRole === 'director' || !S.userRole) {
+      await createTrialSubscription();
+      return loadSubscription();
+    }
+    // Operator without director subscription — allow access with trial limits
+    S.subscription = { plan: 'trial', status: 'active' };
+    S.planLimits = PLAN_LIMITS.trial;
+    return;
+  }
+
+  const sub = Array.isArray(data) ? data[0] : data;
+  S.subscription = sub;
+
+  // Check trial expiry
+  if (sub.plan === 'trial' && sub.trial_ends_at) {
+    if (new Date(sub.trial_ends_at) <= new Date()) {
+      S.subscription.status = 'expired';
+      showTrialExpiredScreen();
+      throw new Error('trial_expired');
+    }
+  }
+
+  // Check subscription status
+  if (sub.status === 'expired' || sub.status === 'canceled') {
+    showTrialExpiredScreen('Your subscription has ended');
+    throw new Error('subscription_expired');
+  }
+
+  S.planLimits = PLAN_LIMITS[sub.plan] || PLAN_LIMITS.trial;
+  loadStripePrices(); // non-blocking
+  updatePlanBadge();
+
+  // Show billing button for directors
+  if (S.userRole === 'director') {
+    document.getElementById('billing-btn').style.display = '';
+  }
+}
+
+async function createTrialSubscription() {
+  const trialEnd = new Date();
+  trialEnd.setDate(trialEnd.getDate() + 3);
+  await sb.from('leod_subscriptions').insert({
+    director_id: S.user.id,
+    plan: 'trial',
+    status: 'active',
+    trial_ends_at: trialEnd.toISOString(),
+  });
+}
+
+async function loadStripePrices() {
+  const { data } = await sb.from('leod_config')
+    .select('key, value')
+    .like('key', 'stripe_price_%');
+  S.stripePrices = {};
+  (data || []).forEach(r => { S.stripePrices[r.key] = r.value; });
+}
+
+function updatePlanBadge() {
+  const badge = document.getElementById('plan-badge');
+  if (!S.subscription) { badge.style.display = 'none'; return; }
+
+  badge.style.display = '';
+  const plan = S.subscription.plan;
+
+  if (plan === 'trial' && S.subscription.trial_ends_at) {
+    const remaining = Math.max(0, new Date(S.subscription.trial_ends_at) - new Date());
+    const hours = Math.floor(remaining / 3600000);
+    const mins = Math.floor((remaining % 3600000) / 60000);
+    badge.textContent = `TRIAL · ${hours}h ${mins}m left`;
+    badge.className = 'trial';
+  } else {
+    badge.textContent = (PLAN_LIMITS[plan]?.label || plan).toUpperCase();
+    badge.className = '';
+  }
+
+  if (S.subscription.status === 'past_due') {
+    badge.textContent += ' · PAYMENT DUE';
+    badge.className = 'past_due';
+  }
+}
+
+// Update trial countdown every 60s
+setInterval(() => { if (S.subscription?.plan === 'trial') updatePlanBadge(); }, 60000);
+
+function showTrialExpiredScreen(msg) {
+  document.getElementById('load-spinner').style.display = 'none';
+  document.getElementById('load-step').style.display = 'none';
+  document.getElementById('pending-screen').style.display = 'none';
+  if (msg) document.getElementById('te-title').textContent = msg;
+  document.getElementById('trial-expired-screen').style.display = 'flex';
+}
+
+function toggleBillingInterval(interval, btn) {
+  _billingInterval = interval;
+  // Update toggle button states
+  const parent = btn.parentElement;
+  parent.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Update prices
+  const starterPrice = interval === 'year' ? '€47' : '€59';
+  const proPrice     = interval === 'year' ? '€79' : '€99';
+  const suffix       = interval === 'year' ? ' / mo (billed annually)' : ' / month';
+  document.querySelectorAll('#te-price-starter, #bm-price-starter').forEach(el => {
+    el.innerHTML = `${starterPrice}<span>${suffix}</span>`;
+  });
+  document.querySelectorAll('#te-price-pro, #bm-price-pro').forEach(el => {
+    el.innerHTML = `${proPrice}<span>${suffix}</span>`;
+  });
+}
+
+async function startCheckout(plan) {
+  const priceKey = plan === 'perevent'
+    ? 'stripe_price_perevent'
+    : `stripe_price_${plan}_${_billingInterval === 'year' ? 'annual' : 'monthly'}`;
+  const priceId = S.stripePrices[priceKey];
+
+  if (!priceId) {
+    pushToast('Stripe not configured yet. Set price IDs in leod_config.', 'warn');
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.functions.invoke('create-checkout-session', {
+      body: { price_id: priceId, plan, interval: _billingInterval },
+    });
+    if (error) {
+      let errMsg = 'Checkout failed';
+      try { const b = await error.context?.json(); errMsg = b?.error || errMsg; } catch {}
+      pushToast(errMsg, 'error');
+      return;
+    }
+    window.location.href = data.url;
+  } catch (e) {
+    pushToast('Failed to start checkout: ' + e.message, 'error');
+  }
+}
+
+async function openCustomerPortal() {
+  try {
+    const { data, error } = await sb.functions.invoke('customer-portal', {
+      body: {},
+    });
+    if (error) throw error;
+    window.location.href = data.url;
+  } catch (e) {
+    pushToast('Failed to open billing portal: ' + (e.message || 'unknown error'), 'error');
+  }
+}
+
+function openBillingModal() {
+  const sub = S.subscription;
+  const current = document.getElementById('bm-current');
+  if (sub) {
+    const planLabel = PLAN_LIMITS[sub.plan]?.label || sub.plan;
+    let info = `Current plan: <strong>${planLabel}</strong>`;
+    if (sub.billing_interval) info += ` (${sub.billing_interval}ly)`;
+    if (sub.current_period_end) {
+      info += ` · Renews ${new Date(sub.current_period_end).toLocaleDateString()}`;
+    }
+    if (sub.cancel_at) {
+      info += ` · Cancels ${new Date(sub.cancel_at).toLocaleDateString()}`;
+    }
+    if (sub.plan === 'perevent') {
+      info += ` · Events: ${sub.events_used}/${sub.events_purchased} used`;
+    }
+    current.innerHTML = info;
+  }
+  // Show manage button if user has a Stripe subscription
+  document.getElementById('bm-manage').style.display =
+    (sub && sub.plan !== 'trial' && sub.status !== 'expired') ? '' : 'none';
+  document.getElementById('billing-modal').style.display = 'flex';
+}
+
+function closeBillingModal() {
+  document.getElementById('billing-modal').style.display = 'none';
 }
 
 async function loadUserRole() {
@@ -4474,6 +4839,16 @@ async function initAuth() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     S.user = session.user;
+
+    // Handle Stripe checkout return
+    const params = new URLSearchParams(location.search);
+    if (params.get('checkout') === 'success') {
+      history.replaceState(null, '', location.pathname);
+      await new Promise(r => setTimeout(r, 3000)); // wait for webhook
+    } else if (params.get('checkout') === 'cancel') {
+      history.replaceState(null, '', location.pathname);
+    }
+
     await boot();
   } else {
     // Marketing site links use #signup to deep-link to registration
@@ -4502,6 +4877,12 @@ async function boot() {
       setStep('Loading user…');
       await loadUserRole();
       document.getElementById('logout-btn').style.display = '';
+    }
+
+    // 0.5. Subscription check
+    if (S.user) {
+      setStep('Checking subscription…');
+      await loadSubscription();
     }
 
     // 1. Clock
@@ -4624,11 +5005,14 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         alertMinutesBefore: 8
       });
     }
-    // Show AI agents sidebar panel for director only, restore saved key
-    if (S.role === 'director') {
+    // Show AI agents sidebar panel for director only + plan check
+    if (S.role === 'director' && (!S.planLimits || S.planLimits.ai)) {
       const aiWrap = document.getElementById('ai-agents-wrap');
       if (aiWrap) aiWrap.style.display = '';
-      loadAgentKey();   // restore key from localStorage and update status dot
+      loadAgentKey();
+    } else {
+      const aiWrap = document.getElementById('ai-agents-wrap');
+      if (aiWrap) aiWrap.style.display = 'none';
     }
 
     overlay.style.display = 'none';
@@ -4644,7 +5028,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     }
 
   } catch (e) {
-    if (e.message === 'pending') return; // handled by showPendingScreen()
+    if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
     setStep(`Boot error: ${e.message}`);
     console.error('CueDeck boot failed:', e);
     setTimeout(() => { overlay.style.display = 'none'; }, 3000);
