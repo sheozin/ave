@@ -1,4 +1,5 @@
 import { adminClient } from './client.ts'
+import { corsHeaders } from './cors.ts'
 
 // ── Time helper ──────────────────────────────────────────────────────────────
 // timeStr is "HH:MM:SS" (TIME column from Postgres)
@@ -12,41 +13,38 @@ export function addMinutes(timeStr: string, mins: number): string {
 
 // ── Shared transition runner ─────────────────────────────────────────────────
 export async function runTransition(req: Request, toStatus: string): Promise<Response> {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  }
+  const cors = corsHeaders(req)
 
   // Pre-flight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   let body: Record<string, unknown>
   try {
     body = await req.json()
   } catch {
-    return new Response('Bad request', { status: 400, headers: corsHeaders })
+    return new Response('Bad request', { status: 400, headers: cors })
   }
 
   // Ping (used by checkEF diagnostic in the console)
   if (body._ping) {
     return new Response(JSON.stringify({ pong: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
   // Auth — extract JWT sent by the Supabase JS client
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) {
-    return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    return new Response('Unauthorized', { status: 401, headers: cors })
   }
   const jwt = authHeader.replace('Bearer ', '')
 
   const sb = adminClient()
   const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
   if (authErr || !user) {
-    return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    return new Response('Unauthorized', { status: 401, headers: cors })
   }
 
   // Validate body
@@ -57,7 +55,7 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     operator_role?: string
   }
   if (!session_id || version === undefined) {
-    return new Response('Missing session_id or version', { status: 400, headers: corsHeaders })
+    return new Response('Missing session_id or version', { status: 400, headers: cors })
   }
 
   // ── Idempotency check ────────────────────────────────────────────────────
@@ -74,13 +72,13 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     if (existing?.status === 'EXECUTED') {
       return new Response(
         JSON.stringify(existing.result),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     }
     if (existing?.status === 'PENDING') {
       return new Response(
         JSON.stringify({ error: 'IN_FLIGHT' }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     }
   }
@@ -93,14 +91,14 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     .single()
 
   if (fetchErr || !session) {
-    return new Response('Session not found', { status: 404, headers: corsHeaders })
+    return new Response('Session not found', { status: 404, headers: cors })
   }
 
   // Optimistic lock — check version before registering the command
   if (session.version !== version) {
     return new Response(
       JSON.stringify({ error: 'Version conflict', current: session.version }),
-      { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   }
 
@@ -120,7 +118,7 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
       // UNIQUE violation → concurrent duplicate; treat as IN_FLIGHT
       return new Response(
         JSON.stringify({ error: 'IN_FLIGHT' }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
       )
     }
   }
@@ -151,7 +149,7 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
         .eq('command_id', command_id)
         .then(() => {}).catch(() => {})
     }
-    return new Response(upErr.message, { status: 500, headers: corsHeaders })
+    return new Response(upErr.message, { status: 500, headers: cors })
   }
 
   const resultPayload = { ok: true, status: toStatus, version: version + 1 }
@@ -179,6 +177,6 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
 
   return new Response(
     JSON.stringify(resultPayload),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    { headers: { ...cors, 'Content-Type': 'application/json' } }
   )
 }

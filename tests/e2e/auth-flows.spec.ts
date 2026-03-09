@@ -432,3 +432,94 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
   });
 
 });
+
+// ── PENDING SCREEN ROLE DESCRIPTIONS ──────────────────────────────────────
+
+test.describe('Auth: pending screen role descriptions', () => {
+
+  test('27 pending screen has role grid container', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#pending-screen .ps-roles-grid')).toBeAttached();
+  });
+
+  test('28 role grid has exactly 6 role cards', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const cards = page.locator('#pending-screen .ps-role-card');
+    await expect(cards).toHaveCount(6);
+  });
+
+  test('29 all 6 role names are present', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const names = await page.locator('#pending-screen .ps-role-name').allTextContents();
+    const normalized = names.map(n => n.toLowerCase());
+    for (const role of ['director', 'stage', 'av', 'interp', 'reg', 'signage']) {
+      expect(normalized).toContain(role);
+    }
+  });
+
+  test('30 each role card has a description', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const descs = page.locator('#pending-screen .ps-role-desc');
+    const count = await descs.count();
+    expect(count).toBe(6);
+    for (let i = 0; i < count; i++) {
+      const text = await descs.nth(i).textContent();
+      expect(text!.length).toBeGreaterThan(5);
+    }
+  });
+
+});
+
+// ── WELCOME MODAL ─────────────────────────────────────────────────────────
+
+test.describe('Auth: welcome modal structure', () => {
+
+  test('31 welcome modal exists in the DOM', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#welcome-modal')).toBeAttached();
+  });
+
+  test('32 welcome modal has role name and description elements', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#welcome-role-name')).toBeAttached();
+    await expect(page.locator('#welcome-role-desc')).toBeAttached();
+  });
+
+  test('33 welcome modal has Get Started dismiss button', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#welcome-modal button:has-text("Get Started")')).toBeAttached();
+  });
+
+});
+
+// ── INVITE SECTION IN USERS MODAL ─────────────────────────────────────────
+
+test.describe('Auth: invite operator UI', () => {
+
+  test('34 invite section exists inside users modal', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#users-modal #invite-section')).toBeAttached();
+  });
+
+  test('35 invite section has email input, role select, and send button', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#inv-email')).toBeAttached();
+    await expect(page.locator('#inv-role')).toBeAttached();
+    await expect(page.locator('#inv-btn')).toBeAttached();
+  });
+
+  test('36 invite role select has all 6 roles', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const options = await page.locator('#inv-role option').allTextContents();
+    for (const role of ['stage', 'av', 'interp', 'reg', 'signage', 'director']) {
+      expect(options).toContain(role);
+    }
+  });
+
+  test('37 invite name input is optional (no required attribute)', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const required = await page.locator('#inv-name').getAttribute('required');
+    expect(required).toBeNull();
+  });
+
+});
