@@ -165,6 +165,63 @@ video.sp-sponsor-logo{max-height:55vh;border-radius:4px;object-fit:contain}
 .ag-speaker{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.4);margin-top:3px}
 .ag-empty{display:flex;align-items:center;justify-content:center;
   height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
+
+/* ── TIMELINE MODE ── */
+.tl-wrap{width:100%;height:100%;overflow:hidden;position:relative;padding:clamp(12px,2vw,24px)}
+.tl-header{font-size:clamp(10px,1.2vw,14px);letter-spacing:.18em;color:rgba(255,255,255,.35);
+  text-transform:uppercase;font-weight:700;margin-bottom:clamp(8px,1.5vw,16px)}
+.tl-list{display:flex;flex-direction:column;gap:clamp(4px,.8vw,10px);will-change:transform}
+.tl-row{display:flex;align-items:flex-start;gap:clamp(10px,2vw,24px);
+  padding:clamp(8px,1vw,14px) clamp(10px,1.5vw,18px);
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
+  border-radius:8px;transition:opacity .3s,border-color .3s}
+.tl-row.live{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.35)}
+.tl-row.ready{background:rgba(96,165,250,.08);border-color:rgba(96,165,250,.3)}
+.tl-row.ended{opacity:.25}
+.tl-row.cancelled{opacity:.2;text-decoration:line-through}
+.tl-time{flex-shrink:0;width:clamp(50px,6vw,80px);font-family:'SF Mono','Fira Code',monospace;
+  font-size:clamp(12px,1.4vw,18px);font-weight:600;color:#60a5fa;padding-top:2px}
+.tl-body{flex:1;min-width:0}
+.tl-title{font-size:clamp(13px,1.5vw,20px);font-weight:600;color:#eef2f7;line-height:1.3}
+.tl-meta{font-size:clamp(10px,1vw,14px);color:rgba(255,255,255,.4);margin-top:2px;
+  display:flex;gap:clamp(8px,1vw,16px);flex-wrap:wrap}
+.tl-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;
+  padding:2px 8px;border-radius:3px;flex-shrink:0;align-self:flex-start;margin-top:2px}
+.tl-badge.live{background:rgba(34,197,94,.15);color:#22c55e}
+.tl-badge.ready{background:rgba(96,165,250,.15);color:#60a5fa}
+.tl-empty{display:flex;align-items:center;justify-content:center;
+  height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
+
+/* ── PROGRAMME MODE ── */
+.pg-wrap{width:100%;height:100%;overflow:hidden;position:relative;padding:clamp(8px,1.5vw,20px)}
+.pg-header{font-size:clamp(10px,1.2vw,14px);letter-spacing:.18em;color:rgba(255,255,255,.35);
+  text-transform:uppercase;font-weight:700;margin-bottom:clamp(6px,1vw,12px)}
+.pg-grid{display:grid;gap:1px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;
+  width:100%;border:1px solid rgba(255,255,255,.06)}
+.pg-corner{background:rgba(0,0,0,.3);padding:8px;font-size:clamp(8px,.7vw,10px);
+  color:rgba(255,255,255,.25);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
+.pg-room-hdr{background:rgba(96,165,250,.08);padding:clamp(6px,.8vw,10px) clamp(8px,1vw,12px);
+  font-size:clamp(9px,.9vw,13px);font-weight:700;letter-spacing:.06em;color:#60a5fa;
+  text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-time-lbl{background:rgba(0,0,0,.3);padding:clamp(4px,.5vw,8px) clamp(6px,.8vw,12px);
+  font-family:'SF Mono','Fira Code',monospace;font-size:clamp(10px,1vw,14px);
+  font-weight:600;color:rgba(255,255,255,.4);white-space:nowrap;display:flex;align-items:center}
+.pg-cell{background:rgba(255,255,255,.015);padding:clamp(4px,.5vw,8px) clamp(6px,.8vw,10px);
+  min-height:clamp(32px,3vw,48px);display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+.pg-cell.live{background:rgba(34,197,94,.1)}
+.pg-cell.ready{background:rgba(96,165,250,.08)}
+.pg-cell-title{font-size:clamp(10px,.9vw,14px);font-weight:600;color:#eef2f7;
+  line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-cell-speaker{font-size:clamp(8px,.7vw,11px);color:rgba(255,255,255,.4);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.pg-cell-badge{font-size:clamp(7px,.55vw,9px);font-weight:700;letter-spacing:.04em}
+.pg-cell-badge.live{color:#22c55e}
+.pg-cell-badge.ready{color:#60a5fa}
+.pg-empty{display:flex;align-items:center;justify-content:center;
+  height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
+.pg-page-indicator{position:absolute;bottom:8px;right:16px;font-size:10px;
+  color:rgba(255,255,255,.2);letter-spacing:.1em;font-weight:600}
+
 .sp-sponsor-name-big{
   font-size:clamp(20px,4vw,48px);font-weight:700;color:#eef2f7;
   letter-spacing:-.01em;opacity:.9;
@@ -271,6 +328,11 @@ let _sponsorTimer = null;
 let _retries     = 0;
 let _seqIdx      = 0;      // current slide index in sequence playlist
 let _seqTimer    = null;   // setTimeout handle for sequence advance
+let _tlAnimTimer = null;   // timeline scroll animation frame id
+let _tlPageTimer = null;   // timeline paginate interval
+let _tlPageIdx   = 0;      // timeline current page index
+let _pgPageTimer = null;   // programme paginate interval
+let _pgPageIdx   = 0;      // programme current page index
 
 // ═══════════════════════════════════════════════════
 // BOOT FROM URL PARAMS
@@ -591,6 +653,10 @@ function render() {
   if (mode !== 'sponsors' && _sponsorTimer) {
     clearInterval(_sponsorTimer); _sponsorTimer = null;
   }
+  // Clear timeline timers if leaving timeline mode
+  if (mode !== 'timeline') { stopTimelineAnimation(); stopTimelinePaginate(); }
+  // Clear programme timers if leaving programme mode
+  if (mode !== 'programme') { stopProgrammePaginate(); }
 
   switch (mode) {
     case 'schedule':  area.innerHTML = renderSchedule(); break;
@@ -601,6 +667,8 @@ function render() {
     case 'recall':    area.innerHTML = renderRecall(); break;
     case 'custom':    area.innerHTML = renderCustom(); break;
     case 'agenda':    renderAgenda(area); break;
+    case 'timeline':  renderTimeline(area); break;
+    case 'programme': renderProgramme(area); break;
     default:          area.innerHTML = renderSchedule();
   }
 
@@ -839,6 +907,291 @@ function renderAgenda(area) {
 }
 
 // ═══════════════════════════════════════════════════
+// TIMELINE MODE — chronological session list
+// ═══════════════════════════════════════════════════
+function renderTimeline(area) {
+  area.style.background = '';
+  // Gather all sessions, apply room filter, sort by planned_start
+  let sessions = [...S.sessions];
+  if (D?.filter_room) sessions = sessions.filter(s => s.room === D.filter_room);
+  sessions.sort((a, b) => (a.planned_start || '').localeCompare(b.planned_start || ''));
+
+  if (!sessions.length) {
+    area.innerHTML = `<div class="tl-empty fade-in">No sessions scheduled</div>`;
+    return;
+  }
+
+  const rows = sessions.map((s, i) => {
+    const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
+    const isReady = s.status === 'READY' || s.status === 'CALLING';
+    const isEnded = s.status === 'ENDED';
+    const isCancelled = s.status === 'CANCELLED';
+    const cls = isLive ? ' live' : isReady ? ' ready' : isEnded ? ' ended' : isCancelled ? ' cancelled' : '';
+    const badge = isLive ? `<div class="tl-badge live">● LIVE</div>` : isReady ? `<div class="tl-badge ready">◈ READY</div>` : '';
+    const time = (s.planned_start || s.scheduled_start || '').slice(11, 16) || '--:--';
+    const endTime = (s.planned_end || s.scheduled_end || '').slice(11, 16) || '';
+    const durMin = s.scheduled_end && s.scheduled_start
+      ? Math.round((toMs(s.scheduled_end) - toMs(s.scheduled_start)) / 60000)
+      : '';
+
+    return `<div class="tl-row${cls}" data-tl-idx="${i}">
+      <div class="tl-time">${esc(time)}</div>
+      <div class="tl-body">
+        <div class="tl-title">${esc(s.title)}</div>
+        <div class="tl-meta">
+          ${s.speaker ? `<span>${esc(s.speaker)}</span>` : ''}
+          ${s.room ? `<span>📍 ${esc(s.room)}</span>` : ''}
+          ${durMin ? `<span>⏱ ${durMin} min</span>` : ''}
+        </div>
+      </div>
+      ${badge}
+    </div>`;
+  }).join('');
+
+  area.innerHTML = `<div class="tl-wrap fade-in">
+    <div class="tl-header">📜 PROGRAMME LIST${D?.filter_room ? ` — ${esc(D.filter_room).toUpperCase()}` : ''}</div>
+    <div class="tl-list" id="tl-list-inner">${rows}</div>
+  </div>`;
+
+  // Start scroll or paginate based on display setting
+  const scrollStyle = D?.scroll_style || 'scroll';
+  if (scrollStyle === 'paginate') {
+    startTimelinePaginate(sessions.length);
+  } else {
+    startTimelineScroll();
+  }
+}
+
+// ── Timeline: smooth auto-scroll ──
+function startTimelineScroll() {
+  stopTimelineAnimation();
+  const list = document.getElementById('tl-list-inner');
+  if (!list) return;
+  const wrap = list.parentElement;
+  if (!wrap) return;
+
+  // Only scroll if content overflows
+  const contentH = list.scrollHeight;
+  const viewH = wrap.clientHeight - 40; // subtract header
+  if (contentH <= viewH) return;
+
+  let offset = 0;
+  const speed = 0.5; // px per frame (~30px/sec at 60fps)
+  const pauseAtTopMs = 3000;
+  let pauseUntil = performance.now() + pauseAtTopMs;
+
+  function step(ts) {
+    if (ts < pauseUntil) {
+      _tlAnimTimer = requestAnimationFrame(step);
+      return;
+    }
+    offset += speed;
+    // Reset to top after scrolling through entire list + one viewport
+    if (offset >= contentH) {
+      offset = 0;
+      pauseUntil = ts + pauseAtTopMs;
+    }
+    list.style.transform = `translateY(-${offset}px)`;
+    _tlAnimTimer = requestAnimationFrame(step);
+  }
+  _tlAnimTimer = requestAnimationFrame(step);
+}
+
+function stopTimelineAnimation() {
+  if (_tlAnimTimer) { cancelAnimationFrame(_tlAnimTimer); _tlAnimTimer = null; }
+}
+
+// ── Timeline: paginate ──
+function startTimelinePaginate(totalCount) {
+  stopTimelinePaginate();
+  const pageSize = 8;
+  const totalPages = Math.ceil(totalCount / pageSize);
+  if (totalPages <= 1) return; // Everything fits on one page
+
+  _tlPageIdx = 0;
+  renderTimelinePage(pageSize, totalPages);
+  const interval = (D?.paginate_seconds || 10) * 1000;
+  _tlPageTimer = setInterval(() => {
+    _tlPageIdx = (_tlPageIdx + 1) % totalPages;
+    renderTimelinePage(pageSize, totalPages);
+  }, interval);
+}
+
+function stopTimelinePaginate() {
+  if (_tlPageTimer) { clearInterval(_tlPageTimer); _tlPageTimer = null; }
+  _tlPageIdx = 0;
+}
+
+function renderTimelinePage(pageSize, totalPages) {
+  const rows = document.querySelectorAll('.tl-row');
+  const start = _tlPageIdx * pageSize;
+  const end = start + pageSize;
+  rows.forEach((r, i) => {
+    r.style.display = (i >= start && i < end) ? '' : 'none';
+  });
+  // Show page indicator
+  let indicator = document.querySelector('.tl-page-indicator');
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.className = 'tl-page-indicator';
+    indicator.style.cssText = 'position:absolute;bottom:8px;right:16px;font-size:10px;color:rgba(255,255,255,.2);letter-spacing:.1em;font-weight:600';
+    const wrap = document.querySelector('.tl-wrap');
+    if (wrap) wrap.appendChild(indicator);
+  }
+  indicator.textContent = `${_tlPageIdx + 1} / ${totalPages}`;
+}
+
+// ═══════════════════════════════════════════════════
+// PROGRAMME MODE — time-slot × room grid
+// ═══════════════════════════════════════════════════
+function renderProgramme(area) {
+  area.style.background = '';
+  let sessions = S.sessions.filter(s => s.room);
+  if (D?.filter_room) sessions = sessions.filter(s => s.room === D.filter_room);
+
+  if (!sessions.length) {
+    area.innerHTML = `<div class="pg-empty fade-in">No sessions scheduled</div>`;
+    return;
+  }
+
+  // Determine rooms (max 6 columns)
+  const rooms = [...new Set(sessions.map(s => s.room))].sort().slice(0, 6);
+  const colCount = rooms.length;
+
+  // Determine time range: round down earliest start to 30-min, round up latest end to 30-min
+  let minT = Infinity, maxT = 0;
+  sessions.forEach(s => {
+    const st = toMs(timeStr(s.planned_start || s.scheduled_start || ''));
+    const en = toMs(timeStr(s.planned_end || s.scheduled_end || '')) || (st + 2700000);
+    if (st && st < minT) minT = st;
+    if (en > maxT) maxT = en;
+  });
+  const slot30 = 30 * 60 * 1000;
+  minT = Math.floor(minT / slot30) * slot30;
+  maxT = Math.ceil(maxT / slot30) * slot30;
+  const totalSlots = Math.round((maxT - minT) / slot30);
+
+  if (totalSlots <= 0 || totalSlots > 48) {
+    area.innerHTML = `<div class="pg-empty fade-in">Cannot render programme grid</div>`;
+    return;
+  }
+
+  // Build slot labels
+  const slots = [];
+  for (let i = 0; i < totalSlots; i++) {
+    const ms = minT + i * slot30;
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    slots.push({
+      ms,
+      label: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`,
+    });
+  }
+
+  // Map sessions to grid cells: for each session, find which slot(s) it spans
+  // sessionGrid[slotIdx][roomIdx] = { session, isFirst }
+  const grid = Array.from({ length: totalSlots }, () => Array(colCount).fill(null));
+
+  sessions.forEach(s => {
+    const rIdx = rooms.indexOf(s.room);
+    if (rIdx === -1) return;
+    const st = toMs(timeStr(s.planned_start || s.scheduled_start || ''));
+    const en = toMs(timeStr(s.planned_end || s.scheduled_end || '')) || (st + 2700000);
+    const startSlot = Math.max(0, Math.floor((st - minT) / slot30));
+    const endSlot = Math.min(totalSlots, Math.ceil((en - minT) / slot30));
+    for (let si = startSlot; si < endSlot; si++) {
+      if (!grid[si][rIdx]) { // don't overwrite — first session wins on overlap
+        const isLive = s.status === 'LIVE' || s.status === 'OVERRUN';
+        const isReady = s.status === 'READY' || s.status === 'CALLING';
+        grid[si][rIdx] = { session: s, isFirst: si === startSlot, isLive, isReady };
+      }
+    }
+  });
+
+  // Determine pagination
+  const scrollStyle = D?.scroll_style || 'scroll';
+  const slotsPerPage = 6;
+  const totalPages = Math.ceil(totalSlots / slotsPerPage);
+  const paginate = scrollStyle === 'paginate' && totalPages > 1;
+
+  // Build grid HTML
+  const gridCols = `auto repeat(${colCount}, 1fr)`;
+
+  // Header row: corner + room names
+  let headerHtml = `<div class="pg-corner">TIME</div>`;
+  rooms.forEach(r => {
+    headerHtml += `<div class="pg-room-hdr">${esc(r)}</div>`;
+  });
+
+  // Slot rows
+  let rowsHtml = '';
+  slots.forEach((slot, si) => {
+    const pageIdx = Math.floor(si / slotsPerPage);
+    const pageAttr = paginate ? ` data-pg-page="${pageIdx}"` : '';
+    rowsHtml += `<div class="pg-time-lbl"${pageAttr}>${slot.label}</div>`;
+    rooms.forEach((r, ri) => {
+      const cell = grid[si][ri];
+      if (!cell) {
+        rowsHtml += `<div class="pg-cell"${pageAttr}></div>`;
+      } else {
+        const cls = cell.isLive ? ' live' : cell.isReady ? ' ready' : '';
+        const badgeCls = cell.isLive ? ' live' : cell.isReady ? ' ready' : '';
+        const badgeText = cell.isLive ? '● LIVE' : cell.isReady ? '◈ READY' : '';
+        if (cell.isFirst) {
+          rowsHtml += `<div class="pg-cell${cls}"${pageAttr}>
+            ${badgeText ? `<div class="pg-cell-badge${badgeCls}">${badgeText}</div>` : ''}
+            <div class="pg-cell-title">${esc(cell.session.title)}</div>
+            ${cell.session.speaker ? `<div class="pg-cell-speaker">${esc(cell.session.speaker)}</div>` : ''}
+          </div>`;
+        } else {
+          // Continuation slot — show a subtle indicator
+          rowsHtml += `<div class="pg-cell${cls}"${pageAttr} style="border-top:none"></div>`;
+        }
+      }
+    });
+  });
+
+  area.innerHTML = `<div class="pg-wrap fade-in">
+    <div class="pg-header">🗓 DAY GRID${D?.filter_room ? ` — ${esc(D.filter_room).toUpperCase()}` : ''}</div>
+    <div class="pg-grid" id="pg-grid-inner" style="grid-template-columns:${gridCols}">
+      ${headerHtml}
+      ${rowsHtml}
+    </div>
+    ${paginate ? `<div class="pg-page-indicator" id="pg-page-ind"></div>` : ''}
+  </div>`;
+
+  if (paginate) {
+    startProgrammePaginate(totalPages);
+  }
+}
+
+// ── Programme: paginate ──
+function startProgrammePaginate(totalPages) {
+  stopProgrammePaginate();
+  _pgPageIdx = 0;
+  renderProgrammePage(totalPages);
+  const interval = (D?.paginate_seconds || 10) * 1000;
+  _pgPageTimer = setInterval(() => {
+    _pgPageIdx = (_pgPageIdx + 1) % totalPages;
+    renderProgrammePage(totalPages);
+  }, interval);
+}
+
+function stopProgrammePaginate() {
+  if (_pgPageTimer) { clearInterval(_pgPageTimer); _pgPageTimer = null; }
+  _pgPageIdx = 0;
+}
+
+function renderProgrammePage(totalPages) {
+  const cells = document.querySelectorAll('[data-pg-page]');
+  cells.forEach(c => {
+    c.style.display = parseInt(c.dataset.pgPage) === _pgPageIdx ? '' : 'none';
+  });
+  const ind = document.getElementById('pg-page-ind');
+  if (ind) ind.textContent = `${_pgPageIdx + 1} / ${totalPages}`;
+}
+
+// ═══════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════
 function esc(s) {
@@ -850,6 +1203,13 @@ function toMs(t) {
   if (!t) return 0;
   const parts = t.substring(0,8).split(':').map(Number);
   return (parts[0]*3600 + (parts[1]||0)*60 + (parts[2]||0)) * 1000;
+}
+
+function timeStr(t) {
+  // Extract time portion from "2026-03-10T09:00:00" or "09:00:00" or "09:00"
+  if (!t) return '';
+  const idx = t.indexOf('T');
+  return idx >= 0 ? t.substring(idx + 1) : t;
 }
 
 function toTimeMs(epochMs) {

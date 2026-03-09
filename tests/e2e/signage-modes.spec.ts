@@ -192,3 +192,132 @@ test('PR-014 agenda mode — shows session titles in grid', async ({ page }) => 
   await bootMode(page, 'agenda');
   await expect(page.locator('#content-area')).toContainText('Keynote Address');
 });
+
+// ── Helper: boot with 4 timed sessions across 3 rooms ──────────────────────
+// Used by timeline and programme mode tests to cover LIVE, READY, PLANNED, ENDED
+async function bootModeWithTimedSessions(
+  page: import('@playwright/test').Page,
+  mode: string,
+  overrides: Record<string, unknown> = {},
+) {
+  await page.goto(DISP_URL);
+  await page.evaluate(
+    ({ m, ov }) => {
+      (window as unknown as Record<string, unknown>).S = {
+        sessions: [
+          {
+            id: 's1', title: 'Opening Keynote', speaker: 'Alice Chen', company: 'TechCo',
+            room: 'Main Hall', status: 'LIVE', sort_order: 1,
+            planned_start: '2026-03-10T09:00:00', planned_end: '2026-03-10T09:45:00',
+            scheduled_start: '09:00:00', scheduled_end: '09:45:00',
+            actual_start: new Date(Date.now() - 10 * 60_000).toISOString(),
+          },
+          {
+            id: 's2', title: 'Panel: Future of AI', speaker: 'Bob Kim', company: '',
+            room: 'Room A', status: 'READY', sort_order: 2,
+            planned_start: '2026-03-10T10:00:00', planned_end: '2026-03-10T10:45:00',
+            scheduled_start: '10:00:00', scheduled_end: '10:45:00',
+            actual_start: null,
+          },
+          {
+            id: 's3', title: 'Workshop: Cloud Ops', speaker: 'Carol Diaz', company: 'CloudInc',
+            room: 'Room B', status: 'PLANNED', sort_order: 3,
+            planned_start: '2026-03-10T11:00:00', planned_end: '2026-03-10T12:00:00',
+            scheduled_start: '11:00:00', scheduled_end: '12:00:00',
+            actual_start: null,
+          },
+          {
+            id: 's4', title: 'Welcome Address', speaker: 'Dave Ortiz', company: '',
+            room: 'Main Hall', status: 'ENDED', sort_order: 0,
+            planned_start: '2026-03-10T08:30:00', planned_end: '2026-03-10T08:55:00',
+            scheduled_start: '08:30:00', scheduled_end: '08:55:00',
+            actual_start: '2026-03-10T08:30:00',
+          },
+        ],
+        sponsors: [],
+        event: { name: 'Tech Summit 2026' },
+        broadcast: null,
+        clockOffset: 0,
+      };
+      (window as unknown as Record<string, unknown>).D = {
+        id: 'disp-tl', name: 'Lobby Screen',
+        content_mode: m, orientation: 'landscape',
+        filter_room: null, override_content: null, sequence: null,
+        scroll_style: 'scroll', paginate_seconds: 10,
+        ...ov,
+      };
+      const setup = document.getElementById('setup');
+      const disp = document.getElementById('display');
+      if (setup) setup.style.display = 'none';
+      if (disp) { disp.style.display = 'flex'; }
+      const renderFn = (window as unknown as Record<string, unknown>).render;
+      if (typeof renderFn === 'function') (renderFn as () => void)();
+    },
+    { m: mode, ov: overrides },
+  );
+}
+
+// ── 9. TIMELINE mode ──────────────────────────────────────────────────────────
+
+test('timeline mode — renders all session titles', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await expect(page.locator('#content-area')).toContainText('Opening Keynote');
+  await expect(page.locator('#content-area')).toContainText('Panel: Future of AI');
+  await expect(page.locator('#content-area')).toContainText('Workshop: Cloud Ops');
+  await expect(page.locator('#content-area')).toContainText('Welcome Address');
+});
+
+test('timeline mode — shows time values', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await expect(page.locator('#content-area')).toContainText('09:00');
+  await expect(page.locator('#content-area')).toContainText('10:00');
+});
+
+test('timeline mode — LIVE session has live class', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await expect(page.locator('.tl-row.live')).toBeVisible();
+});
+
+test('timeline mode — ENDED session is dimmed', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await expect(page.locator('.tl-row.ended')).toBeVisible();
+});
+
+test('timeline mode — filter_room limits sessions', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline', { filter_room: 'Room A' });
+  await expect(page.locator('#content-area')).toContainText('Panel: Future of AI');
+  await expect(page.locator('#content-area')).not.toContainText('Opening Keynote');
+});
+
+test('timeline mode — shows PROGRAMME LIST header', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await expect(page.locator('#content-area')).toContainText('PROGRAMME LIST');
+});
+
+// ── 10. PROGRAMME mode ────────────────────────────────────────────────────────
+
+test('programme mode — shows room headers', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await expect(page.locator('.pg-room-hdr').first()).toBeVisible();
+});
+
+test('programme mode — shows session titles in grid', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await expect(page.locator('#content-area')).toContainText('Opening Keynote');
+  await expect(page.locator('#content-area')).toContainText('Panel: Future of AI');
+});
+
+test('programme mode — LIVE cell has live class', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await expect(page.locator('.pg-cell.live').first()).toBeVisible();
+});
+
+test('programme mode — shows time labels', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await expect(page.locator('.pg-time-lbl').first()).toBeVisible();
+});
+
+test('programme mode — shows DAY GRID header', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await expect(page.locator('#content-area')).toContainText('DAY GRID');
+});

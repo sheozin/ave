@@ -1324,6 +1324,8 @@
         <option value="wayfinding">Wayfinding (room directory)</option>
         <option value="sponsors">Sponsor Carousel</option>
         <option value="agenda">Full Agenda (Room Grid)</option>
+        <option value="timeline">Programme List (chronological)</option>
+        <option value="programme">Day Grid (time × room)</option>
         <option value="break">Break Screen</option>
         <option value="custom">Custom Message</option>
       </select>
@@ -1331,6 +1333,19 @@
     <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — leave blank to show all)</span>
       <input id="dm-room" type="text" placeholder="e.g. Main Stage">
     </label>
+
+    <!-- Scroll / Paginate settings (for timeline & programme modes) -->
+    <div id="dm-scroll-wrap" style="display:flex;gap:10px;align-items:flex-end">
+      <label style="flex:1">Scroll Behaviour
+        <select id="dm-scroll-style" onchange="togglePaginateSeconds()">
+          <option value="scroll">Auto-Scroll (smooth)</option>
+          <option value="paginate">Paginate (advance pages)</option>
+        </select>
+      </label>
+      <label id="dm-paginate-wrap" style="flex:0 0 120px;display:none">Seconds/Page
+        <input id="dm-paginate-seconds" type="number" min="3" max="120" value="10" style="width:100%">
+      </label>
+    </div>
 
     <!-- Sequence builder -->
     <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px">
@@ -2757,12 +2772,18 @@ let _sponModalId  = null;
 let _seqSlides    = [];   // local state for sequence builder while modal is open
 
 // ── Sequence builder helpers (display modal) ──
-const SEQ_MODES = ['schedule','sponsors','agenda','wayfinding','break','recall','wifi','custom'];
+const SEQ_MODES = ['schedule','sponsors','agenda','wayfinding','break','recall','wifi','custom','timeline','programme'];
 
 function toggleSeqBuilder() {
   const on = document.getElementById('dm-seq-enable')?.checked;
   const builder = document.getElementById('dm-seq-builder');
   if (builder) builder.style.display = on ? '' : 'none';
+}
+
+function togglePaginateSeconds() {
+  const style = document.getElementById('dm-scroll-style')?.value;
+  const wrap = document.getElementById('dm-paginate-wrap');
+  if (wrap) wrap.style.display = style === 'paginate' ? '' : 'none';
 }
 
 function addSeqSlide(mode = 'sponsors', duration = 15) {
@@ -2909,12 +2930,14 @@ function renderSignagePanel() {
 
   const activeOverride = S.displays.some(d => d.override_content?.mode);
   const overrideModes = [
-    { key: 'break',    label: '☕ Break Screen' },
-    { key: 'recall',   label: '⚡ 5-Min Recall' },
-    { key: 'sponsors', label: '🏢 Sponsors' },
-    { key: 'agenda',   label: '📊 Agenda Grid' },
-    { key: 'wifi',     label: '📶 WiFi Info' },
-    { key: 'schedule', label: '📋 Schedule' },
+    { key: 'break',     label: '☕ Break Screen' },
+    { key: 'recall',    label: '⚡ 5-Min Recall' },
+    { key: 'sponsors',  label: '🏢 Sponsors' },
+    { key: 'agenda',    label: '📊 Agenda Grid' },
+    { key: 'timeline',  label: '📜 Programme List' },
+    { key: 'programme', label: '🗓 Day Grid' },
+    { key: 'wifi',      label: '📶 WiFi Info' },
+    { key: 'schedule',  label: '📋 Schedule' },
   ];
 
   list.innerHTML = `
@@ -3016,6 +3039,8 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-orient').value = d.orientation || 'landscape';
     document.getElementById('dm-mode').value   = d.content_mode|| 'schedule';
     document.getElementById('dm-room').value   = d.filter_room || '';
+    document.getElementById('dm-scroll-style').value = d.scroll_style || 'scroll';
+    document.getElementById('dm-paginate-seconds').value = d.paginate_seconds || 10;
     // Populate sequence builder
     _seqSlides = (d.sequence || []).map(s => ({ ...s }));
     document.getElementById('dm-seq-enable').checked = _seqSlides.length > 0;
@@ -3025,10 +3050,13 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-orient').value = 'landscape';
     document.getElementById('dm-mode').value   = 'schedule';
     document.getElementById('dm-room').value   = '';
+    document.getElementById('dm-scroll-style').value = 'scroll';
+    document.getElementById('dm-paginate-seconds').value = 10;
     _seqSlides = [];
     document.getElementById('dm-seq-enable').checked = false;
   }
   toggleSeqBuilder();
+  togglePaginateSeconds();
   renderSeqList();
   document.getElementById('disp-modal').style.display = 'flex';
 }
@@ -3051,7 +3079,9 @@ async function saveDisplay() {
 
   const seqEnabled = document.getElementById('dm-seq-enable').checked;
   const sequence   = seqEnabled && _seqSlides.length ? _seqSlides : null;
-  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence };
+  const scrollStyle = document.getElementById('dm-scroll-style').value || 'scroll';
+  const paginateSec = parseInt(document.getElementById('dm-paginate-seconds').value) || 10;
+  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence, scroll_style: scrollStyle, paginate_seconds: paginateSec };
   const { error } = _dispModalId
     ? await sb.from('leod_signage_displays').update(payload).eq('id', _dispModalId)
     : await sb.from('leod_signage_displays').insert(payload);
