@@ -928,8 +928,10 @@ function renderTimeline(area) {
     const isCancelled = s.status === 'CANCELLED';
     const cls = isLive ? ' live' : isReady ? ' ready' : isEnded ? ' ended' : isCancelled ? ' cancelled' : '';
     const badge = isLive ? `<div class="tl-badge live">● LIVE</div>` : isReady ? `<div class="tl-badge ready">◈ READY</div>` : '';
-    const time = (s.planned_start || s.scheduled_start || '').slice(11, 16) || '--:--';
-    const endTime = (s.planned_end || s.scheduled_end || '').slice(11, 16) || '';
+    const rawTime = timeStr(s.planned_start || s.scheduled_start || '');
+    const time = rawTime ? rawTime.substring(0, 5) : '--:--';
+    const rawEnd = timeStr(s.planned_end || s.scheduled_end || '');
+    const endTime = rawEnd ? rawEnd.substring(0, 5) : '';
     const durMin = s.scheduled_end && s.scheduled_start
       ? Math.round((toMs(s.scheduled_end) - toMs(s.scheduled_start)) / 60000)
       : '';
