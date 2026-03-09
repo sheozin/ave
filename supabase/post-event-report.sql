@@ -1,5 +1,5 @@
 -- ============================================================
--- LEOD Post-Event Report Query
+-- CueDeck Post-Event Report Query
 --
 -- Returns one row per session with:
 --   • planned vs actual start/end times

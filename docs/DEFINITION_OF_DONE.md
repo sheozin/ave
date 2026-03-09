@@ -1,4 +1,4 @@
-# LEOD — Definition of Done
+# CueDeck — Definition of Done
 
 A feature or fix is **Done** only when every applicable gate below passes.
 No exceptions. No "we'll fix it later."

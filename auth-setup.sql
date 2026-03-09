@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════
--- LEOD — Auth Setup
+-- CueDeck — Auth Setup
 -- Run ONCE in Supabase SQL Editor after:
 --   1. Enabling Email provider in Dashboard → Auth → Providers
 --   2. Running supabase-setup.sql

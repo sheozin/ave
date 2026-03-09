@@ -1,5 +1,5 @@
 // tests/e2e/auth-flows.spec.ts
-// E2E tests for LEOD console auth, role-gated controls, and operator flows.
+// E2E tests for CueDeck console auth, role-gated controls, and operator flows.
 //
 // Structural tests (no live DB): login form, stage monitor, delay controls.
 // Live DB tests: skipped automatically when TEST_EMAIL / TEST_PASSWORD are unset.
@@ -28,17 +28,17 @@ async function bypassOverlay(page: Page) {
 test.describe('Auth: login form structure', () => {
 
   test('01 login form is present in the DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#login-form')).toBeAttached();
   });
 
   test('02 login form has email input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#lf-email')).toBeAttached();
   });
 
   test('03 login form has password input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     const pwd = page.locator('#lf-password');
     await expect(pwd).toBeAttached();
     // Should be password type (not plain text)
@@ -46,17 +46,17 @@ test.describe('Auth: login form structure', () => {
   });
 
   test('04 login form has submit button', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#login-form button[type="submit"]')).toBeAttached();
   });
 
   test('05 login error element is present', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#lf-error')).toBeAttached();
   });
 
   test('06 login error is empty on page load', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#lf-error')).toHaveText('');
   });
 
@@ -67,43 +67,43 @@ test.describe('Auth: login form structure', () => {
 test.describe('Auth: registration form structure', () => {
 
   test('R01 register form is present in the DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#register-form')).toBeAttached();
   });
 
   test('R02 register form has full name input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#rf-name')).toBeAttached();
     await expect(page.locator('#rf-name')).toHaveAttribute('required', '');
   });
 
   test('R03 register form has organization input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#rf-org')).toBeAttached();
     await expect(page.locator('#rf-org')).toHaveAttribute('required', '');
   });
 
   test('R04 register form has work email input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#rf-email')).toBeAttached();
     await expect(page.locator('#rf-email')).toHaveAttribute('type', 'email');
   });
 
   test('R05 register form has password + confirm inputs', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#rf-password')).toBeAttached();
     await expect(page.locator('#rf-password')).toHaveAttribute('type', 'password');
     await expect(page.locator('#rf-confirm')).toBeAttached();
   });
 
   test('R06 password hint is visible in register form', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('.rf-hint')).toBeAttached();
     await expect(page.locator('.rf-hint')).toContainText('12+');
   });
 
   test('R07 honeypot field is present but visually hidden', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     const hp = page.locator('#rf-website');
     await expect(hp).toBeAttached();
     await expect(hp).toHaveAttribute('aria-hidden', 'true');
@@ -112,13 +112,13 @@ test.describe('Auth: registration form structure', () => {
   });
 
   test('R08 no invite code field exists', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     // Invite code was removed — ensure it's gone
     await expect(page.locator('#rf-code')).not.toBeAttached();
   });
 
   test('R09 showRegisterForm() toggles to register view', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.waitForTimeout(500);
     // Call JS toggle directly — overlay blocks pointer events on embedded links
     await page.evaluate(() => (window as any).showRegisterForm());
@@ -128,7 +128,7 @@ test.describe('Auth: registration form structure', () => {
   });
 
   test('R10 showLoginForm() from register returns to login', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.waitForTimeout(500);
     await page.evaluate(() => (window as any).showRegisterForm());
     await expect(page.locator('#register-form')).toHaveCSS('display', 'flex');
@@ -144,23 +144,23 @@ test.describe('Auth: registration form structure', () => {
 test.describe('Auth: reset password form structure', () => {
 
   test('P01 reset form is present in the DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#reset-form')).toBeAttached();
   });
 
   test('P02 reset form has email input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#rst-email')).toBeAttached();
     await expect(page.locator('#rst-email')).toHaveAttribute('type', 'email');
   });
 
   test('P03 reset form has send button', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#reset-form button[type="submit"]')).toBeAttached();
   });
 
   test('P04 showResetForm() toggles to reset view', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.waitForTimeout(500);
     await page.evaluate(() => (window as any).showResetForm());
     await expect(page.locator('#reset-form')).toHaveCSS('display', 'flex');
@@ -169,7 +169,7 @@ test.describe('Auth: reset password form structure', () => {
   });
 
   test('P05 showLoginForm() from reset returns to login', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.waitForTimeout(500);
     await page.evaluate(() => (window as any).showResetForm());
     await expect(page.locator('#reset-form')).toHaveCSS('display', 'flex');
@@ -185,7 +185,7 @@ test.describe('Auth: reset password form structure', () => {
 test.describe('Auth: #signup deep link', () => {
 
   test('D01 #signup hash shows register form directly', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html#signup`);
+    await page.goto(`${BASE}/cuedeck-console.html#signup`);
     // Wait for Supabase to initialise and the hash to be consumed
     await page.waitForTimeout(3000);
     await expect(page.locator('#register-form')).toHaveCSS('display', 'flex');
@@ -199,35 +199,35 @@ test.describe('Auth: #signup deep link', () => {
 test.describe('Director: panel structure', () => {
 
   test('07 sessions column is present', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     await expect(page.locator('#sessions-col')).toBeVisible();
   });
 
   test('08 sessions list is present', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     await expect(page.locator('#sessions-list')).toBeAttached();
   });
 
   test('09 context sidebar is visible', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     await expect(page.locator('#sidebar')).toBeVisible();
   });
 
   test('10 context actions area is present', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     await expect(page.locator('#ctx-actions')).toBeAttached();
   });
 
   test('11 context panel shows no-session state initially', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     // Without a live DB, context shows the empty/no-session state
@@ -235,7 +235,7 @@ test.describe('Director: panel structure', () => {
   });
 
   test('12 delay strip element exists in DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     await expect(page.locator('#delay-strip')).toBeAttached();
@@ -250,7 +250,7 @@ test.describe('Stage: panel structure', () => {
   test('13 stage panel loads without errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await page.waitForTimeout(300);
@@ -258,14 +258,14 @@ test.describe('Stage: panel structure', () => {
   });
 
   test('14 stage monitor button is visible in stage panel', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await expect(page.locator('button:has-text("STAGE MONITOR")')).toBeVisible();
   });
 
   test('15 clicking STAGE MONITOR opens the fullscreen overlay', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await page.locator('button:has-text("STAGE MONITOR")').click();
@@ -273,7 +273,7 @@ test.describe('Stage: panel structure', () => {
   });
 
   test('16 stage monitor has EXIT MONITOR close button', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await page.locator('button:has-text("STAGE MONITOR")').click();
@@ -281,7 +281,7 @@ test.describe('Stage: panel structure', () => {
   });
 
   test('17 EXIT MONITOR button closes the overlay', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await page.locator('button:has-text("STAGE MONITOR")').click();
@@ -291,7 +291,7 @@ test.describe('Stage: panel structure', () => {
   });
 
   test('18 stage monitor has status, title, and timer elements', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="stage"]').click();
     await page.locator('button:has-text("STAGE MONITOR")').click();
@@ -309,7 +309,7 @@ test.describe('Other roles: structural sanity', () => {
   test('19 AV panel loads without JS errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     // Use data-role selector — :has-text("av") matches SAVE buttons too (5 elements)
     await page.locator('.rbtn[data-role="av"]').click();
@@ -320,7 +320,7 @@ test.describe('Other roles: structural sanity', () => {
   test('20 interp panel loads without JS errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="interp"]').click();
     await page.waitForTimeout(300);
@@ -330,7 +330,7 @@ test.describe('Other roles: structural sanity', () => {
   test('21 reg panel loads without JS errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="reg"]').click();
     await page.waitForTimeout(300);
@@ -355,7 +355,7 @@ test.describe('Auth: sign-in flow (requires TEST_EMAIL + TEST_PASSWORD)', () => 
   test.skip(!HAS_AUTH, 'Skipped: TEST_EMAIL / TEST_PASSWORD not set');
 
   test('22 can sign in with valid credentials', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     const email = process.env.TEST_EMAIL!;
     const pwd   = process.env.TEST_PASSWORD!;
     await page.locator('#lf-email').fill(email);
@@ -367,7 +367,7 @@ test.describe('Auth: sign-in flow (requires TEST_EMAIL + TEST_PASSWORD)', () => 
   });
 
   test('23 wrong password shows sign-in error', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#lf-email').fill(process.env.TEST_EMAIL!);
     await page.locator('#lf-password').fill('definitely-wrong-password!');
     await page.locator('#login-form button[type="submit"]').click();
@@ -385,7 +385,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
   test('24 director can click GO LIVE on a READY session', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#lf-email').fill(process.env.TEST_EMAIL!);
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();
@@ -403,7 +403,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
   test('25 director can HOLD a LIVE session without JS errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#lf-email').fill(process.env.TEST_EMAIL!);
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();
@@ -419,7 +419,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
   });
 
   test('26 delay apply buttons exist when session is active', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#lf-email').fill(process.env.TEST_EMAIL!);
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();

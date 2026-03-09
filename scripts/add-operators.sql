@@ -1,5 +1,5 @@
 -- ============================================================
--- LEOD — Add Operators
+-- CueDeck — Add Operators
 --
 -- Run this in Supabase SQL Editor each time you need to
 -- add crew members before an event.

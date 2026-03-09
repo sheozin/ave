@@ -1,5 +1,5 @@
 // tests/e2e/console-ui.spec.ts
-// E2E tests for LEOD console UI structure — no auth required.
+// E2E tests for CueDeck console UI structure — no auth required.
 // These test that the page loads, renders all roles, and
 // UI elements respond correctly to interaction.
 //
@@ -25,19 +25,19 @@ async function bypassOverlay(page: Page) {
 test.describe('Console: page load', () => {
 
   test('01 console page loads with correct title', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page).toHaveTitle(/CueDeck/);
   });
 
   test('02 CueDeck logo is visible on loading screen', async ({ page }) => {
     // .load-logo is the CueDeck logo inside #loading-overlay, always visible
     // before auth. #header .logo is visible after connection.
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('.load-logo')).toBeVisible();
   });
 
   test('03 all 6 role buttons present in DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     // Use data-role attribute selector to avoid strict-mode violations
     // caused by generic :has-text() matching SAVE/CANCEL/etc.
     for (const role of ['director', 'stage', 'av', 'interp', 'reg', 'signage']) {
@@ -46,7 +46,7 @@ test.describe('Console: page load', () => {
   });
 
   test('04 status bar labels exist in DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     // Use element IDs — text= locator matches too broadly (2+ elements)
     await expect(page.locator('#dl-db')).toBeAttached();
     await expect(page.locator('#dl-rt')).toBeAttached();
@@ -54,7 +54,7 @@ test.describe('Console: page load', () => {
   });
 
   test('05 broadcast bar elements present in DOM', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#bc-bar')).toBeAttached();
     await expect(page.locator('#bc-input')).toBeAttached();
     // SEND / CLEAR buttons have no IDs — check by parent + text
@@ -67,7 +67,7 @@ test.describe('Console: page load', () => {
 test.describe('Console: role switching', () => {
 
   test('06 clicking signage role activates it', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     const signageBtn = page.locator('.rbtn[data-role="signage"]');
     await signageBtn.click();
@@ -75,14 +75,14 @@ test.describe('Console: role switching', () => {
   });
 
   test('07 signage panel shows global override section', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=GLOBAL DISPLAY OVERRIDE')).toBeVisible();
   });
 
   test('08 signage panel shows override buttons', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     // Use class selector — override buttons appear in both panel and sidebar (strict mode)
@@ -93,7 +93,7 @@ test.describe('Console: role switching', () => {
   });
 
   test('09 director role shows session controls', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="director"]').click();
     // Session list area should exist
@@ -105,21 +105,21 @@ test.describe('Console: role switching', () => {
 test.describe('Console: broadcast bar', () => {
 
   test('10 character counter hidden when input is empty', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     const counter = page.locator('#bc-char');
     // Empty input → counter is blank
     await expect(counter).toHaveText('');
   });
 
   test('11 character counter shows count on input', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#bc-input').fill('Hello world');
     const counter = page.locator('#bc-char');
     await expect(counter).toHaveText(/11\/200/);
   });
 
   test('12 character counter turns amber at 161+ chars', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     const longText = 'A'.repeat(161);
     await page.locator('#bc-input').fill(longText);
     const counter = page.locator('#bc-char');
@@ -127,7 +127,7 @@ test.describe('Console: broadcast bar', () => {
   });
 
   test('13 Enter key in input calls sendBroadcast (no error thrown)', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.locator('#bc-input').fill('Test message');
     // Press Enter — should not throw JS errors
     const errors: string[] = [];
@@ -142,7 +142,7 @@ test.describe('Console: broadcast bar', () => {
 test.describe('Console: display modal', () => {
 
   test('14 Add Display button opens modal', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     // Wait for signage panel to render
@@ -153,7 +153,7 @@ test.describe('Console: display modal', () => {
   });
 
   test('15 display modal closes on Cancel', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
@@ -163,7 +163,7 @@ test.describe('Console: display modal', () => {
   });
 
   test('16 display modal closes on backdrop click', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
@@ -174,7 +174,7 @@ test.describe('Console: display modal', () => {
   });
 
   test('17 display modal shows validation error on empty name', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
@@ -189,7 +189,7 @@ test.describe('Console: display modal', () => {
 test.describe('Console: sponsor modal', () => {
 
   test('18 Add Sponsor button opens modal', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
@@ -199,7 +199,7 @@ test.describe('Console: sponsor modal', () => {
   });
 
   test('19 sponsor modal closes on Cancel', async ({ page }) => {
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.locator('.rbtn[data-role="signage"]').click();
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
@@ -215,7 +215,7 @@ test.describe('Console: no JS errors on load', () => {
   test('20 no uncaught JS errors on page load', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await page.waitForTimeout(1000);
     expect(errors).toHaveLength(0);
   });
@@ -223,7 +223,7 @@ test.describe('Console: no JS errors on load', () => {
   test('21 no uncaught errors when switching all roles', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(e.message));
-    await page.goto(`${BASE}/LEOD-console.html`);
+    await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     for (const role of ['director', 'stage', 'av', 'interp', 'reg', 'signage']) {
       await page.locator(`.rbtn[data-role="${role}"]`).click();

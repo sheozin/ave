@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════
--- LEOD — Full Schema Setup
+-- CueDeck — Full Schema Setup
 -- Paste this entire script into Supabase SQL Editor and run once.
 -- ══════════════════════════════════════════════════════════════════
 

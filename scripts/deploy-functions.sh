@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# LEOD Edge Function Deployer
+# CueDeck Edge Function Deployer
 # Usage:  bash scripts/deploy-functions.sh           (deploy all)
 #         bash scripts/deploy-functions.sh go-live   (deploy one)
 set -euo pipefail
 
 PROJ=$(cd "$(dirname "$0")/.." && pwd)
-ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay)
+ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun)
 FAIL=0
 
 green() { echo "  OK  $1"; }
 red()   { echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo ""
-echo "=== LEOD Edge Function Deployer ==="
+echo "=== CueDeck Edge Function Deployer ==="
 
 if [ $# -ge 1 ]; then
   DEPLOY_LIST=("$@")

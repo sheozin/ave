@@ -1,7 +1,7 @@
 {
-  "name": "leod-production-console",
+  "name": "cuedeck-production-console",
   "version": "1.0.0",
-  "description": "LEOD Live Event Operations Dashboard — test suite",
+  "description": "CueDeck — Production Console for Live Events",
   "private": true,
   "scripts": {
     "test":       "vitest run",
@@ -9,7 +9,7 @@
     "test:ui":    "vitest --ui",
     "test:e2e":   "playwright test",
     "test:all":   "vitest run && playwright test",
-    "verify":     "bash scripts/verify-leod.sh 7230"
+    "verify":     "bash scripts/verify-cuedeck.sh 7230"
   },
   "devDependencies": {
     "vitest": "^2.1.0",

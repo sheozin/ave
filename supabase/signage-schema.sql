@@ -1,5 +1,5 @@
 -- ============================================================
--- LEOD Digital Signage — Database Schema
+-- CueDeck Digital Signage — Database Schema
 -- Run this in Supabase SQL Editor to enable the signage system
 -- ============================================================
 

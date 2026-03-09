@@ -1,8 +1,8 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/",        "destination": "/LEOD-console.html" },
-    { "source": "/display", "destination": "/LEOD-display.html" }
+    { "source": "/",        "destination": "/cuedeck-console.html" },
+    { "source": "/display", "destination": "/cuedeck-display.html" }
   ],
   "headers": [
     {

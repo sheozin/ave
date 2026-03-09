@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
-# LEOD Pre-Handoff Verification Script
+# CueDeck Pre-Handoff Verification Script
 # Run after any code change before handing off to user testing
-# Usage: bash scripts/verify-leod.sh [PORT]
+# Usage: bash scripts/verify-cuedeck.sh [PORT]
 # ============================================================
 
 PORT=${1:-7230}
@@ -16,12 +16,12 @@ info()  { echo ""; echo "── $1 ──"; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║     LEOD Verification Agent v1.0        ║"
+echo "║     CueDeck Verification Agent v1.0        ║"
 echo "╚══════════════════════════════════════════╝"
 
 # ── 1. Server reachable ───────────────────────
 info "Server"
-STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$BASE/LEOD-console.html")
+STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" "$BASE/cuedeck-console.html")
 if [ "$STATUS" = "200" ]; then
   green "Server reachable at $BASE"
   PASS=$((PASS+1))
@@ -31,7 +31,7 @@ fi
 
 # ── 2. Console HTML structure ─────────────────
 info "Console HTML"
-HTML=$(curl -s -L "$BASE/LEOD-console.html")
+HTML=$(curl -s -L "$BASE/cuedeck-console.html")
 
 checks=(
   "SUPABASE_URL"
@@ -60,7 +60,7 @@ done
 
 # ── 3. Display HTML structure ─────────────────
 info "Display HTML"
-DISP=$(curl -s -L "$BASE/LEOD-display.html")
+DISP=$(curl -s -L "$BASE/cuedeck-display.html")
 disp_checks=(
   "fromHash"
   "fromQuery"
@@ -70,7 +70,7 @@ disp_checks=(
   "renderBreak"
   "sendHeartbeat"
   "activeMode"
-  "LEOD Display"
+  "CueDeck Display"
 )
 for check in "${disp_checks[@]}"; do
   if echo "$DISP" | grep -q "$check"; then
@@ -108,7 +108,7 @@ fi
 
 # ── 6. Storage RLS fix present ────────────────
 info "Storage Upload"
-if echo "$HTML" | grep -q 'Logo upload failed'; then
+if echo "$HTML" | grep -q 'Upload failed:'; then
   green "Upload error handling present"
   PASS=$((PASS+1))
 else
@@ -149,7 +149,7 @@ fi
 # ── 9. No hardcoded secrets ───────────────────
 info "Secrets"
 AUTH=$(cat "$(dirname "$0")/../auth-setup.sql" 2>/dev/null)
-if echo "$AUTH" | grep -q 'LEOD#'; then
+if echo "$AUTH" | grep -q 'CueDeck#'; then
   red "Hardcoded password still in auth-setup.sql"
 else
   green "No hardcoded password in auth-setup.sql"

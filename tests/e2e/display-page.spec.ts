@@ -1,5 +1,5 @@
 // tests/e2e/display-page.spec.ts
-// E2E tests for LEOD display page — no live DB required.
+// E2E tests for CueDeck display page — no live DB required.
 // Tests cover: page structure, setup form, validation, hash/query param pre-fill,
 // and graceful handling of a failed connection attempt.
 //
@@ -9,10 +9,10 @@
 import { test, expect } from '@playwright/test';
 
 const BASE       = 'http://127.0.0.1:7230';
-const DISP_URL   = `${BASE}/LEOD-display.html`;
+const DISP_URL   = `${BASE}/cuedeck-display.html`;
 
 // Fake but structurally-plausible credentials for auto-boot tests
-const FAKE_SUPA_URL = 'https://fakeleodtest.supabase.co';
+const FAKE_SUPA_URL = 'https://fakecuedecktest.supabase.co';
 const FAKE_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake';
 const FAKE_DISP_ID  = '00000000-0000-0000-0000-000000000001';
 
@@ -154,7 +154,7 @@ test.describe('Display: hash-param pre-fill', () => {
 
 // ── QUERY-PARAM PRE-FILL ───────────────────────────────────────────────────
 //
-// NOTE: The preview server redirects LEOD-display.html → LEOD-display (strips
+// NOTE: The preview server redirects cuedeck-display.html → cuedeck-display (strips
 // the .html extension). This redirect does NOT preserve the query string, so
 // ?url=...&key=...&id=... params are lost before the page receives them.
 // Hash params (#url=...&key=...&id=...) are NOT sent to the server and are

@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CueDeck — Theme Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: #0a0a0f;
+  color: #fff;
+  min-height: 100vh;
+  padding: 40px 24px 60px;
+}
+h1 {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .25em;
+  color: #4a5568;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.subtitle {
+  text-align: center;
+  font-size: 11px;
+  color: #2d3748;
+  margin-bottom: 40px;
+  letter-spacing: .1em;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  gap: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ══════════════════════════════════════════
+   MOCK CONSOLE SHELL
+══════════════════════════════════════════ */
+.theme-wrap { display: flex; flex-direction: column; gap: 10px; }
+.theme-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  padding-left: 4px;
+}
+.theme-desc {
+  font-size: 10px;
+  letter-spacing: .04em;
+  padding-left: 4px;
+  margin-top: -6px;
+  opacity: .5;
+}
+.mock {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid;
+  font-size: 11px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.6);
+}
+
+/* ── MOCK STRUCTURE ── */
+.m-broadcast { padding: 6px 16px; font-size: 10px; font-weight: 500; text-align: center; }
+.m-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px; border-bottom: 1px solid;
+}
+.m-logo { font-size: 16px; font-weight: 900; letter-spacing: -.02em; }
+.m-logo span { font-style: italic; }
+.m-event { font-size: 10px; font-weight: 500; flex: 1; }
+.m-presence { display: flex; gap: 6px; align-items: center; font-size: 9px; }
+.m-dot { width: 6px; height: 6px; border-radius: 50%; }
+.m-clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; font-family: 'JetBrains Mono', monospace; }
+.m-pill { font-size: 9px; font-weight: 600; padding: 2px 8px; border-radius: 20px; border: 1px solid; }
+
+.m-diag {
+  display: flex; gap: 14px; padding: 4px 14px;
+  font-size: 9px; font-weight: 500; letter-spacing: .04em; border-bottom: 1px solid;
+}
+.m-diag-item { display: flex; align-items: center; gap: 4px; }
+.m-diag-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+.m-rolebar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-bottom: 1px solid; font-size: 9px;
+}
+.m-role-lbl { font-weight: 700; letter-spacing: .1em; opacity: .4; }
+.m-rbtn {
+  padding: 2px 9px; border-radius: 4px; border: 1px solid;
+  font-size: 9px; font-weight: 500; cursor: default;
+}
+
+.m-body { display: flex; gap: 0; }
+.m-sessions { flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid; }
+.m-sidebar { width: 160px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+.m-card {
+  border-radius: 6px; border: 1px solid; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.m-card-hdr { display: flex; align-items: center; gap: 6px; }
+.m-seq { font-size: 9px; opacity: .35; font-weight: 600; }
+.m-title { font-size: 11px; font-weight: 600; flex: 1; }
+.m-badge { font-size: 8px; font-weight: 700; padding: 1px 7px; border-radius: 10px; letter-spacing: .06em; }
+.m-meta { font-size: 9px; opacity: .5; }
+.m-actions { display: flex; gap: 4px; margin-top: 2px; }
+.m-btn {
+  font-size: 8px; font-weight: 600; padding: 3px 8px;
+  border-radius: 4px; border: 1px solid; cursor: default; letter-spacing: .04em;
+}
+
+.m-sb-label { font-size: 8px; font-weight: 700; letter-spacing: .12em; opacity: .4; }
+.m-sb-title { font-size: 12px; font-weight: 700; }
+.m-sb-status { font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+.m-sb-btn {
+  display: block; width: 100%; padding: 5px; border-radius: 5px;
+  border: 1px solid; font-size: 9px; font-weight: 700;
+  text-align: center; letter-spacing: .06em; cursor: default;
+}
+.m-sb-time { font-size: 18px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+.m-bc { padding: 6px 14px; display: flex; gap: 6px; align-items: center; border-top: 1px solid; }
+.m-bc-lbl { font-size: 8px; font-weight: 700; letter-spacing: .1em; opacity: .4; }
+.m-bc-input { flex: 1; border-radius: 4px; border: 1px solid; padding: 4px 8px; font-size: 9px; }
+.m-bc-btn { padding: 4px 10px; border-radius: 4px; border: 1px solid; font-size: 9px; font-weight: 700; }
+
+/* current badge indicator */
+.current-badge {
+  display: inline-block;
+  background: #22c55e22;
+  border: 1px solid #22c55e44;
+  color: #22c55e;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+/* ══════════════════════════════════════════
+   THEME 1 — CURRENT (Midnight Blue)
+══════════════════════════════════════════ */
+.t1 {
+  --bg:      #0d0f17;
+  --bg2:     #111420;
+  --surface: #161927;
+  --surface2:#1c2030;
+  --border:  rgba(255,255,255,.07);
+  --border2: rgba(255,255,255,.04);
+  --text:    #e8eaf0;
+  --dim:     #5a6070;
+  --blue:    #3b82f6;
+  --blue-lt: #60a5fa;
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+  --live-bg: rgba(239,68,68,.12);
+  --live-bd: rgba(239,68,68,.3);
+}
+
+/* ══════════════════════════════════════════
+   THEME 2 — OBSIDIAN (Pure black, electric)
+══════════════════════════════════════════ */
+.t2 {
+  --bg:      #000000;
+  --bg2:     #080808;
+  --surface: #0f0f0f;
+  --surface2:#161616;
+  --border:  rgba(255,255,255,.08);
+  --border2: rgba(255,255,255,.04);
+  --text:    #ffffff;
+  --dim:     #444;
+  --blue:    #6366f1;
+  --blue-lt: #818cf8;
+  --green:   #10b981;
+  --red:     #f43f5e;
+  --amber:   #f59e0b;
+  --live-bg: rgba(244,63,94,.1);
+  --live-bd: rgba(244,63,94,.35);
+}
+
+/* ══════════════════════════════════════════
+   THEME 3 — EMBER (Warm dark, amber)
+══════════════════════════════════════════ */
+.t3 {
+  --bg:      #0f0a00;
+  --bg2:     #150d00;
+  --surface: #1a1100;
+  --surface2:#211500;
+  --border:  rgba(245,158,11,.08);
+  --border2: rgba(245,158,11,.04);
+  --text:    #f5e6c8;
+  --dim:     #6b5a3a;
+  --blue:    #f59e0b;
+  --blue-lt: #fbbf24;
+  --green:   #84cc16;
+  --red:     #ef4444;
+  --amber:   #fb923c;
+  --live-bg: rgba(239,68,68,.12);
+  --live-bd: rgba(239,68,68,.3);
+}
+
+/* ══════════════════════════════════════════
+   THEME 4 — TERMINAL (Ops room green)
+══════════════════════════════════════════ */
+.t4 {
+  --bg:      #020c02;
+  --bg2:     #041004;
+  --surface: #051505;
+  --surface2:#071a07;
+  --border:  rgba(34,197,94,.1);
+  --border2: rgba(34,197,94,.05);
+  --text:    #ccffd4;
+  --dim:     #2d5e34;
+  --blue:    #22c55e;
+  --blue-lt: #4ade80;
+  --green:   #86efac;
+  --red:     #f87171;
+  --amber:   #fde047;
+  --live-bg: rgba(34,197,94,.1);
+  --live-bd: rgba(34,197,94,.35);
+}
+
+/* ══════════════════════════════════════════
+   THEME 5 — SLATE PRO (Premium navy)
+══════════════════════════════════════════ */
+.t5 {
+  --bg:      #0b0f1a;
+  --bg2:     #0f1525;
+  --surface: #131c30;
+  --surface2:#192338;
+  --border:  rgba(148,163,184,.1);
+  --border2: rgba(148,163,184,.05);
+  --text:    #e2e8f0;
+  --dim:     #475569;
+  --blue:    #38bdf8;
+  --blue-lt: #7dd3fc;
+  --green:   #34d399;
+  --red:     #fb7185;
+  --amber:   #fbbf24;
+  --live-bg: rgba(251,113,133,.1);
+  --live-bd: rgba(251,113,133,.3);
+}
+
+/* ══════════════════════════════════════════
+   THEME 6 — GRAPHITE (Neutral dark, silver)
+══════════════════════════════════════════ */
+.t6 {
+  --bg:      #111111;
+  --bg2:     #171717;
+  --surface: #1c1c1c;
+  --surface2:#222222;
+  --border:  rgba(255,255,255,.09);
+  --border2: rgba(255,255,255,.05);
+  --text:    #efefef;
+  --dim:     #555;
+  --blue:    #e2e8f0;
+  --blue-lt: #f8fafc;
+  --green:   #4ade80;
+  --red:     #f87171;
+  --amber:   #fb923c;
+  --live-bg: rgba(248,113,113,.1);
+  --live-bd: rgba(248,113,113,.3);
+}
+
+/* Apply CSS vars to mock elements */
+.mock {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+}
+.m-broadcast { background: var(--amber); color: #000; }
+.m-header    { background: var(--bg2); border-color: var(--border); }
+.m-diag      { background: var(--bg); border-color: var(--border); }
+.m-rolebar   { background: var(--bg2); border-color: var(--border); }
+.m-card      { background: var(--surface); border-color: var(--border); }
+.m-card.live { background: var(--live-bg); border-color: var(--live-bd); }
+.m-sidebar   { background: var(--bg2); }
+.m-sessions  { border-color: var(--border); background: var(--bg); }
+.m-bc        { background: var(--bg2); border-color: var(--border); }
+.m-bc-input  { background: var(--surface); border-color: var(--border); color: var(--dim); }
+.m-bc-btn    { background: var(--blue); border-color: transparent; color: #000; font-weight: 800; }
+.m-rbtn      { background: var(--surface2); border-color: var(--border); color: var(--dim); }
+.m-rbtn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.m-badge.ended   { background: rgba(100,100,100,.15); color: var(--dim); border: 1px solid rgba(100,100,100,.2); }
+.m-badge.live    { background: var(--live-bg); color: var(--red); border: 1px solid var(--live-bd); }
+.m-badge.planned { background: rgba(59,130,246,.1); color: var(--blue-lt); border: 1px solid rgba(59,130,246,.2); }
+.m-btn.hold     { background: var(--live-bg); border-color: var(--live-bd); color: var(--red); }
+.m-btn.end      { background: var(--live-bg); border-color: var(--live-bd); color: var(--red); }
+.m-btn.ready    { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.3); color: var(--green); }
+.m-sb-btn.danger { background: var(--live-bg); border-color: var(--live-bd); color: var(--red); }
+.m-sb-status.live { color: var(--red); }
+.m-logo       { color: var(--text); }
+.m-logo span  { color: var(--red); }
+.m-clock      { color: var(--blue-lt); }
+.m-pill       { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.3); color: var(--green); }
+.m-diag-item  { color: var(--dim); }
+.m-diag-item.ok { color: var(--green); }
+.m-role-lbl   { color: var(--dim); }
+.m-seq        { color: var(--dim); }
+.m-meta       { color: var(--dim); }
+.m-sb-label   { color: var(--dim); }
+.m-sb-time    { color: var(--blue-lt); }
+
+/* t4 terminal overrides */
+.t4 .m-logo span  { color: var(--blue-lt); }
+.t4 .m-badge.live { color: var(--blue-lt); border-color: var(--live-bd); }
+.t4 .m-btn.hold, .t4 .m-btn.end { color: var(--red); }
+.t4 .m-sb-status.live { color: var(--blue-lt); }
+.t4 .m-pill { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.4); }
+
+/* t3 ember overrides */
+.t3 .m-logo span { color: var(--amber); }
+.t3 .m-badge.live { color: var(--amber); }
+.t3 .m-sb-status.live { color: var(--amber); }
+.t3 .m-clock { color: var(--blue-lt); }
+.t3 .m-pill { background: rgba(132,204,22,.1); border-color: rgba(132,204,22,.3); color: #a3e635; }
+
+/* t6 graphite overrides */
+.t6 .m-rbtn.active { background: #e2e8f0; border-color: #e2e8f0; color: #111; }
+.t6 .m-badge.planned { color: #94a3b8; border-color: rgba(148,163,184,.2); background: rgba(148,163,184,.08); }
+.t6 .m-btn.ready { color: #4ade80; }
+.t6 .m-bc-btn { background: #e2e8f0; color: #111; }
+</style>
+</head>
+<body>
+
+<h1>CueDeck — Theme Options</h1>
+<p class="subtitle">Preview only — no changes made to the codebase</p>
+
+<div class="grid">
+
+  <!-- ══ THEME 1: CURRENT ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#60a5fa">Midnight Blue <span class="current-badge">CURRENT</span></div>
+    <div class="theme-desc">Blue-tinted dark • familiar • production-proven</div>
+    <div class="mock t1">
+      <div class="m-broadcast">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo">LE<span>O</span>D</div>
+        <div class="m-event">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#22c55e"></div><span style="color:#22c55e;font-size:9px">director</span>
+          <div class="m-dot" style="background:#3b82f6"></div><span style="color:#3b82f680;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock">14:30:37</div>
+        <div class="m-pill">live</div>
+      </div>
+      <div class="m-diag">
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#22c55e"></div>database ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#22c55e"></div>realtime ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#22c55e"></div>clock ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#22c55e"></div>edge functions ✓</div>
+        <span style="margin-left:auto;font-size:9px">sessions: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn active">director</div>
+        <div class="m-rbtn">stage</div>
+        <div class="m-rbtn">av</div>
+        <div class="m-rbtn">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">1</span><span class="m-title">Opening Ceremony</span><span class="m-badge ended">ENDED</span></div>
+            <div class="m-meta">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card live">
+            <div class="m-card-hdr"><span class="m-seq">2</span><span class="m-title">Coffee Break</span><span class="m-badge live">LIVE</span></div>
+            <div class="m-meta">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn hold">HOLD</div>
+              <div class="m-btn end">END SESSION</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">3</span><span class="m-title">Keynote: The Future of AI</span><span class="m-badge planned">PLANNED</span></div>
+            <div class="m-meta">Anna Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn ready">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label">ACTIVE SESSION</div>
+          <div class="m-sb-title">Coffee Break</div>
+          <div class="m-sb-status live">LIVE</div>
+          <div class="m-sb-time">19:54</div>
+          <div class="m-sb-btn danger">HOLD</div>
+          <div class="m-sb-btn danger">END SESSION</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl">BROADCAST</span>
+        <div class="m-bc-input">Message to all operators…</div>
+        <div class="m-bc-btn">SEND</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THEME 2: OBSIDIAN ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#818cf8">Obsidian</div>
+    <div class="theme-desc">Pure black • indigo accent • high-contrast premium</div>
+    <div class="mock t2">
+      <div class="m-broadcast" style="background:#6366f1;color:#fff">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo">LE<span>O</span>D</div>
+        <div class="m-event">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#10b981"></div><span style="color:#10b981;font-size:9px">director</span>
+          <div class="m-dot" style="background:#6366f180"></div><span style="color:#6366f180;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock" style="color:#818cf8">14:30:37</div>
+        <div class="m-pill" style="background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.35);color:#818cf8">live</div>
+      </div>
+      <div class="m-diag">
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#10b981"></div>database ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#10b981"></div>realtime ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#10b981"></div>clock ✓</div>
+        <div class="m-diag-item ok"><div class="m-diag-dot" style="background:#10b981"></div>edge functions ✓</div>
+        <span style="margin-left:auto;font-size:9px">sessions: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn" style="background:#6366f1;border-color:#6366f1;color:#fff">director</div>
+        <div class="m-rbtn">stage</div><div class="m-rbtn">av</div><div class="m-rbtn">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">1</span><span class="m-title">Opening Ceremony</span><span class="m-badge ended">ENDED</span></div>
+            <div class="m-meta">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card live">
+            <div class="m-card-hdr"><span class="m-seq">2</span><span class="m-title">Coffee Break</span><span class="m-badge live">LIVE</span></div>
+            <div class="m-meta">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn hold">HOLD</div>
+              <div class="m-btn end">END SESSION</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">3</span><span class="m-title">Keynote: The Future of AI</span><span class="m-badge planned" style="color:#818cf8;border-color:rgba(129,140,248,.25);background:rgba(129,140,248,.08)">PLANNED</span></div>
+            <div class="m-meta">Anna Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn ready">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label">ACTIVE SESSION</div>
+          <div class="m-sb-title">Coffee Break</div>
+          <div class="m-sb-status live">LIVE</div>
+          <div class="m-sb-time" style="color:#818cf8">19:54</div>
+          <div class="m-sb-btn danger">HOLD</div>
+          <div class="m-sb-btn danger">END SESSION</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl">BROADCAST</span>
+        <div class="m-bc-input">Message to all operators…</div>
+        <div class="m-bc-btn" style="background:#6366f1;color:#fff">SEND</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THEME 3: EMBER ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#fbbf24">Ember</div>
+    <div class="theme-desc">Warm dark • amber gold accent • broadcast studio feel</div>
+    <div class="mock t3">
+      <div class="m-broadcast" style="background:#f59e0b;color:#000">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo" style="color:#f5e6c8">LE<span style="color:#f59e0b">O</span>D</div>
+        <div class="m-event">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#84cc16"></div><span style="color:#84cc16;font-size:9px">director</span>
+          <div class="m-dot" style="background:#f59e0b80"></div><span style="color:#f59e0b80;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock" style="color:#fbbf24">14:30:37</div>
+        <div class="m-pill" style="background:rgba(132,204,22,.1);border-color:rgba(132,204,22,.3);color:#a3e635">live</div>
+      </div>
+      <div class="m-diag">
+        <div class="m-diag-item ok" style="color:#84cc16"><div class="m-diag-dot" style="background:#84cc16"></div>database ✓</div>
+        <div class="m-diag-item ok" style="color:#84cc16"><div class="m-diag-dot" style="background:#84cc16"></div>realtime ✓</div>
+        <div class="m-diag-item ok" style="color:#84cc16"><div class="m-diag-dot" style="background:#84cc16"></div>clock ✓</div>
+        <div class="m-diag-item ok" style="color:#84cc16"><div class="m-diag-dot" style="background:#84cc16"></div>edge functions ✓</div>
+        <span style="margin-left:auto;font-size:9px">sessions: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn" style="background:#f59e0b;border-color:#f59e0b;color:#000;font-weight:700">director</div>
+        <div class="m-rbtn">stage</div><div class="m-rbtn">av</div><div class="m-rbtn">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">1</span><span class="m-title">Opening Ceremony</span><span class="m-badge ended">ENDED</span></div>
+            <div class="m-meta">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card" style="background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)">
+            <div class="m-card-hdr"><span class="m-seq">2</span><span class="m-title">Coffee Break</span><span class="m-badge live" style="color:#ef4444">LIVE</span></div>
+            <div class="m-meta">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn hold">HOLD</div>
+              <div class="m-btn end">END SESSION</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">3</span><span class="m-title">Keynote: The Future of AI</span><span class="m-badge planned" style="color:#fbbf24;border-color:rgba(251,191,36,.25);background:rgba(251,191,36,.08)">PLANNED</span></div>
+            <div class="m-meta">Anna Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn" style="background:rgba(132,204,22,.1);border-color:rgba(132,204,22,.3);color:#a3e635">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label">ACTIVE SESSION</div>
+          <div class="m-sb-title">Coffee Break</div>
+          <div class="m-sb-status" style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:.08em">LIVE</div>
+          <div class="m-sb-time" style="color:#fbbf24">19:54</div>
+          <div class="m-sb-btn danger">HOLD</div>
+          <div class="m-sb-btn danger">END SESSION</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl">BROADCAST</span>
+        <div class="m-bc-input">Message to all operators…</div>
+        <div class="m-bc-btn" style="background:#f59e0b;color:#000;font-weight:800">SEND</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THEME 4: TERMINAL ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#4ade80">Terminal</div>
+    <div class="theme-desc">Ops room green • monochrome dark • mission-critical</div>
+    <div class="mock t4">
+      <div class="m-broadcast" style="background:#22c55e;color:#000">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo" style="color:#ccffd4;font-family:'JetBrains Mono',monospace">LE<span style="color:#4ade80">O</span>D</div>
+        <div class="m-event" style="font-family:'JetBrains Mono',monospace;font-size:9px">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#86efac"></div><span style="color:#86efac;font-size:9px">director</span>
+          <div class="m-dot" style="background:#22c55e80"></div><span style="color:#22c55e80;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock" style="color:#4ade80;font-family:'JetBrains Mono',monospace">14:30:37</div>
+        <div class="m-pill" style="background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.4);color:#4ade80">● LIVE</div>
+      </div>
+      <div class="m-diag" style="font-family:'JetBrains Mono',monospace">
+        <div class="m-diag-item" style="color:#22c55e"><div class="m-diag-dot" style="background:#22c55e"></div>db ✓</div>
+        <div class="m-diag-item" style="color:#22c55e"><div class="m-diag-dot" style="background:#22c55e"></div>rt ✓</div>
+        <div class="m-diag-item" style="color:#22c55e"><div class="m-diag-dot" style="background:#22c55e"></div>ck ✓</div>
+        <div class="m-diag-item" style="color:#22c55e"><div class="m-diag-dot" style="background:#22c55e"></div>ef ✓</div>
+        <span style="margin-left:auto;font-size:9px;color:#2d5e34">sess: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn" style="background:#22c55e;border-color:#22c55e;color:#000;font-family:'JetBrains Mono',monospace">director</div>
+        <div class="m-rbtn" style="font-family:'JetBrains Mono',monospace">stage</div>
+        <div class="m-rbtn" style="font-family:'JetBrains Mono',monospace">av</div>
+        <div class="m-rbtn" style="font-family:'JetBrains Mono',monospace">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">[1]</span><span class="m-title" style="font-family:'JetBrains Mono',monospace;font-size:10px">Opening Ceremony</span><span class="m-badge" style="color:#2d5e34;border-color:#2d5e3460;background:transparent">ENDED</span></div>
+            <div class="m-meta" style="font-family:'JetBrains Mono',monospace">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3)">
+            <div class="m-card-hdr"><span class="m-seq">[2]</span><span class="m-title" style="font-family:'JetBrains Mono',monospace;font-size:10px">Coffee Break</span><span class="m-badge" style="color:#4ade80;border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.08)">● LIVE</span></div>
+            <div class="m-meta" style="font-family:'JetBrains Mono',monospace">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">HOLD</div>
+              <div class="m-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">END</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">[3]</span><span class="m-title" style="font-family:'JetBrains Mono',monospace;font-size:10px">Keynote: Future of AI</span><span class="m-badge" style="color:#22c55e;border-color:rgba(34,197,94,.25);background:rgba(34,197,94,.05)">PLANNED</span></div>
+            <div class="m-meta" style="font-family:'JetBrains Mono',monospace">A. Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn" style="color:#86efac;border-color:rgba(134,239,172,.3);background:rgba(134,239,172,.08)">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label" style="font-family:'JetBrains Mono',monospace">SYS STATUS</div>
+          <div class="m-sb-title" style="font-family:'JetBrains Mono',monospace;font-size:10px">Coffee Break</div>
+          <div class="m-sb-status" style="color:#4ade80;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace">● LIVE</div>
+          <div class="m-sb-time" style="color:#4ade80;font-family:'JetBrains Mono',monospace">19:54</div>
+          <div class="m-sb-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08);font-family:'JetBrains Mono',monospace">HOLD</div>
+          <div class="m-sb-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08);font-family:'JetBrains Mono',monospace">END</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl" style="font-family:'JetBrains Mono',monospace">BCAST</span>
+        <div class="m-bc-input" style="font-family:'JetBrains Mono',monospace">_ message to all operators</div>
+        <div class="m-bc-btn" style="background:#22c55e;color:#000;font-family:'JetBrains Mono',monospace;font-weight:800">SEND</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THEME 5: SLATE PRO ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#7dd3fc">Slate Pro</div>
+    <div class="theme-desc">Navy blue • sky accent • premium SaaS product feel</div>
+    <div class="mock t5">
+      <div class="m-broadcast" style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);color:#fff">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo" style="color:#e2e8f0">LE<span style="color:#38bdf8">O</span>D</div>
+        <div class="m-event">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#34d399"></div><span style="color:#34d399;font-size:9px">director</span>
+          <div class="m-dot" style="background:#38bdf880"></div><span style="color:#38bdf880;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock" style="color:#7dd3fc">14:30:37</div>
+        <div class="m-pill" style="background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.35);color:#34d399">live</div>
+      </div>
+      <div class="m-diag">
+        <div class="m-diag-item" style="color:#34d399"><div class="m-diag-dot" style="background:#34d399"></div>database ✓</div>
+        <div class="m-diag-item" style="color:#34d399"><div class="m-diag-dot" style="background:#34d399"></div>realtime ✓</div>
+        <div class="m-diag-item" style="color:#34d399"><div class="m-diag-dot" style="background:#34d399"></div>clock ✓</div>
+        <div class="m-diag-item" style="color:#34d399"><div class="m-diag-dot" style="background:#34d399"></div>edge functions ✓</div>
+        <span style="margin-left:auto;font-size:9px">sessions: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn" style="background:#38bdf8;border-color:#38bdf8;color:#0b0f1a;font-weight:700">director</div>
+        <div class="m-rbtn">stage</div><div class="m-rbtn">av</div><div class="m-rbtn">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">1</span><span class="m-title">Opening Ceremony</span><span class="m-badge ended">ENDED</span></div>
+            <div class="m-meta">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card" style="background:rgba(251,113,133,.08);border-color:rgba(251,113,133,.28)">
+            <div class="m-card-hdr"><span class="m-seq">2</span><span class="m-title">Coffee Break</span><span class="m-badge" style="color:#fb7185;border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.1)">LIVE</span></div>
+            <div class="m-meta">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn" style="color:#fb7185;border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.08)">HOLD</div>
+              <div class="m-btn" style="color:#fb7185;border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.08)">END SESSION</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">3</span><span class="m-title">Keynote: The Future of AI</span><span class="m-badge" style="color:#7dd3fc;border-color:rgba(125,211,252,.25);background:rgba(125,211,252,.08)">PLANNED</span></div>
+            <div class="m-meta">Anna Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn" style="color:#34d399;border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.08)">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label">ACTIVE SESSION</div>
+          <div class="m-sb-title">Coffee Break</div>
+          <div class="m-sb-status" style="color:#fb7185;font-size:9px;font-weight:700;letter-spacing:.08em">LIVE</div>
+          <div class="m-sb-time" style="color:#7dd3fc">19:54</div>
+          <div class="m-sb-btn" style="color:#fb7185;border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.08)">HOLD</div>
+          <div class="m-sb-btn" style="color:#fb7185;border-color:rgba(251,113,133,.3);background:rgba(251,113,133,.08)">END SESSION</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl">BROADCAST</span>
+        <div class="m-bc-input">Message to all operators…</div>
+        <div class="m-bc-btn" style="background:#38bdf8;color:#0b0f1a;font-weight:800">SEND</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THEME 6: GRAPHITE ══ -->
+  <div class="theme-wrap">
+    <div class="theme-label" style="color:#94a3b8">Graphite</div>
+    <div class="theme-desc">Neutral dark • monochrome silver • editorial precision</div>
+    <div class="mock t6">
+      <div class="m-broadcast" style="background:#e2e8f0;color:#111">📢 ☕ Coffee break starting now</div>
+      <div class="m-header">
+        <div class="m-logo" style="color:#efefef">LE<span style="color:#94a3b8">O</span>D</div>
+        <div class="m-event">AVE Test Event · 2026-03-02</div>
+        <div class="m-presence">
+          <div class="m-dot" style="background:#4ade80"></div><span style="color:#4ade80;font-size:9px">director</span>
+          <div class="m-dot" style="background:#e2e8f080"></div><span style="color:#e2e8f080;font-size:9px">stage</span>
+        </div>
+        <div class="m-clock" style="color:#e2e8f0">14:30:37</div>
+        <div class="m-pill" style="background:rgba(74,222,128,.1);border-color:rgba(74,222,128,.3);color:#4ade80">live</div>
+      </div>
+      <div class="m-diag">
+        <div class="m-diag-item" style="color:#4ade80"><div class="m-diag-dot" style="background:#4ade80"></div>database ✓</div>
+        <div class="m-diag-item" style="color:#4ade80"><div class="m-diag-dot" style="background:#4ade80"></div>realtime ✓</div>
+        <div class="m-diag-item" style="color:#4ade80"><div class="m-diag-dot" style="background:#4ade80"></div>clock ✓</div>
+        <div class="m-diag-item" style="color:#4ade80"><div class="m-diag-dot" style="background:#4ade80"></div>edge functions ✓</div>
+        <span style="margin-left:auto;font-size:9px">sessions: 7</span>
+      </div>
+      <div class="m-rolebar">
+        <span class="m-role-lbl">ROLE</span>
+        <div class="m-rbtn" style="background:#e2e8f0;border-color:#e2e8f0;color:#111;font-weight:700">director</div>
+        <div class="m-rbtn">stage</div><div class="m-rbtn">av</div><div class="m-rbtn">signage</div>
+      </div>
+      <div class="m-body">
+        <div class="m-sessions">
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">1</span><span class="m-title">Opening Ceremony</span><span class="m-badge ended">ENDED</span></div>
+            <div class="m-meta">Sherif Saleh · Main Stage</div>
+          </div>
+          <div class="m-card" style="background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25)">
+            <div class="m-card-hdr"><span class="m-seq">2</span><span class="m-title">Coffee Break</span><span class="m-badge" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.1)">LIVE</span></div>
+            <div class="m-meta">Foyer · elapsed 19:54</div>
+            <div class="m-actions">
+              <div class="m-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">HOLD</div>
+              <div class="m-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">END SESSION</div>
+            </div>
+          </div>
+          <div class="m-card">
+            <div class="m-card-hdr"><span class="m-seq">3</span><span class="m-title">Keynote: The Future of AI</span><span class="m-badge" style="color:#94a3b8;border-color:rgba(148,163,184,.2);background:rgba(148,163,184,.07)">PLANNED</span></div>
+            <div class="m-meta">Anna Kowalska · Main Stage</div>
+            <div class="m-actions"><div class="m-btn" style="color:#4ade80;border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.08)">SET READY</div></div>
+          </div>
+        </div>
+        <div class="m-sidebar">
+          <div class="m-sb-label">ACTIVE SESSION</div>
+          <div class="m-sb-title">Coffee Break</div>
+          <div class="m-sb-status" style="color:#f87171;font-size:9px;font-weight:700;letter-spacing:.08em">LIVE</div>
+          <div class="m-sb-time" style="color:#e2e8f0">19:54</div>
+          <div class="m-sb-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">HOLD</div>
+          <div class="m-sb-btn" style="color:#f87171;border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.08)">END SESSION</div>
+        </div>
+      </div>
+      <div class="m-bc">
+        <span class="m-bc-lbl">BROADCAST</span>
+        <div class="m-bc-input">Message to all operators…</div>
+        <div class="m-bc-btn" style="background:#e2e8f0;color:#111;font-weight:800">SEND</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

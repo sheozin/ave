@@ -1121,18 +1121,18 @@
       <div style="display:flex;flex-direction:column;gap:6px">
         <button class="sb-action-btn btn-red"
           title="Manually trigger an incident advisory modal"
-          onclick="ensureAgentsInited();LEODIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test — check signal path and connections',timestamp:new Date().toLocaleTimeString()})">
+          onclick="ensureAgentsInited();CueDeckIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test — check signal path and connections',timestamp:new Date().toLocaleTimeString()})">
           <span class="sb-btn-icon">⚠</span> Test Incident Alert
         </button>
         <button class="sb-action-btn btn-blue"
           title="Fire a demo pre-cue modal (as if 8 min before next session)"
-          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(Date.now()+8*60000).toISOString(),room:'Main Stage'};LEODCueEngine.triggerCue(LEODCueEngine.adaptLEODSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(Date.now()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(Date.now()+8*60000));})()">
+          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(Date.now()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(Date.now()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(Date.now()+8*60000));})()">
           <span class="sb-btn-icon">⏱</span> Test Cue Alert
         </button>
         <button class="sb-action-btn btn-green"
           id="ai-report-btn"
           title="Generate AI post-event report (auto-loads all session + incident data)"
-          onclick="ensureAgentsInited();LEODReportAgent.triggerFromLEOD()">
+          onclick="ensureAgentsInited();CueDeckReportAgent.triggerFromCueDeck()">
           <span class="sb-btn-icon">📋</span> Generate Report
         </button>
       </div>
@@ -1405,7 +1405,7 @@ const DRIFT_WARN_MS    = 500;
 // AI Agents — Anthropic API key (paste 'sk-ant-...' to enable live AI responses)
 // Without a key all 3 agents run in fallback mode — UI still fully works.
 const ANTHROPIC_API_KEY = '';       // ← operators: set before each event
-window.LEOD_API_KEY     = ANTHROPIC_API_KEY;
+window.CUEDECK_API_KEY     = ANTHROPIC_API_KEY;
 
 // ═══════════════════════════════════════════════════
 // STATE
@@ -1556,7 +1556,7 @@ async function loadSnapshot(eventId) {
   // PR-008: cleanup commands older than 24h (best-effort, non-blocking)
   sb.rpc('cleanup_old_commands').then(() => {}).catch(() => {});
   // AI Agents: refresh Cue Engine schedule whenever sessions are reloaded
-  if (typeof LEODCueEngine !== 'undefined') LEODCueEngine.reinit(S.sessions);
+  if (typeof CueDeckCueEngine !== 'undefined') CueDeckCueEngine.reinit(S.sessions);
 }
 
 async function loadBroadcast(eventId) {
@@ -2763,7 +2763,7 @@ function renderSignagePanel() {
   <div class="sp-section" style="color:var(--dim);font-size:11px;line-height:1.8">
     <span class="sp-section-title" style="display:block;margin-bottom:6px">DISPLAY URL FORMAT</span>
     Displays connect via:<br>
-    <code>LEOD-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
+    <code>cuedeck-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
     Open in any browser — supports landscape &amp; portrait. Heartbeat every 30s.
   </div>`;
 }
@@ -2787,7 +2787,7 @@ function buildDisplayUrl(d) {
   // Local dev (python http.server): keep .html so the file resolves directly
   const isLocal = loc.hostname === '127.0.0.1' || loc.hostname === 'localhost';
   const base = isLocal
-    ? loc.href.replace(/LEOD-console(\.html)?.*$/, 'LEOD-display.html')
+    ? loc.href.replace(/cuedeck-console(\.html)?.*$/, 'cuedeck-display.html')
     : loc.origin + '/display';
   return base.split('?')[0].split('#')[0] + '#id=' + encodeURIComponent(d.id);
 }
@@ -4031,7 +4031,7 @@ setInterval(() => {
   _lastTick = now;
   // Sleep/wake detection
   if (gap > 5000 && S.event) {
-    console.warn(`LEOD: sleep/wake detected (${Math.round(gap)}ms gap)`);
+    console.warn(`CueDeck: sleep/wake detected (${Math.round(gap)}ms gap)`);
     syncClock().then(() => {
       if (S.ctrlChan?.state !== 'joined') doReconnect();
       else loadSnapshot(S.event.id);
@@ -4468,26 +4468,26 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     checkEF();
 
     // 10. AI Agents — init once per session (guard prevents duplicate modal injection)
-    if (typeof LEODIncidentAdvisor !== 'undefined' && !window._leodAgentsInit) {
-      window._leodAgentsInit = true;
-      LEODIncidentAdvisor.init({
+    if (typeof CueDeckIncidentAdvisor !== 'undefined' && !window._cueDeckAgentsInit) {
+      window._cueDeckAgentsInit = true;
+      CueDeckIncidentAdvisor.init({
         supabaseClient: sb,
         getEventId:     () => S.event?.id,
         getRole:        () => S.role,
         onEscalate:     (inc) => {
-          // Relay escalation as a LEOD broadcast so all operators see it
+          // Relay escalation as a CueDeck broadcast so all operators see it
           pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null);
         }
       });
-      LEODReportAgent.init({
+      CueDeckReportAgent.init({
         supabaseClient: sb,
         getEventId:     () => S.event?.id,
         getEvent:       () => S.event,
         getSessions:    () => S.sessions
       });
-      LEODCueEngine.init([], {
-        correctedNow,                  // LEOD 3-sample RTT clock sync
-        leodSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
+      CueDeckCueEngine.init([], {
+        correctedNow,                  // CueDeck 3-sample RTT clock sync
+        cueDeckSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
         alertMinutesBefore: 8
       });
     }
@@ -4504,7 +4504,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
   } catch (e) {
     if (e.message === 'pending') return; // handled by showPendingScreen()
     setStep(`Boot error: ${e.message}`);
-    console.error('LEOD boot failed:', e);
+    console.error('CueDeck boot failed:', e);
     setTimeout(() => { overlay.style.display = 'none'; }, 3000);
   }
 }
@@ -4545,21 +4545,21 @@ function saveAgentKey() {
     setTimeout(() => input.style.borderColor = '', 1200);
     return;
   }
-  localStorage.setItem('leod_agent_key', key);
-  window.LEOD_API_KEY = key;
+  localStorage.setItem('cuedeck_agent_key', key);
+  window.CUEDECK_API_KEY = key;
   _setKeyUI(true);
 }
 
 function clearAgentKey() {
-  localStorage.removeItem('leod_agent_key');
-  window.LEOD_API_KEY = '';
+  localStorage.removeItem('cuedeck_agent_key');
+  window.CUEDECK_API_KEY = '';
   _setKeyUI(false);
 }
 
 function loadAgentKey() {
-  const saved = localStorage.getItem('leod_agent_key');
+  const saved = localStorage.getItem('cuedeck_agent_key');
   if (saved) {
-    window.LEOD_API_KEY = saved;
+    window.CUEDECK_API_KEY = saved;
     _setKeyUI(true);
   } else {
     _setKeyUI(false);
@@ -4568,24 +4568,24 @@ function loadAgentKey() {
 
 // Called before every agent button — ensures init() ran even if boot() missed it
 function ensureAgentsInited() {
-  if (window._leodAgentsInit) return;
-  if (typeof LEODIncidentAdvisor === 'undefined') return;
-  window._leodAgentsInit = true;
-  LEODIncidentAdvisor.init({
+  if (window._cueDeckAgentsInit) return;
+  if (typeof CueDeckIncidentAdvisor === 'undefined') return;
+  window._cueDeckAgentsInit = true;
+  CueDeckIncidentAdvisor.init({
     supabaseClient: typeof sb !== 'undefined' ? sb : null,
     getEventId:     () => S?.event?.id || null,
     getRole:        () => S?.role || 'director',
     onEscalate:     (inc) => { try { pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null); } catch(e){} }
   });
-  LEODReportAgent.init({
+  CueDeckReportAgent.init({
     supabaseClient: typeof sb !== 'undefined' ? sb : null,
     getEventId:     () => S?.event?.id || null,
     getEvent:       () => S?.event || null,
     getSessions:    () => S?.sessions || []
   });
-  LEODCueEngine.init([], {
+  CueDeckCueEngine.init([], {
     correctedNow:        typeof correctedNow === 'function' ? correctedNow : () => Date.now(),
-    leodSessions:        S?.sessions || [],
+    cueDeckSessions:        S?.sessions || [],
     alertMinutesBefore: 8
   });
 }
@@ -4597,8 +4597,8 @@ function ensureAgentsInited() {
      Set ANTHROPIC_API_KEY (see CONFIG section above) to enable live AI.
      Without a key all agents run in fallback mode — UI still fully works.
 ═══════════════════════════════════════════════════════════════ -->
-<script src="leod-agent-1-incident-advisor.js"></script>
-<script src="leod-agent-2-cue-engine.js"></script>
-<script src="leod-agent-3-report-generator.js"></script>
+<script src="cuedeck-agent-1-incident-advisor.js"></script>
+<script src="cuedeck-agent-2-cue-engine.js"></script>
+<script src="cuedeck-agent-3-report-generator.js"></script>
 </body>
 </html>
