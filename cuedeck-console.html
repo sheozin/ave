@@ -856,11 +856,17 @@
     .ck-bar { height:100%;background:var(--green);transition:width .3s;width:0; }
 
     /* ── ONBOARDING: TOOLTIPS ── */
-    .ob-tip { position:fixed;z-index:310;max-width:260px;background:#1d4ed8;color:#fff;border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:opacity .2s; }
-    .ob-tip-text { margin-bottom:10px; }
+    .ob-tip { position:fixed;z-index:310;max-width:280px;background:#1d4ed8;color:#fff;border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;transition:opacity .2s;pointer-events:none; }
+    .ob-tip.ob-visible { opacity:1;pointer-events:auto; }
+    .ob-tip-text { margin-bottom:6px; }
+    .ob-tip-step { font-size:10px;color:rgba(255,255,255,.6);margin-bottom:10px; }
     .ob-tip-btn { background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s; }
     .ob-tip-btn:hover { background:rgba(255,255,255,.35); }
     .ob-tip-arrow { position:absolute;width:12px;height:12px;background:#1d4ed8;transform:rotate(45deg); }
+    @media (max-width: 600px) {
+      .ob-tip { max-width:calc(100vw - 24px);left:12px!important;right:12px;border-radius:10px; }
+      .ob-tip-arrow { display:none; }
+    }
 
     /* ── ONBOARDING: WIZARD ── */
     .wiz-steps { display:flex;align-items:center;gap:0;justify-content:center;margin-bottom:16px; }
@@ -1093,6 +1099,199 @@
     @media (prefers-reduced-motion: reduce) {
       .toast, .toast.toast-out { animation: none; }
     }
+
+    /* ── RESPONSIVE ── */
+
+    /* --- Hamburger button (hidden on desktop) --- */
+    #hamburger-btn {
+      display: none; background: none; border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 6px; padding: 4px 8px;
+      font-size: 16px; line-height: 1; cursor: pointer; transition: all .15s;
+    }
+    #hamburger-btn:hover { border-color: var(--blue); color: var(--text-primary); }
+
+    /* --- Hamburger dropdown menu --- */
+    #mobile-menu {
+      display: none; position: absolute; top: 52px; right: 12px;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: 8px; padding: 6px; min-width: 160px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 210;
+      flex-direction: column; gap: 2px;
+    }
+    #mobile-menu.menu-open { display: flex; }
+    #mobile-menu button {
+      width: 100%; background: none; border: none; color: var(--text-secondary);
+      font-size: 12px; font-family: inherit; padding: 8px 12px;
+      border-radius: 6px; cursor: pointer; text-align: left; transition: all .12s;
+    }
+    #mobile-menu button:hover { background: var(--hover); color: var(--text-primary); }
+
+    /* --- Sidebar toggle tab --- */
+    #sidebar-toggle {
+      display: none; position: fixed; right: 0; top: 50%;
+      transform: translateY(-50%); z-index: 201;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-right: none; border-radius: 6px 0 0 6px;
+      color: var(--text-muted); padding: 12px 5px;
+      font-size: 14px; line-height: 1; cursor: pointer;
+      transition: all .15s; writing-mode: vertical-lr;
+    }
+    #sidebar-toggle:hover { color: var(--text-primary); background: var(--hover); }
+
+    /* --- Sidebar backdrop overlay --- */
+    #sidebar-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 199;
+      background: rgba(0,0,0,.5); backdrop-filter: blur(2px);
+    }
+    #sidebar-backdrop.visible { display: block; }
+
+    /* --- Filter toggle button (hidden on desktop) --- */
+    #filter-toggle-btn {
+      display: none; background: none; border: 1px solid var(--border);
+      color: var(--text-muted); border-radius: 6px; padding: 4px 8px;
+      font-size: 12px; cursor: pointer; transition: all .15s;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    #filter-toggle-btn:hover { border-color: var(--blue); color: var(--text-primary); }
+
+    /* ── TABLET: 768px – 1279px ─────────────────────────────────── */
+    @media screen and (max-width: 1279px) {
+      /* HEADER */
+      #header { padding: 0 12px; gap: 10px; }
+      #hdr-offset { display: none; }
+      #hdr-clock { font-size: 20px; min-width: 80px; }
+
+      /* SIDEBAR — hidden by default, slide in from right */
+      #sidebar {
+        position: fixed; right: 0; top: 0; bottom: 0;
+        z-index: 200; width: 280px;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        will-change: transform;
+        box-shadow: -4px 0 24px rgba(0,0,0,.4);
+      }
+      #sidebar.sidebar-open { transform: translateX(0); }
+      #sidebar-toggle { display: block; }
+
+      /* ROLE BAR */
+      #role-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      #role-bar::-webkit-scrollbar { display: none; }
+      #role-bar label { display: none; }
+      .rbtn { padding: 0 10px; flex-shrink: 0; }
+
+      /* BROADCAST BAR */
+      #bc-bar > label { display: none; }
+      .bc-presets { display: none; }
+
+      /* FILTER BAR */
+      #filter-bar { flex-wrap: wrap; }
+      #fb-search { max-width: none; }
+
+      /* DIAG BAR */
+      .di span { font-size: 0; }
+      .di { padding: 3px 5px; }
+      #diag-bar { padding: 4px 12px; gap: 10px; }
+    }
+
+    /* ── MOBILE: <768px ─────────────────────────────────────────── */
+    @media screen and (max-width: 767px) {
+      /* HEADER */
+      #header { padding: 0 10px; gap: 8px; }
+      #hdr-offset { display: none; }
+      #hdr-clock { font-size: 18px; min-width: 68px; }
+      #event-name { display: none; }
+      #plan-badge { display: none !important; }
+      #presence-bar { display: none; }
+      /* Logo: show icon only — clip container to icon width */
+      .logo { width: 28px; overflow: hidden; flex-shrink: 0; }
+      .logo svg { height: 26px; width: auto; }
+      /* Hide header buttons — moved to hamburger menu */
+      #billing-btn { display: none !important; }
+      #users-btn { display: none !important; }
+      #logout-btn { display: none !important; }
+      #auto-start-btn { display: none !important; }
+      /* Show hamburger */
+      #hamburger-btn { display: flex; align-items: center; }
+      /* Connection pill — compact */
+      #conn-lbl { display: none; }
+      #conn-pill { padding: 4px 6px; }
+
+      /* SIDEBAR — full-width minus 60px */
+      #sidebar {
+        position: fixed; right: 0; top: 0; bottom: 0;
+        z-index: 200; width: calc(100vw - 60px); max-width: 320px;
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        will-change: transform;
+        box-shadow: -4px 0 24px rgba(0,0,0,.5);
+      }
+      #sidebar.sidebar-open { transform: translateX(0); }
+      #sidebar-toggle { display: block; }
+
+      /* ROLE BAR */
+      #role-bar { padding: 5px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      #role-bar::-webkit-scrollbar { display: none; }
+      #role-bar label { display: none; }
+      .rbtn { padding: 0 8px; height: 28px; font-size: 10px; flex-shrink: 0; }
+      #ev-select-wrap { gap: 4px; }
+      #ev-select-wrap button, #ev-select-wrap select { font-size: 10px; }
+
+      /* FILTER BAR — search full width, filters behind toggle */
+      #filter-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+      #fb-search { flex: 1 1 100%; max-width: none; order: -2; }
+      #filter-toggle-btn { display: flex; order: -1; }
+      #fb-status, #fb-room, #fb-clear, #fb-view { display: none; }
+      #filter-bar.filters-open #fb-status,
+      #filter-bar.filters-open #fb-room,
+      #filter-bar.filters-open #fb-clear,
+      #filter-bar.filters-open #fb-view { display: block; }
+      #fb-status, #fb-room { flex: 1 1 calc(50% - 4px); }
+
+      /* SESSION CARD TIMES — stack vertically */
+      .sc-times { flex-direction: column; gap: 6px; padding: 7px 12px; }
+      .sc-times .tc { flex-direction: row; gap: 6px; align-items: center; }
+      .sc-times .delay-tag { margin-left: 0; align-self: flex-start; }
+
+      /* SESSION CARDS — tighter padding */
+      .sc-top { padding: 10px 12px 6px; }
+      .sc-meta { padding: 0 12px 6px; }
+      .sc-actions { padding: 6px 12px; }
+
+      /* BROADCAST BAR — wrap into 2 rows */
+      #bc-bar { flex-wrap: wrap; padding: 8px 10px; gap: 6px; }
+      #bc-bar > label { display: none; }
+      .bc-presets { display: none; }
+      #bc-input { flex: 1 1 100%; order: -1; height: 34px; }
+      .bc-char { display: none; }
+      #bc-pri { height: 34px; }
+
+      /* DIAG BAR — hide on mobile */
+      #diag-bar { display: none; }
+
+      /* MODALS — full-width friendly */
+      .ev-modal-card { min-width: 0; max-width: calc(100vw - 24px); max-height: 90vh; overflow-y: auto; }
+      .te-plans { grid-template-columns: 1fr; }
+      .bm-plans { grid-template-columns: 1fr; }
+
+      /* DELAY STRIP */
+      #delay-strip { flex-wrap: wrap; padding: 8px 10px; font-size: 10px; gap: 6px; }
+
+      /* SESSIONS COLUMN */
+      #sessions-col { padding: 10px 8px; }
+
+      /* SIGNAGE GRID */
+      .sp-grid { grid-template-columns: 1fr; }
+      .sp-section { padding: 12px; }
+    }
+
+    /* ── TOUCH TARGETS ─────────────────────────────────────────── */
+    @media (pointer: coarse) {
+      .abtn { min-height: 44px; }
+      .rbtn { min-height: 36px; }
+      button, select, input { min-height: 36px; }
+      button { touch-action: manipulation; }
+      .sc-mgmt-btn { padding: 4px 8px; font-size: 14px; }
+    }
   </style>
 </head>
 <body>
@@ -1230,6 +1429,13 @@
     Operators <span id="users-badge"></span>
   </button>
   <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
+  <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
+  <div id="mobile-menu">
+    <button onclick="openBillingModal();toggleHamburger()">Billing</button>
+    <button onclick="openUsersModal();toggleHamburger()">Operators</button>
+    <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
+    <button onclick="doLogout()">Sign out</button>
+  </div>
 </div>
 <input type="file" id="csv-import-input" accept=".csv,text/csv">
 
@@ -1256,6 +1462,10 @@
 
 <!-- FILTER BAR -->
 <div id="filter-bar"><!-- populated by buildFilterBar() --></div>
+
+<!-- SIDEBAR TOGGLE + BACKDROP -->
+<button id="sidebar-toggle" onclick="toggleSidebar()">&#9664;</button>
+<div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
 <!-- MAIN -->
 <div id="main">
@@ -3862,21 +4072,22 @@ function buildFilterBar() {
   const statuses = ['PLANNED','READY','CALLING','LIVE','HOLD','ENDED','CANCELLED'];
   const stOpts = statuses.map(st =>
     `<option value="${st}" ${F.status===st?'selected':''}>${st}</option>`).join('');
-  bar.innerHTML = `
-    <input  id="fb-search" type="search" placeholder="search title / speaker…"
-            value="${esc(F.text)}" oninput="onFilterInput(event)">
-    <select id="fb-status" onchange="onFilterChange()">
-      <option value="" ${!F.status?'selected':''}>All statuses</option>${stOpts}
-    </select>
-    <select id="fb-room" onchange="onFilterChange()">
-      <option value="" ${!F.room?'selected':''}>All rooms</option>${roomOpts}
-    </select>
-    <button id="fb-clear" class="${isFilterActive()?'visible':''}" onclick="clearFilters()">✕ clear</button>
-    <span   id="fb-count"></span>
-    <button id="fb-view" class="abtn btn-grey" title="Toggle view mode" onclick="toggleViewMode()"
-            style="margin-left:auto;padding:3px 9px;font-size:10px">
-      ${S.viewMode === 'timeline' ? '☰ List' : '⏱ Timeline'}
-    </button>`;
+  bar.innerHTML =
+    '<input id="fb-search" type="search" placeholder="search title / speaker\u2026"' +
+    ' value="' + esc(F.text) + '" oninput="onFilterInput(event)">' +
+    '<button id="filter-toggle-btn" onclick="toggleFilters()">\u25BE Filters</button>' +
+    '<select id="fb-status" onchange="onFilterChange()">' +
+    '<option value="' + (!F.status?'" selected':'"') + '>All statuses</option>' + stOpts +
+    '</select>' +
+    '<select id="fb-room" onchange="onFilterChange()">' +
+    '<option value="' + (!F.room?'" selected':'"') + '>All rooms</option>' + roomOpts +
+    '</select>' +
+    '<button id="fb-clear" class="' + (isFilterActive()?'visible':'') + '" onclick="clearFilters()">\u2715 clear</button>' +
+    '<span id="fb-count"></span>' +
+    '<button id="fb-view" class="abtn btn-grey" title="Toggle view mode" onclick="toggleViewMode()"' +
+    ' style="margin-left:auto;padding:3px 9px;font-size:10px">' +
+    (S.viewMode === 'timeline' ? '\u2630 List' : '\u23F1 Timeline') +
+    '</button>';
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
@@ -5054,24 +5265,38 @@ function markDisplayLaunched() {
 // ═══════════════════════════════════════════════════
 const ROLE_TIPS = {
   director: [
-    { target: '#ev-select-wrap button:last-child', text: 'Create an event here, then add sessions to build your run of show.' },
-    { target: '#users-btn', text: 'Invite operators and assign roles from the Operators panel.' },
+    { target: '#ev-select-wrap',   text: 'This is your event selector. Create events and switch between them from here.' },
+    { target: '#sessions-list',    text: 'Session cards appear here. Click + Add Session to build your run of show.' },
+    { target: '#users-btn',        text: 'Invite operators and assign roles (stage, AV, signage) from the Operators panel.' },
+    { target: '#bc-bar',           text: 'Send broadcast messages to all connected operators instantly — pick a priority and hit Send.' },
+    { target: '#filter-bar',       text: 'Filter sessions by title, status, or room. Toggle the Timeline view for a time-based grid.' },
   ],
   stage: [
-    { target: '.sc', text: 'Use the action buttons on each session to ARM, CALL, and GO LIVE when the speaker is ready.' },
+    { target: '#sessions-list',    text: 'Each card shows a session. Use the action buttons in the sidebar to ARM, CALL, and GO LIVE.' },
+    { target: '#sidebar',          text: 'Select a session to see its details and actions here — including the Stage Monitor for fullscreen confidence display.' },
+    { target: '#filter-bar',       text: 'Filter by room or status to focus on your stage.' },
   ],
   av: [
-    { target: '.sc', text: 'You can HOLD a session if AV needs attention — everyone sees the status change instantly.' },
+    { target: '#sessions-list',    text: 'Monitor sessions from here. You can HOLD any session if AV needs attention — everyone sees it instantly.' },
+    { target: '#sidebar',          text: 'Select a session to see technical details and action buttons.' },
+  ],
+  interp: [
+    { target: '#sessions-list',    text: 'Your sessions appear here with scheduled times, rooms, and current status — keep track of upcoming interpretation slots.' },
+    { target: '#filter-bar',       text: 'Filter by room to see only the sessions assigned to your booth.' },
+  ],
+  reg: [
+    { target: '#sessions-list',    text: 'Track session status here — see which sessions are live, upcoming, or ended to guide attendees.' },
+    { target: '#filter-bar',       text: 'Search by speaker name or title to quickly find what attendees are asking about.' },
   ],
   signage: [
-    { target: '#sessions-list', text: 'Register displays here, choose content modes, and launch them on any browser.' },
+    { target: '#sessions-list',    text: 'Register displays here: give each screen a name, pick a content mode (schedule, sponsors, room), and launch.' },
+    { target: '#sidebar',          text: 'Select a display to configure its content mode, scroll style, and sequence.' },
   ],
-  interp: [],
-  reg: [],
 };
 
 let _tipQueue = [];
 let _tipIdx = 0;
+let _tipResizeHandler = null;
 
 function showRoleTips() {
   const uid = S.user?.id || 'anon';
@@ -5082,38 +5307,133 @@ function showRoleTips() {
   if (!roleTips.length) { localStorage.setItem(key, '1'); return; }
   _tipQueue = roleTips.filter(t => document.querySelector(t.target));
   _tipIdx = 0;
-  if (!_tipQueue.length) return; // targets not in DOM yet; retry next boot
+  if (!_tipQueue.length) return;
+  // Bind resize handler for repositioning
+  if (_tipResizeHandler) window.removeEventListener('resize', _tipResizeHandler);
+  _tipResizeHandler = () => { if (_tipIdx < _tipQueue.length) _positionTip(_tipIdx); };
+  window.addEventListener('resize', _tipResizeHandler);
   showTipAt(_tipIdx);
 }
 
 function showTipAt(idx) {
+  const tipEl = document.getElementById('ob-tip');
   if (idx >= _tipQueue.length) {
     const uid = S.user?.id || 'anon';
     localStorage.setItem('cuedeck_tips_' + uid + '_' + S.role, '1');
-    document.getElementById('ob-tip').style.display = 'none';
+    tipEl.classList.remove('ob-visible');
+    setTimeout(() => { tipEl.style.display = 'none'; }, 200);
+    if (_tipResizeHandler) { window.removeEventListener('resize', _tipResizeHandler); _tipResizeHandler = null; }
     return;
   }
   const tip = _tipQueue[idx];
   const el = document.querySelector(tip.target);
-  if (!el) { showTipAt(idx + 1); return; }
-  const rect = el.getBoundingClientRect();
-  const tipEl = document.getElementById('ob-tip');
+  if (!el) { _tipIdx = idx + 1; showTipAt(_tipIdx); return; }
+  // Update content
   const textEl = document.getElementById('ob-tip-text');
-  const arrow = document.getElementById('ob-tip-arrow');
+  const stepEl = document.getElementById('ob-tip-step');
   textEl.textContent = tip.text;
+  stepEl.textContent = (idx + 1) + ' of ' + _tipQueue.length;
   tipEl.style.display = '';
-  // Position below target
-  const top = Math.min(rect.bottom + 12, window.innerHeight - 120);
-  const left = Math.max(10, Math.min(rect.left, window.innerWidth - 280));
+  // Brief delay so display:'' takes effect before measuring
+  requestAnimationFrame(() => {
+    _positionTip(idx);
+    tipEl.classList.add('ob-visible');
+  });
+}
+
+function _positionTip(idx) {
+  if (idx >= _tipQueue.length) return;
+  const tip = _tipQueue[idx];
+  const el = document.querySelector(tip.target);
+  if (!el) return;
+  const tipEl = document.getElementById('ob-tip');
+  const arrow = document.getElementById('ob-tip-arrow');
+  const rect = el.getBoundingClientRect();
+  const tipRect = tipEl.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const tipW = tipRect.width || 280;
+  const tipH = tipRect.height || 100;
+  const GAP = 10;
+  const ARROW_SIZE = 12;
+  const MARGIN = 8;
+
+  // On narrow screens, pin to bottom
+  if (vw <= 600) {
+    tipEl.style.top = '';
+    tipEl.style.bottom = '12px';
+    tipEl.style.left = '12px';
+    arrow.style.display = 'none';
+    return;
+  }
+
+  arrow.style.display = '';
+  // Reset arrow position
+  arrow.style.top = ''; arrow.style.bottom = ''; arrow.style.left = ''; arrow.style.right = '';
+
+  // Determine best placement: below, above, right, left
+  const spaceBelow = vh - rect.bottom - GAP;
+  const spaceAbove = rect.top - GAP;
+  const spaceRight = vw - rect.right - GAP;
+  const spaceLeft  = rect.left - GAP;
+
+  let placement = 'below';
+  if (spaceBelow >= tipH + MARGIN) {
+    placement = 'below';
+  } else if (spaceAbove >= tipH + MARGIN) {
+    placement = 'above';
+  } else if (spaceRight >= tipW + MARGIN) {
+    placement = 'right';
+  } else if (spaceLeft >= tipW + MARGIN) {
+    placement = 'left';
+  } else {
+    // Fallback: whichever side has most space
+    placement = spaceBelow >= spaceAbove ? 'below' : 'above';
+  }
+
+  let top, left;
+  const targetCX = rect.left + rect.width / 2;
+  const targetCY = rect.top + rect.height / 2;
+
+  if (placement === 'below') {
+    top = rect.bottom + GAP;
+    left = Math.max(MARGIN, Math.min(targetCX - tipW / 2, vw - tipW - MARGIN));
+    // Arrow on top edge pointing up
+    arrow.style.top = (-ARROW_SIZE / 2) + 'px';
+    arrow.style.left = Math.max(12, Math.min(targetCX - left - ARROW_SIZE / 2, tipW - 24)) + 'px';
+  } else if (placement === 'above') {
+    top = rect.top - GAP - tipH;
+    left = Math.max(MARGIN, Math.min(targetCX - tipW / 2, vw - tipW - MARGIN));
+    // Arrow on bottom edge pointing down
+    arrow.style.bottom = (-ARROW_SIZE / 2) + 'px';
+    arrow.style.left = Math.max(12, Math.min(targetCX - left - ARROW_SIZE / 2, tipW - 24)) + 'px';
+  } else if (placement === 'right') {
+    left = rect.right + GAP;
+    top = Math.max(MARGIN, Math.min(targetCY - tipH / 2, vh - tipH - MARGIN));
+    // Arrow on left edge pointing left
+    arrow.style.left = (-ARROW_SIZE / 2) + 'px';
+    arrow.style.top = Math.max(12, Math.min(targetCY - top - ARROW_SIZE / 2, tipH - 24)) + 'px';
+  } else { // left
+    left = rect.left - GAP - tipW;
+    top = Math.max(MARGIN, Math.min(targetCY - tipH / 2, vh - tipH - MARGIN));
+    // Arrow on right edge pointing right
+    arrow.style.right = (-ARROW_SIZE / 2) + 'px';
+    arrow.style.top = Math.max(12, Math.min(targetCY - top - ARROW_SIZE / 2, tipH - 24)) + 'px';
+  }
+
+  // Final clamp to viewport
+  top = Math.max(MARGIN, Math.min(top, vh - tipH - MARGIN));
+  left = Math.max(MARGIN, Math.min(left, vw - tipW - MARGIN));
+
   tipEl.style.top = top + 'px';
   tipEl.style.left = left + 'px';
-  arrow.style.top = '-6px';
-  arrow.style.left = Math.min(24, Math.max(8, rect.left - left + rect.width / 2 - 6)) + 'px';
+  tipEl.style.bottom = '';
 }
 
 function dismissTip() {
-  _tipIdx++;
-  showTipAt(_tipIdx);
+  const tipEl = document.getElementById('ob-tip');
+  tipEl.classList.remove('ob-visible');
+  setTimeout(() => { _tipIdx++; showTipAt(_tipIdx); }, 200);
 }
 
 // ═══════════════════════════════════════════════════
@@ -5538,6 +5858,39 @@ function ensureAgentsInited() {
   });
 }
 // ══════════════════════════════════════════════════════════════════════════
+
+// ── RESPONSIVE TOGGLE FUNCTIONS ──────────────────────────────────────────
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  const toggle = document.getElementById('sidebar-toggle');
+  const isOpen = sidebar.classList.toggle('sidebar-open');
+  backdrop.classList.toggle('visible', isOpen);
+  if (toggle) toggle.textContent = isOpen ? '\u25B6' : '\u25C0';
+}
+
+function toggleHamburger() {
+  const menu = document.getElementById('mobile-menu');
+  menu.classList.toggle('menu-open');
+}
+
+function toggleFilters() {
+  const bar = document.getElementById('filter-bar');
+  bar.classList.toggle('filters-open');
+  const btn = document.getElementById('filter-toggle-btn');
+  if (btn) btn.textContent = bar.classList.contains('filters-open') ? '\u25B4 Filters' : '\u25BE Filters';
+}
+
+// Close hamburger on outside click
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mobile-menu');
+  const btn = document.getElementById('hamburger-btn');
+  if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+    menu.classList.remove('menu-open');
+  }
+});
+
 </script>
 
 <!-- ═══ AI AGENT MODULES ════════════════════════════════════════
@@ -5548,6 +5901,7 @@ function ensureAgentsInited() {
 <!-- ONBOARDING TOOLTIP -->
 <div id="ob-tip" style="display:none" class="ob-tip">
   <div class="ob-tip-text" id="ob-tip-text"></div>
+  <div class="ob-tip-step" id="ob-tip-step"></div>
   <button class="ob-tip-btn" onclick="dismissTip()">Got it</button>
   <div class="ob-tip-arrow" id="ob-tip-arrow"></div>
 </div>
