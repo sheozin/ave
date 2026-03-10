@@ -349,7 +349,7 @@
     #sessions-col { flex: 1; overflow-y: auto; padding: 14px 16px; background: var(--bg); }
     #sidebar {
       width: 280px; border-left: 1px solid var(--border-section);
-      display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+      display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
       background: var(--surface);
     }
 
@@ -2326,18 +2326,15 @@ function renderSessions() {
 
   // Empty: no sessions at all
   if (!total) {
+    const canAdd = S.userRole === 'director';
     list.innerHTML = `<div id="empty">
       <div class="ei">📋</div>
-      <h2>No sessions found</h2>
-      <p>Add sessions to <code>leod_sessions</code> for this event, or check the event is active.</p>
-      <pre>-- Quick seed:
-INSERT INTO leod_sessions
-  (event_id, sort_order, title, type, planned_start, planned_end, scheduled_start, scheduled_end)
-VALUES
-  ('${S.event?.id || 'YOUR_EVENT_ID'}', 1, 'Opening Ceremony', 'Keynote',
-   '09:00', '09:30', '09:00', '09:30'),
-  ('${S.event?.id || 'YOUR_EVENT_ID'}', 2, 'Keynote: Main Talk', 'Keynote',
-   '09:30', '10:15', '09:30', '10:15');</pre>
+      <h2>No sessions yet</h2>
+      <p>Add your first session to get started with this event.</p>
+      ${canAdd ? `<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        <button class="abtn btn-blue" onclick="openSessModal('add')">＋ Add Session</button>
+        <button class="import-btn" onclick="triggerCSVImport()" title="Import sessions from CSV">⬆ Import CSV</button>
+      </div>` : ''}
     </div>`;
     return;
   }
