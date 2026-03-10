@@ -523,3 +523,74 @@ test.describe('Auth: invite operator UI', () => {
   });
 
 });
+
+// ── REGISTRATION SUCCESS MESSAGE (director flow) ──────────────────────────
+// Self-registered users become directors — success messaging must reflect
+// the new flow: email confirmation → free trial (NOT "wait for a director").
+
+test.describe('Auth: registration success message (director flow)', () => {
+
+  test('R11 success message says "Check your email"', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const msg = await page.locator('#rf-success').textContent();
+    expect(msg).toMatch(/check your email/i);
+  });
+
+  test('R12 success message mentions free trial', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const msg = await page.locator('#rf-success').textContent();
+    expect(msg).toMatch(/free trial/i);
+  });
+
+  test('R13 success message does NOT tell user to wait for director approval', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    const msg = await page.locator('#rf-success').textContent();
+    // These phrases were removed when self-reg became director
+    expect(msg).not.toMatch(/director will assign/i);
+    expect(msg).not.toMatch(/contact a director/i);
+    expect(msg).not.toMatch(/wait for approval/i);
+  });
+
+  test('R14 success element is hidden by default (only shown after submit)', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#rf-success')).toBeHidden();
+  });
+
+  test('R15 password mismatch shows inline error without submitting', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await page.waitForTimeout(500);
+    await page.evaluate(() => (window as any).showRegisterForm());
+    await page.fill('#rf-name',     'Test Director');
+    await page.fill('#rf-org',      'Test Org');
+    await page.fill('#rf-email',    'test@example.com');
+    await page.fill('#rf-password', 'ValidPassword123!');
+    await page.fill('#rf-confirm',  'DifferentPassword999!');
+    await page.click('#register-form button[type="submit"]');
+    await expect(page.locator('#rf-error')).toContainText('Passwords do not match');
+    // Success must not be shown
+    await expect(page.locator('#rf-success')).toBeHidden();
+  });
+
+  test('R16 honeypot triggers fake success without calling Supabase', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await page.waitForTimeout(500);
+    // Clear the rate-limiter so this test is never throttled by a prior run
+    await page.evaluate(() => sessionStorage.removeItem('rf_last_attempt'));
+    await page.evaluate(() => (window as any).showRegisterForm());
+    // Fill honeypot (bots do this, humans don't)
+    await page.evaluate(() => {
+      (document.getElementById('rf-website') as HTMLInputElement).value = 'http://bot.example.com';
+    });
+    await page.fill('#rf-name',     'Bot Name');
+    await page.fill('#rf-org',      'Bot Org');       // required — HTML5 validation blocks submit if empty
+    await page.fill('#rf-email',    'bot@example.com');
+    await page.fill('#rf-password', 'Password123!');
+    await page.fill('#rf-confirm',  'Password123!');
+    await page.click('#register-form button[type="submit"]');
+    // Fake success shown — bot is silently dismissed
+    await expect(page.locator('#rf-success')).toBeVisible();
+    // Error must be empty — we never told the bot what happened
+    await expect(page.locator('#rf-error')).toHaveText('');
+  });
+
+});
