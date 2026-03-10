@@ -1117,7 +1117,7 @@
     <input id="rf-website" type="text" class="rf-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
     <button type="submit">Create Account</button>
     <div id="rf-error"></div>
-    <div id="rf-success" style="display:none">Account created! A director will assign your role — you can sign in once approved.</div>
+    <div id="rf-success" style="display:none">✅ Check your email to confirm your account. Once confirmed, sign in — a director will assign your role before you can access the console.</div>
     <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
   </form>
   <div id="pending-screen">
@@ -4520,24 +4520,25 @@ async function handleRegisterSubmit(e) {
   sessionStorage.setItem('rf_last_attempt', String(Date.now()));
 
   // 1. Create Supabase auth account
-  const { data, error } = await sb.auth.signUp({ email, password: pass });
+  // name + organization are passed as metadata so the server-side
+  // trigger (handle_new_auth_user) can create the leod_users row
+  // even before email is confirmed (no session = no RLS access).
+  const { error } = await sb.auth.signUp({
+    email,
+    password: pass,
+    options: {
+      data: { name, organization: org },
+      emailRedirectTo: window.location.origin,
+    },
+  });
   if (error) {
     errEl.textContent = error.message;
     btn.disabled = false; btn.textContent = 'Create Account';
     return;
   }
 
-  // 2. Insert leod_users row with pending role
-  const { error: insertErr } = await sb.from('leod_users').insert({
-    id: data.user.id, email, role: 'pending',
-    name, organization: org, active: true
-  });
-  if (insertErr) {
-    errEl.textContent = 'Account created but profile setup failed. Contact a director.';
-    btn.disabled = false; btn.textContent = 'Create Account';
-    return;
-  }
-
+  // Profile row is created automatically by the database trigger.
+  // Show confirmation — user must verify email before signing in.
   document.getElementById('rf-success').style.display = '';
   btn.style.display = 'none';
 }
