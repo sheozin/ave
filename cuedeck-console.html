@@ -826,6 +826,34 @@
     #qr-modal .qr-img  { width: 240px; height: 240px; border-radius: 8px; background: #fff; padding: 8px; }
     #qr-modal .qr-hint { font-size: 11px; color: var(--dim); line-height: 1.5; }
 
+    /* ── ONBOARDING: CHECKLIST ── */
+    #checklist-wrap { position: relative; }
+    .checklist-dismiss { position:absolute;top:12px;right:12px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;font-family:inherit; }
+    .checklist-dismiss:hover { color:var(--text); }
+    .ck-item { display:flex;align-items:center;gap:8px;padding:5px 0;font-size:11px;color:var(--text-secondary);cursor:default; }
+    .ck-item.done span { color:var(--dim);text-decoration:line-through; }
+    .ck-item input[type="checkbox"] { accent-color:var(--green);pointer-events:none;margin:0; }
+    .ck-progress { height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden; }
+    .ck-bar { height:100%;background:var(--green);transition:width .3s;width:0; }
+
+    /* ── ONBOARDING: TOOLTIPS ── */
+    .ob-tip { position:fixed;z-index:310;max-width:260px;background:#1d4ed8;color:#fff;border-radius:10px;padding:14px 16px;font-size:12px;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,.4);transition:opacity .2s; }
+    .ob-tip-text { margin-bottom:10px; }
+    .ob-tip-btn { background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s; }
+    .ob-tip-btn:hover { background:rgba(255,255,255,.35); }
+    .ob-tip-arrow { position:absolute;width:12px;height:12px;background:#1d4ed8;transform:rotate(45deg); }
+
+    /* ── ONBOARDING: WIZARD ── */
+    .wiz-steps { display:flex;align-items:center;gap:0;justify-content:center;margin-bottom:16px; }
+    .wiz-dot { width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:var(--surface2);color:var(--dim);border:2px solid var(--border);transition:all .2s; }
+    .wiz-dot.active { background:#1d4ed8;border-color:#2563eb;color:#fff; }
+    .wiz-dot.done { background:var(--green);border-color:var(--green);color:#fff; }
+    .wiz-line { width:24px;height:2px;background:var(--border); }
+    .wiz-body label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase; }
+    .wiz-body input, .wiz-body select { background:var(--input-bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s; }
+    .wiz-body input:focus, .wiz-body select:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+    .wiz-body .wiz-hint { font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5; }
+
     /* ── EVENT MODAL ── */
     .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.70);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px); }
     .ev-modal-card { background:var(--surface);border:1px solid rgba(148,163,184,0.12);border-radius:12px;padding:24px 26px;min-width:320px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.60); }
@@ -1231,6 +1259,20 @@
     </div>
     <div id="ctx-actions"></div>
 
+    <!-- ONBOARDING CHECKLIST (director only, shown on first use) -->
+    <div class="sb-section" id="checklist-wrap" style="display:none">
+      <div class="sb-title">GETTING STARTED</div>
+      <button class="checklist-dismiss" onclick="dismissChecklist()" title="Dismiss checklist">&times;</button>
+      <div id="checklist-items">
+        <label class="ck-item" id="ck-event"><input type="checkbox" disabled><span>Create your first event</span></label>
+        <label class="ck-item" id="ck-session"><input type="checkbox" disabled><span>Add sessions to your event</span></label>
+        <label class="ck-item" id="ck-invite"><input type="checkbox" disabled><span>Invite an operator</span></label>
+        <label class="ck-item" id="ck-signage"><input type="checkbox" disabled><span>Set up a signage display</span></label>
+        <label class="ck-item" id="ck-launch"><input type="checkbox" disabled><span>Launch a display</span></label>
+      </div>
+      <div class="ck-progress"><div class="ck-bar" id="ck-bar"></div></div>
+    </div>
+
     <!-- AI Agents panel (hidden until boot, director only) -->
     <div class="sb-section" id="ai-agents-wrap" style="display:none">
       <div class="sb-title">AI AGENTS</div>
@@ -1454,6 +1496,26 @@
     <div id="welcome-role-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0"></div>
     <div class="ev-modal-actions" style="justify-content:center">
       <button class="primary" onclick="dismissWelcome()">Get Started</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETUP WIZARD (director, first use) -->
+<div id="wizard-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)wizSkip()">
+  <div class="ev-modal-card" style="max-width:460px">
+    <div class="ev-modal-title" id="wiz-title">Let's set up your event</div>
+    <div class="wiz-steps">
+      <span class="wiz-dot active" data-wiz="0">1</span><span class="wiz-line"></span>
+      <span class="wiz-dot" data-wiz="1">2</span><span class="wiz-line"></span>
+      <span class="wiz-dot" data-wiz="2">3</span><span class="wiz-line"></span>
+      <span class="wiz-dot" data-wiz="3">4</span>
+    </div>
+    <div class="wiz-body" id="wiz-body"></div>
+    <div id="wiz-error" style="font-size:11px;color:#f87171;display:none"></div>
+    <div class="ev-modal-actions">
+      <button onclick="wizSkip()">Skip</button>
+      <button id="wiz-back" onclick="wizBack()" style="display:none">Back</button>
+      <button id="wiz-next" class="primary" onclick="wizNext()">Next</button>
     </div>
   </div>
 </div>
@@ -1784,6 +1846,8 @@ async function loadSnapshot(eventId) {
   sb.rpc('cleanup_old_commands').then(() => {}).catch(() => {});
   // AI Agents: refresh Cue Engine schedule whenever sessions are reloaded
   if (typeof CueDeckCueEngine !== 'undefined') CueDeckCueEngine.reinit(S.sessions);
+  // Onboarding: refresh checklist on session data change
+  if (typeof refreshChecklist === 'function') refreshChecklist();
 }
 
 async function loadBroadcast(eventId) {
@@ -2925,7 +2989,7 @@ function renderSignagePanel() {
             </div>
             ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
             <div class="sp-disp-actions">
-              <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer">▶ Launch</a>
+              <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">▶ Launch</a>
               <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
               <button class="id-btn" onclick="identifyDisplay('${esc(d.id)}')" title="Flash screen to identify it">⚡ ID</button>
             </div>
@@ -3108,6 +3172,7 @@ async function saveDisplay() {
   await loadDisplays(S.event.id);
   renderSignagePanel();
   pushLog('SIGNAGE', `display ${_dispModalId ? 'updated' : 'added'}: ${name}`, null);
+  if (typeof refreshChecklist === 'function') refreshChecklist();
 }
 
 async function deleteDisplay() {
@@ -3924,6 +3989,7 @@ async function submitEvModal() {
       closeEvModal();
       buildEvSelect(S.events);
       await switchEvent(ev.id);
+      if (typeof refreshChecklist === 'function') refreshChecklist();
 
     } else {
       const { error } = await sb.from('leod_events')
@@ -4615,6 +4681,10 @@ async function inviteOperator() {
       document.getElementById('inv-name').value = '';
       await refreshUsersModal();
       await loadPendingBadge();
+      // Onboarding: mark invite step done
+      const uid = S.user?.id || 'anon';
+      localStorage.setItem(CK_KEY + uid + '_invited', '1');
+      if (typeof refreshChecklist === 'function') refreshChecklist();
     }
   } catch (e) {
     status.innerHTML = `<span style="color:var(--red)">Network error</span>`;
@@ -4914,6 +4984,278 @@ sb.auth.onAuthStateChange((event) => {
 });
 
 // ═══════════════════════════════════════════════════
+// ONBOARDING: FIRST-STEPS CHECKLIST
+// ═══════════════════════════════════════════════════
+const CK_KEY = 'cuedeck_ck_';
+const CK_STEPS = ['event','session','invite','signage','launch'];
+
+function initChecklist() {
+  if (S.role !== 'director') return;
+  const uid = S.user?.id || 'anon';
+  if (localStorage.getItem(CK_KEY + uid + '_dismissed')) return;
+  document.getElementById('checklist-wrap').style.display = '';
+  refreshChecklist();
+}
+
+function refreshChecklist() {
+  const uid = S.user?.id || 'anon';
+  const checks = {
+    event:   S.events && S.events.length > 0,
+    session: S.sessions && S.sessions.length > 0,
+    invite:  !!localStorage.getItem(CK_KEY + uid + '_invited'),
+    signage: S.displays && S.displays.length > 0,
+    launch:  !!localStorage.getItem(CK_KEY + uid + '_launched'),
+  };
+  let done = 0;
+  CK_STEPS.forEach(step => {
+    const el = document.getElementById('ck-' + step);
+    if (!el) return;
+    const cb = el.querySelector('input');
+    if (checks[step]) { cb.checked = true; el.classList.add('done'); done++; }
+    else { cb.checked = false; el.classList.remove('done'); }
+  });
+  const bar = document.getElementById('ck-bar');
+  if (bar) bar.style.width = (done / CK_STEPS.length * 100) + '%';
+  if (done === CK_STEPS.length) setTimeout(() => dismissChecklist(), 2000);
+}
+
+function dismissChecklist() {
+  const uid = S.user?.id || 'anon';
+  localStorage.setItem(CK_KEY + uid + '_dismissed', '1');
+  const wrap = document.getElementById('checklist-wrap');
+  if (wrap) wrap.style.display = 'none';
+}
+
+function markDisplayLaunched() {
+  const uid = S.user?.id || 'anon';
+  localStorage.setItem(CK_KEY + uid + '_launched', '1');
+  if (typeof refreshChecklist === 'function') refreshChecklist();
+}
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING: ROLE-SPECIFIC TOOLTIPS
+// ═══════════════════════════════════════════════════
+const ROLE_TIPS = {
+  director: [
+    { target: '#ev-select-wrap button:last-child', text: 'Create an event here, then add sessions to build your run of show.' },
+    { target: '#users-btn', text: 'Invite operators and assign roles from the Operators panel.' },
+  ],
+  stage: [
+    { target: '.sc', text: 'Use the action buttons on each session to ARM, CALL, and GO LIVE when the speaker is ready.' },
+  ],
+  av: [
+    { target: '.sc', text: 'You can HOLD a session if AV needs attention — everyone sees the status change instantly.' },
+  ],
+  signage: [
+    { target: '#sessions-list', text: 'Register displays here, choose content modes, and launch them on any browser.' },
+  ],
+  interp: [],
+  reg: [],
+};
+
+let _tipQueue = [];
+let _tipIdx = 0;
+
+function showRoleTips() {
+  const uid = S.user?.id || 'anon';
+  const role = S.role;
+  const key = 'cuedeck_tips_' + uid + '_' + role;
+  if (localStorage.getItem(key)) return;
+  _tipQueue = (ROLE_TIPS[role] || []).filter(t => document.querySelector(t.target));
+  _tipIdx = 0;
+  if (!_tipQueue.length) { localStorage.setItem(key, '1'); return; }
+  showTipAt(_tipIdx);
+}
+
+function showTipAt(idx) {
+  if (idx >= _tipQueue.length) {
+    const uid = S.user?.id || 'anon';
+    localStorage.setItem('cuedeck_tips_' + uid + '_' + S.role, '1');
+    document.getElementById('ob-tip').style.display = 'none';
+    return;
+  }
+  const tip = _tipQueue[idx];
+  const el = document.querySelector(tip.target);
+  if (!el) { showTipAt(idx + 1); return; }
+  const rect = el.getBoundingClientRect();
+  const tipEl = document.getElementById('ob-tip');
+  const textEl = document.getElementById('ob-tip-text');
+  const arrow = document.getElementById('ob-tip-arrow');
+  textEl.textContent = tip.text;
+  tipEl.style.display = '';
+  // Position below target
+  const top = Math.min(rect.bottom + 12, window.innerHeight - 120);
+  const left = Math.max(10, Math.min(rect.left, window.innerWidth - 280));
+  tipEl.style.top = top + 'px';
+  tipEl.style.left = left + 'px';
+  arrow.style.top = '-6px';
+  arrow.style.left = Math.min(24, Math.max(8, rect.left - left + rect.width / 2 - 6)) + 'px';
+}
+
+function dismissTip() {
+  _tipIdx++;
+  showTipAt(_tipIdx);
+}
+
+// ═══════════════════════════════════════════════════
+// ONBOARDING: SETUP WIZARD
+// ═══════════════════════════════════════════════════
+let _wizStep = 0;
+
+const WIZ_TITLES = ['Name your event', 'Add your first session', 'Invite an operator', 'Set up a display'];
+
+function showSetupWizard() {
+  _wizStep = 0;
+  document.getElementById('wizard-modal').style.display = 'flex';
+  renderWizStep();
+}
+
+function renderWizStep() {
+  document.querySelectorAll('.wiz-dot').forEach((d, i) => {
+    d.classList.toggle('active', i === _wizStep);
+    d.classList.toggle('done', i < _wizStep);
+  });
+  document.getElementById('wiz-title').textContent = WIZ_TITLES[_wizStep] || 'Setup';
+  document.getElementById('wiz-back').style.display = _wizStep > 0 ? '' : 'none';
+  document.getElementById('wiz-next').textContent = _wizStep === 3 ? 'Finish' : 'Next';
+  document.getElementById('wiz-error').style.display = 'none';
+
+  const body = document.getElementById('wiz-body');
+  if (_wizStep === 0) {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const today = new Date().toISOString().split('T')[0];
+    body.innerHTML = `
+      <label>Event Name<input id="wiz-ev-name" placeholder="e.g. Annual Conference 2026"></label>
+      <label>Date<input id="wiz-ev-date" type="date" value="${today}"></label>
+      <label>Timezone<input id="wiz-ev-tz" value="${tz}" readonly style="opacity:.7"></label>
+      <div class="wiz-hint">You can always edit these later from the event settings.</div>`;
+  } else if (_wizStep === 1) {
+    body.innerHTML = `
+      <label>Session Title<input id="wiz-sess-title" placeholder="e.g. Opening Keynote"></label>
+      <label>Speaker<input id="wiz-sess-speaker" placeholder="e.g. Jane Smith"></label>
+      <label>Room<input id="wiz-sess-room" placeholder="e.g. Main Stage"></label>
+      <div style="display:flex;gap:10px">
+        <label style="flex:1">Start Time<input id="wiz-sess-start" type="time" value="09:00"></label>
+        <label style="flex:1">End Time<input id="wiz-sess-end" type="time" value="09:30"></label>
+      </div>
+      <div class="wiz-hint">This creates your first session. You can add more from the console afterwards.</div>`;
+  } else if (_wizStep === 2) {
+    body.innerHTML = `
+      <label>Operator Email<input id="wiz-inv-email" type="email" placeholder="colleague@company.com"></label>
+      <label>Name (optional)<input id="wiz-inv-name" placeholder="e.g. John"></label>
+      <label>Role<select id="wiz-inv-role">
+        <option value="stage">Stage Manager</option>
+        <option value="av">AV Operator</option>
+        <option value="interp">Interpreter</option>
+        <option value="reg">Registration</option>
+        <option value="signage">Signage Operator</option>
+      </select></label>
+      <div class="wiz-hint">They'll receive an email invitation to join your event. Skip if you want to do this later.</div>`;
+  } else if (_wizStep === 3) {
+    body.innerHTML = `
+      <label>Display Name<input id="wiz-disp-name" placeholder="e.g. Lobby Screen"></label>
+      <label>Content Mode<select id="wiz-disp-mode">
+        <option value="schedule">Schedule (current + next)</option>
+        <option value="wayfinding">Wayfinding (room directory)</option>
+        <option value="agenda">Agenda Grid</option>
+        <option value="timeline">Programme List</option>
+        <option value="programme">Day Grid</option>
+        <option value="sponsors">Sponsors Carousel</option>
+      </select></label>
+      <label>Orientation<select id="wiz-disp-orient">
+        <option value="landscape">Landscape</option>
+        <option value="portrait">Portrait</option>
+      </select></label>
+      <div class="wiz-hint">Launch the display URL on any screen — TV, tablet, or monitor.</div>`;
+  }
+}
+
+function wizShowError(msg) {
+  const el = document.getElementById('wiz-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+async function wizNext() {
+  const btn = document.getElementById('wiz-next');
+  btn.disabled = true;
+  try {
+    if (_wizStep === 0) {
+      const name = document.getElementById('wiz-ev-name')?.value?.trim();
+      if (!name) { wizShowError('Event name is required.'); return; }
+      const date = document.getElementById('wiz-ev-date')?.value;
+      const tz = document.getElementById('wiz-ev-tz')?.value;
+      const { data, error } = await supabase.from('leod_events').insert({
+        name, event_date: date, timezone: tz, planned_start: '09:00:00', planned_end: '18:00:00'
+      }).select().single();
+      if (error) { wizShowError(error.message); return; }
+      // Reload events and select the new one
+      await loadEvents();
+      if (data?.id) {
+        document.getElementById('ev-select').value = data.id;
+        await switchEvent(data.id);
+      }
+    } else if (_wizStep === 1) {
+      const title = document.getElementById('wiz-sess-title')?.value?.trim();
+      if (!title) { wizShowError('Session title is required.'); return; }
+      const speaker = document.getElementById('wiz-sess-speaker')?.value?.trim() || '';
+      const room = document.getElementById('wiz-sess-room')?.value?.trim() || '';
+      const start = document.getElementById('wiz-sess-start')?.value || '09:00';
+      const end = document.getElementById('wiz-sess-end')?.value || '09:30';
+      const evId = document.getElementById('ev-select')?.value;
+      const { error } = await supabase.from('leod_sessions').insert({
+        event_id: evId, title, speaker, room, company: '',
+        planned_start: start + ':00', planned_end: end + ':00',
+        scheduled_start: start + ':00', scheduled_end: end + ':00',
+        session_type: 'Keynote', sort_order: 1, status: 'PLANNED',
+      });
+      if (error) { wizShowError(error.message); return; }
+      await loadSnapshot();
+    } else if (_wizStep === 2) {
+      const email = document.getElementById('wiz-inv-email')?.value?.trim();
+      if (email) {
+        const name = document.getElementById('wiz-inv-name')?.value?.trim() || '';
+        const role = document.getElementById('wiz-inv-role')?.value || 'stage';
+        try {
+          await supabase.functions.invoke('invite-operator', { body: { email, name, role } });
+          const uid = S.user?.id || 'anon';
+          localStorage.setItem(CK_KEY + uid + '_invited', '1');
+        } catch (_) { /* non-blocking — skip is fine */ }
+      }
+      // Allow skipping invite step without email
+    } else if (_wizStep === 3) {
+      const name = document.getElementById('wiz-disp-name')?.value?.trim();
+      if (!name) { wizShowError('Display name is required.'); return; }
+      const mode = document.getElementById('wiz-disp-mode')?.value || 'schedule';
+      const orient = document.getElementById('wiz-disp-orient')?.value || 'landscape';
+      const evId = document.getElementById('ev-select')?.value;
+      const { error } = await supabase.from('leod_signage_displays').insert({
+        event_id: evId, name, content_mode: mode, orientation: orient, zone_type: 'lobby',
+      });
+      if (error) { wizShowError(error.message); return; }
+      await loadSnapshot();
+      wizSkip();
+      if (typeof refreshChecklist === 'function') refreshChecklist();
+      return;
+    }
+    _wizStep++;
+    renderWizStep();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function wizBack() {
+  if (_wizStep > 0) { _wizStep--; renderWizStep(); }
+}
+
+function wizSkip() {
+  document.getElementById('wizard-modal').style.display = 'none';
+  const uid = S.user?.id || 'anon';
+  localStorage.setItem('cuedeck_wiz_' + uid + '_done', '1');
+}
+
+// ═══════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════
 async function boot() {
@@ -5074,6 +5416,17 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       delete S._showRoleChange;
     }
 
+    // Onboarding: checklist + tooltips + wizard
+    initChecklist();
+    setTimeout(() => showRoleTips(), 800);
+    // Show wizard for directors with no events
+    if (S.role === 'director' && (!S.events || S.events.length === 0)) {
+      const uid = S.user?.id || 'anon';
+      if (!localStorage.getItem('cuedeck_wiz_' + uid + '_done')) {
+        setTimeout(() => showSetupWizard(), 400);
+      }
+    }
+
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
     setStep(`Boot error: ${e.message}`);
@@ -5170,6 +5523,13 @@ function ensureAgentsInited() {
      Set ANTHROPIC_API_KEY (see CONFIG section above) to enable live AI.
      Without a key all agents run in fallback mode — UI still fully works.
 ═══════════════════════════════════════════════════════════════ -->
+<!-- ONBOARDING TOOLTIP -->
+<div id="ob-tip" style="display:none" class="ob-tip">
+  <div class="ob-tip-text" id="ob-tip-text"></div>
+  <button class="ob-tip-btn" onclick="dismissTip()">Got it</button>
+  <div class="ob-tip-arrow" id="ob-tip-arrow"></div>
+</div>
+
 <script src="cuedeck-agent-1-incident-advisor.js"></script>
 <script src="cuedeck-agent-2-cue-engine.js"></script>
 <script src="cuedeck-agent-3-report-generator.js"></script>
