@@ -296,7 +296,7 @@
     }
     .logo { display: flex; align-items: center; }
     .logo svg { height: 30px; width: auto; }
-    #event-name { flex: 1; font-size: 11px; color: var(--text-muted); }
+    #event-name { flex: 1; font-size: 11px; color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #hdr-clock  { font-size: 26px; font-weight: 700; letter-spacing: .02em; color: #F1F5F9; min-width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
     #hdr-offset { font-size: 10px; color: var(--text-muted); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
     #conn-pill {
@@ -880,7 +880,7 @@
     .wiz-body .wiz-hint { font-size:11px;color:var(--dim);margin-top:4px;line-height:1.5; }
 
     /* ── EVENT MODAL ── */
-    .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.70);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px); }
+    .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.70);z-index:250;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px); }
     .ev-modal-card { background:var(--surface);border:1px solid rgba(148,163,184,0.12);border-radius:12px;padding:24px 26px;min-width:320px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.60); }
     .ev-modal-title { font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--text-primary); }
     .ev-modal-card label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase; }
@@ -1191,6 +1191,9 @@
       .di span { font-size: 0; }
       .di { padding: 3px 5px; }
       #diag-bar { padding: 4px 12px; gap: 10px; }
+
+      /* MODALS — constrain height on tablet */
+      .ev-modal-card { max-height: 90vh; overflow-y: auto; }
     }
 
     /* ── MOBILE: <768px ─────────────────────────────────────────── */
@@ -1202,16 +1205,16 @@
       #event-name { display: none; }
       #plan-badge { display: none !important; }
       #presence-bar { display: none; }
-      /* Logo: show icon only — clip container to icon width */
-      .logo { width: 28px; overflow: hidden; flex-shrink: 0; }
-      .logo svg { height: 26px; width: auto; }
+      /* Logo: show icon + text, scaled for mobile */
+      .logo { flex-shrink: 0; }
+      .logo svg { height: 24px; width: auto; }
       /* Hide header buttons — moved to hamburger menu */
       #billing-btn { display: none !important; }
       #users-btn { display: none !important; }
       #logout-btn { display: none !important; }
       #auto-start-btn { display: none !important; }
-      /* Show hamburger */
-      #hamburger-btn { display: flex; align-items: center; }
+      /* Show hamburger — push to far right */
+      #hamburger-btn { display: flex; align-items: center; margin-left: auto; }
       /* Connection pill — compact */
       #conn-lbl { display: none; }
       #conn-pill { padding: 4px 6px; }
