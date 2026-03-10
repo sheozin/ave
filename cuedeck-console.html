@@ -741,6 +741,25 @@
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 
+    /* ── NATIVE FORM CONTROL THEMING ── */
+    /* Forces browser-rendered UI chrome (calendar icon, clock icon, select
+       dropdown arrow, number spin buttons, search clear button) to use light
+       colours that are visible against the app's dark #0F1520 input background. */
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    input[type="search"],
+    input[type="month"],
+    input[type="week"],
+    input[type="number"],
+    select { color-scheme: dark; }
+
+    /* Consistent, readable placeholder text across every input & textarea */
+    ::placeholder { color: var(--text-muted); opacity: 1; }
+
+    /* Textarea reset: match input base styles so it doesn't inherit browser defaults */
+    textarea { color-scheme: dark; }
+
     code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
 
     /* ── SIGNAGE PANEL ── */
