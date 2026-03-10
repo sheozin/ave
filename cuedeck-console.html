@@ -744,68 +744,87 @@
     code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
 
     /* ── SIGNAGE PANEL ── */
-    .sp-section { padding: 14px 16px; }
-    .sp-section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-    .sp-section-title { font-size: 10px; font-weight: 600; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
-    .sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+    /* Scale: font 11/12/15px · padding 4/8/12/16px · gap 6/8/10/12px · radius 4/6/10px */
+    .sp-section { padding: 16px 18px; }
+    .sp-section.bordered { border-bottom: 1px solid var(--border); }
+    .sp-section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .sp-section-title { font-size: 11px; font-weight: 600; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; }
+    .sp-empty { color: var(--dim); font-size: 11px; padding: 16px 0; text-align: center; }
+    .sp-info-footer { color: var(--dim); font-size: 12px; line-height: 1.8; }
+    .sp-info-footer .sp-section-title { display: block; margin-bottom: 8px; }
+    .abtn.abtn-sm { font-size: 11px; padding: 0 12px; height: 26px; }
+    .sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+    .sp-display-wrap { display: flex; flex-direction: column; }
+    .sp-card-mgmt { display: flex; gap: 6px; justify-content: flex-end; padding: 4px 6px 0; }
+    .sp-card-mgmt button {
+      padding: 3px 10px; border-radius: 6px; border: 1px solid transparent;
+      background: transparent; color: var(--dim); font-size: 11px;
+      font-family: inherit; cursor: pointer; transition: all .12s;
+    }
+    .sp-card-mgmt button:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
     .sp-display-card {
       background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border);
-      border-radius: 8px; padding: 11px 13px; display: flex; flex-direction: column; gap: 6px;
+      border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
       transition: border-color .15s;
     }
     .sp-display-card:hover { border-color: var(--dim); }
     .sp-display-card.online   { border-left-color: var(--green); }
     .sp-display-card.offline  { border-left-color: var(--border); opacity: .7; }
     .sp-display-card.override-active { border-left-color: var(--amber); }
-    .sp-disp-hdr   { display: flex; align-items: center; gap: 6px; }
-    .sp-disp-dot   { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .sp-disp-dot.online  { background: var(--green); box-shadow: 0 0 5px var(--green); }
+    .sp-disp-hdr   { display: flex; align-items: center; gap: 8px; }
+    .sp-disp-dot   { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .sp-disp-dot.online  { background: var(--green); box-shadow: 0 0 6px var(--green); }
     .sp-disp-dot.offline { background: var(--border); }
-    .sp-disp-name  { font-size: 13px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sp-disp-zone  { font-size: 10px; color: var(--dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; flex-shrink: 0; }
-    .sp-disp-meta  { font-size: 10px; color: var(--dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .sp-disp-name  { font-size: 15px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sp-disp-zone  { font-size: 11px; color: var(--dim); background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; flex-shrink: 0; }
+    .sp-disp-meta  { font-size: 11px; color: var(--dim); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .sp-disp-mode  { color: var(--blue-lt); font-weight: 500; }
-    .sp-disp-actions { display: flex; gap: 4px; margin-top: 2px; }
+    .sp-seq-tag    { color: #c084fc; }
+    .sp-status-on  { color: var(--green); }
+    .sp-override-tag { font-size: 11px; color: var(--amber); background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); border-radius: 4px; padding: 2px 8px; align-self: flex-start; }
+    .sp-disp-actions { display: flex; gap: 6px; margin-top: 4px; }
     .sp-disp-actions button, .sp-disp-actions a.launch {
-      flex: 1; padding: 4px 8px; border-radius: 5px; border: 1px solid var(--border);
-      background: var(--surface2); color: var(--dim); font-size: 10px;
+      flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--dim); font-size: 11px;
       font-family: inherit; cursor: pointer; transition: all .12s; white-space: nowrap;
     }
     .sp-disp-actions button:hover { color: var(--text); border-color: var(--dim); }
-    .sp-disp-actions button.launch, .sp-disp-actions a.launch { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: var(--blue-lt); text-decoration: none; display: inline-flex; align-items: center; }
+    .sp-disp-actions button.launch, .sp-disp-actions a.launch { background: rgba(59,130,246,.08); border-color: rgba(59,130,246,.3); color: var(--blue-lt); text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
     .sp-disp-actions button.launch:hover, .sp-disp-actions a.launch:hover { background: rgba(59,130,246,.15); }
     .sp-disp-actions button.qr-btn { flex: 0 0 auto; background: rgba(34,197,94,.07); border-color: rgba(34,197,94,.3); color: var(--green); }
     .sp-disp-actions button.qr-btn:hover { background: rgba(34,197,94,.15); }
+    .sp-disp-actions button.id-btn { flex: 0 0 auto; background: rgba(168,85,247,.08); border-color: rgba(168,85,247,.3); color: #c084fc; }
+    .sp-disp-actions button.id-btn:hover { background: rgba(168,85,247,.15); }
+    .sp-global-bar {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 4px;
+    }
+    .sp-global-bar label { font-size: 11px; font-weight: 600; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+    .sp-override-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sp-override-btn {
+      padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--dim); font-size: 12px;
+      font-family: inherit; font-weight: 500; cursor: pointer; transition: all .12s;
+    }
+    .sp-override-btn:hover { background: var(--surface); color: var(--text); border-color: var(--dim); }
+    .sp-sponsor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .sp-sponsor-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: center;
+      text-align: center; position: relative;
+    }
+    .sp-sponsor-img { width: 90px; height: 50px; object-fit: contain; border-radius: 6px; }
+    .sp-sponsor-placeholder { width: 90px; height: 50px; background: var(--surface2); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--dim); }
+    .sp-sponsor-placeholder.video { color: #c084fc; }
+    .sp-sponsor-name { font-size: 12px; font-weight: 500; color: var(--text); }
+    .sp-sponsor-edit { background: none; border: 1px solid var(--border); color: var(--dim); cursor: pointer; font-size: 11px; border-radius: 6px; padding: 3px 8px; font-family: inherit; transition: all .12s; }
+    .sp-sponsor-edit:hover { color: var(--text); border-color: var(--dim); }
     /* ── QR MODAL ── */
     #qr-modal .ev-modal-card { align-items: center; max-width: 320px; text-align: center; }
     #qr-modal .qr-name { font-size: 16px; font-weight: 700; color: var(--text); }
     #qr-modal .qr-sub  { font-size: 11px; color: var(--dim); margin-top: -4px; }
     #qr-modal .qr-img  { width: 240px; height: 240px; border-radius: 8px; background: #fff; padding: 8px; }
     #qr-modal .qr-hint { font-size: 11px; color: var(--dim); line-height: 1.5; }
-    .sp-override-tag { font-size: 10px; color: var(--amber); background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.2); border-radius: 3px; padding: 1px 6px; align-self: flex-start; }
-    .sp-global-bar {
-      background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px 13px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;
-    }
-    .sp-global-bar label { font-size: 10px; font-weight: 600; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
-    .sp-override-btns { display: flex; gap: 5px; flex-wrap: wrap; }
-    .sp-override-btn {
-      padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
-      background: transparent; color: var(--dim); font-size: 11px;
-      font-family: inherit; font-weight: 500; cursor: pointer; transition: all .12s;
-    }
-    .sp-override-btn:hover { background: var(--surface); color: var(--text); border-color: var(--dim); }
-    .sp-sponsor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
-    .sp-sponsor-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-      padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center;
-      text-align: center; position: relative;
-    }
-    .sp-sponsor-img { width: 80px; height: 44px; object-fit: contain; border-radius: 4px; }
-    .sp-sponsor-placeholder { width: 80px; height: 44px; background: var(--surface2); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); }
-    .sp-sponsor-name { font-size: 11px; font-weight: 500; color: var(--text); }
-    .sp-sponsor-edit { background: none; border: 1px solid var(--border); color: var(--dim); cursor: pointer; font-size: 10px; border-radius: 4px; padding: 2px 7px; font-family: inherit; transition: all .12s; }
-    .sp-sponsor-edit:hover { color: var(--text); border-color: var(--dim); }
 
     /* ── EVENT MODAL ── */
     .ev-modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,.70);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px); }
@@ -2890,43 +2909,47 @@ function renderSignagePanel() {
         const dot      = online ? 'online' : 'offline';
         const orientIcon = d.orientation === 'portrait' ? '▯' : '▭';
         const displayUrl = buildDisplayUrl(d);
-        return `<div class="sp-display-card ${cardCls}">
-          <div class="sp-disp-hdr">
-            <div class="sp-disp-dot ${dot}"></div>
-            <div class="sp-disp-name">${esc(d.name)}</div>
-            <span class="sp-disp-zone">${esc(d.zone_type)}</span>
+        return `<div class="sp-display-wrap">
+          <div class="sp-display-card ${cardCls}">
+            <div class="sp-disp-hdr">
+              <div class="sp-disp-dot ${dot}"></div>
+              <div class="sp-disp-name">${esc(d.name)}</div>
+              <span class="sp-disp-zone">${esc(d.zone_type)}</span>
+            </div>
+            <div class="sp-disp-meta">
+              <span class="sp-disp-mode">${esc(d.content_mode)}</span>
+              <span>${orientIcon} ${esc(d.orientation)}</span>
+              ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
+              ${d.sequence?.length ? `<span class="sp-seq-tag">⟳ ${d.sequence.length} slides</span>` : ''}
+              <span${online ? ' class="sp-status-on"' : ''}>${online ? '● online' : '○ offline'}</span>
+            </div>
+            ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
+            <div class="sp-disp-actions">
+              <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer">▶ Launch</a>
+              <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
+              <button class="id-btn" onclick="identifyDisplay('${esc(d.id)}')" title="Flash screen to identify it">⚡ ID</button>
+            </div>
           </div>
-          <div class="sp-disp-meta">
-            <span class="sp-disp-mode">${esc(d.content_mode)}</span>
-            <span>${orientIcon} ${esc(d.orientation)}</span>
-            ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
-            ${d.sequence?.length ? `<span style="color:#c084fc">⟳ ${d.sequence.length} slides</span>` : ''}
-            <span style="color:${online?'var(--green)':'var(--dim)'}">${online?'● online':'○ offline'}</span>
-          </div>
-          ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
-          <div class="sp-disp-actions">
-            <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer">▶ Launch</a>
-            <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
-            <button onclick="identifyDisplay('${esc(d.id)}')" title="Flash screen to identify it" style="background:rgba(168,85,247,.08);border-color:rgba(168,85,247,.3);color:#c084fc">⚡ ID</button>
+          <div class="sp-card-mgmt">
             <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
             ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
           </div>
         </div>`;
       }).join('')
-    : `<div style="color:var(--dim);font-size:11px;padding:16px 0;text-align:center">No displays registered yet — add one to get started.</div>`;
+    : `<div class="sp-empty">No displays registered yet -- add one to get started.</div>`;
 
   const sponsorCards = S.sponsors.length
     ? S.sponsors.map(s => `
         <div class="sp-sponsor-card">
           ${s.logo_url
             ? (/\.(mp4|webm|ogg)(\?|$)/i.test(s.logo_url)
-                ? `<div class="sp-sponsor-placeholder" style="color:#c084fc;font-size:11px">▶ video</div>`
+                ? `<div class="sp-sponsor-placeholder video">▶ video</div>`
                 : `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`)
             : `<div class="sp-sponsor-placeholder">no logo</div>`}
           <div class="sp-sponsor-name">${esc(s.name)}</div>
           <button class="sp-sponsor-edit" onclick="openSponsorModal('edit','${esc(s.id)}')">✎</button>
         </div>`).join('')
-    : `<div style="color:var(--dim);font-size:11px;padding:12px 0">No sponsors added yet.</div>`;
+    : `<div class="sp-empty">No sponsors added yet.</div>`;
 
   const activeOverride = S.displays.some(d => d.override_content?.mode);
   const overrideModes = [
@@ -2941,46 +2964,40 @@ function renderSignagePanel() {
   ];
 
   list.innerHTML = `
-  <div style="border-bottom:1px solid var(--border)">
-    <div class="sp-section">
-      <div class="sp-section-hdr">
-        <span class="sp-section-title">GLOBAL DISPLAY OVERRIDE</span>
-        ${activeOverride ? `<button class="abtn btn-grey" style="font-size:10px;padding:4px 10px" onclick="clearGlobalOverride()">✕ Clear All</button>` : ''}
-      </div>
-      <div class="sp-global-bar">
-        <label>PUSH ALL →</label>
-        <div class="sp-override-btns">
-          ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')}
-        </div>
+  <div class="sp-section bordered">
+    <div class="sp-section-hdr">
+      <span class="sp-section-title">GLOBAL DISPLAY OVERRIDE</span>
+      ${activeOverride ? `<button class="abtn abtn-sm btn-grey" onclick="clearGlobalOverride()">✕ Clear All</button>` : ''}
+    </div>
+    <div class="sp-global-bar">
+      <label>PUSH ALL →</label>
+      <div class="sp-override-btns">
+        ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')}
       </div>
     </div>
   </div>
 
-  <div style="border-bottom:1px solid var(--border)">
-    <div class="sp-section">
-      <div class="sp-section-hdr">
-        <span class="sp-section-title">REGISTERED DISPLAYS (${S.displays.length})</span>
-        <button class="abtn btn-blue" style="font-size:10px;padding:4px 10px" onclick="openDisplayModal('add')">＋ Add Display</button>
-      </div>
-      <div class="sp-grid">${displayCards}</div>
+  <div class="sp-section bordered">
+    <div class="sp-section-hdr">
+      <span class="sp-section-title">REGISTERED DISPLAYS (${S.displays.length})</span>
+      <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">＋ Add Display</button>
     </div>
+    <div class="sp-grid">${displayCards}</div>
   </div>
 
-  <div style="border-bottom:1px solid var(--border)">
-    <div class="sp-section">
-      <div class="sp-section-hdr">
-        <span class="sp-section-title">SPONSOR LIBRARY (${S.sponsors.length})</span>
-        <button class="abtn btn-blue" style="font-size:10px;padding:4px 10px" onclick="openSponsorModal('add')">＋ Add Sponsor</button>
-      </div>
-      <div class="sp-sponsor-grid">${sponsorCards}</div>
+  <div class="sp-section bordered">
+    <div class="sp-section-hdr">
+      <span class="sp-section-title">SPONSOR LIBRARY (${S.sponsors.length})</span>
+      <button class="abtn abtn-sm btn-blue" onclick="openSponsorModal('add')">＋ Add Sponsor</button>
     </div>
+    <div class="sp-sponsor-grid">${sponsorCards}</div>
   </div>
 
-  <div class="sp-section" style="color:var(--dim);font-size:11px;line-height:1.8">
-    <span class="sp-section-title" style="display:block;margin-bottom:6px">DISPLAY URL FORMAT</span>
+  <div class="sp-section sp-info-footer">
+    <span class="sp-section-title">DISPLAY URL FORMAT</span>
     Displays connect via:<br>
     <code>cuedeck-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
-    Open in any browser — supports landscape &amp; portrait. Heartbeat every 30s.
+    Open in any browser -- supports landscape &amp; portrait. Heartbeat every 30s.
   </div>`;
 }
 
