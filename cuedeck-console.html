@@ -5061,9 +5061,11 @@ function showRoleTips() {
   const role = S.role;
   const key = 'cuedeck_tips_' + uid + '_' + role;
   if (localStorage.getItem(key)) return;
-  _tipQueue = (ROLE_TIPS[role] || []).filter(t => document.querySelector(t.target));
+  const roleTips = ROLE_TIPS[role] || [];
+  if (!roleTips.length) { localStorage.setItem(key, '1'); return; }
+  _tipQueue = roleTips.filter(t => document.querySelector(t.target));
   _tipIdx = 0;
-  if (!_tipQueue.length) { localStorage.setItem(key, '1'); return; }
+  if (!_tipQueue.length) return; // targets not in DOM yet; retry next boot
   showTipAt(_tipIdx);
 }
 
@@ -5253,6 +5255,7 @@ function wizSkip() {
   document.getElementById('wizard-modal').style.display = 'none';
   const uid = S.user?.id || 'anon';
   localStorage.setItem('cuedeck_wiz_' + uid + '_done', '1');
+  setTimeout(() => showRoleTips(), 300);
 }
 
 // ═══════════════════════════════════════════════════
@@ -5418,14 +5421,16 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
 
     // Onboarding: checklist + tooltips + wizard
     initChecklist();
-    setTimeout(() => showRoleTips(), 800);
-    // Show wizard for directors with no events
+    // Show wizard for directors with no events; defer tooltips until wizard is done
+    let _wizardShown = false;
     if (S.role === 'director' && (!S.events || S.events.length === 0)) {
       const uid = S.user?.id || 'anon';
       if (!localStorage.getItem('cuedeck_wiz_' + uid + '_done')) {
+        _wizardShown = true;
         setTimeout(() => showSetupWizard(), 400);
       }
     }
+    if (!_wizardShown) setTimeout(() => showRoleTips(), 800);
 
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
