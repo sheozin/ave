@@ -1661,12 +1661,12 @@
     <span id="conn-lbl">offline</span>
   </div>
   <button id="auto-start-btn" onclick="toggleAutoStart()" title="Auto-start sessions at planned time">⏱ AUTO</button>
-  <button id="billing-btn" onclick="openBillingModal()" title="Manage billing" style="display:none">Billing</button>
+  <button id="billing-btn" onclick="openBillingModal()" title="Manage billing" style="display:none">&#x1F4B3; Billing</button>
   <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
-    Operators <span id="users-badge"></span>
+    &#x1F465; Operators <span id="users-badge"></span>
   </button>
   <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
-  <button id="help-btn" class="help-btn" onclick="toggleHelpMenu()" title="Help (?)">?<span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
+  <button id="help-btn" onclick="toggleHelpMenu()" title="Help &middot; Press ? anytime">Help<span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
   <div id="help-dropdown" class="help-dropdown">
     <button onclick="openShortcutsModal();closeHelpMenu()">⌨️ Keyboard Shortcuts</button>
     <button onclick="openQuickRefModal();closeHelpMenu()">📋 Quick Reference</button>
@@ -1676,6 +1676,49 @@
     <button onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()">💬 Contact Support</button>
     <div class="hd-sep"></div>
     <button onclick="openAboutModal();closeHelpMenu()">ℹ️ About CueDeck</button>
+  </div>
+  <!-- USER CHIP + PROFILE PANEL -->
+  <div id="user-chip" class="user-chip" onclick="toggleProfilePanel(event)">
+    <div id="user-chip-avatar" class="uc-avatar"></div>
+    <div>
+      <div id="user-chip-name" class="uc-name"></div>
+      <div id="user-chip-role" class="uc-role"></div>
+    </div>
+    <div class="uc-sep"></div>
+    <span class="uc-caret">&#9662;</span>
+    <div id="profile-panel" class="profile-panel" style="display:none" onclick="event.stopPropagation()">
+      <div class="pp-identity">
+        <div id="pp-avatar" class="pp-avatar"></div>
+        <div>
+          <div id="pp-name" class="pp-name"></div>
+          <div id="pp-email" class="pp-email"></div>
+          <span id="pp-role-badge" class="pp-role-badge"></span>
+        </div>
+      </div>
+      <div id="pp-plan-section" class="pp-plan" style="display:none">
+        <div class="pp-plan-row">
+          <span id="pp-plan-name" class="pp-plan-name"></span>
+          <span id="pp-plan-status" class="pp-plan-status"></span>
+        </div>
+        <p id="pp-trial-note" class="pp-trial-note" style="display:none"></p>
+        <div id="pp-usage"></div>
+      </div>
+      <div class="pp-actions">
+        <button id="pp-billing-btn" class="pp-action" style="display:none"
+                onclick="openBillingModal();closeProfilePanel()">
+          <span class="pp-action-icon">&#x1F4B3;</span>Manage Billing
+        </button>
+        <div id="pp-upgrade-wrap" style="display:none">
+          <button class="pp-action pp-upgrade" onclick="openBillingModal();closeProfilePanel()">
+            <span class="pp-action-icon">&#x2B06;&#xFE0F;</span>Upgrade Plan
+          </button>
+        </div>
+        <div class="pp-divider"></div>
+        <button class="pp-action pp-danger" onclick="doLogout()">
+          <span class="pp-action-icon">&#x23FB;</span>Sign Out
+        </button>
+      </div>
+    </div>
   </div>
   <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
   <div id="mobile-menu">
@@ -1687,6 +1730,8 @@
     <button onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button onclick="openUsersModal();toggleHamburger()">Operators</button>
     <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
+    <div style="height:1px;background:var(--border);margin:2px 6px"></div>
+    <div id="mobile-signed-in" style="padding:6px 14px;font-size:10px;color:var(--dim);font-style:italic"></div>
     <button onclick="doLogout()">Sign out</button>
   </div>
 </div>
@@ -2128,7 +2173,7 @@
     <div class="ev-modal-title" id="ev-modal-title">New Event</div>
     <label>Name<input id="evm-name" type="text" placeholder="Spring Summit 2026" required></label>
     <label>Date<input id="evm-date" type="date" required></label>
-    <label>Timezone<input id="evm-tz"  type="text" placeholder="Europe/Warsaw"></label>
+    <label>Timezone<select id="evm-tz"></select></label>
     <label>Venue<input id="evm-venue" type="text" placeholder="Main Hall"></label>
     <label>Start<input id="evm-start" type="time" required></label>
     <label>End<input id="evm-end" type="time" required></label>
