@@ -5446,6 +5446,7 @@ async function loadUserRole() {
   }
 
   S.userRole = data.role;
+  S.userName = data.name || '';
   setRole(data.role);
 
   // Detect role change → schedule welcome modal or toast
