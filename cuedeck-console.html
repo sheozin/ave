@@ -6028,7 +6028,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
           <div style="font-size:10px;color:var(--dim)">${label}</div>
         </div>`).join('');
       const directorCTA = (S.role === 'director') ? `
-        <button class="abtn btn-blue" style="height:auto;padding:12px 24px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(59,130,246,.3)"
+        <button class="abtn" style="height:auto;padding:12px 24px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;box-shadow:0 4px 16px rgba(59,130,246,.3)"
           onclick="openEvModal('create')">＋ Create Your First Event</button>
         <div style="display:flex;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">${stepsHtml}</div>` : '';
       document.getElementById('sessions-list').innerHTML =
