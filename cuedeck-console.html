@@ -894,6 +894,84 @@
     #evm-error { color:var(--red);font-size:11px;min-height:14px; }
     .ev-edit-btn { background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px;padding:0 3px;opacity:.5;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
     .ev-edit-btn:hover { opacity:1;color:var(--text); }
+
+    /* ── HELP SYSTEM ────────────────────────────────────────────── */
+    /* Help button in header */
+    .help-btn { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .15s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .help-btn:hover { border-color: var(--blue); color: var(--text-primary); background: rgba(59,130,246,.08); }
+    .changelog-badge { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; border: 2px solid var(--surface); }
+
+    /* Help dropdown */
+    .help-dropdown { display: none; position: absolute; top: 52px; right: 60px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 215; flex-direction: column; gap: 2px; }
+    .help-dropdown.hd-open { display: flex; }
+    .help-dropdown button { width: 100%; background: none; border: none; color: var(--text-secondary); font-size: 12px; padding: 8px 12px; border-radius: 6px; cursor: pointer; text-align: left; font-family: inherit; transition: all .12s; display: flex; align-items: center; gap: 8px; }
+    .help-dropdown button:hover { background: var(--hover); color: var(--text-primary); }
+    .help-dropdown .hd-sep { height: 1px; background: var(--border); margin: 2px 6px; }
+
+    /* Keyboard shortcuts grid */
+    .kb-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
+    .kb-cat { grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+    .kb-cat:first-child { margin-top: 0; }
+    .kb-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; }
+    .kb-row .kb-label { font-size: 12px; color: var(--text-secondary); }
+    .kb-key { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 22px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--border); background: rgba(148,163,184,.06); color: var(--text-primary); font-size: 11px; font-family: 'SF Mono','Fira Code','Monaco',monospace; font-weight: 500; white-space: nowrap; }
+
+    /* Changelog */
+    .cl-entry { margin-bottom: 16px; }
+    .cl-ver { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+    .cl-date { font-size: 11px; color: var(--text-muted); margin-left: 8px; }
+    .cl-list { list-style: none; padding: 0; margin: 8px 0 0 0; display: flex; flex-direction: column; gap: 4px; }
+    .cl-list li { font-size: 12px; color: var(--text-secondary); display: flex; align-items: flex-start; gap: 8px; }
+    .cl-tag { flex-shrink: 0; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 3px; }
+    .cl-tag.added { background: rgba(34,197,94,.15); color: #4ade80; }
+    .cl-tag.changed { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .cl-tag.fixed { background: rgba(245,158,11,.15); color: #fbbf24; }
+
+    /* Quick Reference */
+    .qr-section { margin-bottom: 16px; }
+    .qr-section-title { font-size: 12px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+    .qr-state-flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+    .qr-state { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; border: 1px solid var(--border); color: var(--text-secondary); }
+    .qr-arrow { color: var(--dim); font-size: 12px; }
+    .qr-role-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .qr-role-table th { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+    .qr-role-table td { padding: 4px 8px; border-bottom: 1px solid rgba(148,163,184,.06); color: var(--text-secondary); }
+    .qr-role-table tr:hover td { background: rgba(148,163,184,.04); }
+    .qr-check { color: var(--green); } .qr-dash { color: var(--dim); }
+    .qr-wf { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+
+    /* Command Palette */
+    .cmd-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.60); z-index: 260; display: flex; align-items: flex-start; justify-content: center; padding-top: 120px; backdrop-filter: blur(2px); }
+    .cmd-box { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; width: 100%; max-width: 480px; box-shadow: 0 16px 48px rgba(0,0,0,.6); overflow: hidden; }
+    .cmd-input-wrap { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .cmd-input-wrap svg { flex-shrink: 0; color: var(--text-muted); }
+    .cmd-input { flex: 1; background: none; border: none; color: var(--text-primary); font-size: 14px; font-family: inherit; outline: none; }
+    .cmd-input::placeholder { color: var(--text-muted); }
+    .cmd-results { max-height: 320px; overflow-y: auto; padding: 6px; }
+    .cmd-results:empty::after { content: 'No results'; display: block; padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; }
+    .cmd-cat { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; padding: 8px 10px 4px; }
+    .cmd-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; transition: background .1s; font-size: 12px; color: var(--text-secondary); }
+    .cmd-item:hover, .cmd-item.active { background: var(--hover); color: var(--text-primary); }
+    .cmd-item-icon { flex-shrink: 0; width: 20px; text-align: center; font-size: 14px; }
+    .cmd-item-label { flex: 1; }
+    .cmd-item-hint { font-size: 10px; color: var(--dim); }
+    .cmd-footer { padding: 8px 16px; border-top: 1px solid var(--border); display: flex; gap: 12px; font-size: 10px; color: var(--dim); }
+    .cmd-footer kbd { font-size: 10px; background: rgba(148,163,184,.08); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-family: inherit; }
+
+    /* About modal */
+    .about-content { text-align: center; }
+    .about-content svg { height: 40px; width: auto; margin-bottom: 8px; }
+    .about-ver { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; }
+    .about-links a { font-size: 11px; color: var(--blue); text-decoration: none; }
+    .about-links a:hover { text-decoration: underline; }
+    .about-credits { font-size: 10px; color: var(--dim); margin-top: 12px; }
+
+    @media screen and (max-width: 767px) {
+      .kb-grid { grid-template-columns: 1fr; }
+      .cmd-backdrop { padding-top: 24px; padding-left: 10px; padding-right: 10px; }
+      .help-dropdown { right: 10px; }
+    }
     /* ── SESSION MODAL extras ── */
     .sm-chk { display:flex;align-items:center;gap:5px;cursor:pointer; }
     .sm-chk input[type=checkbox] { width:13px;height:13px;accent-color:var(--blue); }
@@ -1432,8 +1510,24 @@
     Operators <span id="users-badge"></span>
   </button>
   <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
+  <button id="help-btn" class="help-btn" onclick="toggleHelpMenu()" title="Help (?)">?<span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
+  <div id="help-dropdown" class="help-dropdown">
+    <button onclick="openShortcutsModal();closeHelpMenu()">⌨️ Keyboard Shortcuts</button>
+    <button onclick="openQuickRefModal();closeHelpMenu()">📋 Quick Reference</button>
+    <button onclick="openChangelogModal();closeHelpMenu()">🆕 What's New</button>
+    <div class="hd-sep"></div>
+    <button onclick="window.open('https://www.cuedeck.io','_blank');closeHelpMenu()">📖 Documentation</button>
+    <button onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()">💬 Contact Support</button>
+    <div class="hd-sep"></div>
+    <button onclick="openAboutModal();closeHelpMenu()">ℹ️ About CueDeck</button>
+  </div>
   <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
   <div id="mobile-menu">
+    <button onclick="openShortcutsModal();toggleHamburger()">⌨️ Shortcuts</button>
+    <button onclick="openQuickRefModal();toggleHamburger()">📋 Quick Ref</button>
+    <button onclick="openChangelogModal();toggleHamburger()">🆕 What's New</button>
+    <button onclick="openAboutModal();toggleHamburger()">ℹ️ About</button>
+    <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     <button onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button onclick="openUsersModal();toggleHamburger()">Operators</button>
     <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
@@ -1905,6 +1999,37 @@
 // ═══════════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// APP INFO & CHANGELOG
+// ═══════════════════════════════════════════════════
+const APP_VERSION    = '1.4.0';
+const APP_BUILD_DATE = '2026-03-10';
+const CHANGELOG = [
+  { version: '1.4.0', date: '2026-03-10', items: [
+    { type: 'added', text: 'Help system: keyboard shortcuts, quick reference, command palette' },
+    { type: 'added', text: 'About panel with version info and legal links' },
+    { type: 'added', text: 'What\'s New changelog with unread badge' },
+    { type: 'added', text: 'Event ownership — users only see their own events' },
+    { type: 'changed', text: 'Full responsive layout for mobile and tablet' },
+    { type: 'changed', text: 'Role bar wraps on mobile, Timeline always visible' },
+    { type: 'fixed', text: 'Mobile header: logo size and hamburger alignment' },
+    { type: 'fixed', text: 'Setup wizard using incorrect column names' },
+  ]},
+  { version: '1.3.0', date: '2026-02-28', items: [
+    { type: 'added', text: 'Stripe billing integration with EUR pricing' },
+    { type: 'added', text: 'AI agent modules: Incident Advisor, Cue Engine, Report Generator' },
+    { type: 'added', text: 'Onboarding system: checklist, tooltips, setup wizard' },
+    { type: 'added', text: 'Timeline and Programme signage modes' },
+    { type: 'changed', text: 'Self-registration creates director role automatically' },
+  ]},
+  { version: '1.2.0', date: '2026-02-15', items: [
+    { type: 'added', text: 'Digital signage system with 10 display modes' },
+    { type: 'added', text: 'Director invite-by-email flow' },
+    { type: 'added', text: 'Stage confidence monitor (fullscreen overlay)' },
+    { type: 'fixed', text: 'Delay cascade visualization and reset' },
+  ]},
+];
+
 const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhd2VrcGd1ZW16dnV2dnVsZmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzk5MTEsImV4cCI6MjA4NzkxNTkxMX0.0zvCmKxdwAmfhmglYf2Gme6zpqtopBghSjI1ZyoVneg';
 const CLOCK_RESYNC_MS  = 300_000;   // 5 min
@@ -2465,25 +2590,53 @@ document.addEventListener('visibilitychange', async () => {
 // PR-019: Global keyboard shortcuts — director only
 // Shortcuts are disabled when focus is inside an input, textarea, or modal.
 document.addEventListener('keydown', e => {
-  const isDirector = S.role === 'director' || S.userRole === 'director';
-  if (!isDirector) return;
   const tag  = document.activeElement?.tagName?.toLowerCase();
   const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
   const inModal = !!document.activeElement?.closest('.ev-modal-backdrop');
 
-  if (e.key === 'Escape') {
-    // Close any open modal first; then clear filter if active
-    const openModal = document.querySelector('.ev-modal-backdrop[style*="flex"]');
-    if (openModal) {
-      if (openModal.id === 'sess-modal')  { closeSessModal(); return; }
-      if (openModal.id === 'ev-modal')    { closeEvModal();   return; }
-      if (openModal.id === 'disp-modal')  { closeDisplayModal(); return; }
-      if (openModal.id === 'spon-modal')  { closeSponsorModal(); return; }
-    }
-    if (isFilterActive()) { clearFilters(); return; }
+  // ── Universal shortcuts (all roles) ────────────────
+  // Cmd/Ctrl+K → command palette (always, even in input)
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    const pal = document.getElementById('cmd-palette');
+    if (pal.style.display === 'flex') closeCmdPalette(); else openCmdPalette();
     return;
   }
+
+  if (e.key === 'Escape') {
+    // Close command palette first
+    if (document.getElementById('cmd-palette').style.display === 'flex') { closeCmdPalette(); return; }
+    // Close help dropdown
+    const hd = document.getElementById('help-dropdown');
+    if (hd?.classList.contains('hd-open')) { closeHelpMenu(); return; }
+    // Close any open modal
+    const openModal = document.querySelector('.ev-modal-backdrop[style*="flex"]');
+    if (openModal) {
+      if (openModal.id === 'shortcuts-modal') { closeShortcutsModal(); return; }
+      if (openModal.id === 'about-modal')     { closeAboutModal(); return; }
+      if (openModal.id === 'changelog-modal') { closeChangelogModal(); return; }
+      if (openModal.id === 'quickref-modal')  { closeQuickRefModal(); return; }
+      if (openModal.id === 'sess-modal')      { closeSessModal(); return; }
+      if (openModal.id === 'ev-modal')        { closeEvModal(); return; }
+      if (openModal.id === 'disp-modal')      { closeDisplayModal(); return; }
+      if (openModal.id === 'spon-modal')      { closeSponsorModal(); return; }
+    }
+    if (typeof isFilterActive === 'function' && isFilterActive()) { clearFilters(); return; }
+    return;
+  }
+
+  // ? → shortcuts modal (when not typing)
+  if (e.key === '?' && !inInput) {
+    e.preventDefault();
+    openShortcutsModal();
+    return;
+  }
+
   if (inInput || inModal) return; // don't intercept typing
+
+  // ── Director-only shortcuts ────────────────────────
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  if (!isDirector) return;
 
   switch (e.key) {
     case '/':
@@ -5713,7 +5866,10 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     // 9. Edge Functions (background check)
     checkEF();
 
-    // 10. AI Agents — init once per session (guard prevents duplicate modal injection)
+    // 10. Help system — changelog badge
+    checkChangelogBadge();
+
+    // 11. AI Agents — init once per session (guard prevents duplicate modal injection)
     if (typeof CueDeckIncidentAdvisor !== 'undefined' && !window._cueDeckAgentsInit) {
       window._cueDeckAgentsInit = true;
       CueDeckIncidentAdvisor.init({
@@ -5892,6 +6048,289 @@ document.addEventListener('click', function(e) {
   if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
     menu.classList.remove('menu-open');
   }
+  // Also close help dropdown on outside click
+  const hd = document.getElementById('help-dropdown');
+  const hb = document.getElementById('help-btn');
+  if (hd && hb && !hd.contains(e.target) && !hb.contains(e.target)) {
+    hd.classList.remove('hd-open');
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// HELP SYSTEM
+// ═══════════════════════════════════════════════════
+
+// ── Help Dropdown ──────────────────────────────────
+function toggleHelpMenu() {
+  document.getElementById('help-dropdown').classList.toggle('hd-open');
+}
+function closeHelpMenu() {
+  document.getElementById('help-dropdown').classList.remove('hd-open');
+}
+
+// ── P1: Keyboard Shortcuts Modal ───────────────────
+function openShortcutsModal() {
+  const shortcuts = [
+    { cat: 'Navigation', items: [
+      { key: '/', label: 'Focus search bar' },
+      { key: 'B', label: 'Focus broadcast input' },
+      { key: 'R', label: 'Refresh sessions' },
+      { key: '↑ ↓', label: 'Navigate session cards' },
+    ]},
+    { cat: 'Help', items: [
+      { key: '?', label: 'Keyboard shortcuts' },
+      { key: '⌘K', label: 'Command palette' },
+    ]},
+    { cat: 'General', items: [
+      { key: 'Esc', label: 'Close modal / clear filters' },
+    ]},
+  ];
+  let html = '';
+  for (const s of shortcuts) {
+    html += `<div class="kb-cat">${s.cat}</div>`;
+    for (const item of s.items) {
+      const keys = item.key.split(' ').map(k => `<span class="kb-key">${k}</span>`).join(' ');
+      html += `<div class="kb-row"><span class="kb-label">${item.label}</span>${keys}</div>`;
+    }
+  }
+  document.getElementById('shortcuts-content').innerHTML = html;
+  document.getElementById('shortcuts-modal').style.display = 'flex';
+}
+function closeShortcutsModal() {
+  document.getElementById('shortcuts-modal').style.display = 'none';
+}
+
+// ── P3: About Modal ────────────────────────────────
+function openAboutModal() {
+  const el = document.getElementById('about-content');
+  el.innerHTML = `
+    <svg viewBox="0 0 214 48" xmlns="http://www.w3.org/2000/svg" style="height:40px;width:auto">
+      <defs><linearGradient id="ab-bg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#6366F1"/></linearGradient></defs>
+      <rect width="40" height="40" rx="12" fill="url(#ab-bg)" y="4"/>
+      <text x="12" y="32" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="800" fill="#fff">C</text>
+      <text x="50" y="32" font-family="Inter,system-ui,sans-serif" font-size="32" font-weight="300" fill="#CBD5E1">Cue</text>
+      <text x="107" y="32" font-family="Inter,system-ui,sans-serif" font-size="32" font-weight="700" fill="#F1F5F9">Deck</text>
+    </svg>
+    <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:4px">Production Console</div>
+    <div class="about-ver">Version ${APP_VERSION} · Built ${APP_BUILD_DATE}</div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px;font-style:italic">Made for live event professionals</div>
+    <div class="about-links">
+      <a href="https://www.cuedeck.io" target="_blank">Website</a>
+      <span style="color:var(--dim)">·</span>
+      <a href="https://www.cuedeck.io/terms" target="_blank">Terms</a>
+      <span style="color:var(--dim)">·</span>
+      <a href="https://www.cuedeck.io/privacy" target="_blank">Privacy</a>
+      <span style="color:var(--dim)">·</span>
+      <a href="mailto:support@cuedeck.io">Support</a>
+    </div>
+    <div class="about-credits">Powered by Supabase · Deployed on Vercel</div>
+  `;
+  document.getElementById('about-modal').style.display = 'flex';
+}
+function closeAboutModal() {
+  document.getElementById('about-modal').style.display = 'none';
+}
+
+// ── P4: Changelog Modal ────────────────────────────
+function openChangelogModal() {
+  let html = '';
+  for (const entry of CHANGELOG) {
+    html += `<div class="cl-entry">
+      <span class="cl-ver">v${entry.version}</span><span class="cl-date">${entry.date}</span>
+      <ul class="cl-list">`;
+    for (const item of entry.items) {
+      html += `<li><span class="cl-tag ${item.type}">${item.type}</span><span>${item.text}</span></li>`;
+    }
+    html += `</ul></div>`;
+  }
+  document.getElementById('changelog-content').innerHTML = html;
+  document.getElementById('changelog-modal').style.display = 'flex';
+  // Clear unread badge
+  localStorage.setItem('cuedeck_changelog_seen', APP_VERSION);
+  const badge = document.getElementById('cl-badge');
+  if (badge) badge.style.display = 'none';
+}
+function closeChangelogModal() {
+  document.getElementById('changelog-modal').style.display = 'none';
+}
+
+function checkChangelogBadge() {
+  const seen = localStorage.getItem('cuedeck_changelog_seen');
+  if (seen !== APP_VERSION) {
+    const badge = document.getElementById('cl-badge');
+    if (badge) badge.style.display = '';
+  }
+}
+
+// ── P5: Quick Reference Modal ──────────────────────
+function openQuickRefModal() {
+  // State machine flow (from ALLOWED constant)
+  const states = ['PLANNED','READY','CALLING','LIVE','OVERRUN','HOLD','ENDED','CANCELLED'];
+  const stateColors = { PLANNED:'#94a3b8', READY:'#facc15', CALLING:'#fb923c', LIVE:'#4ade80', OVERRUN:'#f87171', HOLD:'#a78bfa', ENDED:'#64748b', CANCELLED:'#64748b' };
+  let flowHtml = '<div class="qr-state-flow">';
+  const mainFlow = ['PLANNED','READY','CALLING','LIVE','ENDED'];
+  mainFlow.forEach((s, i) => {
+    flowHtml += `<span class="qr-state" style="border-color:${stateColors[s]};color:${stateColors[s]}">${s}</span>`;
+    if (i < mainFlow.length - 1) flowHtml += '<span class="qr-arrow">→</span>';
+  });
+  flowHtml += '</div>';
+  flowHtml += '<div style="font-size:11px;color:var(--dim);margin-bottom:8px">';
+  flowHtml += 'Branch states: <strong style="color:#a78bfa">HOLD</strong> (pause any live/calling), ';
+  flowHtml += '<strong style="color:#f87171">OVERRUN</strong> (auto from live), ';
+  flowHtml += '<strong style="color:#64748b">CANCELLED</strong> (from planned/ready/calling)';
+  flowHtml += '</div>';
+
+  // Transitions detail
+  let transHtml = '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:12px">';
+  for (const [from, tos] of Object.entries(ALLOWED)) {
+    if (!tos.length) continue;
+    transHtml += `<div><strong style="color:${stateColors[from]}">${from}</strong> → ${tos.join(', ')}</div>`;
+  }
+  transHtml += '</div>';
+
+  // Role permissions table (from ROLE_WRITE)
+  const roles = Object.keys(ROLE_WRITE);
+  const allStates = ['READY','CALLING','LIVE','HOLD','ENDED','CANCELLED','PLANNED'];
+  let tableHtml = '<table class="qr-role-table"><thead><tr><th>Role</th>';
+  for (const st of allStates) tableHtml += `<th>${st.substring(0,4)}</th>`;
+  tableHtml += '<th>Delay</th></tr></thead><tbody>';
+  for (const role of roles) {
+    tableHtml += `<tr><td style="font-weight:600">${role}</td>`;
+    for (const st of allStates) {
+      tableHtml += ROLE_WRITE[role].includes(st)
+        ? '<td class="qr-check">✓</td>'
+        : '<td class="qr-dash">–</td>';
+    }
+    tableHtml += ROLE_DELAY[role]
+      ? '<td class="qr-check">✓</td>'
+      : '<td class="qr-dash">–</td>';
+    tableHtml += '</tr>';
+  }
+  tableHtml += '</tbody></table>';
+
+  // Workflows
+  const workflows = `
+    <div class="qr-section">
+      <div class="qr-section-title">Key Workflows</div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin:6px 0 2px">Create & Launch an Event</div>
+      <ol class="qr-wf"><li>Click <strong>＋</strong> to create an event</li><li>Add sessions with times, rooms, speakers</li><li>Invite operators via the Operators panel</li><li>Set up signage displays in the sidebar</li><li>Move sessions through: READY → CALLING → LIVE → ENDED</li></ol>
+      <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin:10px 0 2px">Handle a Delay</div>
+      <ol class="qr-wf"><li>Click <strong>+5/10/15 min</strong> on the running session</li><li>Delay cascade auto-adjusts all following sessions</li><li>Click <strong>Reset delays</strong> to revert all shifts</li></ol>
+    </div>`;
+
+  document.getElementById('quickref-content').innerHTML = `
+    <div class="qr-section"><div class="qr-section-title">Session State Machine</div>${flowHtml}${transHtml}</div>
+    <div class="qr-section"><div class="qr-section-title">Role Permissions</div>${tableHtml}</div>
+    ${workflows}
+  `;
+  document.getElementById('quickref-modal').style.display = 'flex';
+}
+function closeQuickRefModal() {
+  document.getElementById('quickref-modal').style.display = 'none';
+}
+
+// ── P6: Command Palette ────────────────────────────
+let _cmdActiveIdx = -1;
+
+function openCmdPalette() {
+  document.getElementById('cmd-palette').style.display = 'flex';
+  const input = document.getElementById('cmd-input');
+  input.value = '';
+  _cmdActiveIdx = -1;
+  renderPaletteResults('');
+  setTimeout(() => input.focus(), 50);
+}
+function closeCmdPalette() {
+  document.getElementById('cmd-palette').style.display = 'none';
+}
+
+function getCmdStaticItems() {
+  return [
+    { cat: 'Actions', icon: '▶️', label: 'Refresh sessions', hint: 'R', action: () => { if (S.event) { loadSnapshot(S.event.id); pushToast('Refreshed','info'); } } },
+    { cat: 'Actions', icon: '📢', label: 'Focus broadcast', hint: 'B', action: () => document.getElementById('bc-input')?.focus() },
+    { cat: 'Actions', icon: '🔍', label: 'Focus search', hint: '/', action: () => document.getElementById('fb-search')?.focus() },
+    { cat: 'Navigation', icon: '📋', label: 'Quick Reference', action: () => openQuickRefModal() },
+    { cat: 'Navigation', icon: '⌨️', label: 'Keyboard Shortcuts', hint: '?', action: () => openShortcutsModal() },
+    { cat: 'Navigation', icon: '🆕', label: 'What\'s New', action: () => openChangelogModal() },
+    { cat: 'Navigation', icon: 'ℹ️', label: 'About CueDeck', action: () => openAboutModal() },
+    { cat: 'Navigation', icon: '💰', label: 'Open Billing', action: () => openBillingModal() },
+    { cat: 'Navigation', icon: '👥', label: 'Manage Operators', action: () => openUsersModal() },
+  ];
+  // Role switching
+}
+
+function renderPaletteResults(query) {
+  const q = query.toLowerCase().trim();
+  const results = [];
+
+  // Session matches
+  if (S.sessions?.length) {
+    const matching = S.sessions.filter(s => s.title?.toLowerCase().includes(q) || s.speaker?.toLowerCase().includes(q));
+    for (const s of matching.slice(0, 8)) {
+      results.push({ cat: 'Sessions', icon: '📅', label: s.title, hint: s.status, action: () => {
+        closeCmdPalette();
+        const card = document.getElementById('card-' + s.id);
+        if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.focus(); card.style.outline = '2px solid var(--blue)'; setTimeout(() => card.style.outline = '', 2000); }
+      }});
+    }
+  }
+
+  // Static command matches
+  for (const item of getCmdStaticItems()) {
+    if (!q || item.label.toLowerCase().includes(q) || item.cat.toLowerCase().includes(q)) {
+      results.push({ ...item, action: () => { closeCmdPalette(); item.action(); } });
+    }
+  }
+
+  // Role switch commands
+  const roles = ['director','stage','av','interp','reg','signage'];
+  for (const role of roles) {
+    if (!q || role.includes(q) || 'switch role'.includes(q)) {
+      results.push({ cat: 'Roles', icon: '🎭', label: `Switch to ${role.toUpperCase()}`, action: () => {
+        closeCmdPalette();
+        const btn = document.querySelector(`.rbtn[data-role="${role}"]`) || [...document.querySelectorAll('.rbtn')].find(b => b.textContent.trim().toLowerCase() === role);
+        if (btn) btn.click();
+      }});
+    }
+  }
+
+  // Render
+  const el = document.getElementById('cmd-results');
+  if (!results.length) { el.innerHTML = ''; _cmdActiveIdx = -1; return; }
+
+  let html = '';
+  let lastCat = '';
+  results.forEach((r, i) => {
+    if (r.cat !== lastCat) { html += `<div class="cmd-cat">${r.cat}</div>`; lastCat = r.cat; }
+    html += `<div class="cmd-item${i === _cmdActiveIdx ? ' active' : ''}" data-idx="${i}" onclick="executeCmdItem(${i})" onmouseenter="_cmdActiveIdx=${i};highlightCmdItem()">
+      <span class="cmd-item-icon">${r.icon}</span>
+      <span class="cmd-item-label">${r.label}</span>
+      ${r.hint ? `<span class="cmd-item-hint">${r.hint}</span>` : ''}
+    </div>`;
+  });
+  el.innerHTML = html;
+  window._cmdResults = results;
+  _cmdActiveIdx = 0;
+  highlightCmdItem();
+}
+
+function highlightCmdItem() {
+  const items = document.querySelectorAll('#cmd-results .cmd-item');
+  items.forEach((el, i) => el.classList.toggle('active', i === _cmdActiveIdx));
+}
+
+function executeCmdItem(idx) {
+  const results = window._cmdResults;
+  if (results && results[idx]) results[idx].action();
+}
+
+// Command palette keyboard navigation
+document.getElementById('cmd-input')?.addEventListener('keydown', function(e) {
+  const results = window._cmdResults || [];
+  if (e.key === 'ArrowDown') { e.preventDefault(); _cmdActiveIdx = Math.min(_cmdActiveIdx + 1, results.length - 1); highlightCmdItem(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _cmdActiveIdx = Math.max(_cmdActiveIdx - 1, 0); highlightCmdItem(); }
+  else if (e.key === 'Enter') { e.preventDefault(); executeCmdItem(_cmdActiveIdx); }
+  else if (e.key === 'Escape') { closeCmdPalette(); }
 });
 
 </script>
@@ -5902,6 +6341,53 @@ document.addEventListener('click', function(e) {
      Without a key all agents run in fallback mode — UI still fully works.
 ═══════════════════════════════════════════════════════════════ -->
 <!-- ONBOARDING TOOLTIP -->
+<!-- ── HELP SYSTEM MODALS ────────────────────────────────── -->
+<div id="shortcuts-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeShortcutsModal()">
+  <div class="ev-modal-card" style="max-width:560px">
+    <div class="ev-modal-title">Keyboard Shortcuts</div>
+    <div id="shortcuts-content" class="kb-grid"></div>
+    <div class="ev-modal-actions"><button onclick="closeShortcutsModal()">Close</button></div>
+  </div>
+</div>
+
+<div id="about-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeAboutModal()">
+  <div class="ev-modal-card" style="max-width:380px">
+    <div class="about-content" id="about-content"></div>
+    <div class="ev-modal-actions" style="justify-content:center"><button onclick="closeAboutModal()">Close</button></div>
+  </div>
+</div>
+
+<div id="changelog-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeChangelogModal()">
+  <div class="ev-modal-card" style="max-width:520px">
+    <div class="ev-modal-title">What's New</div>
+    <div id="changelog-content"></div>
+    <div class="ev-modal-actions"><button onclick="closeChangelogModal()">Close</button></div>
+  </div>
+</div>
+
+<div id="quickref-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeQuickRefModal()">
+  <div class="ev-modal-card" style="max-width:620px">
+    <div class="ev-modal-title">Quick Reference</div>
+    <div id="quickref-content"></div>
+    <div class="ev-modal-actions"><button onclick="closeQuickRefModal()">Close</button></div>
+  </div>
+</div>
+
+<div id="cmd-palette" class="cmd-backdrop" style="display:none" onclick="if(event.target===this)closeCmdPalette()">
+  <div class="cmd-box">
+    <div class="cmd-input-wrap">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6.5" cy="6.5" r="5"/><line x1="10" y1="10" x2="15" y2="15"/></svg>
+      <input class="cmd-input" id="cmd-input" type="text" placeholder="Search sessions, actions, navigation…" oninput="renderPaletteResults(this.value)" autocomplete="off">
+    </div>
+    <div class="cmd-results" id="cmd-results"></div>
+    <div class="cmd-footer">
+      <span><kbd>↑↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> select</span>
+      <span><kbd>esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
 <div id="ob-tip" style="display:none" class="ob-tip">
   <div class="ob-tip-text" id="ob-tip-text"></div>
   <div class="ob-tip-step" id="ob-tip-step"></div>
