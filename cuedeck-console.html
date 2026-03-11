@@ -4276,7 +4276,8 @@ function buildEvSelect(events) {
       : '';
     return `<button class="rbtn ${active ? 'active' : ''}" onclick="switchEvent('${e.id}')">${esc(e.name)}</button>${editBtn}`;
   }).join('');
-  html += `<button class="rbtn" onclick="openEvModal('create')" title="New event">＋</button>`;
+  const plusClass = (S.role === 'director' && !events.length) ? 'rbtn rbtn-pulse' : 'rbtn';
+  html += `<button class="${plusClass}" onclick="openEvModal('create')" title="New event">＋</button>`;
   wrap.innerHTML = html;
 }
 
