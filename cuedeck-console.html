@@ -5186,8 +5186,8 @@ function showWelcomeModal(role) {
     card.innerHTML = `
       <div style="font-size:28px;text-align:center">🎉</div>
       <div class="ev-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
-      <div style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center">${role.toUpperCase()}</div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center">${ROLE_DESCRIPTIONS[role] || ''}</div>
+      <div style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center">${esc(role).toUpperCase()}</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center">${esc(ROLE_DESCRIPTIONS[role] || '')}</div>
       <div class="ev-modal-actions" style="justify-content:center;margin-top:12px">
         <button class="primary" onclick="dismissWelcome(false)">Get Started</button>
       </div>`;
@@ -6020,15 +6020,31 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     }
 
     if (!events.length) {
-      document.getElementById('sessions-list').innerHTML = `
-        <div id="empty">
-          <div class="ei">📅</div>
-          <h2>No active events</h2>
-          <p>Use the <strong>＋</strong> button above to create a new event.</p>
-        </div>`;
+      const labels = ['Create event','Add sessions','Invite team','Go live'];
+      const stepsHtml = labels.map((label, i) =>
+        `<div style="flex:1;text-align:center;position:relative">
+          ${i < 3 ? '<span style="position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--dim);font-size:14px">›</span>' : ''}
+          <div style="width:22px;height:22px;background:#1e3a5f;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--blue);margin:0 auto 5px">${i + 1}</div>
+          <div style="font-size:10px;color:var(--dim)">${label}</div>
+        </div>`).join('');
+      const directorCTA = (S.role === 'director') ? `
+        <button class="abtn btn-blue" style="padding:12px 24px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(59,130,246,.3)"
+          onclick="openEvModal('create')">＋ Create Your First Event</button>
+        <div style="display:flex;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">${stepsHtml}</div>` : '';
+      document.getElementById('sessions-list').innerHTML =
+        `<div id="empty"><div class="ei">📅</div><h2>No events yet</h2>` +
+        `<p>Start by creating your first event, then add your sessions and team.</p>` +
+        `${directorCTA}</div>`;
       document.getElementById('event-name').textContent = 'No active events';
       buildEvSelect([]);
       overlay.style.display = 'none';
+      // Wizard trigger — was unreachable before due to early return; now fixed
+      if (S.role === 'director' && !S._showWelcome) {
+        const uid = S.user?.id || 'anon';
+        if (!localStorage.getItem('cuedeck_wiz_' + uid + '_done')) {
+          setTimeout(() => showSetupWizard(), 400);
+        }
+      }
       return;
     }
 
@@ -6113,18 +6129,10 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       delete S._showRoleChange;
     }
 
-    // Onboarding: checklist + tooltips + wizard
+    // Onboarding: checklist + tooltips
+    // (Wizard trigger for 0-event directors lives in the early-return block above)
     initChecklist();
-    // Show wizard for directors with no events; defer tooltips until wizard is done
-    let _wizardShown = false;
-    if (S.role === 'director' && (!S.events || S.events.length === 0)) {
-      const uid = S.user?.id || 'anon';
-      if (!localStorage.getItem('cuedeck_wiz_' + uid + '_done')) {
-        _wizardShown = true;
-        setTimeout(() => showSetupWizard(), 400);
-      }
-    }
-    if (!_wizardShown) setTimeout(() => showRoleTips(), 800);
+    setTimeout(() => showRoleTips(), 800);
 
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
