@@ -1186,6 +1186,7 @@
       /* FILTER BAR */
       #filter-bar { flex-wrap: wrap; }
       #fb-search { max-width: none; }
+      #fb-view { flex-shrink: 0; }
 
       /* DIAG BAR */
       .di span { font-size: 0; }
@@ -1231,23 +1232,22 @@
       #sidebar.sidebar-open { transform: translateX(0); }
       #sidebar-toggle { display: block; }
 
-      /* ROLE BAR */
-      #role-bar { padding: 5px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-      #role-bar::-webkit-scrollbar { display: none; }
+      /* ROLE BAR — wrap: roles on row 1, event selector on row 2 */
+      #role-bar { padding: 5px 10px; flex-wrap: wrap; gap: 4px 4px; }
       #role-bar label { display: none; }
       .rbtn { padding: 0 8px; height: 28px; font-size: 10px; flex-shrink: 0; }
-      #ev-select-wrap { gap: 4px; }
+      #ev-select-wrap { flex-basis: 100%; gap: 4px; margin-left: 0; }
       #ev-select-wrap button, #ev-select-wrap select { font-size: 10px; }
 
-      /* FILTER BAR — search full width, filters behind toggle */
+      /* FILTER BAR — search full width, filters behind toggle, timeline always visible */
       #filter-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
       #fb-search { flex: 1 1 100%; max-width: none; order: -2; }
       #filter-toggle-btn { display: flex; order: -1; }
-      #fb-status, #fb-room, #fb-clear, #fb-view { display: none; }
+      #fb-view { order: -1; font-size: 11px; }
+      #fb-status, #fb-room, #fb-clear { display: none; }
       #filter-bar.filters-open #fb-status,
       #filter-bar.filters-open #fb-room,
-      #filter-bar.filters-open #fb-clear,
-      #filter-bar.filters-open #fb-view { display: block; }
+      #filter-bar.filters-open #fb-clear { display: block; }
       #fb-status, #fb-room { flex: 1 1 calc(50% - 4px); }
 
       /* SESSION CARD TIMES — stack vertically */
@@ -4200,7 +4200,7 @@ async function submitEvModal() {
 
       const { data: ev, error } = await sb.from('leod_events')
         .insert({ name, date, timezone: tz, event_start: start, event_end: end,
-                  venue: venue || null, active: true })
+                  venue: venue || null, active: true, created_by: S.user.id })
         .select().single();
       if (error) { errEl.textContent = error.message; return; }
 
@@ -5528,7 +5528,7 @@ async function wizNext() {
       const date = document.getElementById('wiz-ev-date')?.value;
       const tz = document.getElementById('wiz-ev-tz')?.value;
       const { data, error } = await supabase.from('leod_events').insert({
-        name, event_date: date, timezone: tz, planned_start: '09:00:00', planned_end: '18:00:00'
+        name, date, timezone: tz, event_start: '09:00:00', event_end: '18:00:00', active: true, created_by: S.user?.id
       }).select().single();
       if (error) { wizShowError(error.message); return; }
       // Reload events and select the new one
