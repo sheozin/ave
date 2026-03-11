@@ -343,3 +343,24 @@ describe('setViewMode() — view mode state guard', () => {
     expect(applyViewMode('timeline', 'timeline')).toBe('timeline');
   });
 });
+
+// getUtcOffset() regex extraction — pure function test
+function extractOffset(localeString: string): string {
+  const m = localeString.match(/GMT([+-]\d+(?::\d+)?)/);
+  return m ? 'UTC' + m[1] : 'UTC+0';
+}
+
+describe('getUtcOffset() — offset string extraction', () => {
+  it('extracts positive integer offset', () => {
+    expect(extractOffset('1/1/2026, 10:00:00 AM GMT+2')).toBe('UTC+2');
+  });
+  it('extracts negative offset', () => {
+    expect(extractOffset('1/1/2026, 5:00:00 AM GMT-5')).toBe('UTC-5');
+  });
+  it('extracts offset with colon minutes (e.g. India UTC+5:30)', () => {
+    expect(extractOffset('1/1/2026, 3:30:00 PM GMT+5:30')).toBe('UTC+5:30');
+  });
+  it('returns UTC+0 when no GMT marker found', () => {
+    expect(extractOffset('some string without offset')).toBe('UTC+0');
+  });
+});

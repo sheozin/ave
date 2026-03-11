@@ -2976,6 +2976,39 @@ function setViewMode(mode) {
   renderSessions();
 }
 
+// TIMEZONE HELPERS
+function getUtcOffset(tz) {
+  try {
+    const s = new Date().toLocaleString('en', { timeZone: tz, timeZoneName: 'shortOffset' });
+    const m = s.match(/GMT([+-]\d+(?::\d+)?)/);
+    return m ? 'UTC' + m[1] : 'UTC+0';
+  } catch { return 'UTC'; }
+}
+
+function buildTzSelect(selectId, currentTz) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const zones = Intl.supportedValuesOf('timeZone');
+  const groups = {};
+  zones.forEach(function(tz) {
+    var region = tz.includes('/') ? tz.split('/')[0] : 'Other';
+    if (!groups[region]) groups[region] = [];
+    groups[region].push(tz);
+  });
+  var defaultTz = currentTz || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  var html = '';
+  Object.keys(groups).sort().forEach(function(region) {
+    html += '<optgroup label="' + region + '">';
+    groups[region].forEach(function(tz) {
+      var offset = getUtcOffset(tz);
+      var selected = tz === defaultTz ? ' selected' : '';
+      html += '<option value="' + tz + '"' + selected + '>' + tz + ' (' + offset + ')</option>';
+    });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+}
+
 // PR-020: Render sessions as a horizontal SVG timeline
 // Rows = rooms (or single row if no rooms assigned).
 // X axis = time, marked every 30 minutes.
@@ -4489,7 +4522,7 @@ function openEvModal(mode, eventId) {
     document.getElementById('ev-modal-title').textContent = 'New Event';
     document.getElementById('evm-name').value  = '';
     document.getElementById('evm-date').value  = new Date().toISOString().substring(0, 10);
-    document.getElementById('evm-tz').value    = S.event?.timezone || 'Europe/Warsaw';
+    buildTzSelect('evm-tz', S.event?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
     document.getElementById('evm-venue').value = '';
     document.getElementById('evm-start').value = '09:00';
     document.getElementById('evm-end').value   = '18:00';
@@ -4505,7 +4538,7 @@ function openEvModal(mode, eventId) {
     document.getElementById('ev-modal-title').textContent = 'Edit Event';
     document.getElementById('evm-name').value  = ev.name  || '';
     document.getElementById('evm-date').value  = ev.date  || '';
-    document.getElementById('evm-tz').value    = ev.timezone || '';
+    buildTzSelect('evm-tz', ev.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
     document.getElementById('evm-venue').value = ev.venue || '';
     document.getElementById('evm-start').value = (ev.event_start || '').substring(0, 5);
     document.getElementById('evm-end').value   = (ev.event_end   || '').substring(0, 5);
@@ -5964,11 +5997,12 @@ function renderWizStep() {
   if (_wizStep === 0) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const today = new Date().toISOString().split('T')[0];
-    body.innerHTML = `
-      <label>Event Name<input id="wiz-ev-name" placeholder="e.g. Annual Conference 2026"></label>
-      <label>Date<input id="wiz-ev-date" type="date" value="${today}"></label>
-      <label>Timezone<input id="wiz-ev-tz" value="${tz}" readonly style="opacity:.7"></label>
-      <div class="wiz-hint">You can always edit these later from the event settings.</div>`;
+    body.innerHTML =
+      '<label>Event Name<input id="wiz-ev-name" placeholder="e.g. Annual Conference 2026"></label>' +
+      '<label>Date<input id="wiz-ev-date" type="date" value="' + today + '"></label>' +
+      '<label>Timezone<select id="wiz-ev-tz"></select></label>' +
+      '<div class="wiz-hint">You can always edit these later from the event settings.</div>';
+    buildTzSelect('wiz-ev-tz', tz);
   } else if (_wizStep === 1) {
     body.innerHTML = `
       <label>Session Title<input id="wiz-sess-title" placeholder="e.g. Opening Keynote"></label>
