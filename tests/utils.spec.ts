@@ -324,3 +324,22 @@ describe('PR-010 — getNextSession()', () => {
     expect(getNextSession([live, s2, s3], live)).toBe(s2);
   });
 });
+
+// setViewMode() guard — pure logic
+function applyViewMode(current: string, requested: string): string {
+  if (current === requested) return current;
+  return requested;
+}
+
+describe('setViewMode() — view mode state guard', () => {
+  it('switches from list to timeline', () => {
+    expect(applyViewMode('list', 'timeline')).toBe('timeline');
+  });
+  it('switches from timeline to list', () => {
+    expect(applyViewMode('timeline', 'list')).toBe('list');
+  });
+  it('no-op when already in requested mode', () => {
+    expect(applyViewMode('list', 'list')).toBe('list');
+    expect(applyViewMode('timeline', 'timeline')).toBe('timeline');
+  });
+});

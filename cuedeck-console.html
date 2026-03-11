@@ -2969,6 +2969,13 @@ function toggleViewMode() {
   renderSessions();
 }
 
+function setViewMode(mode) {
+  if (S.viewMode === mode) return;
+  S.viewMode = mode;
+  buildFilterBar();
+  renderSessions();
+}
+
 // PR-020: Render sessions as a horizontal SVG timeline
 // Rows = rooms (or single row if no rooms assigned).
 // X axis = time, marked every 30 minutes.
@@ -4435,10 +4442,10 @@ function buildFilterBar() {
     '</select>' +
     '<button id="fb-clear" class="' + (isFilterActive()?'visible':'') + '" onclick="clearFilters()">\u2715 clear</button>' +
     '<span id="fb-count"></span>' +
-    '<button id="fb-view" class="abtn btn-grey" title="Toggle view mode" onclick="toggleViewMode()"' +
-    ' style="margin-left:auto;padding:3px 9px;font-size:10px">' +
-    (S.viewMode === 'timeline' ? '\u2630 List' : '\u23F1 Timeline') +
-    '</button>';
+    '<div class="fb-view-pill">' +
+    '<button class="fvp-btn' + (S.viewMode === 'list' ? ' active' : '') + '" onclick="setViewMode(\'list\')">\u2630 List</button>' +
+    '<button class="fvp-btn' + (S.viewMode === 'timeline' ? ' active' : '') + '" onclick="setViewMode(\'timeline\')">\u23F1 Timeline</button>' +
+    '</div>';
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
