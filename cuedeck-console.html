@@ -2270,6 +2270,7 @@ const S = {
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
   subscription:    null,   // { plan, status, trial_ends_at, ... }
   planLimits:      null,   // resolved PLAN_LIMITS entry
+  operatorCount:   0,      // total non-pending leod_users; cached by loadPendingBadge
   stripePrices:    {},     // key → Stripe price ID (loaded from leod_config)
 };
 
@@ -5456,6 +5457,52 @@ async function loadPendingBadge() {
     badge.style.display = 'none';
     btn.style.borderColor = '';
   }
+  // Cache total for profile panel usage bar
+  const { count: total } = await sb.from('leod_users')
+    .select('id', { count: 'exact', head: true }).neq('role', 'pending');
+  S.operatorCount = total || 0;
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('user-chip');
+  if (!chip || !S.userRole) return;
+
+  const name     = S.userName || S.user?.email || '';
+  const words    = name.trim().split(/\s+/);
+  const initials = words.length >= 2
+    ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
+    : (name.substring(0, 2) || '??').toUpperCase();
+  const firstName = words[0] || name;
+  const role      = S.userRole;
+
+  const roleColors = {
+    director: { bg:'rgba(59,130,246,0.2)', border:'rgba(59,130,246,0.4)', text:'#60A5FA', chipBg:'rgba(59,130,246,0.12)', chipBorder:'rgba(59,130,246,0.35)' },
+    stage:    { bg:'rgba(34,197,94,0.2)',  border:'rgba(34,197,94,0.4)',  text:'#4ade80', chipBg:'rgba(34,197,94,0.10)',   chipBorder:'rgba(34,197,94,0.3)'   },
+    av:       { bg:'rgba(249,115,22,0.2)', border:'rgba(249,115,22,0.4)', text:'#fb923c', chipBg:'rgba(249,115,22,0.10)',  chipBorder:'rgba(249,115,22,0.3)'  },
+    interp:   { bg:'rgba(139,92,246,0.2)', border:'rgba(139,92,246,0.4)', text:'#a78bfa', chipBg:'rgba(139,92,246,0.10)',  chipBorder:'rgba(139,92,246,0.3)'  },
+  };
+  const c = roleColors[role] || {
+    bg:'rgba(100,116,139,0.2)', border:'rgba(100,116,139,0.4)', text:'#94A3B8',
+    chipBg:'rgba(100,116,139,0.10)', chipBorder:'rgba(100,116,139,0.3)',
+  };
+
+  const avatar = document.getElementById('user-chip-avatar');
+  avatar.textContent      = initials;
+  avatar.style.background = c.bg;
+  avatar.style.borderColor= c.border;
+  avatar.style.color      = c.text;
+
+  document.getElementById('user-chip-name').textContent = firstName;
+  const roleEl = document.getElementById('user-chip-role');
+  roleEl.textContent  = role;
+  roleEl.style.color  = c.text;
+
+  chip.style.background   = c.chipBg;
+  chip.style.borderColor  = c.chipBorder;
+  chip.style.display      = 'flex';
+
+  const mob = document.getElementById('mobile-signed-in');
+  if (mob) mob.textContent = 'Signed in as ' + (S.userName || S.user?.email || '') + ' (' + role + ')';
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -6140,7 +6187,7 @@ async function boot() {
     if (S.user) {
       setStep('Loading user…');
       await loadUserRole();
-      document.getElementById('logout-btn').style.display = '';
+      renderUserChip();
     }
 
     // 0.5. Subscription check

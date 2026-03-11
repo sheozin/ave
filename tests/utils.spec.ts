@@ -364,3 +364,28 @@ describe('getUtcOffset() — offset string extraction', () => {
     expect(extractOffset('some string without offset')).toBe('UTC+0');
   });
 });
+
+// getInitials() — avatar letter generation
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+  return (name.substring(0, 2) || '??').toUpperCase();
+}
+
+describe('getInitials() — avatar letter generation', () => {
+  it('returns first + last initials for two-word name', () => {
+    expect(getInitials('Sherif Makled')).toBe('SM');
+  });
+  it('returns first two characters for single-word name', () => {
+    expect(getInitials('Jake')).toBe('JA');
+  });
+  it('uses first and last word for three-word names', () => {
+    expect(getInitials('Jean Claude Van')).toBe('JV');
+  });
+  it('is always uppercase', () => {
+    expect(getInitials('sherif makled')).toBe('SM');
+  });
+  it('returns ?? for empty string', () => {
+    expect(getInitials('')).toBe('??');
+  });
+});
