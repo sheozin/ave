@@ -184,6 +184,43 @@
       font-size: 11px; color: var(--dim); text-decoration: none;
     }
     .lf-toggle-link:hover { color: var(--fg); }
+    /* ── AUTOFILL OVERRIDE — neutralise browser yellow highlight ── */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px #1a2537 inset !important;
+      box-shadow: 0 0 0 1000px #1a2537 inset !important;
+      -webkit-text-fill-color: var(--text) !important;
+      caret-color: var(--text) !important;
+      border-color: var(--border) !important;
+      transition: background-color 9999s ease-in-out 0s;
+    }
+    /* ── CONFIRM EMAIL SCREEN ── */
+    #confirm-email-screen {
+      display: none; flex-direction: column; align-items: center;
+      gap: 16px; text-align: center; max-width: 320px;
+    }
+    #confirm-email-screen .ce-icon { font-size: 36px; }
+    #confirm-email-screen .ce-title { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+    #confirm-email-screen .ce-msg { font-size: 12px; color: var(--dim); line-height: 1.7; }
+    #confirm-email-screen .ce-email { color: var(--blue); font-weight: 500; word-break: break-all; }
+    #confirm-email-screen .ce-resend-btn {
+      background: var(--blue); color: #fff; border: none;
+      border-radius: 6px; padding: 9px 20px; font-size: 12px;
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      transition: filter .15s; width: 100%;
+    }
+    #confirm-email-screen .ce-resend-btn:hover { filter: brightness(1.1); }
+    #confirm-email-screen .ce-resend-btn:disabled { opacity: .5; cursor: default; }
+    #confirm-email-screen .ce-resend-ok { font-size: 11px; color: var(--green); min-height: 16px; text-align: center; display: none; }
+    #confirm-email-screen .ce-polling { font-size: 10px; color: var(--dim); opacity: .7; display: flex; align-items: center; gap: 6px; justify-content: center; }
+    #confirm-email-screen .ce-polling-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--blue); opacity: .5;
+      animation: ce-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes ce-pulse { 0%,100% { opacity:.3; transform:scale(.8); } 50% { opacity:1; transform:scale(1); } }
     /* ── PENDING SCREEN ── */
     #pending-screen {
       display: none; flex-direction: column; align-items: center;
@@ -728,6 +765,17 @@
     @keyframes badge-pulse-overrun {
       0%,100% { box-shadow: 0 0 20px rgba(255,0,168,.25), 0 2px 8px rgba(0,0,0,.50); }
       50%      { box-shadow: 0 0 30px rgba(255,0,168,.40), 0 2px 8px rgba(0,0,0,.50); }
+    }
+    /* ── ONBOARDING: pulsing + button when no events ── */
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(59,130,246,.8); }
+      70%  { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+      100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+    }
+    .rbtn-pulse {
+      animation: pulse-ring 1.8s ease infinite !important;
+      background: #3b82f6 !important;
+      color: #fff !important;
     }
     /* Badge blink — HOLD */
     @keyframes badge-blink        { 0%,100% { opacity:1; } 50% { opacity:0; } }
@@ -1419,6 +1467,19 @@
     <div id="rf-success" style="display:none">✅ Check your email to confirm your account. Once confirmed, sign in to start your free trial.</div>
     <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
   </form>
+  <div id="confirm-email-screen">
+    <div class="ce-icon">📬</div>
+    <div class="ce-title">Check your inbox</div>
+    <div class="ce-msg">
+      We sent a confirmation link to<br>
+      <span class="ce-email" id="confirm-email-addr"></span><br><br>
+      Click the link to activate your account. This tab will sign you in automatically once confirmed.
+    </div>
+    <button class="ce-resend-btn" id="ce-resend-btn" onclick="handleResendEmail()">Resend confirmation email</button>
+    <div class="ce-resend-ok" id="ce-resend-ok">Sent! Check your inbox (and spam folder).</div>
+    <div class="ce-polling"><div class="ce-polling-dot"></div> Waiting for confirmation…</div>
+    <a href="#" class="lf-toggle-link" onclick="stopConfirmPolling();showLoginForm();return false">← Back to sign in</a>
+  </div>
   <div id="pending-screen">
     <div class="ps-icon">⏳</div>
     <div class="ps-title">Account Pending Approval</div>
@@ -4816,27 +4877,33 @@ async function handleLoginSubmit(e) {
 
 // ── Auth form toggles ───────────────────────────────────────
 function showRegisterForm() {
-  document.getElementById('load-spinner').style.display  = 'none';
-  document.getElementById('load-step').style.display     = 'none';
-  document.getElementById('login-form').style.display    = 'none';
-  document.getElementById('reset-form').style.display    = 'none';
-  document.getElementById('register-form').style.display = 'flex';
+  stopConfirmPolling();
+  document.getElementById('load-spinner').style.display           = 'none';
+  document.getElementById('load-step').style.display              = 'none';
+  document.getElementById('login-form').style.display             = 'none';
+  document.getElementById('reset-form').style.display             = 'none';
+  document.getElementById('confirm-email-screen').style.display   = 'none';
+  document.getElementById('register-form').style.display          = 'flex';
   document.getElementById('rf-name').focus();
 }
 function showLoginForm() {
-  document.getElementById('load-spinner').style.display  = 'none';
-  document.getElementById('load-step').style.display     = 'none';
-  document.getElementById('register-form').style.display = 'none';
-  document.getElementById('reset-form').style.display    = 'none';
-  document.getElementById('login-form').style.display    = 'flex';
+  stopConfirmPolling();
+  document.getElementById('load-spinner').style.display           = 'none';
+  document.getElementById('load-step').style.display              = 'none';
+  document.getElementById('register-form').style.display          = 'none';
+  document.getElementById('reset-form').style.display             = 'none';
+  document.getElementById('confirm-email-screen').style.display   = 'none';
+  document.getElementById('login-form').style.display             = 'flex';
   document.getElementById('lf-email').focus();
 }
 function showResetForm() {
-  document.getElementById('load-spinner').style.display  = 'none';
-  document.getElementById('load-step').style.display     = 'none';
-  document.getElementById('login-form').style.display    = 'none';
-  document.getElementById('register-form').style.display = 'none';
-  document.getElementById('reset-form').style.display    = 'flex';
+  stopConfirmPolling();
+  document.getElementById('load-spinner').style.display           = 'none';
+  document.getElementById('load-step').style.display              = 'none';
+  document.getElementById('login-form').style.display             = 'none';
+  document.getElementById('register-form').style.display          = 'none';
+  document.getElementById('confirm-email-screen').style.display   = 'none';
+  document.getElementById('reset-form').style.display             = 'flex';
   document.getElementById('rst-email').focus();
 }
 
@@ -4921,9 +4988,85 @@ async function handleRegisterSubmit(e) {
   }
 
   // Profile row is created automatically by the database trigger.
-  // Show confirmation — user must verify email before signing in.
-  document.getElementById('rf-success').style.display = '';
-  btn.style.display = 'none';
+  // Show the proper confirm-email screen with auto-polling.
+  showConfirmEmailScreen(email);
+}
+
+// ── Confirm Email screen (post-signup) ─────────────────────
+let _confirmPollInterval = null;
+let _confirmPollEmail    = null;
+
+function showConfirmEmailScreen(email) {
+  _confirmPollEmail = email;
+
+  // Hide all auth panels
+  document.getElementById('load-spinner').style.display    = 'none';
+  document.getElementById('load-step').style.display       = 'none';
+  document.getElementById('login-form').style.display      = 'none';
+  document.getElementById('register-form').style.display   = 'none';
+  document.getElementById('reset-form').style.display      = 'none';
+  document.getElementById('pending-screen').style.display  = 'none';
+
+  // Populate and show confirm screen
+  document.getElementById('confirm-email-addr').textContent = email;
+  document.getElementById('ce-resend-ok').style.display    = 'none';
+  const resendBtn = document.getElementById('ce-resend-btn');
+  resendBtn.disabled    = false;
+  resendBtn.textContent = 'Resend confirmation email';
+  document.getElementById('confirm-email-screen').style.display = 'flex';
+
+  // Start polling for session (every 3s, for up to 5 min)
+  stopConfirmPolling();
+  const deadline = Date.now() + 5 * 60 * 1000;
+  _confirmPollInterval = setInterval(async () => {
+    if (Date.now() > deadline) { stopConfirmPolling(); return; }
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        stopConfirmPolling();
+        S.user = session.user;
+        document.getElementById('confirm-email-screen').style.display = 'none';
+        await boot();
+      }
+    } catch (_) { /* ignore transient errors */ }
+  }, 3000);
+}
+
+function stopConfirmPolling() {
+  if (_confirmPollInterval) {
+    clearInterval(_confirmPollInterval);
+    _confirmPollInterval = null;
+  }
+}
+
+async function handleResendEmail() {
+  if (!_confirmPollEmail) return;
+  const btn    = document.getElementById('ce-resend-btn');
+  const okEl   = document.getElementById('ce-resend-ok');
+  btn.disabled    = true;
+  btn.textContent = 'Sending…';
+  okEl.style.display = 'none';
+
+  const { error } = await sb.auth.resend({ type: 'signup', email: _confirmPollEmail });
+
+  if (error) {
+    btn.disabled    = false;
+    btn.textContent = 'Resend confirmation email';
+    okEl.style.display  = 'block';
+    okEl.style.color    = 'var(--red)';
+    okEl.textContent    = error.message || 'Failed to resend. Try again.';
+  } else {
+    btn.disabled    = true;
+    btn.textContent = 'Email sent';
+    okEl.style.display  = 'block';
+    okEl.style.color    = 'var(--green)';
+    okEl.textContent    = 'Sent! Check your inbox (and spam folder).';
+    // Re-enable after 60 s
+    setTimeout(() => {
+      btn.disabled    = false;
+      btn.textContent = 'Resend confirmation email';
+    }, 60000);
+  }
 }
 
 // ── Pending screen ─────────────────────────────────────────
@@ -5362,9 +5505,22 @@ async function initAuth() {
   }
 }
 
-// Reload on sign-out (e.g. from another tab or token expiry)
-sb.auth.onAuthStateChange((event) => {
-  if (event === 'SIGNED_OUT') location.reload();
+// Handle auth state changes — sign-out reloads, sign-in (from email
+// confirmation in another tab) cancels polling and boots directly.
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT') {
+    location.reload();
+  } else if (event === 'SIGNED_IN' && session) {
+    // Only act if we are currently on the confirm-email screen (polling).
+    // This fires when the user clicks the confirmation link in any tab.
+    const confirmScreen = document.getElementById('confirm-email-screen');
+    if (confirmScreen && confirmScreen.style.display !== 'none') {
+      stopConfirmPolling();
+      S.user = session.user;
+      confirmScreen.style.display = 'none';
+      boot();
+    }
+  }
 });
 
 // ═══════════════════════════════════════════════════
