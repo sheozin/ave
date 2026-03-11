@@ -294,11 +294,12 @@
     .um-empty { font-size:12px; color:var(--dim); text-align:center; padding:12px 0; }
     #users-btn {
       display:none; align-items:center; gap:5px; position:relative;
-      background:none; border:1px solid var(--border); color:var(--dim);
+      background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3);
+      color:#60A5FA; font-weight:600;
       border-radius:5px; padding:3px 9px; font-size:11px;
       font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
     }
-    #users-btn:hover { border-color:var(--blue); color:var(--fg); }
+    #users-btn:hover { filter:brightness(1.15); }
     #users-badge {
       display:none; background:var(--red); color:#fff;
       border-radius:8px; padding:1px 5px; font-size:9px; font-weight:700;
@@ -310,6 +311,93 @@
       line-height: 1; opacity: .6;
     }
     #logout-btn:hover { opacity: 1; color: var(--red); }
+    /* BILLING BUTTON */
+    #billing-btn {
+      display:none; align-items:center; gap:5px;
+      background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3);
+      color:#60A5FA; font-weight:600;
+      border-radius:5px; padding:3px 9px; font-size:11px;
+      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
+    }
+    #billing-btn:hover { filter:brightness(1.15); }
+    /* USER CHIP */
+    .user-chip {
+      display:none; align-items:center; gap:7px;
+      border-radius:20px; padding:3px 10px 3px 4px;
+      cursor:pointer; transition:all .15s;
+      position:relative; flex-shrink:0; border:1px solid transparent;
+    }
+    .user-chip:hover { filter:brightness(1.1); }
+    .uc-avatar {
+      width:26px; height:26px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:10px; font-weight:800; flex-shrink:0;
+      border:1px solid transparent;
+    }
+    .uc-name  { font-size:11px; font-weight:600; color:#CBD5E1; }
+    .uc-role  { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
+    .uc-sep   { width:1px; height:14px; background:rgba(148,163,184,0.15); }
+    .uc-caret { color:#6B7280; font-size:9px; }
+    /* PROFILE PANEL */
+    .profile-panel {
+      position:absolute; top:calc(100% + 8px); right:0;
+      width:280px; background:#131C2C;
+      border:1px solid rgba(148,163,184,0.15);
+      border-radius:12px;
+      box-shadow:0 16px 48px rgba(0,0,0,0.6);
+      z-index:220; overflow:hidden; cursor:default;
+    }
+    .pp-identity {
+      padding:14px 16px;
+      background:linear-gradient(135deg,rgba(29,78,216,0.08),rgba(59,130,246,0.03));
+      border-bottom:1px solid rgba(148,163,184,0.08);
+      display:flex; align-items:center; gap:12px;
+    }
+    .pp-avatar {
+      width:42px; height:42px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:15px; font-weight:800; flex-shrink:0;
+      border:2px solid transparent;
+    }
+    .pp-name        { font-size:13px; font-weight:700; color:#F1F5F9; margin-bottom:2px; }
+    .pp-email       { font-size:11px; color:#6B7280; margin-bottom:4px; }
+    .pp-role-badge  { display:inline-block; font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:2px 7px; border-radius:4px; border:1px solid transparent; }
+    .pp-plan        { padding:10px 16px; border-bottom:1px solid rgba(148,163,184,0.08); }
+    .pp-plan-row    { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+    .pp-plan-name   { font-size:12px; font-weight:700; color:#E5E7EB; }
+    .pp-plan-status { font-size:9px; font-weight:700; padding:2px 7px; border-radius:4px; text-transform:uppercase; letter-spacing:.05em; border:1px solid transparent; }
+    .pp-active      { background:rgba(34,197,94,0.12);  color:#4ade80; border-color:rgba(34,197,94,0.25);  }
+    .pp-trial       { background:rgba(245,158,11,0.12); color:#FDBA74; border-color:rgba(245,158,11,0.25); }
+    .pp-past-due    { background:rgba(239,68,68,0.12);  color:#f87171; border-color:rgba(239,68,68,0.25);  }
+    .pp-trial-note  { font-size:10px; color:#6B7280; margin-bottom:8px; line-height:1.4; }
+    .pp-actions     { padding:8px; }
+    .pp-action {
+      display:flex; align-items:center; gap:9px;
+      width:100%; padding:8px 10px;
+      background:none; border:none; border-radius:7px;
+      cursor:pointer; font-family:inherit; font-size:11px;
+      color:#9CA3AF; text-align:left; transition:all .12s;
+    }
+    .pp-action:hover  { background:rgba(255,255,255,0.04); color:#E5E7EB; }
+    .pp-danger:hover  { background:rgba(239,68,68,0.08);   color:#f87171; }
+    .pp-upgrade       { background:rgba(59,130,246,0.1);   color:#60A5FA; font-weight:600; }
+    .pp-upgrade:hover { background:rgba(59,130,246,0.18); }
+    .pp-action-icon   { font-size:13px; width:18px; text-align:center; flex-shrink:0; }
+    .pp-divider       { height:1px; background:rgba(148,163,184,0.08); margin:4px 8px; }
+    /* VIEW MODE PILL */
+    .fb-view-pill {
+      display:flex; gap:2px; margin-left:auto; flex-shrink:0;
+      background:#0F1520; border:1px solid rgba(148,163,184,0.12);
+      border-radius:100px; padding:2px;
+    }
+    .fvp-btn {
+      background:none; border:none; color:#6B7280;
+      font-size:11px; font-family:inherit;
+      padding:4px 12px; border-radius:100px; cursor:pointer;
+      white-space:nowrap; transition:all .15s;
+    }
+    .fvp-btn.active { background:#1e3a5f; color:#60A5FA; font-weight:600; }
+    .fvp-btn:not(.active):hover { color:#9CA3AF; }
 
     /* ── BROADCAST BANNER ── */
     #bc-banner {
@@ -945,9 +1033,15 @@
 
     /* ── HELP SYSTEM ────────────────────────────────────────────── */
     /* Help button in header */
-    .help-btn { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border); background: transparent; color: var(--text-muted); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all .15s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .help-btn:hover { border-color: var(--blue); color: var(--text-primary); background: rgba(59,130,246,.08); }
-    .changelog-badge { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; border: 2px solid var(--surface); }
+    #help-btn {
+      display:flex; align-items:center; gap:5px; position:relative;
+      background:none; border:1px solid var(--border); color:var(--dim);
+      border-radius:5px; padding:3px 9px; font-size:11px;
+      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
+      flex-shrink:0;
+    }
+    #help-btn:hover { border-color:rgba(148,163,184,0.25); color:var(--fg); }
+    .changelog-badge { width:7px; height:7px; border-radius:50%; background:#ef4444; display:inline-block; margin-left:2px; flex-shrink:0; }
 
     /* Help dropdown */
     .help-dropdown { display: none; position: absolute; top: 52px; right: 60px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px; min-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 215; flex-direction: column; gap: 2px; }
@@ -1312,7 +1406,6 @@
       /* FILTER BAR */
       #filter-bar { flex-wrap: wrap; }
       #fb-search { max-width: none; }
-      #fb-view { flex-shrink: 0; }
 
       /* DIAG BAR */
       .di span { font-size: 0; }
@@ -1340,6 +1433,8 @@
       #users-btn { display: none !important; }
       #logout-btn { display: none !important; }
       #auto-start-btn { display: none !important; }
+      .user-chip { display: none !important; }
+      #help-btn  { display: none !important; }
       /* Show hamburger — push to far right */
       #hamburger-btn { display: flex; align-items: center; margin-left: auto; }
       /* Connection pill — compact */
@@ -1369,7 +1464,7 @@
       #filter-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
       #fb-search { flex: 1 1 100%; max-width: none; order: -2; }
       #filter-toggle-btn { display: flex; order: -1; }
-      #fb-view { order: -1; font-size: 11px; }
+      .fb-view-pill { order: -1; font-size: 11px; }
       #fb-status, #fb-room, #fb-clear { display: none; }
       #filter-bar.filters-open #fb-status,
       #filter-bar.filters-open #fb-room,
