@@ -1875,15 +1875,8 @@
 </div>
 
 <!-- WELCOME MODAL (shown once after role approval) -->
-<div id="welcome-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)dismissWelcome()">
-  <div class="ev-modal-card" style="max-width:420px;text-align:center">
-    <div style="font-size:28px">🎉</div>
-    <div class="ev-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
-    <div id="welcome-role-name" style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px"></div>
-    <div id="welcome-role-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0"></div>
-    <div class="ev-modal-actions" style="justify-content:center">
-      <button class="primary" onclick="dismissWelcome()">Get Started</button>
-    </div>
+<div id="welcome-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)dismissWelcome(false)">
+  <div class="ev-modal-card" style="max-width:420px">
   </div>
 </div>
 
@@ -5152,12 +5145,59 @@ const ROLE_DESCRIPTIONS = {
 // ── WELCOME MODAL (shown once after role approval) ───────────────
 // ═══════════════════════════════════════════════════════════════════
 function showWelcomeModal(role) {
-  document.getElementById('welcome-role-name').textContent = role.toUpperCase();
-  document.getElementById('welcome-role-desc').textContent = ROLE_DESCRIPTIONS[role] || '';
-  document.getElementById('welcome-modal').style.display = 'flex';
+  const modal = document.getElementById('welcome-modal');
+  const card  = modal.querySelector('.ev-modal-card');
+  const firstName = (S.userName || '').split(' ')[0] || 'there';
+  const isNewDirector = (role === 'director' && (!S.events || S.events.length === 0));
+
+  if (isNewDirector) {
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div style="width:38px;height:38px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🎬</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#f1f5f9">Welcome, ${esc(firstName)}! 👋</div>
+          <div style="font-size:11px;color:var(--dim);margin-top:2px">You're set up as Director</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.65;margin-bottom:16px">
+        Let's get your first event ready — it only takes 2 minutes.
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:18px">
+        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+          <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">①</span>
+          <span style="font-size:10px;color:var(--dim)">Create event</span>
+        </div>
+        <span style="color:#334155;font-size:12px">→</span>
+        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+          <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">②</span>
+          <span style="font-size:10px;color:var(--dim)">Add sessions</span>
+        </div>
+        <span style="color:#334155;font-size:12px">→</span>
+        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+          <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">③</span>
+          <span style="font-size:10px;color:var(--dim)">Go live</span>
+        </div>
+      </div>
+      <div class="ev-modal-actions" style="flex-direction:column;gap:7px">
+        <button class="primary" onclick="dismissWelcome(true)">Set Up My Event →</button>
+        <button onclick="dismissWelcome(false)" style="background:transparent;border:1px solid #334155;color:var(--dim);font-size:11px">I'll explore on my own</button>
+      </div>`;
+  } else {
+    card.innerHTML = `
+      <div style="font-size:28px;text-align:center">🎉</div>
+      <div class="ev-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
+      <div style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center">${role.toUpperCase()}</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center">${ROLE_DESCRIPTIONS[role] || ''}</div>
+      <div class="ev-modal-actions" style="justify-content:center;margin-top:12px">
+        <button class="primary" onclick="dismissWelcome(false)">Get Started</button>
+      </div>`;
+  }
+  modal.style.display = 'flex';
 }
-function dismissWelcome() {
+
+function dismissWelcome(launchWizard) {
   document.getElementById('welcome-modal').style.display = 'none';
+  if (launchWizard) showSetupWizard();
 }
 
 // ═══════════════════════════════════════════════════════════════════
