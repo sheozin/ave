@@ -257,6 +257,7 @@ const CueDeckCueEngine = (() => {
   let _sessionTime      = null; // stored for snooze re-trigger
   let cueStartTime      = null;
   let totalSeconds      = 0;
+  let _supabaseClient   = null;
 
   // Clock function — overridden with CueDeck's correctedNow() via options.correctedNow
   // Default: Date.now() (client time, may have skew — pass correctedNow for accuracy)
@@ -301,7 +302,8 @@ const CueDeckCueEngine = (() => {
   // INIT
   // ═══════════════════════════════════════════════════
   function init(sessionsArray, options = {}) {
-    alertMinutes = options.alertMinutesBefore || 8;
+    alertMinutes     = options.alertMinutesBefore || 8;
+    _supabaseClient  = options.supabaseClient || null;
 
     // Accept CueDeck's correctedNow() for clock-sync accuracy
     if (typeof options.correctedNow === 'function') {
@@ -414,8 +416,7 @@ const CueDeckCueEngine = (() => {
   // CLAUDE API — fetch tailored checklist
   // ═══════════════════════════════════════════════════
   async function fetchCueChecklist(session) {
-    const apiKey = window.CUEDECK_API_KEY;
-    if (!apiKey) { renderFallbackChecklist(session); return; }
+    if (!_supabaseClient) { renderFallbackChecklist(session); return; }
 
     const prompt = `You are an AV production manager for live corporate conferences. Generate a pre-cue checklist for the upcoming session.
 
@@ -437,25 +438,17 @@ Respond ONLY with valid JSON, no markdown:
 Generate 6-8 specific, actionable items.`;
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+      const { data, error } = await _supabaseClient.functions.invoke('ai-proxy', {
+        body: {
+          model:      'claude-sonnet-4-20250514',
           max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }]
-        })
+          messages:   [{ role: 'user', content: prompt }]
+        }
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (error) throw new Error(error.message);
 
-      const data   = await res.json();
-      const text   = data.content?.[0]?.text || '';
+      const text   = data?.content?.[0]?.text || '';
       const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       renderChecklist(parsed.checklist);
 

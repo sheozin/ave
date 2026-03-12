@@ -383,27 +383,19 @@ Respond ONLY with valid JSON, no markdown:
 }`;
 
     try {
-      if (!apiKey) throw new Error('No API key');
+      if (!_opts.supabaseClient) throw new Error('No Supabase client');
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-allow-browser': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+      const { data, error } = await _opts.supabaseClient.functions.invoke('ai-proxy', {
+        body: {
+          model:      'claude-sonnet-4-20250514',
           max_tokens: 1200,
-          messages: [{ role: 'user', content: prompt }]
-        })
+          messages:   [{ role: 'user', content: prompt }]
+        }
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (error) throw new Error(error.message);
 
-      const data = await res.json();
-      const text = data.content?.[0]?.text || '';
+      const text = data?.content?.[0]?.text || '';
       reportData = { ...JSON.parse(text.replace(/```json|```/g, '').trim()), eventData };
 
     } catch (e) {

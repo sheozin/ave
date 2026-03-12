@@ -649,27 +649,7 @@
     .sb-action-btn:disabled { opacity: .35; cursor: not-allowed; }
     .sb-action-btn .sb-btn-icon { font-size: 14px; flex-shrink: 0; }
 
-    /* AI key row */
-    .ai-key-row {
-      display: flex; align-items: center; gap: 6px;
-      padding: 6px 8px; border-radius: 6px;
-      background: rgba(255,255,255,0.025);
-      border: 1px solid var(--border-section);
-      margin-bottom: 10px;
-    }
-    .ai-key-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #ef4444; flex-shrink: 0; transition: background .3s;
-    }
-    .ai-key-dot.active { background: var(--green); box-shadow: 0 0 5px rgba(34,197,94,.5); }
-    .ai-key-label { font-size: 10px; color: var(--text-muted); letter-spacing: .04em; font-weight: 600; flex: 1; }
-    .ai-key-clear {
-      background: none; border: none; color: var(--text-muted);
-      cursor: pointer; font-size: 11px; padding: 0 2px; line-height: 1;
-      display: none; transition: color .12s;
-    }
-    .ai-key-clear:hover { color: var(--red-lt); }
-    .ai-key-input-row { display: flex; gap: 5px; margin-bottom: 10px; }
+    /* ── AI key styles removed (proxy handles auth server-side) ── */
     .ai-key-input {
       flex: 1; min-width: 0;
       background: var(--input-bg); border: 1px solid var(--border);
@@ -1804,19 +1784,6 @@
     <div class="sb-section" id="ai-agents-wrap" style="display:none">
       <div class="sb-title">AI AGENTS</div>
 
-      <!-- API Key status + input -->
-      <div class="ai-key-row" style="margin-top:6px">
-        <span id="ai-key-dot" class="ai-key-dot"></span>
-        <span id="ai-key-label" class="ai-key-label">NO API KEY</span>
-        <button id="ai-key-clear" class="ai-key-clear" onclick="clearAgentKey()" title="Remove saved key">✕</button>
-      </div>
-      <div class="ai-key-input-row">
-        <input id="ai-key-input" type="password" placeholder="sk-ant-api03-…"
-          class="ai-key-input"
-          onkeydown="if(event.key==='Enter')saveAgentKey()">
-        <button class="ai-key-set" onclick="saveAgentKey()">Set</button>
-      </div>
-
       <!-- Action buttons -->
       <div style="display:flex;flex-direction:column;gap:6px">
         <button class="sb-action-btn btn-red"
@@ -2228,11 +2195,6 @@ const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhd2VrcGd1ZW16dnV2dnVsZmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzk5MTEsImV4cCI6MjA4NzkxNTkxMX0.0zvCmKxdwAmfhmglYf2Gme6zpqtopBghSjI1ZyoVneg';
 const CLOCK_RESYNC_MS  = 300_000;   // 5 min
 const DRIFT_WARN_MS    = 500;
-
-// AI Agents — Anthropic API key (paste 'sk-ant-...' to enable live AI responses)
-// Without a key all 3 agents run in fallback mode — UI still fully works.
-const ANTHROPIC_API_KEY = '';       // ← operators: set before each event
-window.CUEDECK_API_KEY     = ANTHROPIC_API_KEY;
 
 // ═══════════════════════════════════════════════════
 // STATE
@@ -6451,7 +6413,8 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         getSessions:    () => S.sessions
       });
       CueDeckCueEngine.init([], {
-        correctedNow,                  // CueDeck 3-sample RTT clock sync
+        supabaseClient:     sb,
+        correctedNow,                     // CueDeck 3-sample RTT clock sync
         cueDeckSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
         alertMinutesBefore: 8
       });
@@ -6460,7 +6423,6 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     if (S.role === 'director' && (!S.planLimits || S.planLimits.ai)) {
       const aiWrap = document.getElementById('ai-agents-wrap');
       if (aiWrap) aiWrap.style.display = '';
-      loadAgentKey();
     } else {
       const aiWrap = document.getElementById('ai-agents-wrap');
       if (aiWrap) aiWrap.style.display = 'none';
@@ -6494,59 +6456,6 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
 initAuth();
 
 // ═══ AI AGENT KEY MANAGEMENT ══════════════════════════════════════════════
-// API key stored in localStorage — never sent anywhere except Anthropic API
-// called by the AI AGENTS sidebar panel inputs
-
-function _setKeyUI(hasKey) {
-  const dot   = document.getElementById('ai-key-dot');
-  const label = document.getElementById('ai-key-label');
-  const clear = document.getElementById('ai-key-clear');
-  const input = document.getElementById('ai-key-input');
-  if (!dot) return;
-  if (hasKey) {
-    dot.classList.add('active');
-    label.textContent   = 'AI ACTIVE';
-    label.style.color   = 'var(--green)';
-    clear.style.display = '';
-    input.value         = '';
-    input.placeholder   = '●●●●●●●●●●●●●●●● (key set)';
-  } else {
-    dot.classList.remove('active');
-    label.textContent   = 'NO API KEY';
-    label.style.color   = '';     /* falls back to .ai-key-label CSS */
-    clear.style.display = 'none';
-    input.placeholder   = 'sk-ant-api03-…';
-  }
-}
-
-function saveAgentKey() {
-  const input = document.getElementById('ai-key-input');
-  const key   = input?.value.trim();
-  if (!key || !key.startsWith('sk-ant-')) {
-    input.style.borderColor = '#ef4444';
-    setTimeout(() => input.style.borderColor = '', 1200);
-    return;
-  }
-  localStorage.setItem('cuedeck_agent_key', key);
-  window.CUEDECK_API_KEY = key;
-  _setKeyUI(true);
-}
-
-function clearAgentKey() {
-  localStorage.removeItem('cuedeck_agent_key');
-  window.CUEDECK_API_KEY = '';
-  _setKeyUI(false);
-}
-
-function loadAgentKey() {
-  const saved = localStorage.getItem('cuedeck_agent_key');
-  if (saved) {
-    window.CUEDECK_API_KEY = saved;
-    _setKeyUI(true);
-  } else {
-    _setKeyUI(false);
-  }
-}
 
 // Called before every agent button — ensures init() ran even if boot() missed it
 function ensureAgentsInited() {
@@ -6566,8 +6475,9 @@ function ensureAgentsInited() {
     getSessions:    () => S?.sessions || []
   });
   CueDeckCueEngine.init([], {
-    correctedNow:        typeof correctedNow === 'function' ? correctedNow : () => Date.now(),
-    cueDeckSessions:        S?.sessions || [],
+    supabaseClient:     typeof sb !== 'undefined' ? sb : null,
+    correctedNow:       typeof correctedNow === 'function' ? correctedNow : () => Date.now(),
+    cueDeckSessions:    S?.sessions || [],
     alertMinutesBefore: 8
   });
 }
