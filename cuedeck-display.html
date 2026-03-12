@@ -1003,7 +1003,9 @@ function renderStageTimer() {
 
 // Wrapper so render() calls renderStageTimerArea(area) like renderAgenda/renderTimeline
 function renderStageTimerArea(area) {
-  _stHoldRemain = null;
+  // Only reset the HOLD freeze when transitioning away from HOLD (not on every render)
+  const isCurrentlyHeld = S.sessions.some(s => s.status === 'HOLD');
+  if (!isCurrentlyHeld) _stHoldRemain = null;
   const html = renderStageTimer();
   area.textContent = '';
   const range = document.createRange();
