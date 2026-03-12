@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
   const { data: subRow } = await sb
     .from('leod_subscriptions')
     .select('plan')
-    .eq('user_id', user.id)
+    .eq('director_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

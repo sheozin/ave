@@ -61,7 +61,7 @@ const INCIDENT_ADVISOR_CSS = `
   background: #111827;
   border: 1px solid rgba(255, 59, 48, 0.30);
   border-radius: 12px;
-  width: 560px; max-width: 95vw; max-height: 90vh;
+  width: 680px; max-width: 95vw; max-height: 90vh;
   display: flex; flex-direction: column;
   box-shadow: 0 0 40px rgba(255, 59, 48, 0.12), 0 8px 32px rgba(0,0,0,0.60);
   animation: ia-slide-up 0.22s ease;
@@ -140,6 +140,7 @@ const INCIDENT_ADVISOR_CSS = `
   text-transform: uppercase; margin-bottom: 8px;
   font-family: 'SF Mono','Fira Code','Monaco',monospace;
 }
+#ia-content { display: flex; flex-direction: column; }
 .ia-steps { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .ia-step {
   display: flex; gap: 10px; align-items: flex-start;
@@ -152,7 +153,7 @@ const INCIDENT_ADVISOR_CSS = `
 .ia-step-num    { font-size: 10px; color: #60A5FA; width: 16px; flex-shrink: 0; padding-top: 1px;
                   font-family: 'SF Mono','Fira Code','Monaco',monospace; }
 .ia-step.done .ia-step-num  { color: #86EFAC; }
-.ia-step-text   { font-size: 12px; color: #D1D5DB; flex: 1; line-height: 1.45; }
+.ia-step-text   { font-size: 12px; color: #D1D5DB; flex: 1; line-height: 1.45; min-width: 0; overflow-wrap: break-word; }
 .ia-step.done .ia-step-text { color: #86EFAC; text-decoration: line-through; opacity: 0.6; }
 .ia-step-check  { color: #86EFAC; font-size: 13px; opacity: 0; transition: opacity 0.2s; }
 .ia-step.done .ia-step-check { opacity: 1; }
@@ -305,7 +306,7 @@ Respond ONLY with valid JSON in this exact format, no markdown:
     try {
       const { data, error } = await _opts.supabaseClient.functions.invoke('ai-proxy', {
         body: {
-          model:      'claude-sonnet-4-20250514',
+          model:      'claude-sonnet-4-6',
           max_tokens: 1000,
           messages:   [{ role: 'user', content: prompt }]
         }

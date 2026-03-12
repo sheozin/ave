@@ -440,7 +440,7 @@ Generate 6-8 specific, actionable items.`;
     try {
       const { data, error } = await _supabaseClient.functions.invoke('ai-proxy', {
         body: {
-          model:      'claude-sonnet-4-20250514',
+          model:      'claude-sonnet-4-6',
           max_tokens: 1000,
           messages:   [{ role: 'user', content: prompt }]
         }

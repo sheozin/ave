@@ -1883,6 +1883,7 @@
         <option value="programme">Day Grid (time × room)</option>
         <option value="break">Break Screen</option>
         <option value="custom">Custom Message</option>
+        <option value="stage-timer">Stage Timer (speaker countdown)</option>
       </select>
     </label>
     <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — leave blank to show all)</span>
@@ -3349,6 +3350,7 @@ function buildCtxPanel() {
     }
     html += lbl('MONITOR');
     html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
+    html += cbtn('STAGE TIMER', 'btn-blue', 'openStageTimerDisplay()', '⏱');
 
   } else if (role === 'av') {
     if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
@@ -3897,6 +3899,17 @@ function openStageMonitor() {
 }
 function closeStageMonitor() {
   document.getElementById('stage-monitor').style.display = 'none';
+}
+
+function openStageTimerDisplay() {
+  const d = S.displays.find(d => d.content_mode === 'stage-timer');
+  if (d) {
+    window.open(buildDisplayUrl(d), '_blank');
+  } else {
+    pushToast('No Stage Timer display configured — add one in the Signage panel.', 'info');
+    const sp = document.getElementById('sp-wrap');
+    if (sp) sp.scrollIntoView({ behavior: 'smooth' });
+  }
 }
 function updateStageMonitor() {
   const mon = document.getElementById('stage-monitor');

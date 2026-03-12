@@ -264,6 +264,27 @@ body.is-live #display{
 /* ── ANIMATIONS ── */
 @keyframes fade-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .fade-in{animation:fade-in .4s ease both}
+
+/* ── STAGE TIMER MODE ─────────────────────────── */
+.st-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:0;padding:2vw;box-sizing:border-box}
+.st-status{font-size:clamp(13px,2.2vw,26px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#4b5563;margin-bottom:.2em}
+.st-status.live{color:#22c55e}
+.st-status.hold{color:#f97316}
+.st-status.overrun{color:#ef4444}
+.st-timer{font-size:clamp(80px,22vw,260px);font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;transition:color .4s}
+.st-timer.flash{animation:st-flash .65s step-end infinite}
+@keyframes st-flash{0%,100%{opacity:1}50%{opacity:.12}}
+.st-timer-lbl{font-size:clamp(11px,1.8vw,20px);font-weight:600;letter-spacing:.22em;color:#4b5563;margin-top:.35em;margin-bottom:.6em}
+.st-progress-bar{width:84%;max-width:960px;height:7px;background:rgba(255,255,255,.08);border-radius:4px;margin-bottom:1.8em}
+.st-progress-fill{height:100%;border-radius:4px;transition:width .95s linear,background-color .4s}
+.st-title{font-size:clamp(18px,3.2vw,52px);font-weight:700;color:#fff;text-align:center;max-width:90%}
+.st-speaker{font-size:clamp(12px,1.8vw,28px);color:#6b7280;margin-top:.3em;text-align:center}
+.st-next{font-size:clamp(10px,1.3vw,16px);color:#374151;margin-top:1.8em;letter-spacing:.07em;text-align:center}
+.st-standby-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:.5em}
+.st-standby-label{font-size:clamp(16px,3vw,36px);font-weight:700;letter-spacing:.2em;color:#374151}
+.st-standby-session{font-size:clamp(16px,2.8vw,40px);color:#fff;font-weight:600;text-align:center;max-width:80%}
+.st-standby-countdown{font-size:clamp(28px,8vw,110px);font-weight:800;color:#fbbf24;font-variant-numeric:tabular-nums}
+.st-standby-lbl{font-size:clamp(11px,1.5vw,18px);letter-spacing:.2em;color:#4b5563}
 </style>
 </head>
 <body>
@@ -592,6 +613,7 @@ function tick() {
   // Lightweight timer update (no full re-render)
   const mode = activeMode();
   if (mode === 'schedule' || mode === 'recall') updateTimerInPlace();
+  if (mode === 'stage-timer') updateStageTimerInPlace();
 }
 
 function updateTimerInPlace() {
@@ -641,6 +663,61 @@ function updateTimerInPlace() {
   }
 }
 
+function updateStageTimerInPlace() {
+  const stEl = document.getElementById('st-timer');
+  if (!stEl) return; // not in stage-timer mode
+
+  const live2 = liveSession();
+  const held2 = S.sessions.find(s => s.status === 'HOLD');
+  const sess2 = live2 || held2;
+
+  // Standby countdown update (no LIVE/HOLD session)
+  const sbCd = document.getElementById('st-standby-countdown');
+  if (sbCd) {
+    const nx = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+    if (nx) sbCd.textContent = fmtCountdown(Math.max(0, toMs(nx.scheduled_start) - toTimeMs(correctedNow())));
+  }
+
+  if (!sess2) return;
+
+  const isHold2  = sess2.status === 'HOLD';
+  const durMs2   = schedDurMs(sess2);
+  const startMs2 = sess2.actual_start
+    ? new Date(sess2.actual_start).getTime()
+    : correctedNow() - durMs2 / 2;
+  const liveR2   = durMs2 - (correctedNow() - startMs2);
+
+  if (isHold2 && _stHoldRemain === null) _stHoldRemain = liveR2;
+  if (!isHold2) _stHoldRemain = null;
+
+  const rem2 = isHold2 ? _stHoldRemain : liveR2;
+  const ov2  = rem2 < 0;
+  const col2 = ov2 ? '#ef4444'
+    : isHold2          ? '#f97316'
+    : rem2 < 120_000   ? '#ef4444'
+    : rem2 < 300_000   ? '#f59e0b'
+    : '#22c55e';
+
+  stEl.textContent  = fmtTimer(rem2);
+  stEl.style.color  = col2;
+  stEl.className    = 'st-timer' + (ov2 && !isHold2 ? ' flash' : '');
+
+  const lbl2  = document.getElementById('st-timer-lbl');
+  if (lbl2)  lbl2.textContent = ov2 ? 'OVERTIME' : isHold2 ? 'PAUSED' : 'REMAINING';
+
+  const fill2 = document.getElementById('st-progress-fill');
+  if (fill2) {
+    fill2.style.width           = Math.max(0, Math.min(100, (rem2 / durMs2) * 100)) + '%';
+    fill2.style.backgroundColor = col2;
+  }
+
+  const stat2 = document.getElementById('st-status');
+  if (stat2) {
+    stat2.textContent = isHold2 ? 'HOLD' : ov2 ? 'OVERTIME' : 'LIVE';
+    stat2.className   = 'st-status ' + (isHold2 ? 'hold' : ov2 ? 'overrun' : 'live');
+  }
+}
+
 // ═══════════════════════════════════════════════════
 // RENDER — main render switch
 // ═══════════════════════════════════════════════════
@@ -664,8 +741,9 @@ function render() {
     case 'sponsors':  renderSponsors(area); break;
     case 'break':     area.innerHTML = renderBreak(); break;
     case 'wifi':      area.innerHTML = renderWifi(); break;
-    case 'recall':    area.innerHTML = renderRecall(); break;
-    case 'custom':    area.innerHTML = renderCustom(); break;
+    case 'recall':      area.innerHTML = renderRecall(); break;
+    case 'stage-timer': renderStageTimerArea(area); break;
+    case 'custom':      area.innerHTML = renderCustom(); break;
     case 'agenda':    renderAgenda(area); break;
     case 'timeline':  renderTimeline(area); break;
     case 'programme': renderProgramme(area); break;
@@ -852,6 +930,84 @@ function renderRecall() {
     <div class="recall-lbl">PLEASE RETURN TO YOUR SEATS</div>
     ${next ? `<div class="recall-title">${esc(next.title)}</div>` : ''}
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// STAGE TIMER MODE — speaker-facing countdown display
+// ═══════════════════════════════════════════════════
+let _stHoldRemain = null; // frozen remaining ms captured on HOLD
+
+function renderStageTimer() {
+  const live = liveSession();
+  const held = S.sessions.find(s => s.status === 'HOLD');
+  const session = live || held;
+
+  if (!session) {
+    _stHoldRemain = null;
+    const next = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+    if (!next) {
+      return `<div class="st-standby-wrap fade-in">
+        <div class="st-standby-label">STANDBY</div>
+        <div class="st-standby-session">${esc(S.event?.name || '')}</div>
+      </div>`;
+    }
+    const diff = toMs(next.scheduled_start) - toTimeMs(correctedNow());
+    return `<div class="st-standby-wrap fade-in">
+      <div class="st-standby-label">NEXT UP IN</div>
+      <div id="st-standby-countdown" class="st-standby-countdown">${fmtCountdown(Math.max(0, diff))}</div>
+      <div class="st-standby-lbl">TO START</div>
+      <div class="st-standby-session">${esc(next.title)}${next.speaker ? ` &middot; ${esc(next.speaker)}` : ''}</div>
+    </div>`;
+  }
+
+  const isHold  = session.status === 'HOLD';
+  const durMs   = schedDurMs(session);
+  const startMs = session.actual_start
+    ? new Date(session.actual_start).getTime()
+    : correctedNow() - durMs / 2;
+  const liveR   = durMs - (correctedNow() - startMs);
+
+  // Capture freeze point on first HOLD tick
+  if (isHold && _stHoldRemain === null) _stHoldRemain = liveR;
+  if (!isHold) _stHoldRemain = null;
+
+  const remain  = isHold ? _stHoldRemain : liveR;
+  const ov      = remain < 0;
+  const color   = ov ? '#ef4444'
+    : isHold    ? '#f97316'
+    : remain < 120_000 ? '#ef4444'
+    : remain < 300_000 ? '#f59e0b'
+    : '#22c55e';
+  const pct     = Math.max(0, Math.min(100, (remain / durMs) * 100));
+  const stTxt   = isHold ? 'HOLD'     : ov ? 'OVERTIME' : 'LIVE';
+  const stCls   = isHold ? 'hold'     : ov ? 'overrun'  : 'live';
+  const lbl     = isHold ? 'PAUSED'   : ov ? 'OVERTIME' : 'REMAINING';
+  const flash   = ov && !isHold ? ' flash' : '';
+  const next    = S.sessions.find(s => s.sort_order > session.sort_order
+    && !['ENDED','CANCELLED'].includes(s.status));
+
+  return `<div class="st-wrap fade-in">
+    <div id="st-status" class="st-status ${stCls}">${stTxt}</div>
+    <div id="st-timer" class="st-timer${flash}" style="color:${color}">${fmtTimer(remain)}</div>
+    <div id="st-timer-lbl" class="st-timer-lbl">${lbl}</div>
+    <div class="st-progress-bar">
+      <div id="st-progress-fill" class="st-progress-fill" style="width:${pct}%;background:${color}"></div>
+    </div>
+    <div class="st-title">${esc(session.title)}</div>
+    ${session.speaker ? `<div class="st-speaker">${esc(session.speaker)}</div>` : ''}
+    ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${next.speaker ? ` &middot; ${esc(next.speaker)}` : ''}</div>` : ''}
+  </div>`;
+}
+
+// Wrapper so render() calls renderStageTimerArea(area) like renderAgenda/renderTimeline
+function renderStageTimerArea(area) {
+  _stHoldRemain = null;
+  const html = renderStageTimer();
+  area.textContent = '';
+  const range = document.createRange();
+  range.selectNodeContents(area);
+  range.deleteContents();
+  area.insertAdjacentHTML('beforeend', html);
 }
 
 // ═══════════════════════════════════════════════════
