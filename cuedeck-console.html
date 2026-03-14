@@ -5628,7 +5628,7 @@ async function loadSubscription() {
   const sub = Array.isArray(data) ? data[0] : data;
   S.subscription = sub;
 
-  loadStripePrices(); // non-blocking — must run before expiry checks so pricing screen works
+  await loadStripePrices(); // must complete before expiry checks so pricing screen has price IDs
 
   // Check trial expiry
   if (sub.plan === 'trial' && sub.trial_ends_at) {
