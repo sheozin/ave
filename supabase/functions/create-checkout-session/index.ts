@@ -98,6 +98,7 @@ Deno.serve(async (req) => {
       client_reference_id: user.id,
       metadata: { director_id: user.id, plan, interval },
       automatic_tax: { enabled: true },
+      customer_update: { address: 'auto', name: 'auto' },
       tax_id_collection: { enabled: true },
       locale: 'auto',
     }
