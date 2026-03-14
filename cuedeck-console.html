@@ -6164,7 +6164,7 @@ function showSuspendedScreen() {
 async function loadUserRole() {
   if (!S.user) return;
   const { data } = await sb.from('leod_users')
-    .select('role, name, organization, phone, company_name, vat_id, billing_address, active')
+    .select('*')
     .eq('id', S.user.id)
     .single();
   if (!data) {
