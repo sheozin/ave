@@ -354,12 +354,12 @@
     .uc-caret { color:#6B7280; font-size:9px; }
     /* PROFILE PANEL */
     .profile-panel {
-      position:absolute; top:calc(100% + 8px); right:0;
-      width:280px; background:#131C2C;
+      position:fixed; top:52px; right:0;
+      width:290px; background:#131C2C;
       border:1px solid rgba(148,163,184,0.15);
       border-radius:12px;
       box-shadow:0 16px 48px rgba(0,0,0,0.6);
-      z-index:220; overflow:hidden; cursor:default;
+      z-index:9999; overflow-y:auto; cursor:default; max-height:calc(100vh - 70px);
     }
     .pp-identity {
       padding:14px 16px;
@@ -1688,7 +1688,8 @@
     </div>
     <div class="uc-sep"></div>
     <span class="uc-caret">&#9662;</span>
-    <div id="profile-panel" class="profile-panel" style="display:none" onclick="event.stopPropagation()">
+  </div>
+  <div id="profile-panel" class="profile-panel" style="display:none" onclick="event.stopPropagation()">
       <div class="pp-identity" style="position:relative">
         <div id="pp-avatar" class="pp-avatar"></div>
         <div>
@@ -1698,7 +1699,7 @@
         </div>
         <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:10px;font-family:inherit;cursor:pointer">&#x270E; Edit</button>
       </div>
-      <div id="pp-edit-section" style="display:none;padding:0 14px">
+      <div id="pp-edit-section" style="display:none;padding:0 14px 10px">
         <div style="font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Personal Details</div>
         <div style="margin-bottom:6px">
           <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Name</div>
@@ -1755,7 +1756,6 @@
         </button>
       </div>
     </div>
-  </div>
   <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
   <div id="mobile-menu">
     <button onclick="openShortcutsModal();toggleHamburger()">⌨️ Shortcuts</button>
@@ -5721,6 +5721,8 @@ function toggleProfilePanel(e) {
   if (e) e.stopPropagation();
   const panel = document.getElementById('profile-panel');
   if (!panel) return;
+  // Ensure panel is a direct child of body for correct z-index stacking
+  if (panel.parentElement !== document.body) document.body.appendChild(panel);
   if (panel.style.display !== 'none') {
     closeProfilePanel();
   } else {
@@ -5733,6 +5735,11 @@ function toggleProfilePanel(e) {
 function closeProfilePanel() {
   const panel = document.getElementById('profile-panel');
   if (panel) panel.style.display = 'none';
+  // Reset edit mode so panel opens in view mode next time
+  const editSec = document.getElementById('pp-edit-section');
+  if (editSec) editSec.style.display = 'none';
+  const editBtn = document.getElementById('pp-edit-btn');
+  if (editBtn) editBtn.textContent = '✎ Edit';
   document.removeEventListener('click', _closePanelOutside);
 }
 

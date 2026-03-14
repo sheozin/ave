@@ -29,14 +29,20 @@ scripts/youtube-pipeline/yt-tokens.json
 scripts/youtube-pipeline/video-ids.json
 scripts/youtube-pipeline/playlist-id.json
 
-# YouTube branding temp/build artifacts
-youtube-branding/temp/
-youtube-branding/recordings/
-youtube-branding/final/
-youtube-branding/voiceovers/
-youtube-branding/music/
+# Assets — large media files, not tracked in git
+assets/demos/
+assets/audio/
+assets/branding/
+assets/screenshots/
+assets/youtube-branding/temp/
+assets/youtube-branding/recordings/
+assets/youtube-branding/final/
+assets/youtube-branding/voiceovers/
+assets/youtube-branding/music/
+
+# Archive — legacy/old files kept for reference
+archive/
 
 # Backup / scratch files
 *.bak
-"files 2"/
 .vercel

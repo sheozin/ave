@@ -4,6 +4,9 @@
 CueDeck is a single-file HTML production console for managing live conference events.
 No build system, no framework — pure HTML/CSS/JS with Supabase backend.
 
+## File Organization
+**All CueDeck/LEOD files MUST live inside `AVE Production Console/`.** Never place project files outside this directory. See `FILE-ORGANIZATION.md` for the full directory structure and rules.
+
 ## Quick Start
 - **Dev server:** `python3 -m http.server 7230` then open `http://127.0.0.1:7230/cuedeck-console.html`
 - **Live URL:** https://app.cuedeck.io (Vercel auto-deploy from `cuedeck` remote)
