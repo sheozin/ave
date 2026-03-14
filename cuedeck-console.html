@@ -293,6 +293,18 @@
     .um-role-sel { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:4px 6px; border-radius:5px; font-size:11px; font-family:inherit; }
     .um-approve-btn { background:rgba(34,197,94,.15); border:1px solid rgba(34,197,94,.4); color:var(--green); border-radius:5px; padding:4px 10px; font-size:11px; font-family:inherit; cursor:pointer; white-space:nowrap; }
     .um-approve-btn:hover { background:rgba(34,197,94,.25); }
+    .um-suspend-btn, .um-activate-btn, .um-remove-btn {
+      background: transparent;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 10px;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .um-suspend-btn { border: 1px solid rgba(245,158,11,.3); color: #fbbf24; background: rgba(245,158,11,.08); }
+    .um-activate-btn { border: 1px solid rgba(16,185,129,.3); color: #34d399; background: rgba(16,185,129,.08); }
+    .um-remove-btn { border: 1px solid rgba(239,68,68,.3); color: #f87171; background: rgba(239,68,68,.08); }
     .um-empty { font-size:12px; color:var(--dim); text-align:center; padding:12px 0; }
     #users-btn {
       display:none; align-items:center; gap:5px; position:relative;
@@ -1623,6 +1635,14 @@
         <button class="te-cta primary" onclick="startCheckout('pro')">Start Pro</button>
       </div>
     </div>
+    <div style="border-top:1px solid var(--border-section);margin:16px 0;padding-top:16px">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:8px">Have a code?</div>
+      <div style="display:flex;gap:8px;max-width:300px;margin:0 auto">
+        <input id="te-promo-code" type="text" placeholder="Enter code" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:monospace;text-align:center;outline:none">
+        <button onclick="redeemPromoCode('te')" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:7px 14px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer">Apply</button>
+      </div>
+      <div id="te-promo-status" style="font-size:11px;min-height:14px;margin-top:4px;text-align:center"></div>
+    </div>
     <button onclick="doLogout()" style="background:none;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:7px 18px;font-size:12px;font-family:inherit;cursor:pointer;margin-top:4px;">Sign Out</button>
   </div>
 </div>
@@ -1669,13 +1689,47 @@
     <div class="uc-sep"></div>
     <span class="uc-caret">&#9662;</span>
     <div id="profile-panel" class="profile-panel" style="display:none" onclick="event.stopPropagation()">
-      <div class="pp-identity">
+      <div class="pp-identity" style="position:relative">
         <div id="pp-avatar" class="pp-avatar"></div>
         <div>
           <div id="pp-name" class="pp-name"></div>
           <div id="pp-email" class="pp-email"></div>
           <span id="pp-role-badge" class="pp-role-badge"></span>
         </div>
+        <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:10px;font-family:inherit;cursor:pointer">&#x270E; Edit</button>
+      </div>
+      <div id="pp-edit-section" style="display:none;padding:0 14px">
+        <div style="font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Personal Details</div>
+        <div style="margin-bottom:6px">
+          <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Name</div>
+          <input id="pp-edit-name" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Organization</div>
+          <input id="pp-edit-org" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+        </div>
+        <div style="margin-bottom:6px">
+          <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Phone</div>
+          <input id="pp-edit-phone" type="text" placeholder="+41 79 123 4567" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+        </div>
+        <div id="pp-billing-section" style="display:none">
+          <div style="border-top:1px solid var(--border-section);margin:10px 0"></div>
+          <div style="font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Billing Details <span style="display:inline-block;font-size:8px;background:rgba(59,130,246,.15);color:var(--blue);padding:1px 5px;border-radius:3px;margin-left:4px">Director</span></div>
+          <div style="margin-bottom:6px">
+            <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Company Name</div>
+            <input id="pp-edit-company" type="text" placeholder="Company Ltd." style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="font-size:10px;color:var(--dim);margin-bottom:2px">VAT / Tax ID</div>
+            <input id="pp-edit-vat" type="text" placeholder="CHE-123.456.789" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="font-size:10px;color:var(--dim);margin-bottom:2px">Billing Address</div>
+            <textarea id="pp-edit-address" rows="2" placeholder="Street, City, Country" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;resize:none"></textarea>
+          </div>
+        </div>
+        <button onclick="saveProfileChanges()" style="width:100%;margin-top:8px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:8px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer">Save Changes</button>
+        <div id="pp-save-status" style="font-size:10px;min-height:14px;margin-top:4px;text-align:center"></div>
       </div>
       <div id="pp-plan-section" class="pp-plan" style="display:none">
         <div class="pp-plan-row">
@@ -1964,16 +2018,19 @@
         <input id="inv-email" type="email" placeholder="Email address" style="flex:1;min-width:140px;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
         <input id="inv-name" type="text" placeholder="Name (optional)" style="width:120px;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
         <select id="inv-role" style="background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-          <option value="stage">stage</option>
-          <option value="av">av</option>
-          <option value="interp">interp</option>
-          <option value="reg">reg</option>
-          <option value="signage">signage</option>
-          <option value="director">director</option>
+          <option value="stage">Stage</option>
+          <option value="av">AV</option>
+          <option value="interp">Interp</option>
+          <option value="reg">Reg</option>
+          <option value="signage">Signage</option>
+          <option value="director">Director</option>
         </select>
         <button id="inv-btn" onclick="inviteOperator()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:var(--blue);border-radius:6px;padding:7px 14px;font-size:11px;font-family:inherit;font-weight:500;cursor:pointer;white-space:nowrap">Send Invite</button>
       </div>
       <div id="inv-status" style="font-size:11px;min-height:16px;margin-top:4px"></div>
+    </div>
+    <div style="padding:8px 0">
+      <input id="um-search" type="text" placeholder="🔍  Search operators..." oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit;outline:none">
     </div>
     <div id="users-modal-body">
       <div class="um-empty">Loading…</div>
@@ -2049,6 +2106,14 @@
     </div>
     <div class="bm-manage" id="bm-manage" style="display:none;text-align:center">
       <button class="te-cta secondary" style="display:inline-block;width:auto;padding:8px 20px" onclick="openCustomerPortal()">Manage Subscription</button>
+    </div>
+    <div style="border-top:1px solid var(--border-section);margin:12px 0 0;padding-top:12px">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Have a promo or gift code?</div>
+      <div style="display:flex;gap:8px">
+        <input id="bm-promo-code" type="text" placeholder="Enter code (e.g. LAUNCH20)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:1px;outline:none">
+        <button onclick="redeemPromoCode('bm')" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:7px 14px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">Apply</button>
+      </div>
+      <div id="bm-promo-status" style="font-size:11px;min-height:14px;margin-top:4px"></div>
     </div>
     <div class="ev-modal-actions"><button onclick="closeBillingModal()">Close</button></div>
   </div>
@@ -3577,6 +3642,16 @@ function renderSignagePanel() {
               ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
               ${d.sequence?.length ? `<span class="sp-seq-tag">⟳ ${d.sequence.length} slides</span>` : ''}
               <span${online ? ' class="sp-status-on"' : ''}>${online ? '● online' : '○ offline'}</span>
+              ${(() => {
+                if (!d.last_seen_at) return '';
+                const diff = now - new Date(d.last_seen_at).getTime();
+                let agoText;
+                if (diff < 60000) agoText = Math.floor(diff / 1000) + 's ago';
+                else if (diff < 3600000) agoText = Math.floor(diff / 60000) + 'm ago';
+                else if (diff < 86400000) agoText = Math.floor(diff / 3600000) + 'h ago';
+                else agoText = Math.floor(diff / 86400000) + 'd ago';
+                return `<span style="font-size:10px;color:var(--dim)">${agoText}</span>`;
+              })()}
             </div>
             ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
             <div class="sp-disp-actions">
@@ -3638,6 +3713,13 @@ function renderSignagePanel() {
       <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">＋ Add Display</button>
     </div>
     <div class="sp-grid">${displayCards}</div>
+    <div style="border-top:1px solid var(--border-section);margin-top:12px;padding-top:12px">
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">Pair a Display</div>
+      <div style="display:flex;gap:6px">
+        <input id="sp-pair-code" type="text" placeholder="Enter pairing code (e.g. A7K-3M2)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:2px;text-transform:uppercase;outline:none">
+        <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">🔗 Pair</button>
+      </div>
+    </div>
   </div>
 
   <div class="sp-section bordered">
@@ -3654,6 +3736,65 @@ function renderSignagePanel() {
     <code>cuedeck-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
     Open in any browser -- supports landscape &amp; portrait. Heartbeat every 30s.
   </div>`;
+}
+
+// ── Pair display by code ────────────────────────────────────
+async function pairDisplayByCode(code) {
+  code = (code || '').replace('-', '').toUpperCase();
+  if (!code || code.length < 6) {
+    pushToast('Enter a valid 6-character pairing code', 'warn');
+    return;
+  }
+  if (!S.event) {
+    pushToast('No event selected', 'error');
+    return;
+  }
+
+  // Look up pairing code
+  var { data: pairing, error } = await sb.from('leod_signage_pairing')
+    .select('*')
+    .eq('code', code)
+    .single();
+
+  if (error || !pairing) {
+    pushToast('Invalid pairing code', 'error');
+    return;
+  }
+  if (new Date(pairing.expires_at) < new Date()) {
+    pushToast('Pairing code expired', 'error');
+    return;
+  }
+  if (pairing.display_id) {
+    pushToast('Code already used', 'error');
+    return;
+  }
+
+  // Create a new display
+  var displayName = 'Paired Display ' + code.slice(0, 3);
+  var { data: display, error: insertErr } = await sb.from('leod_signage_displays')
+    .insert({
+      name: displayName,
+      event_id: S.event.id,
+      content_mode: 'schedule',
+      zone_type: 'lobby',
+      orientation: 'landscape',
+    })
+    .select()
+    .single();
+
+  if (insertErr || !display) {
+    pushToast('Failed to create display: ' + (insertErr ? insertErr.message : ''), 'error');
+    return;
+  }
+
+  // Link pairing code to display
+  await sb.from('leod_signage_pairing')
+    .update({ display_id: display.id, event_id: S.event.id })
+    .eq('code', code);
+
+  pushToast('✓ Display paired successfully!', 'success');
+  await loadDisplays(S.event.id);
+  if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
 }
 
 // ── QR Code modal ──────────────────────────────────────────
@@ -5251,48 +5392,140 @@ function closeUsersModal() {
   document.getElementById('users-modal').style.display = 'none';
 }
 
-async function refreshUsersModal() {
-  const body = document.getElementById('users-modal-body');
-  body.innerHTML = '<div class="um-empty">Loading…</div>';
+var _operatorsData = [];
 
-  const { data, error } = await sb.from('leod_users')
-    .select('id, name, email, role, organization').order('role').order('name');
+async function refreshUsersModal() {
+  var body = document.getElementById('users-modal-body');
+  body.textContent = '';
+  var loading = document.createElement('div');
+  loading.className = 'um-empty';
+  loading.textContent = 'Loading\u2026';
+  body.appendChild(loading);
+
+  var searchEl = document.getElementById('um-search');
+  if (searchEl) searchEl.value = '';
+
+  var { data, error } = await sb.rpc('get_operators_with_last_seen');
   if (error || !data || data.length === 0) {
-    body.innerHTML = '<div class="um-empty">No operator accounts found.</div>'; return;
+    body.textContent = '';
+    var empty = document.createElement('div');
+    empty.className = 'um-empty';
+    empty.textContent = 'No operator accounts found.';
+    body.appendChild(empty);
+    return;
   }
 
-  const ROLES = ['director','stage','av','interp','reg','signage','pending'];
-  body.innerHTML = data.map(u => `
-    <div class="um-row" data-uid="${esc(u.id)}">
-      <div style="flex:1;min-width:0">
-        <div class="um-name">${esc(u.name || '—')}${u.organization ? ` <span style="color:var(--dim);font-weight:400;font-size:11px">· ${esc(u.organization)}</span>` : ''}</div>
-        <div class="um-email">${esc(u.email || '')}</div>
-      </div>
-      <select class="um-role-sel" data-uid="${esc(u.id)}">
-        ${ROLES.map(r => `<option value="${r}"${r === u.role ? ' selected' : ''}>${r}</option>`).join('')}
-      </select>
-      <button class="um-approve-btn" onclick="approveUser('${esc(u.id)}', this.closest('.um-row').querySelector('.um-role-sel').value)">
-        ${u.role === 'pending' ? 'Approve' : 'Update'}
-      </button>
-    </div>
-  `).join('');
+  _operatorsData = data;
+  renderOperatorRows(data);
+}
 
-  // Update approve/update label on role change
-  body.querySelectorAll('.um-role-sel').forEach(sel => {
-    sel.addEventListener('change', () => {
-      const btn = sel.closest('.um-row').querySelector('.um-approve-btn');
-      const orig = data.find(u => u.id === sel.dataset.uid);
-      btn.textContent = (sel.value === orig?.role) ? 'Update' : (orig?.role === 'pending' ? 'Approve' : 'Update');
-    });
+function renderOperatorRows(data) {
+  var body = document.getElementById('users-modal-body');
+  var ROLES = ['director','stage','av','interp','reg','signage','pending'];
+  var ROLE_LABELS = { director:'Director', stage:'Stage', av:'AV', interp:'Interp', reg:'Reg', signage:'Signage', pending:'Pending' };
+
+  var markup = '';
+  data.forEach(function(u, idx) {
+    var isSuspended = u.active === false;
+    var isPending   = u.role === 'pending';
+    var isSelf      = u.id === (S.user ? S.user.id : '');
+
+    // Last seen
+    var lastSeenText = 'never';
+    var lastSeenColor = '#64748b';
+    if (u.last_sign_in_at) {
+      var ago = Date.now() - new Date(u.last_sign_in_at).getTime();
+      if (ago < 60000) { lastSeenText = 'just now'; lastSeenColor = '#34d399'; }
+      else if (ago < 3600000) { lastSeenText = Math.floor(ago / 60000) + 'm ago'; lastSeenColor = '#34d399'; }
+      else if (ago < 86400000) { lastSeenText = Math.floor(ago / 3600000) + 'h ago'; lastSeenColor = '#34d399'; }
+      else { lastSeenText = Math.floor(ago / 86400000) + 'd ago'; }
+    }
+
+    var dotBg = isSuspended ? '#ef4444' : (u.last_sign_in_at ? '#34d399' : '#4b5563');
+
+    // Action buttons
+    var actions = '';
+    if (!isSelf) {
+      if (isPending) {
+        actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Approve</button>' +
+          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')">&#x1F5D1;</button>';
+      } else if (isSuspended) {
+        actions = '<button class="um-activate-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'reactivate\')">\u25B6 Activate</button>' +
+          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')">&#x1F5D1;</button>';
+      } else {
+        actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Update</button>' +
+          '<button class="um-suspend-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'suspend\')">\u23F8</button>';
+      }
+    }
+
+    var roleOptions = ROLES.map(function(r) {
+      return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + ROLE_LABELS[r] + '</option>';
+    }).join('');
+
+    if (idx > 0) markup += '<div style="border-top:1px solid var(--border-section)"></div>';
+    markup += '<div class="um-row" data-uid="' + esc(u.id) + '" style="' + (isSuspended ? 'opacity:0.6' : '') + '">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div class="um-name">' + esc(u.name || '\u2014') +
+          (u.organization ? ' <span style="color:var(--dim);font-weight:400;font-size:11px">\u00B7 ' + esc(u.organization) + '</span>' : '') +
+          (isSuspended ? ' <span style="display:inline-block;font-size:8px;background:rgba(239,68,68,.12);color:#f87171;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SUSPENDED</span>' : '') +
+        '</div>' +
+        '<div class="um-email">' + esc(u.email || '') + '</div>' +
+        '<div style="font-size:10px;color:var(--dim);margin-top:2px">' +
+          '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + dotBg + ';vertical-align:middle;margin-right:4px"></span>' +
+          'Last seen: <span style="color:' + lastSeenColor + '">' + lastSeenText + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<select class="um-role-sel" data-uid="' + esc(u.id) + '">' + roleOptions + '</select>' +
+      actions +
+    '</div>';
   });
+
+  // Status summary
+  var total     = data.length;
+  var pending   = data.filter(function(u) { return u.role === 'pending'; }).length;
+  var suspended = data.filter(function(u) { return u.active === false; }).length;
+
+  markup += '<div style="margin-top:14px;font-size:10px;color:var(--dim)">' +
+    total + ' operator' + (total !== 1 ? 's' : '') +
+    (pending ? ' \u00B7 ' + pending + ' pending' : '') +
+    (suspended ? ' \u00B7 ' + suspended + ' suspended' : '') +
+  '</div>';
+
+  body.innerHTML = markup;
+}
+
+function filterOperators() {
+  var q = (document.getElementById('um-search').value || '').trim().toLowerCase();
+  if (!q) { renderOperatorRows(_operatorsData); return; }
+  var filtered = _operatorsData.filter(function(u) {
+    return (u.name || '').toLowerCase().indexOf(q) !== -1 || (u.email || '').toLowerCase().indexOf(q) !== -1;
+  });
+  renderOperatorRows(filtered);
 }
 
 async function approveUser(userId, role) {
   const { error } = await sb.from('leod_users').update({ role }).eq('id', userId);
   if (error) { pushToast('Failed: ' + error.message, 'error'); return; }
-  pushToast(`✓ Role set to ${role}`, 'success');
+  pushToast(`\u2713 Role set to ${role}`, 'success');
   await refreshUsersModal();
   await loadPendingBadge();
+}
+
+async function manageOperator(userId, action) {
+  var { data, error } = await sb.functions.invoke('manage-operator', {
+    body: { user_id: userId, action: action },
+  });
+  if (error) {
+    pushToast('Failed: ' + (error.message || 'Unknown error'), 'error');
+    return;
+  }
+  pushToast('\u2713 Operator ' + action + 'd', 'success');
+  await refreshUsersModal();
+}
+
+function confirmRemoveUser(userId, displayName) {
+  if (!confirm('Remove ' + displayName + '? This cannot be undone.')) return;
+  manageOperator(userId, 'remove');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -5604,6 +5837,69 @@ function renderProfilePanel() {
   }
 }
 
+function toggleProfileEdit() {
+  var section = document.getElementById('pp-edit-section');
+  var btn = document.getElementById('pp-edit-btn');
+  var isOpen = section.style.display !== 'none';
+  if (isOpen) {
+    section.style.display = 'none';
+    btn.textContent = '✎ Edit';
+  } else {
+    document.getElementById('pp-edit-name').value = S.userName || '';
+    document.getElementById('pp-edit-org').value = S.userOrg || '';
+    document.getElementById('pp-edit-phone').value = S.userPhone || '';
+    var billingSection = document.getElementById('pp-billing-section');
+    if (S.userRole === 'director') {
+      billingSection.style.display = '';
+      document.getElementById('pp-edit-company').value = S.userCompanyName || '';
+      document.getElementById('pp-edit-vat').value = S.userVatId || '';
+      document.getElementById('pp-edit-address').value = S.userBillingAddress || '';
+    } else {
+      billingSection.style.display = 'none';
+    }
+    section.style.display = '';
+    btn.textContent = '✕ Cancel';
+  }
+}
+
+async function saveProfileChanges() {
+  var statusEl = document.getElementById('pp-save-status');
+  statusEl.textContent = 'Saving\u2026';
+  statusEl.style.color = 'var(--dim)';
+  var name  = document.getElementById('pp-edit-name').value.trim();
+  var org   = document.getElementById('pp-edit-org').value.trim();
+  var phone = document.getElementById('pp-edit-phone').value.trim();
+  var { error } = await sb.from('leod_users').update({ name: name, organization: org, phone: phone }).eq('id', S.user.id);
+  if (error) {
+    statusEl.textContent = 'Error: ' + error.message;
+    statusEl.style.color = '#f87171';
+    return;
+  }
+  S.userName = name;
+  S.userOrg  = org;
+  S.userPhone = phone;
+  if (S.userRole === 'director') {
+    var company_name    = document.getElementById('pp-edit-company').value.trim();
+    var vat_id          = document.getElementById('pp-edit-vat').value.trim();
+    var billing_address = document.getElementById('pp-edit-address').value.trim();
+    var result = await sb.functions.invoke('update-billing-details', {
+      body: { company_name: company_name, vat_id: vat_id, billing_address: billing_address },
+    });
+    if (result.error) {
+      console.error('Billing sync error:', result.error);
+    }
+    S.userCompanyName    = company_name;
+    S.userVatId          = vat_id;
+    S.userBillingAddress = billing_address;
+  }
+  renderProfilePanel();
+  document.getElementById('pp-edit-section').style.display = 'none';
+  document.getElementById('pp-edit-btn').textContent = '✎ Edit';
+  statusEl.textContent = '\u2713 Saved';
+  statusEl.style.color = '#34d399';
+  setTimeout(function() { statusEl.textContent = ''; }, 2000);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // ── SUBSCRIPTION & BILLING ──────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════
@@ -5739,7 +6035,7 @@ async function startCheckout(plan) {
 
   try {
     const { data, error } = await sb.functions.invoke('create-checkout-session', {
-      body: { price_id: priceId, plan, interval: _billingInterval },
+      body: { price_id: priceId, plan: plan, interval: _billingInterval, coupon_id: S._pendingCoupon || undefined },
     });
     if (error) {
       let errMsg = 'Checkout failed';
@@ -5747,9 +6043,65 @@ async function startCheckout(plan) {
       pushToast(errMsg, 'error');
       return;
     }
+    delete S._pendingCoupon;
     window.location.href = data.url;
   } catch (e) {
     pushToast('Failed to start checkout: ' + e.message, 'error');
+  }
+}
+
+async function redeemPromoCode(prefix) {
+  var input    = document.getElementById(prefix + '-promo-code');
+  var statusEl = document.getElementById(prefix + '-promo-status');
+  var code     = (input.value || '').trim().toUpperCase();
+
+  if (!code) { statusEl.textContent = 'Enter a code'; statusEl.style.color = '#f87171'; return; }
+
+  statusEl.textContent = 'Applying…';
+  statusEl.style.color = 'var(--dim)';
+
+  try {
+    var { data, error } = await sb.functions.invoke('redeem-code', {
+      body: { code: code },
+    });
+
+    if (error) {
+      var errMsg = 'Failed to redeem code';
+      try {
+        var parsed = await error.context.json();
+        errMsg = parsed.error || errMsg;
+      } catch (e) {}
+      statusEl.textContent = errMsg;
+      statusEl.style.color = '#f87171';
+      return;
+    }
+
+    statusEl.textContent = '✓ ' + (data.message || 'Code applied!');
+    statusEl.style.color = '#34d399';
+    input.value = '';
+
+    // If a discount code, store coupon ID for next checkout
+    if (data.type === 'discount' && data.stripe_coupon_id) {
+      S._pendingCoupon = data.stripe_coupon_id;
+    }
+
+    // If trial_extension or plan_unlock, reload subscription and close screens
+    if (data.type === 'trial_extension' || data.type === 'plan_unlock') {
+      setTimeout(async function() {
+        await loadSubscription();
+        renderProfilePanel();
+        updatePlanBadge();
+        if (prefix === 'te') {
+          window.location.reload();
+        } else {
+          closeBillingModal();
+          pushToast('✓ ' + (data.message || 'Code applied!'), 'success');
+        }
+      }, 1500);
+    }
+  } catch (e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = '#f87171';
   }
 }
 
@@ -5793,10 +6145,26 @@ function closeBillingModal() {
   document.getElementById('billing-modal').style.display = 'none';
 }
 
+function showSuspendedScreen() {
+  document.getElementById('load-spinner').style.display = 'none';
+  document.getElementById('load-step').style.display = 'none';
+  var overlay = document.createElement('div');
+  overlay.id = 'suspended-screen';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center';
+  var inner = document.createElement('div');
+  inner.style.cssText = 'text-align:center;max-width:360px;padding:40px';
+  inner.innerHTML = '<div style="font-size:48px;margin-bottom:12px">\u26A0\uFE0F</div>' +
+    '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px">Account Suspended</div>' +
+    '<div style="font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:24px">Your account has been suspended by your director. Contact them to restore access.</div>' +
+    '<button onclick="doLogout()" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Sign Out</button>';
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+}
+
 async function loadUserRole() {
   if (!S.user) return;
   const { data } = await sb.from('leod_users')
-    .select('role, name')
+    .select('role, name, organization, phone, company_name, vat_id, billing_address, active')
     .eq('id', S.user.id)
     .single();
   if (!data) {
@@ -5804,6 +6172,12 @@ async function loadUserRole() {
     document.getElementById('users-btn').style.display = 'flex';
     loadPendingBadge();
     return;
+  }
+
+  // Block access for suspended accounts
+  if (data.active === false) {
+    showSuspendedScreen();
+    throw new Error('suspended'); // abort boot()
   }
 
   // Block access for pending accounts
@@ -5814,6 +6188,11 @@ async function loadUserRole() {
 
   S.userRole = data.role;
   S.userName = data.name || '';
+  S.userOrg            = data.organization || '';
+  S.userPhone          = data.phone || '';
+  S.userCompanyName    = data.company_name || '';
+  S.userVatId          = data.vat_id || '';
+  S.userBillingAddress = data.billing_address || '';
   setRole(data.role);
 
   // Detect role change → schedule welcome modal or toast

@@ -266,6 +266,7 @@ body.is-live #display{
 /* ── ANIMATIONS ── */
 @keyframes fade-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .fade-in{animation:fade-in .4s ease both}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 /* ── STAGE TIMER MODE ─────────────────────────── */
 .st-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:0;padding:2vw;box-sizing:border-box}
@@ -297,15 +298,29 @@ body.is-live #display{
     <div class="su-logo">Cue<span>Deck</span> <span style="font-size:16px;font-weight:600;letter-spacing:.2em;color:#4a6278">DISPLAY</span></div>
     <div class="su-sub">DIGITAL SIGNAGE</div>
     <div class="su-err" id="su-err"></div>
-    <label class="su-lbl">DISPLAY ID (from console)</label>
-    <input class="su-input" id="su-id" type="text" placeholder="e.g. a18fd6bd-084b-4699-…" autocomplete="off">
-    <button class="su-btn" onclick="connectDisplay()">CONNECT DISPLAY →</button>
-    <div class="su-hint">
-      Short URL: <code style="font-size:10px;color:#4a6278">display.html#id=YOUR-DISPLAY-ID</code>
+    <!-- Pairing code UI -->
+    <div style="text-align:center">
+      <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Pairing Code</div>
+      <div id="pairing-code" style="font-size:48px;font-weight:800;letter-spacing:8px;color:#fff;font-family:monospace;margin-bottom:6px">---</div>
+      <div style="font-size:11px;color:#64748b;margin-bottom:20px">Enter this code in your CueDeck console to connect</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <span style="width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 6px #34d399;display:inline-block;animation:pulse 2s infinite"></span>
+        <span id="pairing-status" style="font-size:11px;color:#34d399">Waiting for connection...</span>
+      </div>
+      <div id="pairing-timer" style="margin-top:16px;font-size:10px;color:#4b5563"></div>
+      <div style="margin-top:24px;border-top:1px solid #1e293b;padding-top:16px">
+        <div style="font-size:10px;color:#4b5563;margin-bottom:6px">Or enter Display ID manually:</div>
+        <div style="display:flex;gap:8px;justify-content:center">
+          <input id="manual-display-id" type="text" placeholder="Display UUID" style="background:#0f172a;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:11px;width:200px;text-align:center;font-family:monospace;outline:none">
+          <button onclick="manualBoot()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#60a5fa;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit">Connect</button>
+        </div>
+      </div>
     </div>
     <!-- Hidden fields — override hardcoded credentials if needed -->
     <input id="su-url" type="hidden" value="">
     <input id="su-key" type="hidden" value="">
+    <!-- Legacy hidden input kept for E2E test compatibility -->
+    <input id="su-id" type="hidden" value="">
   </div>
 </div>
 
@@ -380,6 +395,10 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('setup').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
     bootDisplay(url, key, id);
+  } else {
+    // No ID in URL — initialize Supabase client and show pairing code flow
+    sb = supabase.createClient(url, key);
+    startPairing();
   }
 });
 
@@ -393,6 +412,96 @@ async function connectDisplay() {
   document.getElementById('setup').style.display = 'none';
   document.getElementById('loading').style.display = 'flex';
   await bootDisplay(url, key, id);
+}
+
+// ═══════════════════════════════════════════════════
+// PAIRING CODE
+// ═══════════════════════════════════════════════════
+function generatePairingCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+  var code = '';
+  for (var i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code.slice(0, 3) + '-' + code.slice(3);
+}
+
+var _pairingPollInterval = null;
+var _pairingTimerInterval = null;
+
+async function startPairing() {
+  var code = generatePairingCode();
+  var rawCode = code.replace('-', '');
+  var expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  // Store in pairing table (uses a placeholder event_id — console will set the real one)
+  var { error } = await sb.from('leod_signage_pairing').insert({
+    code: rawCode,
+    event_id: '00000000-0000-0000-0000-000000000000',
+    expires_at: expiresAt,
+  });
+  if (error) {
+    console.error('Failed to create pairing code:', error);
+    // Fall back to manual mode — just show the code as unavailable
+    document.getElementById('pairing-code').textContent = '---';
+    document.getElementById('pairing-status').textContent = 'Pairing unavailable — use manual entry below';
+    document.getElementById('pairing-status').style.color = '#6b7280';
+    return;
+  }
+
+  document.getElementById('pairing-code').textContent = code;
+
+  // Countdown timer
+  var endTime = Date.now() + 5 * 60 * 1000;
+  var timerEl = document.getElementById('pairing-timer');
+  if (_pairingTimerInterval) clearInterval(_pairingTimerInterval);
+  _pairingTimerInterval = setInterval(function() {
+    var remaining = Math.max(0, endTime - Date.now());
+    var min = Math.floor(remaining / 60000);
+    var sec = Math.floor((remaining % 60000) / 1000);
+    timerEl.textContent = 'Code expires in ' + min + ':' + (sec < 10 ? '0' : '') + sec;
+    if (remaining <= 0) {
+      clearInterval(_pairingTimerInterval);
+      clearInterval(_pairingPollInterval);
+      timerEl.textContent = 'Code expired — generating new code...';
+      setTimeout(startPairing, 1000);
+    }
+  }, 1000);
+
+  // Poll for pairing confirmation every 2 seconds
+  if (_pairingPollInterval) clearInterval(_pairingPollInterval);
+  _pairingPollInterval = setInterval(async function() {
+    var { data } = await sb.from('leod_signage_pairing')
+      .select('display_id')
+      .eq('code', rawCode)
+      .single();
+    if (data && data.display_id) {
+      clearInterval(_pairingPollInterval);
+      clearInterval(_pairingTimerInterval);
+      document.getElementById('pairing-status').textContent = 'Connected!';
+      document.getElementById('pairing-status').style.color = '#34d399';
+      document.getElementById('pairing-timer').textContent = '';
+      var url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
+      var key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
+      setTimeout(function() {
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('loading').style.display = 'flex';
+        bootDisplay(url, key, data.display_id);
+      }, 500);
+    }
+  }, 2000);
+}
+
+function manualBoot() {
+  var id = document.getElementById('manual-display-id').value.trim();
+  if (!id) { document.getElementById('su-err').textContent = 'Display ID is required.'; return; }
+  if (_pairingPollInterval) clearInterval(_pairingPollInterval);
+  if (_pairingTimerInterval) clearInterval(_pairingTimerInterval);
+  var url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
+  var key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  bootDisplay(url, key, id);
 }
 
 // ═══════════════════════════════════════════════════
