@@ -1264,7 +1264,7 @@
     #toast-container {
       position: fixed; top: 14px; right: 14px;
       display: flex; flex-direction: column; gap: 8px;
-      z-index: 500; /* below modals/loading, above session cards */
+      z-index: 1100; /* above loading-overlay (1000) and modals */
       pointer-events: none;
     }
     .toast {
@@ -5628,6 +5628,8 @@ async function loadSubscription() {
   const sub = Array.isArray(data) ? data[0] : data;
   S.subscription = sub;
 
+  loadStripePrices(); // non-blocking — must run before expiry checks so pricing screen works
+
   // Check trial expiry
   if (sub.plan === 'trial' && sub.trial_ends_at) {
     if (new Date(sub.trial_ends_at) <= new Date()) {
@@ -5644,7 +5646,6 @@ async function loadSubscription() {
   }
 
   S.planLimits = PLAN_LIMITS[sub.plan] || PLAN_LIMITS.trial;
-  loadStripePrices(); // non-blocking
   updatePlanBadge();
 
   // Show billing button for directors
