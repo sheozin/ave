@@ -510,9 +510,11 @@ test.describe('Auth: invite operator UI', () => {
 
   test('36 invite role select has all 6 roles', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
-    const options = await page.locator('#inv-role option').allTextContents();
+    const values = await page.locator('#inv-role option').evaluateAll(
+      els => els.map(el => (el as HTMLOptionElement).value)
+    );
     for (const role of ['stage', 'av', 'interp', 'reg', 'signage', 'director']) {
-      expect(options).toContain(role);
+      expect(values).toContain(role);
     }
   });
 

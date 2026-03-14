@@ -47,14 +47,14 @@ test.describe('Display: page load — no params', () => {
     await expect(page.locator('#su-key')).toBeAttached();
   });
 
-  test('05 display ID input is present', async ({ page }) => {
+  test('05 pairing code is present on setup screen', async ({ page }) => {
     await page.goto(DISP_URL);
-    await expect(page.locator('#su-id')).toBeVisible();
+    await expect(page.locator('#pairing-code')).toBeVisible();
   });
 
-  test('06 CONNECT DISPLAY button is present', async ({ page }) => {
+  test('06 manual display ID fallback input is present', async ({ page }) => {
     await page.goto(DISP_URL);
-    await expect(page.locator('button:has-text("CONNECT DISPLAY")')).toBeVisible();
+    await expect(page.locator('#manual-display-id')).toBeVisible();
   });
 
   test('07 CueDeck Display branding is visible', async ({ page }) => {
@@ -88,20 +88,19 @@ test.describe('Display: page load — no params', () => {
 
 test.describe('Display: setup form validation', () => {
 
-  test('11 submitting without display ID shows required error', async ({ page }) => {
+  test('11 submitting manual entry without display ID shows required error', async ({ page }) => {
     await page.goto(DISP_URL);
-    // #su-url and #su-key are hidden inputs (pre-filled from hardcoded constants).
-    // Only #su-id is user-editable. Leave it empty and submit.
-    await page.locator('#su-id').fill('');
-    await page.locator('button:has-text("CONNECT DISPLAY")').click();
+    // Manual display ID input is the user-editable fallback. Leave it empty and submit.
+    await page.locator('#manual-display-id').fill('');
+    await page.locator('button:has-text("Connect")').click();
     await expect(page.locator('#su-err')).toHaveText(/Display ID is required/i);
   });
 
-  test('12 submitting with only ID left empty still shows required error', async ({ page }) => {
+  test('12 submitting manual entry with empty ID still shows required error', async ({ page }) => {
     await page.goto(DISP_URL);
-    // URL and key fall back to hardcoded values; ID is the only required user input.
-    await page.locator('#su-id').fill('');
-    await page.locator('button:has-text("CONNECT DISPLAY")').click();
+    // Manual entry fallback — leave empty and submit.
+    await page.locator('#manual-display-id').fill('');
+    await page.locator('button:has-text("Connect")').click();
     await expect(page.locator('#su-err')).toHaveText(/Display ID is required/i);
   });
 
