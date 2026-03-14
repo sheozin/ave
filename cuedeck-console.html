@@ -3657,7 +3657,7 @@ function renderSignagePanel() {
             <div class="sp-disp-actions">
               <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">▶ Launch</a>
               <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
-              <button class="id-btn" onclick="identifyDisplay('${esc(d.id)}')" title="Flash screen to identify it">⚡ ID</button>
+              <button class="id-btn" onclick="copyAndIdentifyDisplay('${esc(d.id)}')" title="Copy display UUID and flash screen">📋 Copy ID</button>
             </div>
           </div>
           <div class="sp-card-mgmt">
@@ -4407,6 +4407,22 @@ async function identifyDisplay(displayId) {
   setTimeout(async () => {
     await sb.from('leod_signage_displays').update({ global_override: prev }).eq('id', displayId);
   }, 4000);
+}
+
+// ── Copy & Identify Display ──────────────────────────
+function copyAndIdentifyDisplay(displayId) {
+  // Copy UUID to clipboard
+  var ta = document.createElement('textarea');
+  ta.value = displayId;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  pushToast('Display ID copied — screen will flash', 'success');
+  // Also flash the display to identify it
+  identifyDisplay(displayId);
 }
 
 // ── Notes Toggle ─────────────────────────────────────
