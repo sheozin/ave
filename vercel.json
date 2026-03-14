@@ -13,5 +13,9 @@
         { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
       ]
     }
+  ],
+  "crons": [
+    { "path": "/api/cron/session-cleanup", "schedule": "0 2 * * *" },
+    { "path": "/api/cron/health-check",    "schedule": "*/15 * * * *" }
   ]
 }
