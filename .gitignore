@@ -23,6 +23,20 @@ playwright-report/
 .vscode/
 .idea/
 
+# YouTube pipeline secrets — never commit
+scripts/youtube-pipeline/client_secret.json
+scripts/youtube-pipeline/yt-tokens.json
+scripts/youtube-pipeline/video-ids.json
+scripts/youtube-pipeline/playlist-id.json
+
+# YouTube branding temp/build artifacts
+youtube-branding/temp/
+youtube-branding/recordings/
+youtube-branding/final/
+youtube-branding/voiceovers/
+youtube-branding/music/
+
 # Backup / scratch files
 *.bak
 "files 2"/
+.vercel
