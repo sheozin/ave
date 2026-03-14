@@ -1987,6 +1987,13 @@
 <!-- WELCOME MODAL (shown once after role approval) -->
 <div id="welcome-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)dismissWelcome(false)">
   <div class="ev-modal-card" style="max-width:420px">
+    <div style="font-size:28px;text-align:center">🎉</div>
+    <div class="ev-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
+    <div id="welcome-role-name" style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center"></div>
+    <div id="welcome-role-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center"></div>
+    <div class="ev-modal-actions" style="justify-content:center;margin-top:12px">
+      <button class="primary" onclick="dismissWelcome(false)">Get Started</button>
+    </div>
   </div>
 </div>
 
@@ -5342,14 +5349,8 @@ function showWelcomeModal(role) {
         <button onclick="dismissWelcome(false)" style="background:transparent;border:1px solid #334155;color:var(--dim);font-size:11px">I'll explore on my own</button>
       </div>`;
   } else {
-    card.innerHTML = `
-      <div style="font-size:28px;text-align:center">🎉</div>
-      <div class="ev-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
-      <div style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center">${esc(role).toUpperCase()}</div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center">${esc(ROLE_DESCRIPTIONS[role] || '')}</div>
-      <div class="ev-modal-actions" style="justify-content:center;margin-top:12px">
-        <button class="primary" onclick="dismissWelcome(false)">Get Started</button>
-      </div>`;
+    document.getElementById('welcome-role-name').textContent = role.toUpperCase();
+    document.getElementById('welcome-role-desc').textContent = ROLE_DESCRIPTIONS[role] || '';
   }
   modal.style.display = 'flex';
 }
@@ -6204,14 +6205,14 @@ async function wizNext() {
       if (!name) { wizShowError('Event name is required.'); return; }
       const date = document.getElementById('wiz-ev-date')?.value;
       const tz = document.getElementById('wiz-ev-tz')?.value;
-      const { data, error } = await supabase.from('leod_events').insert({
+      const { data, error } = await sb.from('leod_events').insert({
         name, date, timezone: tz, event_start: '09:00:00', event_end: '18:00:00', active: true, created_by: S.user?.id
       }).select().single();
       if (error) { wizShowError(error.message); return; }
       // Reload events and select the new one
-      await loadEvents();
+      S.events = await loadEvents();
+      buildEvSelect(S.events);
       if (data?.id) {
-        document.getElementById('ev-select').value = data.id;
         await switchEvent(data.id);
       }
     } else if (_wizStep === 1) {
@@ -6222,7 +6223,7 @@ async function wizNext() {
       const start = document.getElementById('wiz-sess-start')?.value || '09:00';
       const end = document.getElementById('wiz-sess-end')?.value || '09:30';
       const evId = document.getElementById('ev-select')?.value;
-      const { error } = await supabase.from('leod_sessions').insert({
+      const { error } = await sb.from('leod_sessions').insert({
         event_id: evId, title, speaker, room, company: '',
         planned_start: start + ':00', planned_end: end + ':00',
         scheduled_start: start + ':00', scheduled_end: end + ':00',
@@ -6236,7 +6237,7 @@ async function wizNext() {
         const name = document.getElementById('wiz-inv-name')?.value?.trim() || '';
         const role = document.getElementById('wiz-inv-role')?.value || 'stage';
         try {
-          await supabase.functions.invoke('invite-operator', { body: { email, name, role } });
+          await sb.functions.invoke('invite-operator', { body: { email, name, role } });
           const uid = S.user?.id || 'anon';
           localStorage.setItem(CK_KEY + uid + '_invited', '1');
         } catch (_) { /* non-blocking — skip is fine */ }
@@ -6248,7 +6249,7 @@ async function wizNext() {
       const mode = document.getElementById('wiz-disp-mode')?.value || 'schedule';
       const orient = document.getElementById('wiz-disp-orient')?.value || 'landscape';
       const evId = document.getElementById('ev-select')?.value;
-      const { error } = await supabase.from('leod_signage_displays').insert({
+      const { error } = await sb.from('leod_signage_displays').insert({
         event_id: evId, name, content_mode: mode, orientation: orient, zone_type: 'lobby',
       });
       if (error) { wizShowError(error.message); return; }
