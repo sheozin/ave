@@ -5651,7 +5651,7 @@ async function inviteOperator() {
   // Plan limit: check operator count
   if (S.planLimits && S.planLimits.operators !== 999) {
     const { count } = await sb.from('leod_users')
-      .select('id', { count: 'exact', head: true }).neq('role', 'pending');
+      .select('id', { count: 'exact', head: true }).neq('role', 'pending').eq('invited_by', S.user.id);
     if (count >= S.planLimits.operators) {
       status.innerHTML = `<span style="color:var(--red)">Your plan allows ${S.planLimits.operators} operators. Upgrade to invite more.</span>`;
       return;
@@ -5701,7 +5701,7 @@ async function inviteOperator() {
 async function loadPendingBadge() {
   if (S.userRole !== 'director') return;
   const { count } = await sb.from('leod_users')
-    .select('id', { count: 'exact', head: true }).eq('role', 'pending');
+    .select('id', { count: 'exact', head: true }).eq('role', 'pending').eq('invited_by', S.user.id);
   const badge = document.getElementById('users-badge');
   const btn   = document.getElementById('users-btn');
   if (count > 0) {
@@ -5712,9 +5712,9 @@ async function loadPendingBadge() {
     badge.style.display = 'none';
     btn.style.borderColor = '';
   }
-  // Cache total for profile panel usage bar
+  // Cache total for profile panel usage bar (own team only)
   const { count: total } = await sb.from('leod_users')
-    .select('id', { count: 'exact', head: true }).neq('role', 'pending');
+    .select('id', { count: 'exact', head: true }).neq('role', 'pending').eq('invited_by', S.user.id);
   S.operatorCount = total || 0;
 }
 
