@@ -20,12 +20,5 @@ CREATE POLICY "Users can insert own feedback"
   ON leod_feedback FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Directors read event feedback"
-  ON leod_feedback FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM leod_users
-      WHERE leod_users.user_id = auth.uid()
-        AND leod_users.role = 'director'
-    )
-  );
+-- No SELECT policy for authenticated users.
+-- Feedback is read-only via Supabase dashboard or service role key (admin/owner only).
