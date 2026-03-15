@@ -1076,6 +1076,11 @@
     .qr-check { color: var(--green); } .qr-dash { color: var(--dim); }
     .qr-wf { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
 
+    /* Feedback Star Rating */
+    .fb-stars { display: flex; gap: 4px; }
+    .fb-star { font-size: 22px; cursor: pointer; color: var(--dim); transition: color .12s, transform .12s; user-select: none; }
+    .fb-star:hover, .fb-star.active { color: var(--amber); transform: scale(1.15); }
+
     /* Command Palette */
     .cmd-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.60); z-index: 260; display: flex; align-items: flex-start; justify-content: center; padding-top: 120px; backdrop-filter: blur(2px); }
     .cmd-box { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; width: 100%; max-width: 480px; box-shadow: 0 16px 48px rgba(0,0,0,.6); overflow: hidden; }
@@ -1675,7 +1680,8 @@
     <button onclick="openChangelogModal();closeHelpMenu()">🆕 What's New</button>
     <div class="hd-sep"></div>
     <button onclick="window.open('https://www.cuedeck.io/docs','_blank');closeHelpMenu()">📖 Documentation</button>
-    <button onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()">💬 Contact Support</button>
+    <button onclick="openFeedbackModal();closeHelpMenu()">💬 Send Feedback</button>
+    <button onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()">📧 Contact Support</button>
     <div class="hd-sep"></div>
     <button onclick="openAboutModal();closeHelpMenu()">ℹ️ About CueDeck</button>
   </div>
@@ -1762,6 +1768,7 @@
     <button onclick="openQuickRefModal();toggleHamburger()">📋 Quick Ref</button>
     <button onclick="openChangelogModal();toggleHamburger()">🆕 What's New</button>
     <button onclick="openAboutModal();toggleHamburger()">ℹ️ About</button>
+    <button onclick="openFeedbackModal();toggleHamburger()">💬 Feedback</button>
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     <button onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button onclick="openUsersModal();toggleHamburger()">Operators</button>
@@ -2853,6 +2860,7 @@ document.addEventListener('keydown', e => {
       if (openModal.id === 'ev-modal')        { closeEvModal(); return; }
       if (openModal.id === 'disp-modal')      { closeDisplayModal(); return; }
       if (openModal.id === 'spon-modal')      { closeSponsorModal(); return; }
+      if (openModal.id === 'feedback-modal')  { closeFeedbackModal(); return; }
     }
     if (typeof isFilterActive === 'function' && isFilterActive()) { clearFilters(); return; }
     return;
@@ -7157,6 +7165,7 @@ function getCmdStaticItems() {
     { cat: 'Navigation', icon: 'ℹ️', label: 'About CueDeck', action: () => openAboutModal() },
     { cat: 'Navigation', icon: '💰', label: 'Open Billing', action: () => openBillingModal() },
     { cat: 'Navigation', icon: '👥', label: 'Manage Operators', action: () => openUsersModal() },
+    { cat: 'Help', icon: '💬', label: 'Send Feedback', action: () => openFeedbackModal() },
   ];
   // Role switching
 }
@@ -7235,6 +7244,66 @@ document.getElementById('cmd-input')?.addEventListener('keydown', function(e) {
   else if (e.key === 'Escape') { closeCmdPalette(); }
 });
 
+// ── Feedback Modal ────────────────────────────────
+let _fbRating = 0;
+function setFbRating(n) {
+  _fbRating = (_fbRating === n) ? 0 : n;  // toggle off if same star clicked
+  document.querySelectorAll('.fb-star').forEach(s => {
+    s.classList.toggle('active', +s.dataset.v <= _fbRating);
+  });
+}
+
+function openFeedbackModal() {
+  _fbRating = 0;
+  document.getElementById('fb-cat').value = 'general';
+  document.getElementById('fb-msg').value = '';
+  document.getElementById('fb-chars').textContent = '0/1000';
+  document.querySelectorAll('.fb-star').forEach(s => s.classList.remove('active'));
+  document.getElementById('feedback-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('fb-msg').focus(), 50);
+}
+
+function closeFeedbackModal() {
+  document.getElementById('feedback-modal').style.display = 'none';
+}
+
+async function submitFeedback() {
+  const msg = document.getElementById('fb-msg').value.trim();
+  if (!msg) { pushToast('Please enter a message', 'warn'); return; }
+
+  // Rate-limit: 60s cooldown
+  const lastKey = 'cuedeck_feedback_last';
+  const last = parseInt(localStorage.getItem(lastKey) || '0', 10);
+  if (Date.now() - last < 60000) {
+    pushToast('Please wait a minute before sending more feedback', 'warn');
+    return;
+  }
+
+  const category = document.getElementById('fb-cat').value;
+  const row = {
+    user_id:     S.user?.id || null,
+    email:       S.user?.email || null,
+    role:        S.role || null,
+    event_id:    S.event?.id || null,
+    rating:      _fbRating || null,
+    category:    category,
+    message:     msg,
+    app_version: APP_VERSION,
+    user_agent:  navigator.userAgent
+  };
+
+  const { error } = await S.sb.from('leod_feedback').insert(row);
+  if (error) {
+    console.error('Feedback insert error:', error);
+    pushToast('Failed to send feedback — try again', 'error');
+    return;
+  }
+
+  localStorage.setItem(lastKey, String(Date.now()));
+  closeFeedbackModal();
+  pushToast('Thanks for your feedback!', 'success');
+}
+
 </script>
 
 <!-- ═══ AI AGENT MODULES ════════════════════════════════════════
@@ -7272,6 +7341,39 @@ document.getElementById('cmd-input')?.addEventListener('keydown', function(e) {
     <div class="ev-modal-title">Quick Reference</div>
     <div id="quickref-content"></div>
     <div class="ev-modal-actions"><button onclick="closeQuickRefModal()">Close</button></div>
+  </div>
+</div>
+
+<div id="feedback-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeFeedbackModal()">
+  <div class="ev-modal-card" style="max-width:440px">
+    <div class="ev-modal-title">Send Feedback</div>
+    <label>Category
+      <select id="fb-cat">
+        <option value="general">General Feedback</option>
+        <option value="bug">Bug Report</option>
+        <option value="feature">Feature Request</option>
+        <option value="praise">Praise</option>
+      </select>
+    </label>
+    <label>Rating <span style="font-size:10px;color:var(--dim)">(optional)</span>
+      <div class="fb-stars" id="fb-stars">
+        <span class="fb-star" data-v="1" onclick="setFbRating(1)">★</span>
+        <span class="fb-star" data-v="2" onclick="setFbRating(2)">★</span>
+        <span class="fb-star" data-v="3" onclick="setFbRating(3)">★</span>
+        <span class="fb-star" data-v="4" onclick="setFbRating(4)">★</span>
+        <span class="fb-star" data-v="5" onclick="setFbRating(5)">★</span>
+      </div>
+    </label>
+    <label>Message
+      <textarea id="fb-msg" rows="4" maxlength="1000" placeholder="Tell us what's on your mind…"
+        style="width:100%;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;resize:vertical;transition:border-color .15s"
+        oninput="document.getElementById('fb-chars').textContent=this.value.length+'/1000'"></textarea>
+      <div id="fb-chars" style="font-size:10px;color:var(--dim);text-align:right;margin-top:-4px">0/1000</div>
+    </label>
+    <div class="ev-modal-actions">
+      <button onclick="closeFeedbackModal()">Cancel</button>
+      <button class="primary" onclick="submitFeedback()">Send Feedback</button>
+    </div>
   </div>
 </div>
 
