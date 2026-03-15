@@ -1519,7 +1519,7 @@
 
 <!-- LOADING / LOGIN -->
 <div id="loading-overlay">
-  <div class="load-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="ll-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#ll-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#60a5fa">Deck</tspan></text></svg></div>
+  <div class="load-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="ll-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#ll-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text></svg></div>
   <div class="spinner" id="load-spinner"></div>
   <div class="load-step" id="load-step">Connecting…</div>
   <form id="login-form" onsubmit="handleLoginSubmit(event)">
@@ -1652,7 +1652,7 @@
 
 <!-- HEADER -->
 <div id="header">
-  <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="hl-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#hl-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#60a5fa">Deck</tspan></text></svg></div>
+  <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="hl-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#hl-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text></svg></div>
   <div id="event-name">—</div>
   <div id="plan-badge"></div>
   <div id="presence-bar"></div>
@@ -7008,11 +7008,10 @@ function openAboutModal() {
   const el = document.getElementById('about-content');
   el.innerHTML = `
     <svg viewBox="0 0 214 48" xmlns="http://www.w3.org/2000/svg" style="height:40px;width:auto">
-      <defs><linearGradient id="ab-bg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#3B82F6"/><stop offset="100%" stop-color="#6366F1"/></linearGradient></defs>
+      <defs><linearGradient id="ab-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
       <rect width="40" height="40" rx="12" fill="url(#ab-bg)" y="4"/>
-      <text x="12" y="32" font-family="Inter,system-ui,sans-serif" font-size="22" font-weight="800" fill="#fff">C</text>
-      <text x="50" y="32" font-family="Inter,system-ui,sans-serif" font-size="32" font-weight="300" fill="#CBD5E1">Cue</text>
-      <text x="107" y="32" font-family="Inter,system-ui,sans-serif" font-size="32" font-weight="700" fill="#F1F5F9">Deck</text>
+      <path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/>
+      <text x="50" y="35.5" font-family="Inter,system-ui,sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text>
     </svg>
     <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:4px">Production Console</div>
     <div class="about-ver">Version ${APP_VERSION} · Built ${APP_BUILD_DATE}</div>
