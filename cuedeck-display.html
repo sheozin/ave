@@ -6,6 +6,10 @@
 <title>CueDeck Display</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
+<link rel="manifest" href="/display-manifest.json">
+<meta name="theme-color" content="#05060f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ── RESET & BASE ── */
@@ -83,6 +87,7 @@ body{
 .d-header-status.live{color:#ef4444}
 .d-header-status.ready{color:#fbbf24}
 .d-header-status.standby{color:rgba(255,255,255,.3)}
+.d-header:hover #disconnect-btn{opacity:1}
 
 /* ── CONTENT AREA ── */
 #content-area{
@@ -333,6 +338,7 @@ body.is-live #display{
     <span class="d-header-event" id="d-event-name">—</span>
     <span class="d-header-status standby" id="d-status-lbl">STANDBY</span>
     <span class="d-header-clock" id="d-clock">--:--:--</span>
+    <button id="disconnect-btn" onclick="disconnectDisplay()" style="background:none;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.3);font-size:9px;padding:3px 8px;border-radius:4px;cursor:pointer;letter-spacing:.1em;opacity:0;transition:opacity .3s;font-family:inherit">UNPAIR</button>
   </div>
   <div id="content-area"></div>
 </div>
@@ -385,20 +391,31 @@ window.addEventListener('DOMContentLoaded', () => {
   const url = get('url') || SUPABASE_URL;   // fall back to hardcoded
   const key = get('key') || SUPABASE_ANON_KEY;
 
-  if (id)  document.getElementById('su-id').value  = id;
+  // Check localStorage for previously paired display
+  const savedId = localStorage.getItem('cuedeck_display_id');
+
+  const bootId = id || savedId;
+
+  if (bootId) document.getElementById('su-id').value = bootId;
   // Pre-fill hidden inputs so connectDisplay() and tests can read them back
   document.getElementById('su-url').value = url;
   document.getElementById('su-key').value = key;
 
-  // Auto-boot if we have a display ID (url+key are always available via hardcoded fallback)
-  if (id) {
+  // Auto-boot if we have a display ID (from URL or localStorage)
+  if (bootId) {
+    _bootedFromLocalStorage = !id && !!savedId;
     document.getElementById('setup').style.display = 'none';
     document.getElementById('loading').style.display = 'flex';
-    bootDisplay(url, key, id);
+    bootDisplay(url, key, bootId);
   } else {
-    // No ID in URL — initialize Supabase client and show pairing code flow
+    // No ID anywhere — initialize Supabase client and show pairing code flow
     sb = supabase.createClient(url, key);
     startPairing();
+  }
+
+  // Register service worker for PWA install
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/display-sw.js').catch(() => {});
   }
 });
 
@@ -504,9 +521,20 @@ function manualBoot() {
   bootDisplay(url, key, id);
 }
 
+function disconnectDisplay() {
+  // Clear saved display and reload to show pairing screen
+  localStorage.removeItem('cuedeck_display_id');
+  if (_chan) { sb.removeChannel(_chan); _chan = null; }
+  if (_tick) clearInterval(_tick);
+  if (_heartbeat) clearInterval(_heartbeat);
+  window.location.replace(window.location.pathname);
+}
+
 // ═══════════════════════════════════════════════════
 // BOOT SEQUENCE
 // ═══════════════════════════════════════════════════
+var _bootedFromLocalStorage = false;
+
 async function bootDisplay(url, key, id) {
   try {
     sb = supabase.createClient(url, key);
@@ -557,12 +585,23 @@ async function bootDisplay(url, key, id) {
     // 10. Resync clock every 5 min
     setInterval(syncClock, 300_000);
 
+    // Save display ID for auto-reconnect on next launch
+    localStorage.setItem('cuedeck_display_id', id);
+
     render();
     startSequence();  // Begin cycling if display has a sequence playlist
   } catch (e) {
+    // If auto-reconnect from localStorage failed, clear saved ID and fall back to pairing
+    var wasLocalStorage = localStorage.getItem('cuedeck_display_id') === id;
+    if (wasLocalStorage) localStorage.removeItem('cuedeck_display_id');
     document.getElementById('loading').style.display = 'none';
     document.getElementById('setup').style.display = 'flex';
     document.getElementById('su-err').textContent = `Connection failed: ${e.message}`;
+    // Only auto-start pairing if we booted from localStorage (not URL params)
+    if (_bootedFromLocalStorage && !_pairingPollInterval) {
+      if (!sb) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      startPairing();
+    }
   }
 }
 

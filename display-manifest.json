@@ -1,0 +1,19 @@
+{
+  "name": "CueDeck Display",
+  "short_name": "CueDeck",
+  "description": "Digital signage display for CueDeck live event production.",
+  "start_url": "/display",
+  "scope": "/display",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#05060f",
+  "theme_color": "#05060f",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
