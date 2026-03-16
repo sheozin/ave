@@ -278,6 +278,52 @@ async function cleanPlaylist() {
   console.log(`\n✓ Cleaned ${toDelete.length} deleted entry(ies) from playlist.`);
 }
 
+// Set all uploaded videos to public
+async function publishAll() {
+  if (!existsSync(IDS_FILE)) {
+    console.error('No video IDs found. Upload videos first.');
+    process.exit(1);
+  }
+
+  const ids = JSON.parse(readFileSync(IDS_FILE, 'utf8'));
+  const episodes = Object.keys(ids)
+    .map(k => ({ num: parseInt(k.replace('ep', '')), key: k }))
+    .sort((a, b) => a.num - b.num);
+
+  console.log(`Publishing ${episodes.length} video(s)...\n`);
+
+  let updated = 0;
+  let skipped = 0;
+
+  for (const { num, key } of episodes) {
+    const videoId = ids[key].videoId;
+
+    const result = await ytApi(`/videos?part=status&id=${videoId}`);
+    const item = result.items && result.items[0];
+    if (!item) {
+      console.log(`  Ep ${String(num).padStart(2, '0')}: not found, skipping`);
+      skipped++;
+      continue;
+    }
+
+    if (item.status.privacyStatus === 'public') {
+      console.log(`  Ep ${String(num).padStart(2, '0')}: already public, skipping`);
+      skipped++;
+      continue;
+    }
+
+    await ytApi('/videos?part=status', 'PUT', {
+      id: videoId,
+      status: { privacyStatus: 'public' },
+    });
+
+    console.log(`  ✓ Ep ${String(num).padStart(2, '0')}: now public`);
+    updated++;
+  }
+
+  console.log(`\nDone. ${updated} published, ${skipped} skipped.`);
+}
+
 // Add/update hashtags on all uploaded videos
 async function updateHashtags() {
   if (!existsSync(IDS_FILE)) {
@@ -366,6 +412,9 @@ async function main() {
     case 'clean':
       await cleanPlaylist();
       break;
+    case 'publish-all':
+      await publishAll();
+      break;
     default:
       console.error('Usage:');
       console.error('  manage-playlist.mjs create           Create the series playlist');
@@ -374,6 +423,7 @@ async function main() {
       console.error('  manage-playlist.mjs list             Show playlist contents');
       console.error('  manage-playlist.mjs update-hashtags  Add SEO hashtags to all video descriptions');
       console.error('  manage-playlist.mjs clean            Remove deleted video entries from playlist');
+      console.error('  manage-playlist.mjs publish-all      Set all videos to public');
       process.exit(1);
   }
 }
