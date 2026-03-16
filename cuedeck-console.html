@@ -882,6 +882,7 @@
     input[type="month"],
     input[type="week"],
     input[type="number"],
+    input[type="file"],
     select { color-scheme: dark; }
 
     /* Consistent, readable placeholder text across every input & textarea */
@@ -889,6 +890,19 @@
 
     /* Textarea reset: match input base styles so it doesn't inherit browser defaults */
     textarea { color-scheme: dark; }
+
+    /* Focus rings for inline-styled inputs that lack a parent-class :focus rule.
+       These inputs use outline:none inline but have no corresponding focus CSS. */
+    #pp-edit-section input:focus,
+    #pp-edit-section textarea:focus,
+    #inv-email:focus, #inv-name:focus, #inv-role:focus,
+    #um-search:focus,
+    #te-promo-code:focus, #bm-promo-code:focus,
+    #bc-pri:focus {
+      border-color: var(--blue) !important;
+      box-shadow: 0 0 0 3px rgba(59,130,246,.1) !important;
+      outline: none !important;
+    }
 
     code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 11px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
 
@@ -1015,7 +1029,7 @@
     .ev-modal-title { font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--text-primary); }
     .ev-modal-card label { display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase; }
     .ev-modal-card input,.ev-modal-card select { background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;outline:none;transition:border-color .15s; }
-    .ev-modal-card input:focus,.ev-modal-card select:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+    .ev-modal-card input:focus,.ev-modal-card select:focus,.ev-modal-card textarea:focus { border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,130,246,.1); }
     .ev-modal-actions { display:flex;gap:8px;justify-content:flex-end;margin-top:4px; }
     .ev-modal-actions button { padding:6px 14px;border-radius:6px;border:1px solid var(--border);background:var(--card-hi);color:var(--text-primary);cursor:pointer;font-size:11px;font-family:inherit;font-weight:500;transition:filter .15s; }
     .ev-modal-actions button.primary { background:#1d4ed8;border-color:#2563eb;color:#fff; }
@@ -4561,7 +4575,7 @@ function buildBCPresets() {
   const isDirector = S.role === 'director' || S.userRole === 'director';
   if (!isDirector) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = BC_PRESETS.map(p =>
-    `<button class="bc-preset-btn" onclick="fillPreset(${JSON.stringify(p.text)})">${p.label}</button>`
+    `<button class="bc-preset-btn" onclick="fillPreset('${p.text.replace(/'/g, "\\'")}')">${p.label}</button>`
   ).join('');
 }
 
