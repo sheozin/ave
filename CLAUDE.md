@@ -105,6 +105,11 @@ Deno.serve(async (req: Request) => {
 });
 ```
 
+## Content Writing Rules
+- **Avoid dashes in titles, headings, and copy** — only use `—` or `-` when genuinely necessary (e.g. a range, or a strong pause no other punctuation can replace)
+- Prefer clean, direct phrasing; no dash-connected clauses
+- Applies to: blog titles, subtitles, cover image text, meta descriptions, all marketing copy
+
 ## Live Verification Protocol
 Every code change MUST be verified live before reporting done:
 1. **Console edits** (`cuedeck-console.html`): Open https://app.cuedeck.io in Chrome, reload, check for JS errors, take screenshot proof
