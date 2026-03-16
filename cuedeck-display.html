@@ -1048,7 +1048,7 @@ function _doUnlockAudio() {
 }
 
 async function initAudioUnlock() {
-  if (!D?.audio_enabled) return;
+  // Always try to unlock audio if there are video sponsors
   const hasVideo = S.sponsors.some(s => s.logo_url && isVideoUrl(s.logo_url));
   if (!hasVideo) return;
 
@@ -1133,7 +1133,7 @@ function renderSponsors(area) {
   }
 
   if (_sponsorTimer) { clearTimeout(_sponsorTimer); _sponsorTimer = null; }
-  const audioEnabled = D?.audio_enabled === true;
+  // Audio is always attempted for video sponsors if browser is unlocked
 
   const showSponsor = (idx) => {
     _cleanupActiveVideo();
@@ -1149,8 +1149,8 @@ function renderSponsors(area) {
     if (isVideo) {
       const vid = document.createElement('video');
       vid.className = 'sp-sponsor-logo';  // starts opacity:0 via CSS
-      // Unmuted only if both DB flag AND browser audio are unlocked
-      vid.muted = !(audioEnabled && _audioUnlocked);
+      // Unmuted if browser audio has been unlocked (tap or kiosk flag)
+      vid.muted = !_audioUnlocked;
       vid.playsInline = true;
       vid.preload = 'auto';
 
