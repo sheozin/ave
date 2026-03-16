@@ -485,7 +485,7 @@
     }
     .rbtn:hover { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.25); }
     .rbtn.active { background: #1A2640; color: #E5E7EB; border-color: rgba(148,163,184,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
-    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
+    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); position:relative; z-index:100; }
     .ev-pill { display:flex;align-items:center;background:#1e293b;border-radius:8px;border:1px solid rgba(148,163,184,0.2);overflow:visible;cursor:pointer;transition:border-color .12s; }
     .ev-pill:hover { border-color:rgba(148,163,184,0.35); }
     .ev-pill-label { padding:6px 10px;font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:rgba(148,163,184,0.08);border-radius:8px 0 0 8px; }
@@ -1200,7 +1200,7 @@
     }
     #fb-clear:hover { border-color:var(--text);color:var(--text); }
     #fb-clear.visible { display:block; }
-    #fb-count { font-size:10px;color:var(--dim);white-space:nowrap;margin-left:auto;letter-spacing:.04em; }
+    #fb-count { font-size:10px;color:var(--dim);white-space:nowrap;letter-spacing:.04em; }
     #fb-count.filtered { color:var(--blue); }
 
     /* ── CONTEXT PANEL ── */
@@ -2340,6 +2340,7 @@ const S = {
   presence:        {},     // PR-009: role → count of connected operators
   viewMode:        'list', // PR-020: 'list' | 'timeline'
   tlManualOverride: false, // prevents timeline auto-switch after user chooses List
+  tlBootDone:       false, // true after first render — auto-switch only on realtime updates
   autoStart:       false,  // auto go-live at planned start time
   _autoStarted:    new Set(), // session IDs already auto-started this session
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
@@ -2960,7 +2961,8 @@ function renderSessions() {
   }
 
   // Smart auto-open: switch to timeline when sessions are READY/CALLING
-  if (S.viewMode === 'list' && !S.tlManualOverride) {
+  // Only triggers on realtime updates (after boot), not on initial page load
+  if (S.tlBootDone && S.viewMode === 'list' && !S.tlManualOverride) {
     const hasUpcoming = S.sessions.some(s => s.status === 'READY' || s.status === 'CALLING');
     if (hasUpcoming) {
       S.viewMode = 'timeline';
@@ -2971,6 +2973,7 @@ function renderSessions() {
       return;
     }
   }
+  if (!S.tlBootDone) S.tlBootDone = true;
 
   // PR-020: Timeline view mode
   if (S.viewMode === 'timeline') {
