@@ -110,6 +110,7 @@ async function ytApi(path, method, body) {
     const err = await resp.text();
     throw new Error(`YouTube API error ${resp.status}: ${err}`);
   }
+  if (resp.status === 204) return null;
   return resp.json();
 }
 
@@ -233,6 +234,50 @@ async function listPlaylist() {
   console.log(`\nTotal: ${position} video(s)`);
 }
 
+// Remove deleted/unavailable videos from playlist
+async function cleanPlaylist() {
+  if (!existsSync(PLAYLIST_FILE)) {
+    console.error('No playlist found. Run: manage-playlist.mjs create');
+    process.exit(1);
+  }
+
+  const { playlistId } = JSON.parse(readFileSync(PLAYLIST_FILE, 'utf8'));
+  console.log('Scanning playlist for deleted videos...\n');
+
+  let pageToken = '';
+  const toDelete = [];
+
+  do {
+    const result = await ytApi(
+      `/playlistItems?part=snippet,status&playlistId=${playlistId}&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}`
+    );
+
+    for (const item of result.items || []) {
+      const title = item.snippet.title;
+      const privacy = item.status?.privacyStatus;
+      if (title === 'Deleted video' || title === 'Private video' || privacy === 'privacyStatusUnspecified') {
+        toDelete.push({ id: item.id, title });
+      }
+    }
+
+    pageToken = result.nextPageToken || '';
+  } while (pageToken);
+
+  if (toDelete.length === 0) {
+    console.log('No deleted videos found — playlist is clean.');
+    return;
+  }
+
+  console.log(`Found ${toDelete.length} deleted entry(ies) to remove:`);
+  for (const item of toDelete) {
+    console.log(`  Removing: ${item.title} (${item.id})`);
+    await ytApi(`/playlistItems?id=${item.id}`, 'DELETE');
+    console.log(`  ✓ Removed`);
+  }
+
+  console.log(`\n✓ Cleaned ${toDelete.length} deleted entry(ies) from playlist.`);
+}
+
 // Add/update hashtags on all uploaded videos
 async function updateHashtags() {
   if (!existsSync(IDS_FILE)) {
@@ -318,6 +363,9 @@ async function main() {
     case 'update-hashtags':
       await updateHashtags();
       break;
+    case 'clean':
+      await cleanPlaylist();
+      break;
     default:
       console.error('Usage:');
       console.error('  manage-playlist.mjs create           Create the series playlist');
@@ -325,6 +373,7 @@ async function main() {
       console.error('  manage-playlist.mjs add-all          Add all uploaded episodes');
       console.error('  manage-playlist.mjs list             Show playlist contents');
       console.error('  manage-playlist.mjs update-hashtags  Add SEO hashtags to all video descriptions');
+      console.error('  manage-playlist.mjs clean            Remove deleted video entries from playlist');
       process.exit(1);
   }
 }
