@@ -105,6 +105,13 @@ Deno.serve(async (req: Request) => {
 });
 ```
 
+## Live Verification Protocol
+Every code change MUST be verified live before reporting done:
+1. **Console edits** (`cuedeck-console.html`): Open https://app.cuedeck.io in Chrome, reload, check for JS errors, take screenshot proof
+2. **Marketing edits** (`cuedeck-marketing/`): Check preview server for build errors, screenshot the affected page
+3. **Database changes** (migrations/RPC): Apply via Supabase SQL editor in Chrome, verify with a query
+4. **Never claim done without evidence** — screenshot or console output proving it works
+
 ## Vercel Cron Route Template
 ```typescript
 // api/cron/example.ts
