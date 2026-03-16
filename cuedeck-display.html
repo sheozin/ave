@@ -158,16 +158,9 @@ video.sp-sponsor-logo{
   max-width:100vw;max-height:100vh;border-radius:0;width:100%;height:100%;
 }
 .sp-sponsor-display.video-fullscreen .sp-sponsor-name-big{display:none}
-/* Unmute button overlay */
-.sp-unmute-btn{
-  position:absolute;bottom:24px;right:24px;z-index:10;
-  background:rgba(0,0,0,.6);backdrop-filter:blur(8px);
-  border:1px solid rgba(255,255,255,.15);border-radius:50%;
-  width:48px;height:48px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:20px;transition:all .2s;
-}
-.sp-unmute-btn:hover{background:rgba(59,130,246,.5);transform:scale(1.1)}
+/* Video hidden until ready (prevents flash) */
+video.sp-sponsor-logo{opacity:0;transition:opacity .3s ease}
+video.sp-sponsor-logo.sp-ready{opacity:1}
 /* Video progress bar */
 .sp-video-progress{
   position:absolute;bottom:0;left:0;height:3px;
@@ -1025,14 +1018,30 @@ function renderWayfinding() {
 // ═══════════════════════════════════════════════════
 // SPONSORS MODE — rotating carousel with video support
 // ═══════════════════════════════════════════════════
-let _audioUnlocked = false;
+let _currentVideoSrc = null;   // guard: skip re-render if same video playing
+let _activeVideoEl = null;     // ref to currently playing <video>
+let _activeCapTimer = null;
+let _activeProgressTimer = null;
 
 function isVideoUrl(url) {
   return /\.(mp4|webm|ogg|mov)(\?|$)/i.test(url);
 }
 
+function _cleanupActiveVideo() {
+  if (_activeVideoEl) {
+    _activeVideoEl.pause();
+    _activeVideoEl.removeAttribute('src');
+    _activeVideoEl.load();
+    _activeVideoEl = null;
+  }
+  if (_activeCapTimer) { clearTimeout(_activeCapTimer); _activeCapTimer = null; }
+  if (_activeProgressTimer) { clearInterval(_activeProgressTimer); _activeProgressTimer = null; }
+  _currentVideoSrc = null;
+}
+
 function renderSponsors(area) {
   if (!S.sponsors.length) {
+    _cleanupActiveVideo();
     area.textContent = '';
     const wrap = document.createElement('div');
     wrap.className = 'fade-in sp-sponsor-display';
@@ -1044,10 +1053,17 @@ function renderSponsors(area) {
     return;
   }
 
+  // Guard: if the same video is already playing, don't restart it
+  const currentSponsor = S.sponsors[_sponsorIdx % S.sponsors.length];
+  if (_currentVideoSrc && currentSponsor.logo_url === _currentVideoSrc && _activeVideoEl && !_activeVideoEl.ended) {
+    return;
+  }
+
   if (_sponsorTimer) { clearTimeout(_sponsorTimer); _sponsorTimer = null; }
   const audioEnabled = D?.audio_enabled === true;
 
   const showSponsor = (idx) => {
+    _cleanupActiveVideo();
     if (_sponsorTimer) { clearTimeout(_sponsorTimer); _sponsorTimer = null; }
     const s = S.sponsors[idx % S.sponsors.length];
     const isVideo = s.logo_url && isVideoUrl(s.logo_url);
@@ -1058,11 +1074,9 @@ function renderSponsors(area) {
     wrap.className = 'fade-in sp-sponsor-display' + (isVideo ? ' video-fullscreen' : '');
 
     if (isVideo) {
-      const shouldUnmute = audioEnabled && _audioUnlocked;
       const vid = document.createElement('video');
-      vid.className = 'sp-sponsor-logo';
-      vid.src = s.logo_url;
-      vid.muted = !shouldUnmute;
+      vid.className = 'sp-sponsor-logo';  // starts opacity:0 via CSS
+      vid.muted = !audioEnabled;           // start unmuted if audio enabled
       vid.playsInline = true;
       vid.preload = 'auto';
 
@@ -1077,45 +1091,52 @@ function renderSponsors(area) {
       wrap.appendChild(vid);
       wrap.appendChild(nameEl);
       wrap.appendChild(progress);
-
-      if (audioEnabled) {
-        const btn = document.createElement('button');
-        btn.className = 'sp-unmute-btn';
-        btn.textContent = _audioUnlocked ? '\u{1F50A}' : '\u{1F507}';
-        btn.title = _audioUnlocked ? 'Mute' : 'Enable audio';
-        btn.onclick = () => {
-          _audioUnlocked = !_audioUnlocked;
-          vid.muted = !_audioUnlocked;
-          btn.textContent = _audioUnlocked ? '\u{1F50A}' : '\u{1F507}';
-          btn.title = _audioUnlocked ? 'Mute' : 'Enable audio';
-        };
-        wrap.appendChild(btn);
-      }
-
       area.appendChild(wrap);
 
-      const playPromise = vid.play();
-      if (playPromise) {
-        playPromise.catch(() => { vid.muted = true; vid.play().catch(() => {}); });
-      }
+      // Track this video
+      _currentVideoSrc = s.logo_url;
+      _activeVideoEl = vid;
 
-      const progressTimer = setInterval(() => {
+      // Wait until enough data buffered, then play + reveal
+      // Video is invisible (opacity:0) until sp-ready class added,
+      // so any muted-fallback retry happens before the user sees anything
+      vid.addEventListener('canplay', () => {
+        const p = vid.play();
+        if (p) p.then(() => {
+          vid.classList.add('sp-ready');  // fade in
+        }).catch(() => {
+          // Autoplay with sound blocked by browser — mute and retry
+          vid.muted = true;
+          vid.play().then(() => {
+            vid.classList.add('sp-ready');
+          }).catch(() => {
+            vid.classList.add('sp-ready'); // show anyway
+          });
+        });
+      }, { once: true });
+
+      // Set source after listeners are attached
+      vid.src = s.logo_url;
+
+      _activeProgressTimer = setInterval(() => {
         if (vid.duration && progress) {
           progress.style.width = (vid.currentTime / vid.duration * 100) + '%';
         }
       }, 200);
 
       const maxCap = 60;
-      const capTimer = setTimeout(() => {
-        vid.pause(); clearInterval(progressTimer); advanceToNext();
+      _activeCapTimer = setTimeout(() => {
+        _cleanupActiveVideo();
+        advanceToNext();
       }, maxCap * 1000);
 
       vid.addEventListener('ended', () => {
-        clearTimeout(capTimer); clearInterval(progressTimer); advanceToNext();
+        _cleanupActiveVideo();
+        advanceToNext();
       }, { once: true });
 
       vid.addEventListener('error', () => {
-        clearTimeout(capTimer); clearInterval(progressTimer);
+        _cleanupActiveVideo();
         area.textContent = '';
         const errWrap = document.createElement('div');
         errWrap.className = 'fade-in sp-sponsor-display';
