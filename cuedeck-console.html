@@ -485,7 +485,7 @@
     }
     .rbtn:hover { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.25); }
     .rbtn.active { background: #1A2640; color: #E5E7EB; border-color: rgba(148,163,184,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
-    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); position:relative; z-index:100; }
+    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
     .ev-pill { display:flex;align-items:center;background:#1e293b;border-radius:8px;border:1px solid rgba(148,163,184,0.2);overflow:visible;cursor:pointer;transition:border-color .12s; }
     .ev-pill:hover { border-color:rgba(148,163,184,0.35); }
     .ev-pill-label { padding:6px 10px;font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:rgba(148,163,184,0.08);border-radius:8px 0 0 8px; }
@@ -1058,7 +1058,7 @@
     /* ── HELP SYSTEM ────────────────────────────────────────────── */
     /* Help button in header */
     #help-btn {
-      display:flex; align-items:center; gap:5px; position:relative;
+      display:flex; align-items:center; gap:5px; position:relative; z-index:220;
       background:none; border:1px solid var(--border); color:var(--dim);
       border-radius:5px; padding:3px 9px; font-size:11px;
       font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
@@ -4684,6 +4684,7 @@ function buildEvSelect(events) {
 }
 
 function toggleEvDropdown() {
+  closeHelpMenu();
   const dd = document.getElementById('ev-pill-dd');
   if (dd) dd.classList.toggle('open');
 }
@@ -7051,6 +7052,7 @@ document.addEventListener('click', function(e) {
 
 // ── Help Dropdown ──────────────────────────────────
 function toggleHelpMenu() {
+  closeEvDropdown();
   document.getElementById('help-dropdown').classList.toggle('hd-open');
 }
 function closeHelpMenu() {
