@@ -400,7 +400,7 @@
     .pp-divider       { height:1px; background:rgba(148,163,184,0.08); margin:4px 8px; }
     /* VIEW MODE PILL */
     .fb-view-pill {
-      display:flex; gap:2px; margin-left:auto; flex-shrink:0;
+      display:flex; gap:2px; flex-shrink:0;
       background:#0F1520; border:1px solid rgba(148,163,184,0.12);
       border-radius:100px; padding:2px;
     }
@@ -412,6 +412,8 @@
     }
     .fvp-btn.active { background:#1e3a5f; color:#60A5FA; font-weight:600; }
     .fvp-btn:not(.active):hover { color:#9CA3AF; }
+    .tl-auto-toast { padding:4px 12px;font-size:10px;color:#f59e0b;font-style:italic;display:none;align-items:center;gap:6px; }
+    .tl-auto-toast.show { display:flex; }
 
     /* ── BROADCAST BANNER ── */
     #bc-banner {
@@ -484,6 +486,18 @@
     .rbtn:hover { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.25); }
     .rbtn.active { background: #1A2640; color: #E5E7EB; border-color: rgba(148,163,184,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
     #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); }
+    .ev-pill { display:flex;align-items:center;background:#1e293b;border-radius:8px;border:1px solid rgba(148,163,184,0.2);overflow:visible;cursor:pointer;transition:border-color .12s; }
+    .ev-pill:hover { border-color:rgba(148,163,184,0.35); }
+    .ev-pill-label { padding:6px 10px;font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:rgba(148,163,184,0.08);border-radius:8px 0 0 8px; }
+    .ev-pill-name { padding:6px 14px;font-size:11px;color:#E5E7EB;font-weight:700;letter-spacing:.04em;text-transform:uppercase; }
+    .ev-pill-chev { padding:6px 8px;font-size:10px;color:#6B7280; }
+    .ev-pill-dd { position:absolute;top:100%;right:0;margin-top:4px;background:#1e293b;border:1px solid rgba(148,163,184,0.2);border-radius:8px;padding:4px;min-width:180px;z-index:200;display:none; }
+    .ev-pill-dd.open { display:block; }
+    .ev-pill-dd button { display:block;width:100%;text-align:left;padding:6px 12px;border:none;background:none;color:#94a3b8;font-size:11px;font-family:inherit;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:background .1s; }
+    .ev-pill-dd button:hover { background:rgba(148,163,184,0.1);color:#E5E7EB; }
+    .ev-pill-dd button.active { color:#60A5FA;background:rgba(59,130,246,0.1); }
+    .ev-add-btn { width:28px;height:28px;border-radius:8px;border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.15);color:#60A5FA;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0; }
+    .ev-add-btn:hover { background:rgba(59,130,246,0.25);border-color:rgba(59,130,246,0.6); }
 
     /* ── MAIN LAYOUT ── */
     #main { flex: 1; display: flex; overflow: hidden; background: var(--bg); }
@@ -1038,7 +1052,7 @@
     .ev-modal-actions button.danger  { background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#F87171; }
     .ev-modal-actions button:hover { filter:brightness(1.15); }
     #evm-error { color:var(--red);font-size:11px;min-height:14px; }
-    .ev-edit-btn { background:none;border:none;color:var(--dim);cursor:pointer;font-size:10px;padding:0 3px;opacity:.5;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
+    .ev-edit-btn { background:none;border:none;color:#94a3b8;cursor:pointer;font-size:10px;padding:0 3px;opacity:.7;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
     .ev-edit-btn:hover { opacity:1;color:var(--text); }
 
     /* ── HELP SYSTEM ────────────────────────────────────────────── */
@@ -1134,8 +1148,8 @@
     .sm-chk input[type=checkbox] { width:13px;height:13px;accent-color:var(--blue); }
     /* ── Card management buttons (▲▼✎) ── */
     .sc-mgmt { display:flex;gap:2px;margin-left:6px; }
-    .sc-mgmt-btn { background:none;border:none;color:var(--dim);cursor:pointer;
-                   font-size:10px;padding:1px 4px;opacity:.45;font-family:inherit; }
+    .sc-mgmt-btn { background:none;border:none;color:#94a3b8;cursor:pointer;
+                   font-size:10px;padding:1px 4px;opacity:.7;font-family:inherit; }
     .sc-mgmt-btn:hover { opacity:1;color:var(--text); }
     /* ── DELAY CASCADE VISUALIZER ── */
     #delay-strip {
@@ -1719,7 +1733,7 @@
           <div id="pp-email" class="pp-email"></div>
           <span id="pp-role-badge" class="pp-role-badge"></span>
         </div>
-        <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:10px;font-family:inherit;cursor:pointer">&#x270E; Edit</button>
+        <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:#94a3b8;border-radius:6px;padding:3px 8px;font-size:10px;font-family:inherit;cursor:pointer;opacity:.7;transition:opacity .12s" onmouseover="this.style.opacity='1';this.style.color='var(--text)'" onmouseout="this.style.opacity='.7';this.style.color='#94a3b8'">&#x270E; Edit</button>
       </div>
       <div id="pp-edit-section" style="display:none;padding:0 14px 10px">
         <div style="font-size:10px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Personal Details</div>
@@ -2325,6 +2339,7 @@ const S = {
   lastSyncAt:      0,      // PR-016: ms timestamp of last successful loadSnapshot()
   presence:        {},     // PR-009: role → count of connected operators
   viewMode:        'list', // PR-020: 'list' | 'timeline'
+  tlManualOverride: false, // prevents timeline auto-switch after user chooses List
   autoStart:       false,  // auto go-live at planned start time
   _autoStarted:    new Set(), // session IDs already auto-started this session
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
@@ -2944,6 +2959,19 @@ function renderSessions() {
     return;
   }
 
+  // Smart auto-open: switch to timeline when sessions are READY/CALLING
+  if (S.viewMode === 'list' && !S.tlManualOverride) {
+    const hasUpcoming = S.sessions.some(s => s.status === 'READY' || s.status === 'CALLING');
+    if (hasUpcoming) {
+      S.viewMode = 'timeline';
+      buildFilterBar();
+      const toast = document.getElementById('tl-auto-toast');
+      if (toast) { toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 4000); }
+      renderTimeline();
+      return;
+    }
+  }
+
   // PR-020: Timeline view mode
   if (S.viewMode === 'timeline') {
     renderTimeline();
@@ -3035,6 +3063,7 @@ function toggleViewMode() {
 function setViewMode(mode) {
   if (S.viewMode === mode) return;
   S.viewMode = mode;
+  if (mode === 'list') S.tlManualOverride = true;
   buildFilterBar();
   renderSessions();
 }
@@ -4631,18 +4660,39 @@ function setRole(role) {
 
 function buildEvSelect(events) {
   const wrap = document.getElementById('ev-select-wrap');
-  let html = 'EVENT: ';
-  html += events.map(e => {
-    const active = e.id === S.event?.id;
-    const editBtn = active
-      ? `<button class="ev-edit-btn" onclick="openEvModal('edit','${e.id}')" title="Edit event">✎</button>`
-      : '';
-    return `<button class="rbtn ${active ? 'active' : ''}" onclick="switchEvent('${e.id}')">${esc(e.name)}</button>${editBtn}`;
-  }).join('');
-  const plusClass = (S.role === 'director' && !events.length) ? 'rbtn rbtn-pulse' : 'rbtn';
-  html += `<button class="${plusClass}" onclick="openEvModal('create')" title="New event">＋</button>`;
-  wrap.innerHTML = html;
+  const cur = S.event;
+  const editBtn = cur
+    ? `<button class="ev-edit-btn" onclick="event.stopPropagation();openEvModal('edit','${cur.id}')" title="Edit event">✎</button>`
+    : '';
+  const ddItems = events.map(e =>
+    `<button class="${e.id === cur?.id ? 'active' : ''}" onclick="event.stopPropagation();switchEvent('${e.id}');closeEvDropdown()">${esc(e.name)}</button>`
+  ).join('');
+  const plusClass = (S.role === 'director' && !events.length) ? 'ev-add-btn rbtn-pulse' : 'ev-add-btn';
+  wrap.innerHTML =
+    `<div style="position:relative;display:flex;align-items:center;gap:6px">` +
+      `<div class="ev-pill" onclick="toggleEvDropdown()" title="Switch event">` +
+        `<span class="ev-pill-label">EVENT</span>` +
+        `<span class="ev-pill-name">${cur ? esc(cur.name) : 'None'}</span>` +
+        `<span class="ev-pill-chev">▾</span>` +
+      `</div>` +
+      editBtn +
+      `<div id="ev-pill-dd" class="ev-pill-dd">${ddItems}</div>` +
+    `</div>` +
+    `<button class="${plusClass}" onclick="openEvModal('create')" title="New event">＋</button>`;
 }
+
+function toggleEvDropdown() {
+  const dd = document.getElementById('ev-pill-dd');
+  if (dd) dd.classList.toggle('open');
+}
+function closeEvDropdown() {
+  const dd = document.getElementById('ev-pill-dd');
+  if (dd) dd.classList.remove('open');
+}
+document.addEventListener('click', e => {
+  const dd = document.getElementById('ev-pill-dd');
+  if (dd && dd.classList.contains('open') && !e.target.closest('#ev-select-wrap')) closeEvDropdown();
+});
 
 function buildFilterBar() {
   const bar = document.getElementById('filter-bar');
@@ -4668,7 +4718,8 @@ function buildFilterBar() {
     '<div class="fb-view-pill">' +
     '<button class="fvp-btn' + (S.viewMode === 'list' ? ' active' : '') + '" onclick="setViewMode(\'list\')">\u2630 List</button>' +
     '<button class="fvp-btn' + (S.viewMode === 'timeline' ? ' active' : '') + '" onclick="setViewMode(\'timeline\')">\u23F1 Timeline</button>' +
-    '</div>';
+    '</div>' +
+    '<div id="tl-auto-toast" class="tl-auto-toast">\u26A1 Auto-switched to Timeline \u2014 sessions starting soon</div>';
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
@@ -4689,6 +4740,7 @@ async function switchEvent(eventId) {
   S.event = ev;
   setStep(`Loading ${ev.name}…`);
   F.text = ''; F.status = ''; F.room = ''; // clear filters on event switch
+  S.tlManualOverride = false; // reset timeline auto-switch on event change
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});
   await loadLog(eventId).catch(() => {});
