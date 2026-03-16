@@ -591,7 +591,10 @@ async function bootDisplay(url, key, id) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('display').style.display = 'flex';
 
-    // 8. Start clock tick
+    // 8. Show audio unlock overlay if needed
+    showAudioUnlockOverlay();
+
+    // 9. Start clock tick
     _tick = setInterval(tick, 1000);
     tick();
 
@@ -1016,6 +1019,59 @@ function renderWayfinding() {
 }
 
 // ═══════════════════════════════════════════════════
+// AUDIO UNLOCK — one-tap overlay to satisfy Chrome autoplay policy
+// ═══════════════════════════════════════════════════
+let _audioContext = null;
+let _audioUnlocked = false;
+
+function showAudioUnlockOverlay() {
+  // Only show if audio_enabled and there are video sponsors
+  if (!D?.audio_enabled) return;
+  const hasVideo = S.sponsors.some(s => s.logo_url && isVideoUrl(s.logo_url));
+  if (!hasVideo) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'audio-unlock-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,6,15,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity .4s';
+
+  const icon = document.createElement('div');
+  icon.style.cssText = 'font-size:64px;margin-bottom:20px';
+  icon.textContent = '\u{1F50A}';
+
+  const label = document.createElement('div');
+  label.style.cssText = 'color:rgba(255,255,255,.7);font-size:22px;font-weight:600;letter-spacing:.04em';
+  label.textContent = 'Tap to enable audio';
+
+  const sub = document.createElement('div');
+  sub.style.cssText = 'color:rgba(255,255,255,.3);font-size:14px;margin-top:8px';
+  sub.textContent = 'Required by browser for sound playback';
+
+  overlay.appendChild(icon);
+  overlay.appendChild(label);
+  overlay.appendChild(sub);
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', () => {
+    // Create and resume AudioContext to unlock audio
+    _audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    _audioContext.resume().then(() => {
+      _audioUnlocked = true;
+      // Play a silent buffer to fully unlock audio
+      const buf = _audioContext.createBuffer(1, 1, 22050);
+      const src = _audioContext.createBufferSource();
+      src.buffer = buf;
+      src.connect(_audioContext.destination);
+      src.start(0);
+    });
+    _audioUnlocked = true;
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.remove(), 400);
+    // Re-render sponsors so current video picks up audio
+    render();
+  }, { once: true });
+}
+
+// ═══════════════════════════════════════════════════
 // SPONSORS MODE — rotating carousel with video support
 // ═══════════════════════════════════════════════════
 let _currentVideoSrc = null;   // guard: skip re-render if same video playing
@@ -1076,7 +1132,8 @@ function renderSponsors(area) {
     if (isVideo) {
       const vid = document.createElement('video');
       vid.className = 'sp-sponsor-logo';  // starts opacity:0 via CSS
-      vid.muted = !audioEnabled;           // start unmuted if audio enabled
+      // Unmuted only if both DB flag AND browser audio are unlocked
+      vid.muted = !(audioEnabled && _audioUnlocked);
       vid.playsInline = true;
       vid.preload = 'auto';
 
