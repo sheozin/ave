@@ -2973,7 +2973,6 @@ function renderSessions() {
       return;
     }
   }
-  if (!S.tlBootDone) S.tlBootDone = true;
 
   // PR-020: Timeline view mode
   if (S.viewMode === 'timeline') {
@@ -6965,6 +6964,9 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     // (Wizard trigger for 0-event directors lives in the early-return block above)
     initChecklist();
     setTimeout(() => showRoleTips(), 800);
+
+    // Enable timeline auto-switch now that boot is complete
+    S.tlBootDone = true;
 
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
