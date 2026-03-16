@@ -6965,8 +6965,9 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     initChecklist();
     setTimeout(() => showRoleTips(), 800);
 
-    // Enable timeline auto-switch now that boot is complete
-    S.tlBootDone = true;
+    // Enable timeline auto-switch after boot settles (delay prevents
+    // realtime events fired during subscribe from triggering auto-switch)
+    setTimeout(() => { S.tlBootDone = true; }, 3000);
 
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
