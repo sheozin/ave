@@ -591,8 +591,8 @@ async function bootDisplay(url, key, id) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('display').style.display = 'flex';
 
-    // 8. Show audio unlock overlay if needed
-    showAudioUnlockOverlay();
+    // 8. Try to unlock audio for video sponsors
+    initAudioUnlock();
 
     // 9. Start clock tick
     _tick = setInterval(tick, 1000);
@@ -1019,56 +1019,73 @@ function renderWayfinding() {
 }
 
 // ═══════════════════════════════════════════════════
-// AUDIO UNLOCK — one-tap overlay to satisfy Chrome autoplay policy
+// AUDIO UNLOCK — satisfies Chrome autoplay policy
+// Strategy: try silent auto-unlock first; if blocked,
+// listen for ANY click/touch on the page to unlock.
 // ═══════════════════════════════════════════════════
-let _audioContext = null;
 let _audioUnlocked = false;
 
-function showAudioUnlockOverlay() {
-  // Only show if audio_enabled and there are video sponsors
+function _doUnlockAudio() {
+  if (_audioUnlocked) return;
+  _audioUnlocked = true;
+  // Create AudioContext + play silent buffer to fully unlock
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+  } catch(e) {}
+  // Remove indicator if present
+  const ind = document.getElementById('audio-hint');
+  if (ind) { ind.style.opacity = '0'; setTimeout(() => ind.remove(), 400); }
+  // Force re-render so current video gets unmuted
+  _currentVideoSrc = null;
+  _cleanupActiveVideo();
+  render();
+}
+
+async function initAudioUnlock() {
   if (!D?.audio_enabled) return;
   const hasVideo = S.sponsors.some(s => s.logo_url && isVideoUrl(s.logo_url));
   if (!hasVideo) return;
 
-  const overlay = document.createElement('div');
-  overlay.id = 'audio-unlock-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,6,15,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity .4s';
-
-  const icon = document.createElement('div');
-  icon.style.cssText = 'font-size:64px;margin-bottom:20px';
-  icon.textContent = '\u{1F50A}';
-
-  const label = document.createElement('div');
-  label.style.cssText = 'color:rgba(255,255,255,.7);font-size:22px;font-weight:600;letter-spacing:.04em';
-  label.textContent = 'Tap to enable audio';
-
-  const sub = document.createElement('div');
-  sub.style.cssText = 'color:rgba(255,255,255,.3);font-size:14px;margin-top:8px';
-  sub.textContent = 'Required by browser for sound playback';
-
-  overlay.appendChild(icon);
-  overlay.appendChild(label);
-  overlay.appendChild(sub);
-  document.body.appendChild(overlay);
-
-  overlay.addEventListener('click', () => {
-    // Create and resume AudioContext to unlock audio
-    _audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    _audioContext.resume().then(() => {
+  // Attempt 1: silent auto-unlock (works in kiosk with --autoplay-policy flag)
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    if (ctx.state === 'running') {
       _audioUnlocked = true;
-      // Play a silent buffer to fully unlock audio
-      const buf = _audioContext.createBuffer(1, 1, 22050);
-      const src = _audioContext.createBufferSource();
-      src.buffer = buf;
-      src.connect(_audioContext.destination);
-      src.start(0);
-    });
-    _audioUnlocked = true;
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.remove(), 400);
-    // Re-render sponsors so current video picks up audio
-    render();
-  }, { once: true });
+      ctx.close();
+      return; // Audio works without user gesture
+    }
+    ctx.close();
+  } catch(e) {}
+
+  // Attempt 2: listen for ANY click/touch on the page
+  // Show a small non-blocking hint in the corner
+  const hint = document.createElement('div');
+  hint.id = 'audio-hint';
+  hint.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:8px 20px;display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;transition:opacity .4s;animation:pulse-hint 2s ease-in-out infinite';
+  hint.textContent = '\u{1F50A} Tap anywhere for audio';
+  document.body.appendChild(hint);
+
+  // Add pulse animation
+  const style = document.createElement('style');
+  style.textContent = '@keyframes pulse-hint{0%,100%{opacity:.7}50%{opacity:1}}';
+  document.head.appendChild(style);
+
+  // Any click or touch anywhere unlocks audio
+  const handler = () => {
+    _doUnlockAudio();
+    document.removeEventListener('click', handler, true);
+    document.removeEventListener('touchstart', handler, true);
+    style.remove();
+  };
+  document.addEventListener('click', handler, true);
+  document.addEventListener('touchstart', handler, true);
 }
 
 // ═══════════════════════════════════════════════════
