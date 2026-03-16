@@ -591,8 +591,8 @@ async function bootDisplay(url, key, id) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('display').style.display = 'flex';
 
-    // 8. Try to unlock audio for video sponsors
-    initAudioUnlock();
+    // 8. Try to unlock audio for video sponsors (await before first render)
+    await initAudioUnlock();
 
     // 9. Start clock tick
     _tick = setInterval(tick, 1000);
