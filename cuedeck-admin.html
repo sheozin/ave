@@ -2126,10 +2126,19 @@
 
     try {
       for (var i = 0; i < actions.length; i++) {
+        console.log('[admin] Calling admin-manage-subscription with:', JSON.stringify(actions[i]));
         var result = await sb.functions.invoke('admin-manage-subscription', {
           body: actions[i],
         });
-        if (result.error) throw result.error;
+        console.log('[admin] Result:', JSON.stringify({ error: result.error ? result.error.message : null, data: result.data }));
+        if (result.error) {
+          // Try to extract the actual error message from the response
+          var errMsg = result.error.message || 'Unknown error';
+          if (result.error.context && result.error.context.body) {
+            try { var b = JSON.parse(result.error.context.body); errMsg = b.error || errMsg; } catch(e) {}
+          }
+          throw new Error(errMsg);
+        }
         var respData = result.data;
         if (typeof respData === 'string') { try { respData = JSON.parse(respData); } catch(e) {} }
         if (respData && respData.error) throw new Error(respData.error);
