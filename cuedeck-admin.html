@@ -1137,6 +1137,24 @@
     return d.toLocaleDateString();
   }
 
+  // Helper: call an Edge Function with proper auth and error extraction
+  async function callEdgeFn(fnName, payload) {
+    var session = (await sb.auth.getSession()).data.session;
+    if (!session) throw new Error('Not authenticated — please sign in again');
+    var resp = await fetch(SUPABASE_URL + '/functions/v1/' + fnName, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token,
+        'apikey': SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+    var data = await resp.json().catch(function() { return {}; });
+    if (!resp.ok) throw new Error(data.error || data.message || ('HTTP ' + resp.status));
+    return data;
+  }
+
   function fmtDate(dateStr) {
     if (!dateStr) return '\u2014';
     return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -1867,17 +1885,14 @@
     var isActive = $('detail-active-toggle').classList.contains('on');
 
     try {
-      var result = await sb.functions.invoke('admin-manage-user', {
-        body: {
+      await callEdgeFn('admin-manage-user', {
           action: 'update_role',
           user_id: user.id,
           name: name,
           organization: org,
           role: role,
           active: isActive,
-        },
       });
-      if (result.error) throw result.error;
       showToast('User updated successfully', 'success');
       closeUserDetail();
       loadUsers();
@@ -1888,10 +1903,7 @@
 
   async function resetUserPassword(user) {
     try {
-      var result = await sb.functions.invoke('admin-manage-user', {
-        body: { action: 'reset_password', user_id: user.id, email: user.email },
-      });
-      if (result.error) throw result.error;
+      await callEdgeFn('admin-manage-user', { action: 'reset_password', user_id: user.id, email: user.email });
       showToast('Password reset email sent', 'success');
     } catch (err) {
       showToast('Failed to reset password: ' + (err.message || err), 'error');
@@ -1900,10 +1912,7 @@
 
   async function promoteUser(user) {
     try {
-      var result = await sb.functions.invoke('admin-promote', {
-        body: { user_id: user.id },
-      });
-      if (result.error) throw result.error;
+      await callEdgeFn('admin-promote', { user_id: user.id });
       showToast('User promoted to admin', 'success');
       closeUserDetail();
       loadUsers();
@@ -1914,10 +1923,7 @@
 
   async function deleteUser(user) {
     try {
-      var result = await sb.functions.invoke('admin-manage-user', {
-        body: { action: 'remove', user_id: user.id },
-      });
-      if (result.error) throw result.error;
+      await callEdgeFn('admin-manage-user', { action: 'remove', user_id: user.id });
       showToast('User deleted', 'success');
       closeUserDetail();
       loadUsers();
@@ -2126,22 +2132,7 @@
 
     try {
       for (var i = 0; i < actions.length; i++) {
-        console.log('[admin] Calling admin-manage-subscription with:', JSON.stringify(actions[i]));
-        var result = await sb.functions.invoke('admin-manage-subscription', {
-          body: actions[i],
-        });
-        console.log('[admin] Result:', JSON.stringify({ error: result.error ? result.error.message : null, data: result.data }));
-        if (result.error) {
-          // Try to extract the actual error message from the response
-          var errMsg = result.error.message || 'Unknown error';
-          if (result.error.context && result.error.context.body) {
-            try { var b = JSON.parse(result.error.context.body); errMsg = b.error || errMsg; } catch(e) {}
-          }
-          throw new Error(errMsg);
-        }
-        var respData = result.data;
-        if (typeof respData === 'string') { try { respData = JSON.parse(respData); } catch(e) {} }
-        if (respData && respData.error) throw new Error(respData.error);
+        await callEdgeFn('admin-manage-subscription', actions[i]);
       }
       showToast('Subscription updated successfully', 'success');
       backdrop.classList.remove('open');
@@ -2255,10 +2246,7 @@
 
   async function togglePromoCode(code, action) {
     try {
-      var result = await sb.functions.invoke('admin-manage-promo', {
-        body: { action: action, code: code.code },
-      });
-      if (result.error) throw result.error;
+      await callEdgeFn('admin-manage-promo', { action: action, code: code.code });
       showToast('Promo code ' + action + 'd', 'success');
       loadPromoCodes();
     } catch (err) {
@@ -2388,10 +2376,7 @@
     }
 
     try {
-      var result = await sb.functions.invoke('admin-manage-promo', {
-        body: payload,
-      });
-      if (result.error) throw result.error;
+      await callEdgeFn('admin-manage-promo', payload);
       showToast('Promo code created', 'success');
       backdrop.classList.remove('open');
       loadPromoCodes();
