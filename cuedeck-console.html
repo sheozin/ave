@@ -6340,6 +6340,36 @@ async function loadUserRole() {
     throw new Error('pending'); // abort boot()
   }
 
+  // Admin accounts cannot operate the console — redirect to /admin
+  if (data.role === 'admin') {
+    document.getElementById('load-spinner').style.display = 'none';
+    document.getElementById('load-step').style.display = 'none';
+    var adminOverlay = document.createElement('div');
+    adminOverlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center';
+    var adminInner = document.createElement('div');
+    adminInner.style.cssText = 'text-align:center;max-width:360px;padding:40px';
+    var adminIcon = document.createElement('div');
+    adminIcon.style.cssText = 'font-size:48px;margin-bottom:12px';
+    adminIcon.textContent = '\uD83D\uDD12';
+    var adminTitle = document.createElement('div');
+    adminTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff;margin-bottom:8px';
+    adminTitle.textContent = 'Admin Account';
+    var adminMsg = document.createElement('div');
+    adminMsg.style.cssText = 'font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:24px';
+    adminMsg.textContent = 'This account has platform admin access only. Use the Admin Dashboard to manage users, subscriptions, and analytics.';
+    var adminLink = document.createElement('a');
+    adminLink.href = '/admin';
+    adminLink.style.cssText = 'display:inline-block;background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);color:#a78bfa;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none';
+    adminLink.textContent = 'Go to Admin Dashboard';
+    adminInner.appendChild(adminIcon);
+    adminInner.appendChild(adminTitle);
+    adminInner.appendChild(adminMsg);
+    adminInner.appendChild(adminLink);
+    adminOverlay.appendChild(adminInner);
+    document.body.appendChild(adminOverlay);
+    throw new Error('admin'); // abort boot()
+  }
+
   S.userRole = data.role;
   S.userName = data.name || '';
   S.userOrg            = data.organization || '';

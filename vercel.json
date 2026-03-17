@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/admin",   "destination": "/cuedeck-admin.html" },
     { "source": "/",        "destination": "/cuedeck-console.html" },
     { "source": "/d",       "destination": "/cuedeck-display.html" },
     { "source": "/display", "destination": "/cuedeck-display.html" }
