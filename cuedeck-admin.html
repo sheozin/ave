@@ -1435,9 +1435,10 @@
 
   function renderStatsCards(container, stats) {
     clear(container);
+    var signupsDelta = (stats.new_users_30d || 0) - (stats.prev_users_30d || 0);
     var cards = [
-      { label: 'Total Signups', value: formatNum(stats.total_signups), delta: stats.signups_delta },
-      { label: 'Active Subscribers', value: formatNum(stats.active_subscribers), delta: null },
+      { label: 'Total Users', value: formatNum(stats.total_users), delta: signupsDelta },
+      { label: 'Active Subscribers', value: formatNum(stats.active_subs), delta: null },
       { label: 'DAU', value: formatNum(stats.dau), delta: null },
       { label: 'MRR', value: formatEur(stats.mrr), delta: null },
       { label: 'Churn Rate', value: formatPct(stats.churn_rate), delta: null },
@@ -1652,19 +1653,21 @@
     try {
       var result = await sb.rpc('admin_list_users', {
         p_search: usersSearch || null,
-        p_role: usersRoleFilter === 'all' ? null : usersRoleFilter,
-        p_status: usersStatusFilter === 'all' ? null : usersStatusFilter,
-        p_offset: (usersPage - 1) * usersPerPage,
-        p_limit: usersPerPage,
+        p_role_filter: usersRoleFilter === 'all' ? null : usersRoleFilter,
+        p_status_filter: usersStatusFilter === 'all' ? null : usersStatusFilter,
+        p_page: usersPage,
+        p_per_page: usersPerPage,
       });
 
-      var data = result.data || [];
-      renderUsersTable(wrap, data);
-      renderUsersPagination(data.length);
+      var payload = result.data || {};
+      var users = payload.users || [];
+      var total = payload.total || 0;
+      renderUsersTable(wrap, users);
+      renderUsersPagination(total);
     } catch (err) {
       clear(wrap);
       wrap.appendChild(el('div', { className: 'empty-state' }, [
-        el('p', { textContent: 'Failed to load users. The admin_list_users RPC may not be deployed yet.' }),
+        el('p', { textContent: 'Failed to load users: ' + (err.message || 'Unknown error') }),
       ]));
     }
   }
@@ -1731,16 +1734,17 @@
     container.appendChild(table);
   }
 
-  function renderUsersPagination(count) {
+  function renderUsersPagination(total) {
     var pag = $('users-pagination');
     clear(pag);
+    var totalPages = Math.ceil(total / usersPerPage) || 1;
 
-    var info = el('span', { textContent: 'Page ' + usersPage });
+    var info = el('span', { textContent: 'Page ' + usersPage + ' of ' + totalPages + ' (' + total + ' users)' });
     var prevBtn = el('button', { textContent: '\u2190 Prev', disabled: usersPage <= 1, onClick: function() {
       usersPage--;
       loadUsers();
     }});
-    var nextBtn = el('button', { textContent: 'Next \u2192', disabled: count < usersPerPage, onClick: function() {
+    var nextBtn = el('button', { textContent: 'Next \u2192', disabled: usersPage >= totalPages, onClick: function() {
       usersPage++;
       loadUsers();
     }});
@@ -1951,18 +1955,20 @@
 
     try {
       var result = await sb.rpc('admin_list_subscriptions', {
-        p_status: subsStatusFilter === 'all' ? null : subsStatusFilter,
-        p_offset: (subsPage - 1) * subsPerPage,
-        p_limit: subsPerPage,
+        p_filter: subsStatusFilter === 'all' ? null : subsStatusFilter,
+        p_page: subsPage,
+        p_per_page: subsPerPage,
       });
 
-      var data = result.data || [];
-      renderSubsTable(wrap, data);
-      renderSubsPagination(data.length);
+      var payload = result.data || {};
+      var subs = payload.subscriptions || [];
+      var total = payload.total || 0;
+      renderSubsTable(wrap, subs);
+      renderSubsPagination(total);
     } catch (err) {
       clear(wrap);
       wrap.appendChild(el('div', { className: 'empty-state' }, [
-        el('p', { textContent: 'Failed to load subscriptions. The admin_list_subscriptions RPC may not be deployed yet.' }),
+        el('p', { textContent: 'Failed to load subscriptions: ' + (err.message || 'Unknown error') }),
       ]));
     }
   }
@@ -2030,12 +2036,13 @@
     container.appendChild(table);
   }
 
-  function renderSubsPagination(count) {
+  function renderSubsPagination(total) {
     var pag = $('subs-pagination');
     clear(pag);
+    var totalPages = Math.ceil(total / subsPerPage) || 1;
     pag.appendChild(el('button', { textContent: '\u2190 Prev', disabled: subsPage <= 1, onClick: function() { subsPage--; loadSubscriptions(); } }));
-    pag.appendChild(el('span', { textContent: 'Page ' + subsPage }));
-    pag.appendChild(el('button', { textContent: 'Next \u2192', disabled: count < subsPerPage, onClick: function() { subsPage++; loadSubscriptions(); } }));
+    pag.appendChild(el('span', { textContent: 'Page ' + subsPage + ' of ' + totalPages }));
+    pag.appendChild(el('button', { textContent: 'Next \u2192', disabled: subsPage >= totalPages, onClick: function() { subsPage++; loadSubscriptions(); } }));
   }
 
   /* ══════════════════════════════════════════
@@ -2142,12 +2149,13 @@
 
     try {
       var result = await sb.rpc('admin_list_promo_codes');
-      var data = result.data || [];
-      renderPromoTable(wrap, data);
+      var payload = result.data || {};
+      var codes = payload.codes || [];
+      renderPromoTable(wrap, codes);
     } catch (err) {
       clear(wrap);
       wrap.appendChild(el('div', { className: 'empty-state' }, [
-        el('p', { textContent: 'Failed to load promo codes. The admin_list_promo_codes RPC may not be deployed yet.' }),
+        el('p', { textContent: 'Failed to load promo codes: ' + (err.message || 'Unknown error') }),
       ]));
     }
   }
