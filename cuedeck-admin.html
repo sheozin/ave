@@ -1286,7 +1286,7 @@
 
   async function checkAdminAndBoot() {
     // Get user profile from leod_users
-    var result = await sb.from('leod_users').select('*').eq('user_id', currentUser.id).single();
+    var result = await sb.from('leod_users').select('*').eq('id', currentUser.id).single();
     if (result.error || !result.data) {
       showAccessDenied();
       return;
