@@ -1029,7 +1029,7 @@
      SUPABASE INIT
      ══════════════════════════════════════════ */
   const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhd2VrcGd1ZW16dnV2dnVsZmJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzMzk5MTEsImV4cCI6MjA4NzkxNTkxMX0.0zvCmKxdwAmfhmglYf2Gme6zpqtopBghSjI1ZyoVneg';
+  const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   /* ══════════════════════════════════════════
@@ -1137,30 +1137,11 @@
     return d.toLocaleDateString();
   }
 
-  // Helper: call an Edge Function via Supabase client with proper error extraction
-  async function callEdgeFn(fnName, payload) {
-    var result = await sb.functions.invoke(fnName, { body: payload });
-    if (result.error) {
-      // Extract actual error message from the FunctionsHttpError response
-      var errMsg = 'Unknown error';
-      try {
-        // FunctionsHttpError stores response in context
-        if (result.error.context) {
-          var text = await result.error.context.text();
-          var parsed = JSON.parse(text);
-          errMsg = parsed.error || parsed.message || errMsg;
-        } else {
-          errMsg = result.error.message || errMsg;
-        }
-      } catch(e) {
-        errMsg = result.error.message || errMsg;
-      }
-      throw new Error(errMsg);
-    }
-    var data = result.data;
-    if (typeof data === 'string') { try { data = JSON.parse(data); } catch(e) {} }
-    if (data && data.error) throw new Error(data.error);
-    return data;
+  // Helper: call an admin RPC with error handling
+  async function callAdminRpc(rpcName, params) {
+    var result = await sb.rpc(rpcName, params);
+    if (result.error) throw new Error(result.error.message || 'RPC failed');
+    return result.data;
   }
 
   function fmtDate(dateStr) {
@@ -1893,13 +1874,13 @@
     var isActive = $('detail-active-toggle').classList.contains('on');
 
     try {
-      await callEdgeFn('admin-manage-user', {
-          action: 'update_role',
-          user_id: user.id,
-          name: name,
-          organization: org,
-          role: role,
-          active: isActive,
+      await callAdminRpc('admin_update_user', {
+          p_action: 'update_role',
+          p_user_id: user.id,
+          p_name: name,
+          p_org: org,
+          p_role: role,
+          p_active: isActive,
       });
       showToast('User updated successfully', 'success');
       closeUserDetail();
@@ -1911,7 +1892,9 @@
 
   async function resetUserPassword(user) {
     try {
-      await callEdgeFn('admin-manage-user', { action: 'reset_password', user_id: user.id, email: user.email });
+      // Password reset requires auth.admin API — use Supabase auth directly
+      var { error: resetErr } = await sb.auth.resetPasswordForEmail(user.email);
+      if (resetErr) throw resetErr;
       showToast('Password reset email sent', 'success');
     } catch (err) {
       showToast('Failed to reset password: ' + (err.message || err), 'error');
@@ -1920,7 +1903,7 @@
 
   async function promoteUser(user) {
     try {
-      await callEdgeFn('admin-promote', { user_id: user.id });
+      await callAdminRpc('admin_promote_user', { p_user_id: user.id });
       showToast('User promoted to admin', 'success');
       closeUserDetail();
       loadUsers();
@@ -1931,7 +1914,7 @@
 
   async function deleteUser(user) {
     try {
-      await callEdgeFn('admin-manage-user', { action: 'remove', user_id: user.id });
+      await callAdminRpc('admin_update_user', { p_action: 'remove', p_user_id: user.id });
       showToast('User deleted', 'success');
       closeUserDetail();
       loadUsers();
@@ -2140,7 +2123,13 @@
 
     try {
       for (var i = 0; i < actions.length; i++) {
-        await callEdgeFn('admin-manage-subscription', actions[i]);
+        await callAdminRpc('admin_update_subscription', {
+          p_action: actions[i].action,
+          p_director_id: actions[i].director_id,
+          p_plan: actions[i].plan || null,
+          p_days: actions[i].days || null,
+          p_months: actions[i].months || null,
+        });
       }
       showToast('Subscription updated successfully', 'success');
       backdrop.classList.remove('open');
@@ -2254,7 +2243,7 @@
 
   async function togglePromoCode(code, action) {
     try {
-      await callEdgeFn('admin-manage-promo', { action: action, code: code.code });
+      await callAdminRpc('admin_manage_promo', { p_action: action, p_code: code.code });
       showToast('Promo code ' + action + 'd', 'success');
       loadPromoCodes();
     } catch (err) {
@@ -2384,7 +2373,17 @@
     }
 
     try {
-      await callEdgeFn('admin-manage-promo', payload);
+      await callAdminRpc('admin_manage_promo', {
+        p_action: 'create',
+        p_code: payload.code,
+        p_type: payload.type,
+        p_discount_pct: payload.discount_pct || null,
+        p_trial_days: payload.extra_days || null,
+        p_granted_plan: payload.granted_plan || null,
+        p_granted_months: payload.granted_months || null,
+        p_max_uses: payload.max_uses || null,
+        p_expires_at: payload.expires_at || null,
+      });
       showToast('Promo code created', 'success');
       backdrop.classList.remove('open');
       loadPromoCodes();
