@@ -53,9 +53,10 @@ Deno.serve(async (req) => {
   }
 
   // ── Validate input ───────────────────────────────────────────────────
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const targetId = String(body.user_id || '').trim()
-  if (!targetId) {
-    return new Response(JSON.stringify({ error: 'Missing user_id' }), {
+  if (!targetId || !UUID_RE.test(targetId)) {
+    return new Response(JSON.stringify({ error: 'Missing or invalid user_id — must be a valid UUID' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -63,6 +64,15 @@ Deno.serve(async (req) => {
   // Cannot modify own admin status
   if (targetId === user.id) {
     return new Response(JSON.stringify({ error: 'Cannot modify your own admin status' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // ── Guard: prevent demoting existing admins ──────────────────────────
+  const { data: targetRow } = await sb.from('leod_users')
+    .select('role').eq('id', targetId).single()
+  if (targetRow?.role === 'admin') {
+    return new Response(JSON.stringify({ error: 'User is already an admin — this endpoint only promotes, it cannot demote' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -80,13 +90,17 @@ Deno.serve(async (req) => {
   }
 
   // ── Audit log ─────────────────────────────────────────────────────────
-  sb.from('leod_admin_audit').insert({
-    admin_id:    user.id,
-    action:      'promote_to_admin',
-    target_type: 'user',
-    target_id:   targetId,
-    details:     { previous_action: 'role set to admin' },
-  }).then(() => {}).catch(() => {})
+  try {
+    await sb.from('leod_admin_audit').insert({
+      admin_id:    user.id,
+      action:      'promote_to_admin',
+      target_type: 'user',
+      target_id:   targetId,
+      details:     { previous_action: 'role set to admin' },
+    })
+  } catch (auditErr) {
+    console.error('Audit log insert failed:', (auditErr as Error).message)
+  }
 
   return new Response(
     JSON.stringify({ ok: true, action: 'promote_to_admin', user_id: targetId }),

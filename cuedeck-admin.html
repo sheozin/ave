@@ -1493,7 +1493,7 @@
         labels: signupsData.map(function(d) { return d.day || d.date || ''; }),
         datasets: [{
           label: 'Signups',
-          data: signupsData.map(function(d) { return d.count || 0; }),
+          data: signupsData.map(function(d) { return d.signup_count || 0; }),
           borderColor: clr.accent,
           backgroundColor: clr.accentBg,
           fill: true,
@@ -1526,7 +1526,7 @@
         labels: dauData.map(function(d) { return d.day || d.date || ''; }),
         datasets: [{
           label: 'DAU',
-          data: dauData.map(function(d) { return d.count || 0; }),
+          data: dauData.map(function(d) { return d.active_users || 0; }),
           backgroundColor: clr.accent,
           borderRadius: 4,
         }]
@@ -1600,11 +1600,11 @@
       eventsFeed.appendChild(el('div', { className: 'empty-state' }, [el('p', { textContent: 'No events yet' })]));
     } else {
       recentEvents.forEach(function(ev) {
-        var avatar = el('div', { className: 'avatar', textContent: initials(ev.name || ev.title, '') });
+        var avatar = el('div', { className: 'avatar', textContent: initials(ev.event_name, '') });
         avatar.style.background = 'var(--success)';
         var info = el('div', { className: 'feed-info' });
-        info.appendChild(el('div', { className: 'feed-name', textContent: ev.name || ev.title || 'Untitled Event' }));
-        info.appendChild(el('div', { className: 'feed-meta', textContent: fmtDate(ev.event_date || ev.date) }));
+        info.appendChild(el('div', { className: 'feed-name', textContent: ev.event_name || 'Untitled Event' }));
+        info.appendChild(el('div', { className: 'feed-meta', textContent: fmtDate(ev.event_date) }));
         var time = el('div', { className: 'feed-time', textContent: relativeTime(ev.created_at) });
         eventsFeed.appendChild(el('div', { className: 'feed-item' }, [avatar, info, time]));
       });
@@ -1634,7 +1634,7 @@
     });
 
     var statusSelect = el('select', { onChange: function(e) { usersStatusFilter = e.target.value; usersPage = 1; loadUsers(); } });
-    ['all', 'active', 'suspended'].forEach(function(s) {
+    ['all', 'active', 'inactive'].forEach(function(s) {
       var opt = el('option', { value: s, textContent: s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1) });
       if (s === usersStatusFilter) opt.selected = true;
       statusSelect.appendChild(opt);
@@ -1709,8 +1709,8 @@
 
         var statusTd = el('td');
         var statusBadge = el('span', {
-          className: 'badge ' + (u.status === 'active' || !u.status ? 'badge-green' : 'badge-red'),
-          textContent: u.status || 'active',
+          className: 'badge ' + (u.active !== false ? 'badge-green' : 'badge-red'),
+          textContent: u.active !== false ? 'Active' : 'Inactive',
         });
         statusTd.appendChild(statusBadge);
         row.appendChild(statusTd);
@@ -1804,7 +1804,7 @@
     // Active toggle
     var toggleRow = el('div', { className: 'toggle-row' });
     toggleRow.appendChild(el('label', { textContent: 'Active' }));
-    var isActive = user.status !== 'suspended';
+    var isActive = user.active !== false;
     var toggleSwitch = el('div', {
       className: 'toggle-switch' + (isActive ? ' on' : ''),
       id: 'detail-active-toggle',
@@ -1869,12 +1869,12 @@
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
         body: JSON.stringify({
-          action: 'update',
-          user_id: user.user_id,
+          action: 'update_role',
+          user_id: user.id,
           name: name,
           organization: org,
           role: role,
-          status: isActive ? 'active' : 'suspended',
+          active: isActive,
         }),
       });
       if (result.error) throw result.error;
@@ -1889,7 +1889,7 @@
   async function resetUserPassword(user) {
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
-        body: JSON.stringify({ action: 'reset_password', user_id: user.user_id, email: user.email }),
+        body: JSON.stringify({ action: 'reset_password', user_id: user.id, email: user.email }),
       });
       if (result.error) throw result.error;
       showToast('Password reset email sent', 'success');
@@ -1901,7 +1901,7 @@
   async function promoteUser(user) {
     try {
       var result = await sb.functions.invoke('admin-promote', {
-        body: JSON.stringify({ user_id: user.user_id }),
+        body: JSON.stringify({ user_id: user.id }),
       });
       if (result.error) throw result.error;
       showToast('User promoted to admin', 'success');
@@ -1915,7 +1915,7 @@
   async function deleteUser(user) {
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
-        body: JSON.stringify({ action: 'delete', user_id: user.user_id }),
+        body: JSON.stringify({ action: 'remove', user_id: user.id }),
       });
       if (result.error) throw result.error;
       showToast('User deleted', 'success');
@@ -2010,7 +2010,7 @@
         statusTd.appendChild(el('span', { className: 'badge ' + statusClass, textContent: s.status || 'unknown' }));
         row.appendChild(statusTd);
 
-        row.appendChild(el('td', { textContent: s.interval || '\u2014' }));
+        row.appendChild(el('td', { textContent: s.billing_interval || '\u2014' }));
         row.appendChild(el('td', { textContent: fmtDate(s.current_period_end || s.period_end) }));
 
         var stripeIdTd = el('td');
@@ -2110,7 +2110,7 @@
     var payload = {
       action: 'override',
       subscription_id: sub.id || sub.subscription_id,
-      user_id: sub.user_id,
+      director_id: sub.director_id,
     };
     if (plan) payload.override_plan = plan;
     if (trialDays > 0) payload.extend_trial_days = trialDays;
@@ -2200,12 +2200,12 @@
         row.appendChild(el('td', { textContent: details || '\u2014' }));
 
         row.appendChild(el('td', { textContent: c.max_uses != null ? String(c.max_uses) : '\u221E' }));
-        row.appendChild(el('td', { textContent: String(c.used_count || c.times_used || 0) }));
+        row.appendChild(el('td', { textContent: String(c.uses || 0) }));
         row.appendChild(el('td', { textContent: fmtDate(c.expires_at) }));
 
         // Status
         var statusTd = el('td');
-        var isActive = c.is_active !== false && c.active !== false;
+        var isActive = c.active !== false;
         statusTd.appendChild(el('span', { className: 'badge ' + (isActive ? 'badge-green' : 'badge-gray'), textContent: isActive ? 'Active' : 'Inactive' }));
         row.appendChild(statusTd);
 
@@ -2237,7 +2237,7 @@
   async function togglePromoCode(code, action) {
     try {
       var result = await sb.functions.invoke('admin-manage-promo', {
-        body: JSON.stringify({ action: action, code_id: code.id }),
+        body: JSON.stringify({ action: action, code: code.code }),
       });
       if (result.error) throw result.error;
       showToast('Promo code ' + action + 'd', 'success');
@@ -2411,23 +2411,22 @@
     }
 
     try {
-      var query = sb.from('leod_admin_audit')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .range(auditOffset, auditOffset + auditLimit - 1);
+      var result = await sb.rpc('admin_get_audit_log', {
+        p_offset: auditOffset,
+        p_limit: auditLimit,
+      });
+      var data = result.data || [];
 
+      // Client-side filtering for action and date (RPC returns all)
       if (auditActionFilter !== 'all') {
-        query = query.eq('action', auditActionFilter);
+        data = data.filter(function(entry) { return entry.action === auditActionFilter; });
       }
       if (auditDateFrom) {
-        query = query.gte('created_at', auditDateFrom + 'T00:00:00Z');
+        data = data.filter(function(entry) { return entry.created_at >= auditDateFrom + 'T00:00:00Z'; });
       }
       if (auditDateTo) {
-        query = query.lte('created_at', auditDateTo + 'T23:59:59Z');
+        data = data.filter(function(entry) { return entry.created_at <= auditDateTo + 'T23:59:59Z'; });
       }
-
-      var result = await query;
-      var data = result.data || [];
 
       data.forEach(function(entry) {
         var item = el('div', { className: 'audit-entry' });
@@ -2446,9 +2445,10 @@
           textContent: entry.action || 'unknown',
         });
         actionRow.appendChild(actionBadge);
-        if (entry.target) {
+        var targetStr = (entry.target_type ? entry.target_type + ': ' + (entry.target_id || '') : '');
+        if (targetStr) {
           actionRow.appendChild(document.createTextNode(' \u2192 '));
-          actionRow.appendChild(el('span', { textContent: entry.target, style: { color: 'var(--text-muted)' } }));
+          actionRow.appendChild(el('span', { textContent: targetStr, style: { color: 'var(--text-muted)' } }));
         }
         body.appendChild(actionRow);
 

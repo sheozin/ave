@@ -9,8 +9,10 @@ const VALID_ACTIONS = new Set([
 ])
 
 const VALID_ROLES = new Set([
-  'admin', 'director', 'stage', 'av', 'interp', 'reg', 'signage', 'pending',
+  'director', 'stage', 'av', 'interp', 'reg', 'signage', 'pending',
 ])
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -69,8 +71,8 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  if (!targetId) {
-    return new Response(JSON.stringify({ error: 'Missing user_id' }), {
+  if (!targetId || !UUID_RE.test(targetId)) {
+    return new Response(JSON.stringify({ error: 'Missing or invalid user_id — must be a valid UUID' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -172,13 +174,17 @@ Deno.serve(async (req) => {
   }
 
   // ── Audit log ────────────────────────────────────────────────────────
-  sb.from('leod_admin_audit').insert({
-    admin_id:    user.id,
-    action:      `manage_user.${action}`,
-    target_type: 'user',
-    target_id:   targetId,
-    details:     { action, role: body.role, name: body.name, organization: body.organization },
-  }).then(() => {}).catch(() => {})
+  try {
+    await sb.from('leod_admin_audit').insert({
+      admin_id:    user.id,
+      action:      `manage_user.${action}`,
+      target_type: 'user',
+      target_id:   targetId,
+      details:     { action, role: body.role, name: body.name, organization: body.organization },
+    })
+  } catch (auditErr) {
+    console.error('Audit log insert failed:', (auditErr as Error).message)
+  }
 
   return new Response(
     JSON.stringify({ ok: true, action, ...responseExtra }),

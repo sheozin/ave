@@ -6,6 +6,7 @@ import { corsHeaders }  from '../_shared/cors.ts'
 
 const VALID_ACTIONS = new Set(['override_plan', 'extend_trial', 'gift_months'])
 const VALID_PLANS   = new Set(['trial', 'perevent', 'starter', 'pro', 'enterprise'])
+const UUID_RE       = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -64,8 +65,8 @@ Deno.serve(async (req) => {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  if (!directorId) {
-    return new Response(JSON.stringify({ error: 'Missing director_id' }), {
+  if (!directorId || !UUID_RE.test(directorId)) {
+    return new Response(JSON.stringify({ error: 'Missing or invalid director_id — must be a valid UUID' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -165,13 +166,17 @@ Deno.serve(async (req) => {
   }
 
   // ── Audit log ─────────────────────────────────────────────────────────
-  sb.from('leod_admin_audit').insert({
-    admin_id:    user.id,
-    action:      `manage_subscription.${action}`,
-    target_type: 'subscription',
-    target_id:   directorId,
-    details:     { action, plan: body.plan, days: body.days, months: body.months, ...responseExtra },
-  }).then(() => {}).catch(() => {})
+  try {
+    await sb.from('leod_admin_audit').insert({
+      admin_id:    user.id,
+      action:      `manage_subscription.${action}`,
+      target_type: 'subscription',
+      target_id:   directorId,
+      details:     { action, plan: body.plan, days: body.days, months: body.months, ...responseExtra },
+    })
+  } catch (auditErr) {
+    console.error('Audit log insert failed:', (auditErr as Error).message)
+  }
 
   return new Response(
     JSON.stringify({ ok: true, action, ...responseExtra }),

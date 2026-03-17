@@ -159,13 +159,17 @@ Deno.serve(async (req) => {
   }
 
   // ── Audit log ─────────────────────────────────────────────────────────
-  sb.from('leod_admin_audit').insert({
-    admin_id:    user.id,
-    action:      `manage_promo.${action}`,
-    target_type: 'promo_code',
-    target_id:   code,
-    details:     { action, code, type: body.type, max_uses: body.max_uses, expires_at: body.expires_at },
-  }).then(() => {}).catch(() => {})
+  try {
+    await sb.from('leod_admin_audit').insert({
+      admin_id:    user.id,
+      action:      `manage_promo.${action}`,
+      target_type: 'promo_code',
+      target_id:   code,
+      details:     { action, code, type: body.type, max_uses: body.max_uses, expires_at: body.expires_at },
+    })
+  } catch (auditErr) {
+    console.error('Audit log insert failed:', (auditErr as Error).message)
+  }
 
   return new Response(
     JSON.stringify({ ok: true, action, ...responseExtra }),
