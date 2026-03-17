@@ -1868,14 +1868,14 @@
 
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
-        body: JSON.stringify({
+        body: {
           action: 'update_role',
           user_id: user.id,
           name: name,
           organization: org,
           role: role,
           active: isActive,
-        }),
+        },
       });
       if (result.error) throw result.error;
       showToast('User updated successfully', 'success');
@@ -1889,7 +1889,7 @@
   async function resetUserPassword(user) {
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
-        body: JSON.stringify({ action: 'reset_password', user_id: user.id, email: user.email }),
+        body: { action: 'reset_password', user_id: user.id, email: user.email },
       });
       if (result.error) throw result.error;
       showToast('Password reset email sent', 'success');
@@ -1901,7 +1901,7 @@
   async function promoteUser(user) {
     try {
       var result = await sb.functions.invoke('admin-promote', {
-        body: JSON.stringify({ user_id: user.id }),
+        body: { user_id: user.id },
       });
       if (result.error) throw result.error;
       showToast('User promoted to admin', 'success');
@@ -1915,7 +1915,7 @@
   async function deleteUser(user) {
     try {
       var result = await sb.functions.invoke('admin-manage-user', {
-        body: JSON.stringify({ action: 'remove', user_id: user.id }),
+        body: { action: 'remove', user_id: user.id },
       });
       if (result.error) throw result.error;
       showToast('User deleted', 'success');
@@ -2127,7 +2127,7 @@
     try {
       for (var i = 0; i < actions.length; i++) {
         var result = await sb.functions.invoke('admin-manage-subscription', {
-          body: JSON.stringify(actions[i]),
+          body: actions[i],
         });
         if (result.error) throw result.error;
         var respData = result.data;
@@ -2247,7 +2247,7 @@
   async function togglePromoCode(code, action) {
     try {
       var result = await sb.functions.invoke('admin-manage-promo', {
-        body: JSON.stringify({ action: action, code: code.code }),
+        body: { action: action, code: code.code },
       });
       if (result.error) throw result.error;
       showToast('Promo code ' + action + 'd', 'success');
@@ -2380,7 +2380,7 @@
 
     try {
       var result = await sb.functions.invoke('admin-manage-promo', {
-        body: JSON.stringify(payload),
+        body: payload,
       });
       if (result.error) throw result.error;
       showToast('Promo code created', 'success');
