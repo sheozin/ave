@@ -1137,21 +1137,29 @@
     return d.toLocaleDateString();
   }
 
-  // Helper: call an Edge Function with proper auth and error extraction
+  // Helper: call an Edge Function via Supabase client with proper error extraction
   async function callEdgeFn(fnName, payload) {
-    var session = (await sb.auth.getSession()).data.session;
-    if (!session) throw new Error('Not authenticated — please sign in again');
-    var resp = await fetch(SUPABASE_URL + '/functions/v1/' + fnName, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + session.access_token,
-        'apikey': SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify(payload),
-    });
-    var data = await resp.json().catch(function() { return {}; });
-    if (!resp.ok) throw new Error(data.error || data.message || ('HTTP ' + resp.status));
+    var result = await sb.functions.invoke(fnName, { body: payload });
+    if (result.error) {
+      // Extract actual error message from the FunctionsHttpError response
+      var errMsg = 'Unknown error';
+      try {
+        // FunctionsHttpError stores response in context
+        if (result.error.context) {
+          var text = await result.error.context.text();
+          var parsed = JSON.parse(text);
+          errMsg = parsed.error || parsed.message || errMsg;
+        } else {
+          errMsg = result.error.message || errMsg;
+        }
+      } catch(e) {
+        errMsg = result.error.message || errMsg;
+      }
+      throw new Error(errMsg);
+    }
+    var data = result.data;
+    if (typeof data === 'string') { try { data = JSON.parse(data); } catch(e) {} }
+    if (data && data.error) throw new Error(data.error);
     return data;
   }
 
