@@ -2107,24 +2107,34 @@
     var giftPlan = $('override-gift-plan').value;
     var giftMonths = parseInt($('override-gift-months').value) || 0;
 
-    var payload = {
-      action: 'override',
-      subscription_id: sub.id || sub.subscription_id,
-      director_id: sub.director_id,
-    };
-    if (plan) payload.override_plan = plan;
-    if (trialDays > 0) payload.extend_trial_days = trialDays;
+    // Build list of actions to execute sequentially
+    var actions = [];
+    if (plan) {
+      actions.push({ action: 'override_plan', director_id: sub.director_id, plan: plan });
+    }
+    if (trialDays > 0) {
+      actions.push({ action: 'extend_trial', director_id: sub.director_id, days: trialDays });
+    }
     if (giftPlan && giftMonths > 0) {
-      payload.gift_plan = giftPlan;
-      payload.gift_months = giftMonths;
+      actions.push({ action: 'gift_months', director_id: sub.director_id, plan: giftPlan, months: giftMonths });
+    }
+
+    if (actions.length === 0) {
+      showToast('No changes selected', 'warning');
+      return;
     }
 
     try {
-      var result = await sb.functions.invoke('admin-manage-subscription', {
-        body: JSON.stringify(payload),
-      });
-      if (result.error) throw result.error;
-      showToast('Subscription override applied', 'success');
+      for (var i = 0; i < actions.length; i++) {
+        var result = await sb.functions.invoke('admin-manage-subscription', {
+          body: JSON.stringify(actions[i]),
+        });
+        if (result.error) throw result.error;
+        var respData = result.data;
+        if (typeof respData === 'string') { try { respData = JSON.parse(respData); } catch(e) {} }
+        if (respData && respData.error) throw new Error(respData.error);
+      }
+      showToast('Subscription updated successfully', 'success');
       backdrop.classList.remove('open');
       loadSubscriptions();
     } catch (err) {
