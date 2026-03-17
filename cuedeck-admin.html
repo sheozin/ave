@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CueDeck — Admin Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" integrity="sha384-zETTH+6IXxKQ6zbGcT6H6EDdnGaae9uhI8uO7doTJoNEmPGeTKVOe5S6/XybS9JH" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -785,6 +785,7 @@
     }
     .toast.success { background: var(--success); }
     .toast.error   { background: var(--danger); }
+    .toast.warning { background: #e67e22; }
     .toast.info    { background: var(--accent); }
     @keyframes toastIn { from { transform: translateX(40px); opacity:0; } to { transform: translateX(0); opacity:1; } }
     .toast.removing { animation: toastOut .2s ease forwards; }
@@ -2377,7 +2378,7 @@
         p_action: 'create',
         p_code: payload.code,
         p_type: payload.type,
-        p_discount_pct: payload.discount_pct || null,
+        p_stripe_coupon: payload.stripe_coupon_id || null,
         p_trial_days: payload.extra_days || null,
         p_granted_plan: payload.granted_plan || null,
         p_granted_months: payload.granted_months || null,
