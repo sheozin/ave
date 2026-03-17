@@ -1,0 +1,2554 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CueDeck — Admin Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* ── THEME VARIABLES ── */
+    [data-theme="dark"] {
+      --bg: #0a0b14;
+      --surface: #12141f;
+      --surface-2: #1a1d2e;
+      --border: rgba(255,255,255,.08);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #8b5cf6;
+      --accent-hover: #7c3aed;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-2: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --accent: #7c3aed;
+      --accent-hover: #6d28d9;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+    }
+
+    /* ── RESET & BASE ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      overflow: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: inherit;
+      font-size: inherit;
+    }
+    input, select, textarea {
+      font-family: inherit;
+      font-size: 0.875rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    th {
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 2;
+    }
+    tbody tr { transition: background .15s; }
+    tbody tr:hover { background: var(--surface-2); }
+
+    /* ── LOGIN SCREEN ── */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: var(--bg);
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      width: 380px;
+      max-width: 90vw;
+    }
+    .login-card h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    .login-card .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+    .login-card label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .login-card input {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    .login-card .btn-login {
+      width: 100%;
+      padding: 10px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      transition: background .2s;
+    }
+    .login-card .btn-login:hover { background: var(--accent-hover); }
+    .login-card .btn-login:disabled { opacity: .6; cursor: not-allowed; }
+    .login-error {
+      color: var(--danger);
+      font-size: 0.8rem;
+      text-align: center;
+      margin-bottom: 12px;
+      min-height: 1.2em;
+    }
+
+    /* ── ACCESS DENIED ── */
+    #access-denied {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: var(--bg);
+      flex-direction: column;
+      gap: 16px;
+    }
+    #access-denied h1 { font-size: 1.5rem; color: var(--danger); }
+    #access-denied p { color: var(--text-muted); font-size: 0.9rem; }
+    #access-denied button {
+      padding: 8px 20px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-weight: 500;
+    }
+    #access-denied button:hover { background: var(--accent); color: #fff; }
+
+    /* ── APP SHELL ── */
+    #app-shell { display: none; height: 100vh; }
+    #app-shell.visible { display: flex; }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .sidebar-brand {
+      padding: 20px 20px 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sidebar-brand .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+    .sidebar-brand h2 {
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .sidebar-brand span {
+      font-size: 0.65rem;
+      background: var(--accent);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .sidebar-admin-name {
+      padding: 4px 20px 16px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px 0;
+      overflow-y: auto;
+    }
+    .sidebar-nav button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 20px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: all .15s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-nav button:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+    .sidebar-nav button.active {
+      color: var(--accent);
+      background: var(--surface-2);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+    .sidebar-nav button .nav-icon {
+      width: 20px;
+      text-align: center;
+      font-size: 1rem;
+    }
+    .sidebar-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sidebar-footer .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      padding: 6px 0;
+      cursor: pointer;
+    }
+    .sidebar-footer .theme-toggle:hover { color: var(--text); }
+    .sidebar-footer .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: var(--danger);
+      padding: 6px 0;
+    }
+    .sidebar-footer .btn-logout:hover { opacity: .8; }
+
+    /* ── MAIN CONTENT ── */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+      position: relative;
+    }
+    .main-content h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .main-content .section-subtitle {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      margin-bottom: 24px;
+    }
+    .section { display: none; }
+    .section.visible { display: block; }
+
+    /* ── STAT CARDS ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .stat-card .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .stat-card .stat-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .stat-card .stat-value {
+      font-size: 1.75rem;
+      font-weight: 700;
+    }
+    .stat-card .stat-delta {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+    .stat-delta.positive { background: rgba(34,197,94,.15); color: var(--success); }
+    .stat-delta.negative { background: rgba(239,68,68,.15); color: var(--danger); }
+    .stat-delta.neutral  { background: rgba(148,163,184,.12); color: var(--text-muted); }
+
+    /* ── CHARTS GRID ── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .chart-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .chart-card canvas {
+      width: 100% !important;
+      max-height: 260px;
+    }
+    .chart-card.span-full {
+      grid-column: 1 / -1;
+    }
+
+    /* ── RECENT ACTIVITY FEEDS ── */
+    .feeds-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .feed-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .feed-card h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+    .feed-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .feed-item:last-child { border-bottom: none; }
+    .feed-item .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .feed-item .feed-info { flex: 1; min-width: 0; }
+    .feed-item .feed-name {
+      font-size: 0.82rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .feed-item .feed-meta {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .feed-item .feed-time {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    /* ── TOP BAR (USERS / SUBSCRIPTIONS) ── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .top-bar input[type="search"] {
+      width: 240px;
+    }
+    .top-bar select {
+      min-width: 120px;
+    }
+    .top-bar .spacer { flex: 1; }
+    .top-bar .btn-primary {
+      padding: 8px 16px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      transition: background .2s;
+    }
+    .top-bar .btn-primary:hover { background: var(--accent-hover); }
+
+    /* ── TABLE WRAPPER ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      max-height: calc(100vh - 280px);
+    }
+
+    /* ── PAGINATION ── */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .pagination button {
+      padding: 5px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+    .pagination button:hover { background: var(--accent); color: #fff; }
+    .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+    .pagination button:disabled:hover { background: var(--surface-2); color: var(--text); }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .badge-blue   { background: rgba(59,130,246,.15); color: #60a5fa; }
+    .badge-green  { background: rgba(34,197,94,.15); color: #4ade80; }
+    .badge-purple { background: rgba(139,92,246,.15); color: #a78bfa; }
+    .badge-red    { background: rgba(239,68,68,.15); color: #f87171; }
+    .badge-yellow { background: rgba(245,158,11,.15); color: #fbbf24; }
+    .badge-gray   { background: rgba(148,163,184,.12); color: var(--text-muted); }
+
+    /* ── SLIDE-OUT DETAIL PANEL ── */
+    .detail-overlay {
+      display: none;
+      position: fixed;
+      top: 0; right: 0; bottom: 0; left: 0;
+      background: rgba(0,0,0,.4);
+      z-index: 100;
+    }
+    .detail-overlay.open { display: block; }
+    .detail-panel {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 420px;
+      max-width: 90vw;
+      height: 100vh;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      z-index: 101;
+      transition: right .25s ease;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .detail-panel.open { right: 0; }
+    .detail-panel h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .detail-panel .close-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+    .detail-panel .close-btn:hover { background: var(--surface-2); color: var(--text); }
+    .detail-panel .field-group {
+      margin-bottom: 16px;
+    }
+    .detail-panel .field-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .detail-panel .field-group input,
+    .detail-panel .field-group select {
+      width: 100%;
+    }
+    .detail-panel .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .detail-panel .toggle-row label {
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .detail-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    .detail-actions .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      text-align: center;
+      transition: all .15s;
+    }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { background: var(--accent-hover); }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover { background: var(--surface-2); }
+    .btn-danger-outline {
+      background: transparent;
+      border: 1px solid var(--danger);
+      color: var(--danger);
+    }
+    .btn-danger-outline:hover { background: rgba(239,68,68,.1); }
+
+    /* ── TOGGLE SWITCH ── */
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .toggle-switch.on { background: var(--accent); border-color: var(--accent); }
+    .toggle-switch .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transition: left .2s;
+    }
+    .toggle-switch.on .toggle-knob { left: 20px; }
+
+    /* ── MODALS ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0; right: 0; bottom: 0; left: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      width: 440px;
+      max-width: 92vw;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    .modal h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+    .modal .field-group {
+      margin-bottom: 14px;
+    }
+    .modal .field-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .modal .field-group input,
+    .modal .field-group select {
+      width: 100%;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+    .modal-actions .btn {
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.82rem;
+    }
+
+    /* ── CONFIRM MODAL ── */
+    .confirm-modal .confirm-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .confirm-modal .confirm-message {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.5;
+    }
+
+    /* ── SUBSCRIPTION FILTER TABS ── */
+    .filter-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      padding: 4px;
+      width: fit-content;
+    }
+    .filter-tabs button {
+      padding: 6px 16px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      border-radius: 6px;
+      transition: all .15s;
+    }
+    .filter-tabs button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .filter-tabs button:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* ── AUDIT LOG ── */
+    .audit-entry {
+      display: flex;
+      gap: 14px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .audit-entry:last-child { border-bottom: none; }
+    .audit-time {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      min-width: 100px;
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+    .audit-body { flex: 1; }
+    .audit-body .audit-admin {
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .audit-body .audit-action {
+      font-size: 0.82rem;
+      margin-bottom: 4px;
+    }
+    .audit-body .audit-details {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: none;
+      margin-top: 6px;
+      background: var(--surface-2);
+      padding: 8px 10px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .audit-body .audit-details.open { display: block; }
+    .audit-toggle {
+      font-size: 0.72rem;
+      color: var(--accent);
+      cursor: pointer;
+    }
+    .audit-toggle:hover { text-decoration: underline; }
+
+    /* ── TOAST NOTIFICATIONS ── */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 0.84rem;
+      font-weight: 500;
+      color: #fff;
+      animation: toastIn .25s ease;
+      max-width: 360px;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error   { background: var(--danger); }
+    .toast.info    { background: var(--accent); }
+    @keyframes toastIn { from { transform: translateX(40px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+    .toast.removing { animation: toastOut .2s ease forwards; }
+    @keyframes toastOut { to { transform: translateX(40px); opacity:0; } }
+
+    /* ── LOADING SKELETON ── */
+    .skeleton {
+      background: var(--surface-2);
+      border-radius: 6px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+    .skeleton-row {
+      height: 14px;
+      margin-bottom: 10px;
+    }
+    .skeleton-card {
+      height: 100px;
+      border-radius: 10px;
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      opacity: .5;
+    }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* ── MOBILE HAMBURGER ── */
+    .mobile-menu-btn {
+      display: none;
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 60;
+      width: 36px;
+      height: 36px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: var(--text);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .feeds-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: flex; }
+      .sidebar {
+        position: fixed;
+        left: -260px;
+        z-index: 50;
+        transition: left .25s ease;
+        box-shadow: 4px 0 20px rgba(0,0,0,.3);
+      }
+      .sidebar.open { left: 0; }
+      .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.3);
+        z-index: 49;
+      }
+      .sidebar-overlay.open { display: block; }
+      .main-content { padding: 60px 16px 20px; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .top-bar input[type="search"] { width: 100%; }
+      .detail-panel { width: 100%; max-width: 100vw; }
+    }
+
+    /* ── LOAD MORE BTN ── */
+    .btn-load-more {
+      display: block;
+      margin: 16px auto 0;
+      padding: 8px 24px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+    .btn-load-more:hover { background: var(--accent); color: #fff; }
+
+    /* ── CURSOR POINTER FOR CLICKABLE ROWS ── */
+    .clickable-row { cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ LOGIN SCREEN ═══════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>CueDeck Admin</h1>
+    <p class="subtitle">Platform administration dashboard</p>
+    <div id="login-error" class="login-error"></div>
+    <label for="login-email">Email</label>
+    <input type="email" id="login-email" placeholder="admin@cuedeck.io" autocomplete="email">
+    <label for="login-password">Password</label>
+    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+    <button class="btn-login" id="btn-login">Sign In</button>
+  </div>
+</div>
+
+<!-- ═══════════════ ACCESS DENIED ═══════════════ -->
+<div id="access-denied">
+  <h1>Access Denied</h1>
+  <p>Your account does not have admin privileges.</p>
+  <button id="btn-denied-logout">Sign Out</button>
+</div>
+
+<!-- ═══════════════ APP SHELL ═══════════════ -->
+<button class="mobile-menu-btn" id="mobile-menu-btn">&#9776;</button>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<div id="app-shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo-icon">CD</div>
+      <div>
+        <h2>CueDeck</h2>
+      </div>
+      <span>Admin</span>
+    </div>
+    <div class="sidebar-admin-name" id="sidebar-admin-name"></div>
+    <nav class="sidebar-nav" id="sidebar-nav">
+      <!-- Nav buttons built by JS -->
+    </nav>
+    <div class="sidebar-footer">
+      <button class="theme-toggle" id="btn-theme-toggle">
+        <span id="theme-icon">&#9790;</span>
+        <span id="theme-label">Dark mode</span>
+      </button>
+      <button class="btn-logout" id="btn-logout">
+        <span>&#x2192;</span>
+        <span>Sign Out</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content" id="main-content">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="section" id="section-dashboard">
+      <h1>Dashboard</h1>
+      <p class="section-subtitle">Platform overview and analytics</p>
+      <div class="stats-grid" id="stats-grid">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="charts-grid" id="charts-grid">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="feeds-grid" id="feeds-grid">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+    <!-- ── USERS ── -->
+    <div class="section" id="section-users">
+      <h1>Users</h1>
+      <p class="section-subtitle">Manage all platform users</p>
+      <div class="top-bar" id="users-top-bar">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="table-wrap" id="users-table-wrap">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="pagination" id="users-pagination"></div>
+    </div>
+
+    <!-- ── SUBSCRIPTIONS ── -->
+    <div class="section" id="section-subscriptions">
+      <h1>Subscriptions</h1>
+      <p class="section-subtitle">Manage billing and plans</p>
+      <div class="filter-tabs" id="sub-filter-tabs"></div>
+      <div class="table-wrap" id="subs-table-wrap"></div>
+      <div class="pagination" id="subs-pagination"></div>
+    </div>
+
+    <!-- ── PROMO CODES ── -->
+    <div class="section" id="section-promo">
+      <h1>Promo Codes</h1>
+      <p class="section-subtitle">Manage discounts, trials, and plan unlocks</p>
+      <div class="top-bar" id="promo-top-bar"></div>
+      <div class="table-wrap" id="promo-table-wrap"></div>
+    </div>
+
+    <!-- ── AUDIT LOG ── -->
+    <div class="section" id="section-audit">
+      <h1>Audit Log</h1>
+      <p class="section-subtitle">Admin activity history</p>
+      <div class="top-bar" id="audit-top-bar"></div>
+      <div id="audit-feed" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 20px;max-height:calc(100vh - 260px);overflow-y:auto;"></div>
+      <button class="btn-load-more" id="btn-audit-load-more" style="display:none;">Load More</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ DETAIL PANEL (USER) ═══════════════ -->
+<div class="detail-overlay" id="detail-overlay"></div>
+<div class="detail-panel" id="detail-panel"></div>
+
+<!-- ═══════════════ MODAL: SUBSCRIPTION OVERRIDE ═══════════════ -->
+<div class="modal-backdrop" id="modal-sub-override">
+  <div class="modal" id="modal-sub-override-inner"></div>
+</div>
+
+<!-- ═══════════════ MODAL: CREATE PROMO CODE ═══════════════ -->
+<div class="modal-backdrop" id="modal-promo-create">
+  <div class="modal" id="modal-promo-create-inner"></div>
+</div>
+
+<!-- ═══════════════ MODAL: CONFIRM ═══════════════ -->
+<div class="modal-backdrop confirm-modal" id="modal-confirm">
+  <div class="modal" id="modal-confirm-inner"></div>
+</div>
+
+<!-- ═══════════════ TOAST CONTAINER ═══════════════ -->
+<div id="toast-container"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ══════════════════════════════════════════
+     SUPABASE INIT
+     ══════════════════════════════════════════ */
+  const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ══════════════════════════════════════════
+     STATE
+     ══════════════════════════════════════════ */
+  let currentUser = null;
+  let adminProfile = null;
+  let activeSection = 'dashboard';
+  let inactivityTimer = null;
+
+  // Users section state
+  let usersPage = 1;
+  const usersPerPage = 20;
+  let usersSearch = '';
+  let usersRoleFilter = 'all';
+  let usersStatusFilter = 'all';
+
+  // Subscriptions state
+  let subsPage = 1;
+  const subsPerPage = 20;
+  let subsStatusFilter = 'all';
+
+  // Audit state
+  let auditOffset = 0;
+  const auditLimit = 50;
+  let auditActionFilter = 'all';
+  let auditDateFrom = '';
+  let auditDateTo = '';
+
+  // Chart instances
+  let chartSignups = null;
+  let chartDau = null;
+  let chartTiers = null;
+
+  /* ══════════════════════════════════════════
+     NAV ITEMS
+     ══════════════════════════════════════════ */
+  const NAV_ITEMS = [
+    { id: 'dashboard',     icon: '\u25A3', label: 'Dashboard' },
+    { id: 'users',         icon: '\u2606', label: 'Users' },
+    { id: 'subscriptions', icon: '\u2605', label: 'Subscriptions' },
+    { id: 'promo',         icon: '\u2691', label: 'Promo Codes' },
+    { id: 'audit',         icon: '\u2630', label: 'Audit Log' },
+  ];
+
+  /* ══════════════════════════════════════════
+     HELPERS
+     ══════════════════════════════════════════ */
+
+  function el(tag, attrs, children) {
+    var e = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function(k) {
+        if (k === 'className') e.className = attrs[k];
+        else if (k === 'textContent') e.textContent = attrs[k];
+        else if (k.startsWith('on')) e.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+        else if (k === 'style' && typeof attrs[k] === 'object') {
+          Object.assign(e.style, attrs[k]);
+        } else if (k === 'dataset') {
+          Object.keys(attrs[k]).forEach(function(dk) { e.dataset[dk] = attrs[k][dk]; });
+        } else e.setAttribute(k, attrs[k]);
+      });
+    }
+    if (children) {
+      if (!Array.isArray(children)) children = [children];
+      children.forEach(function(c) {
+        if (c == null) return;
+        if (typeof c === 'string' || typeof c === 'number') {
+          e.appendChild(document.createTextNode(String(c)));
+        } else {
+          e.appendChild(c);
+        }
+      });
+    }
+    return e;
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function $(id) { return document.getElementById(id); }
+
+  function formatEur(v) {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(v || 0);
+  }
+
+  function formatPct(v) {
+    return (v || 0).toFixed(1) + '%';
+  }
+
+  function formatNum(v) {
+    return new Intl.NumberFormat('en').format(v || 0);
+  }
+
+  function relativeTime(dateStr) {
+    if (!dateStr) return 'Never';
+    var d = new Date(dateStr);
+    var now = new Date();
+    var diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+    return d.toLocaleDateString();
+  }
+
+  function fmtDate(dateStr) {
+    if (!dateStr) return '\u2014';
+    return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function initials(name, email) {
+    if (name && name.trim()) {
+      var parts = name.trim().split(/\s+/);
+      return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+    }
+    if (email) return email[0].toUpperCase();
+    return '?';
+  }
+
+  /* ══════════════════════════════════════════
+     TOAST
+     ══════════════════════════════════════════ */
+  function showToast(message, type) {
+    type = type || 'info';
+    var container = $('toast-container');
+    var toast = el('div', { className: 'toast ' + type, textContent: message });
+    container.appendChild(toast);
+    setTimeout(function() {
+      toast.classList.add('removing');
+      setTimeout(function() {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 200);
+    }, 4000);
+  }
+
+  /* ══════════════════════════════════════════
+     CONFIRM MODAL
+     ══════════════════════════════════════════ */
+  var pendingConfirm = null;
+
+  function confirmAction(title, message, onConfirm) {
+    var modal = $('modal-confirm');
+    var inner = $('modal-confirm-inner');
+    clear(inner);
+
+    var titleEl = el('div', { className: 'confirm-title', textContent: title });
+    var msgEl = el('div', { className: 'confirm-message', textContent: message });
+
+    var actions = el('div', { className: 'modal-actions' });
+    var btnCancel = el('button', { className: 'btn btn-outline', textContent: 'Cancel', onClick: function() {
+      modal.classList.remove('open');
+    }});
+    var btnConfirm = el('button', { className: 'btn btn-accent', textContent: 'Confirm', onClick: function() {
+      modal.classList.remove('open');
+      if (onConfirm) onConfirm();
+    }});
+    // Style the confirm button red for destructive actions
+    if (title.toLowerCase().includes('delete') || title.toLowerCase().includes('ban')) {
+      btnConfirm.style.background = 'var(--danger)';
+    }
+    actions.appendChild(btnCancel);
+    actions.appendChild(btnConfirm);
+
+    inner.appendChild(titleEl);
+    inner.appendChild(msgEl);
+    inner.appendChild(actions);
+    modal.classList.add('open');
+  }
+
+  /* ══════════════════════════════════════════
+     THEME
+     ══════════════════════════════════════════ */
+  function getTheme() {
+    var stored = localStorage.getItem('cuedeck_admin_theme');
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('cuedeck_admin_theme', theme);
+    var icon = $('theme-icon');
+    var label = $('theme-label');
+    if (icon) icon.textContent = theme === 'dark' ? '\u263E' : '\u2600';
+    if (label) label.textContent = theme === 'dark' ? 'Dark mode' : 'Light mode';
+  }
+
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute('data-theme');
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+    // Redraw charts with new theme
+    if (activeSection === 'dashboard') loadDashboardData();
+  }
+
+  /* ══════════════════════════════════════════
+     INACTIVITY LOGOUT (30 min)
+     ══════════════════════════════════════════ */
+  function resetInactivity() {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(function() {
+      showToast('Session expired due to inactivity', 'info');
+      doLogout();
+    }, 30 * 60 * 1000);
+  }
+
+  function startInactivityWatcher() {
+    ['mousemove', 'keydown', 'click', 'scroll'].forEach(function(ev) {
+      document.addEventListener(ev, resetInactivity, { passive: true });
+    });
+    resetInactivity();
+  }
+
+  function stopInactivityWatcher() {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    ['mousemove', 'keydown', 'click', 'scroll'].forEach(function(ev) {
+      document.removeEventListener(ev, resetInactivity);
+    });
+  }
+
+  /* ══════════════════════════════════════════
+     AUTH
+     ══════════════════════════════════════════ */
+  async function doLogin() {
+    var emailInput = $('login-email');
+    var pwInput = $('login-password');
+    var errEl = $('login-error');
+    var btn = $('btn-login');
+
+    var email = emailInput.value.trim();
+    var pw = pwInput.value;
+    errEl.textContent = '';
+
+    if (!email || !pw) {
+      errEl.textContent = 'Please enter email and password.';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+
+    var result = await sb.auth.signInWithPassword({ email: email, password: pw });
+    if (result.error) {
+      errEl.textContent = result.error.message;
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+      return;
+    }
+
+    currentUser = result.data.user;
+    await checkAdminAndBoot();
+  }
+
+  async function checkAdminAndBoot() {
+    // Get user profile from leod_users
+    var result = await sb.from('leod_users').select('*').eq('user_id', currentUser.id).single();
+    if (result.error || !result.data) {
+      showAccessDenied();
+      return;
+    }
+    adminProfile = result.data;
+    if (adminProfile.role !== 'admin') {
+      showAccessDenied();
+      return;
+    }
+    bootApp();
+  }
+
+  function showAccessDenied() {
+    $('login-screen').style.display = 'none';
+    $('access-denied').style.display = 'flex';
+  }
+
+  async function doLogout() {
+    stopInactivityWatcher();
+    await sb.auth.signOut();
+    currentUser = null;
+    adminProfile = null;
+    $('app-shell').classList.remove('visible');
+    $('access-denied').style.display = 'none';
+    $('login-screen').style.display = 'flex';
+    $('login-email').value = '';
+    $('login-password').value = '';
+    $('login-error').textContent = '';
+    $('btn-login').disabled = false;
+    $('btn-login').textContent = 'Sign In';
+  }
+
+  /* ══════════════════════════════════════════
+     BOOT APP
+     ══════════════════════════════════════════ */
+  function bootApp() {
+    $('login-screen').style.display = 'none';
+    $('access-denied').style.display = 'none';
+    $('app-shell').classList.add('visible');
+
+    // Set admin name in sidebar
+    var nameEl = $('sidebar-admin-name');
+    nameEl.textContent = adminProfile.name || currentUser.email;
+
+    buildSidebar();
+    buildUsersTopBar();
+    buildSubFilterTabs();
+    buildPromoTopBar();
+    buildAuditTopBar();
+
+    showSection('dashboard');
+    startInactivityWatcher();
+  }
+
+  /* ══════════════════════════════════════════
+     SIDEBAR
+     ══════════════════════════════════════════ */
+  function buildSidebar() {
+    var nav = $('sidebar-nav');
+    clear(nav);
+    NAV_ITEMS.forEach(function(item) {
+      var iconSpan = el('span', { className: 'nav-icon', textContent: item.icon });
+      var labelSpan = el('span', { textContent: item.label });
+      var btn = el('button', { dataset: { section: item.id }, onClick: function() {
+        showSection(item.id);
+        closeMobileSidebar();
+      }}, [iconSpan, labelSpan]);
+      nav.appendChild(btn);
+    });
+  }
+
+  function showSection(name) {
+    activeSection = name;
+    // Update nav active state
+    var navBtns = $('sidebar-nav').querySelectorAll('button');
+    navBtns.forEach(function(b) {
+      b.classList.toggle('active', b.dataset.section === name);
+    });
+    // Toggle sections
+    var sections = $('main-content').querySelectorAll('.section');
+    sections.forEach(function(s) {
+      s.classList.toggle('visible', s.id === 'section-' + name);
+    });
+    // Load data
+    if (name === 'dashboard') loadDashboardData();
+    else if (name === 'users') loadUsers();
+    else if (name === 'subscriptions') loadSubscriptions();
+    else if (name === 'promo') loadPromoCodes();
+    else if (name === 'audit') { auditOffset = 0; loadAuditLog(true); }
+  }
+
+  /* ══════════════════════════════════════════
+     MOBILE SIDEBAR
+     ══════════════════════════════════════════ */
+  function openMobileSidebar() {
+    $('sidebar').classList.add('open');
+    $('sidebar-overlay').classList.add('open');
+  }
+  function closeMobileSidebar() {
+    $('sidebar').classList.remove('open');
+    $('sidebar-overlay').classList.remove('open');
+  }
+
+  /* ══════════════════════════════════════════
+     DASHBOARD
+     ══════════════════════════════════════════ */
+  async function loadDashboardData() {
+    var statsGrid = $('stats-grid');
+    var chartsGrid = $('charts-grid');
+    var feedsGrid = $('feeds-grid');
+
+    // Show skeletons
+    clear(statsGrid);
+    for (var sk = 0; sk < 6; sk++) {
+      statsGrid.appendChild(el('div', { className: 'skeleton skeleton-card' }));
+    }
+
+    try {
+      var results = await Promise.all([
+        sb.rpc('admin_get_stats'),
+        sb.rpc('admin_get_signups_per_day', { p_days: 30 }),
+        sb.rpc('admin_get_dau_per_day', { p_days: 14 }),
+        sb.rpc('admin_get_tier_breakdown'),
+        sb.rpc('admin_get_recent_signups', { p_limit: 10 }),
+        sb.rpc('admin_get_recent_events', { p_limit: 10 }),
+      ]);
+
+      var stats = results[0].data || {};
+      var signupsData = results[1].data || [];
+      var dauData = results[2].data || [];
+      var tiersData = results[3].data || [];
+      var recentSignups = results[4].data || [];
+      var recentEvents = results[5].data || [];
+
+      renderStatsCards(statsGrid, stats);
+      renderCharts(chartsGrid, signupsData, dauData, tiersData);
+      renderFeeds(feedsGrid, recentSignups, recentEvents);
+    } catch (err) {
+      clear(statsGrid);
+      statsGrid.appendChild(el('div', { className: 'empty-state' }, [
+        el('div', { className: 'empty-icon', textContent: '!' }),
+        el('p', { textContent: 'Failed to load dashboard data. RPCs may not be deployed yet.' }),
+      ]));
+    }
+  }
+
+  function renderStatsCards(container, stats) {
+    clear(container);
+    var cards = [
+      { label: 'Total Signups', value: formatNum(stats.total_signups), delta: stats.signups_delta },
+      { label: 'Active Subscribers', value: formatNum(stats.active_subscribers), delta: null },
+      { label: 'DAU', value: formatNum(stats.dau), delta: null },
+      { label: 'MRR', value: formatEur(stats.mrr), delta: null },
+      { label: 'Churn Rate', value: formatPct(stats.churn_rate), delta: null },
+      { label: 'Conversion Rate', value: formatPct(stats.conversion_rate), delta: null },
+    ];
+
+    cards.forEach(function(c) {
+      var card = el('div', { className: 'stat-card' });
+      card.appendChild(el('div', { className: 'stat-label', textContent: c.label }));
+
+      var row = el('div', { className: 'stat-row' });
+      row.appendChild(el('div', { className: 'stat-value', textContent: c.value }));
+
+      if (c.delta != null) {
+        var deltaClass = c.delta > 0 ? 'positive' : c.delta < 0 ? 'negative' : 'neutral';
+        var deltaText = (c.delta > 0 ? '+' : '') + c.delta + ' vs prev 30d';
+        row.appendChild(el('span', { className: 'stat-delta ' + deltaClass, textContent: deltaText }));
+      }
+
+      card.appendChild(row);
+      container.appendChild(card);
+    });
+  }
+
+  function getChartColors() {
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    return {
+      grid: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.08)',
+      text: isDark ? '#94a3b8' : '#64748b',
+      accent: '#8b5cf6',
+      accentBg: isDark ? 'rgba(139,92,246,.2)' : 'rgba(124,58,237,.15)',
+      success: '#22c55e',
+      tierColors: ['#8b5cf6', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#94a3b8'],
+    };
+  }
+
+  function renderCharts(container, signupsData, dauData, tiersData) {
+    clear(container);
+    var clr = getChartColors();
+
+    // Signups line chart
+    var signupsCard = el('div', { className: 'chart-card' });
+    signupsCard.appendChild(el('h3', { textContent: 'Signups per Day (30d)' }));
+    var signupsCanvas = el('canvas');
+    signupsCard.appendChild(signupsCanvas);
+    container.appendChild(signupsCard);
+
+    if (chartSignups) { chartSignups.destroy(); chartSignups = null; }
+    chartSignups = new Chart(signupsCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: signupsData.map(function(d) { return d.day || d.date || ''; }),
+        datasets: [{
+          label: 'Signups',
+          data: signupsData.map(function(d) { return d.count || 0; }),
+          borderColor: clr.accent,
+          backgroundColor: clr.accentBg,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: clr.text, maxTicksLimit: 8, font: { size: 10 } }, grid: { color: clr.grid } },
+          y: { ticks: { color: clr.text, font: { size: 10 } }, grid: { color: clr.grid }, beginAtZero: true },
+        }
+      }
+    });
+
+    // DAU bar chart
+    var dauCard = el('div', { className: 'chart-card' });
+    dauCard.appendChild(el('h3', { textContent: 'Daily Active Users (14d)' }));
+    var dauCanvas = el('canvas');
+    dauCard.appendChild(dauCanvas);
+    container.appendChild(dauCard);
+
+    if (chartDau) { chartDau.destroy(); chartDau = null; }
+    chartDau = new Chart(dauCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: dauData.map(function(d) { return d.day || d.date || ''; }),
+        datasets: [{
+          label: 'DAU',
+          data: dauData.map(function(d) { return d.count || 0; }),
+          backgroundColor: clr.accent,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: clr.text, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: clr.text, font: { size: 10 } }, grid: { color: clr.grid }, beginAtZero: true },
+        }
+      }
+    });
+
+    // Tiers doughnut chart
+    var tierCard = el('div', { className: 'chart-card' });
+    tierCard.appendChild(el('h3', { textContent: 'Tier Breakdown' }));
+    var tierCanvas = el('canvas');
+    tierCard.appendChild(tierCanvas);
+    container.appendChild(tierCard);
+
+    if (chartTiers) { chartTiers.destroy(); chartTiers = null; }
+    chartTiers = new Chart(tierCanvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: tiersData.map(function(d) { return d.plan || d.tier || 'Unknown'; }),
+        datasets: [{
+          data: tiersData.map(function(d) { return d.count || 0; }),
+          backgroundColor: clr.tierColors.slice(0, tiersData.length),
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: { color: clr.text, font: { size: 11 }, padding: 12 }
+          }
+        },
+      }
+    });
+  }
+
+  function renderFeeds(container, recentSignups, recentEvents) {
+    clear(container);
+
+    // Recent Signups
+    var signupsFeed = el('div', { className: 'feed-card' });
+    signupsFeed.appendChild(el('h3', { textContent: 'Recent Signups' }));
+    if (recentSignups.length === 0) {
+      signupsFeed.appendChild(el('div', { className: 'empty-state' }, [el('p', { textContent: 'No signups yet' })]));
+    } else {
+      recentSignups.forEach(function(u) {
+        var avatar = el('div', { className: 'avatar', textContent: initials(u.name, u.email) });
+        var info = el('div', { className: 'feed-info' });
+        info.appendChild(el('div', { className: 'feed-name', textContent: u.name || u.email }));
+        info.appendChild(el('div', { className: 'feed-meta', textContent: (u.role || 'pending') + (u.organization ? ' \u00B7 ' + u.organization : '') }));
+        var time = el('div', { className: 'feed-time', textContent: relativeTime(u.created_at) });
+        signupsFeed.appendChild(el('div', { className: 'feed-item' }, [avatar, info, time]));
+      });
+    }
+    container.appendChild(signupsFeed);
+
+    // Recent Events
+    var eventsFeed = el('div', { className: 'feed-card' });
+    eventsFeed.appendChild(el('h3', { textContent: 'Recent Events' }));
+    if (recentEvents.length === 0) {
+      eventsFeed.appendChild(el('div', { className: 'empty-state' }, [el('p', { textContent: 'No events yet' })]));
+    } else {
+      recentEvents.forEach(function(ev) {
+        var avatar = el('div', { className: 'avatar', textContent: initials(ev.name || ev.title, '') });
+        avatar.style.background = 'var(--success)';
+        var info = el('div', { className: 'feed-info' });
+        info.appendChild(el('div', { className: 'feed-name', textContent: ev.name || ev.title || 'Untitled Event' }));
+        info.appendChild(el('div', { className: 'feed-meta', textContent: fmtDate(ev.event_date || ev.date) }));
+        var time = el('div', { className: 'feed-time', textContent: relativeTime(ev.created_at) });
+        eventsFeed.appendChild(el('div', { className: 'feed-item' }, [avatar, info, time]));
+      });
+    }
+    container.appendChild(eventsFeed);
+  }
+
+  /* ══════════════════════════════════════════
+     USERS SECTION
+     ══════════════════════════════════════════ */
+  function buildUsersTopBar() {
+    var bar = $('users-top-bar');
+    clear(bar);
+
+    var searchInput = el('input', {
+      type: 'search',
+      placeholder: 'Search users...',
+      value: usersSearch,
+      onInput: function(e) { usersSearch = e.target.value; usersPage = 1; loadUsers(); },
+    });
+
+    var roleSelect = el('select', { onChange: function(e) { usersRoleFilter = e.target.value; usersPage = 1; loadUsers(); } });
+    ['all', 'admin', 'director', 'stage', 'av', 'interp', 'reg', 'signage', 'pending'].forEach(function(r) {
+      var opt = el('option', { value: r, textContent: r === 'all' ? 'All Roles' : r.charAt(0).toUpperCase() + r.slice(1) });
+      if (r === usersRoleFilter) opt.selected = true;
+      roleSelect.appendChild(opt);
+    });
+
+    var statusSelect = el('select', { onChange: function(e) { usersStatusFilter = e.target.value; usersPage = 1; loadUsers(); } });
+    ['all', 'active', 'suspended'].forEach(function(s) {
+      var opt = el('option', { value: s, textContent: s === 'all' ? 'All Status' : s.charAt(0).toUpperCase() + s.slice(1) });
+      if (s === usersStatusFilter) opt.selected = true;
+      statusSelect.appendChild(opt);
+    });
+
+    bar.appendChild(searchInput);
+    bar.appendChild(roleSelect);
+    bar.appendChild(statusSelect);
+  }
+
+  async function loadUsers() {
+    var wrap = $('users-table-wrap');
+    clear(wrap);
+    wrap.appendChild(el('div', { className: 'skeleton skeleton-row', style: { margin: '20px', height: '200px' } }));
+
+    try {
+      var result = await sb.rpc('admin_list_users', {
+        p_search: usersSearch || null,
+        p_role: usersRoleFilter === 'all' ? null : usersRoleFilter,
+        p_status: usersStatusFilter === 'all' ? null : usersStatusFilter,
+        p_offset: (usersPage - 1) * usersPerPage,
+        p_limit: usersPerPage,
+      });
+
+      var data = result.data || [];
+      renderUsersTable(wrap, data);
+      renderUsersPagination(data.length);
+    } catch (err) {
+      clear(wrap);
+      wrap.appendChild(el('div', { className: 'empty-state' }, [
+        el('p', { textContent: 'Failed to load users. The admin_list_users RPC may not be deployed yet.' }),
+      ]));
+    }
+  }
+
+  function renderUsersTable(container, users) {
+    clear(container);
+
+    var table = el('table');
+    var thead = el('thead');
+    var headerRow = el('tr');
+    ['Name', 'Email', 'Role', 'Organization', 'Plan', 'Status', 'Last Login', 'Actions'].forEach(function(h) {
+      headerRow.appendChild(el('th', { textContent: h }));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    if (users.length === 0) {
+      var emptyRow = el('tr');
+      var emptyTd = el('td', { colSpan: '8', style: { textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }, textContent: 'No users found' });
+      emptyRow.appendChild(emptyTd);
+      tbody.appendChild(emptyRow);
+    } else {
+      users.forEach(function(u) {
+        var row = el('tr', { className: 'clickable-row', onClick: function() { openUserDetail(u); } });
+        row.appendChild(el('td', { textContent: u.name || '\u2014' }));
+        row.appendChild(el('td', { textContent: u.email || '\u2014' }));
+
+        var roleTd = el('td');
+        var roleBadge = el('span', {
+          className: 'badge ' + (u.role === 'admin' ? 'badge-purple' : u.role === 'director' ? 'badge-blue' : u.role === 'pending' ? 'badge-yellow' : 'badge-gray'),
+          textContent: u.role || 'pending',
+        });
+        roleTd.appendChild(roleBadge);
+        row.appendChild(roleTd);
+
+        row.appendChild(el('td', { textContent: u.organization || '\u2014' }));
+        row.appendChild(el('td', { textContent: u.plan || 'Free' }));
+
+        var statusTd = el('td');
+        var statusBadge = el('span', {
+          className: 'badge ' + (u.status === 'active' || !u.status ? 'badge-green' : 'badge-red'),
+          textContent: u.status || 'active',
+        });
+        statusTd.appendChild(statusBadge);
+        row.appendChild(statusTd);
+
+        row.appendChild(el('td', { textContent: relativeTime(u.last_login || u.last_sign_in_at) }));
+
+        var actTd = el('td');
+        var editBtn = el('button', {
+          className: 'btn btn-outline',
+          textContent: 'Edit',
+          style: { padding: '4px 10px', fontSize: '0.75rem' },
+          onClick: function(e) { e.stopPropagation(); openUserDetail(u); },
+        });
+        actTd.appendChild(editBtn);
+        row.appendChild(actTd);
+
+        tbody.appendChild(row);
+      });
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  function renderUsersPagination(count) {
+    var pag = $('users-pagination');
+    clear(pag);
+
+    var info = el('span', { textContent: 'Page ' + usersPage });
+    var prevBtn = el('button', { textContent: '\u2190 Prev', disabled: usersPage <= 1, onClick: function() {
+      usersPage--;
+      loadUsers();
+    }});
+    var nextBtn = el('button', { textContent: 'Next \u2192', disabled: count < usersPerPage, onClick: function() {
+      usersPage++;
+      loadUsers();
+    }});
+
+    pag.appendChild(prevBtn);
+    pag.appendChild(info);
+    pag.appendChild(nextBtn);
+  }
+
+  /* ══════════════════════════════════════════
+     USER DETAIL PANEL
+     ══════════════════════════════════════════ */
+  function openUserDetail(user) {
+    var overlay = $('detail-overlay');
+    var panel = $('detail-panel');
+    clear(panel);
+
+    // Header
+    var header = el('h2');
+    header.appendChild(document.createTextNode('User Details'));
+    var closeBtn = el('button', { className: 'close-btn', textContent: '\u2715', onClick: closeUserDetail });
+    header.appendChild(closeBtn);
+    panel.appendChild(header);
+
+    // Email (read-only)
+    var emailGrp = el('div', { className: 'field-group' });
+    emailGrp.appendChild(el('label', { textContent: 'Email' }));
+    emailGrp.appendChild(el('input', { type: 'text', value: user.email || '', disabled: 'true' }));
+    panel.appendChild(emailGrp);
+
+    // Name
+    var nameGrp = el('div', { className: 'field-group' });
+    nameGrp.appendChild(el('label', { textContent: 'Name' }));
+    var nameInput = el('input', { type: 'text', id: 'detail-name', value: user.name || '' });
+    nameGrp.appendChild(nameInput);
+    panel.appendChild(nameGrp);
+
+    // Organization
+    var orgGrp = el('div', { className: 'field-group' });
+    orgGrp.appendChild(el('label', { textContent: 'Organization' }));
+    var orgInput = el('input', { type: 'text', id: 'detail-org', value: user.organization || '' });
+    orgGrp.appendChild(orgInput);
+    panel.appendChild(orgGrp);
+
+    // Role dropdown
+    var roleGrp = el('div', { className: 'field-group' });
+    roleGrp.appendChild(el('label', { textContent: 'Role' }));
+    var roleSelect = el('select', { id: 'detail-role' });
+    ['admin', 'director', 'stage', 'av', 'interp', 'reg', 'signage', 'pending'].forEach(function(r) {
+      var opt = el('option', { value: r, textContent: r.charAt(0).toUpperCase() + r.slice(1) });
+      if (r === user.role) opt.selected = true;
+      roleSelect.appendChild(opt);
+    });
+    roleGrp.appendChild(roleSelect);
+    panel.appendChild(roleGrp);
+
+    // Active toggle
+    var toggleRow = el('div', { className: 'toggle-row' });
+    toggleRow.appendChild(el('label', { textContent: 'Active' }));
+    var isActive = user.status !== 'suspended';
+    var toggleSwitch = el('div', {
+      className: 'toggle-switch' + (isActive ? ' on' : ''),
+      id: 'detail-active-toggle',
+      onClick: function() {
+        toggleSwitch.classList.toggle('on');
+      },
+    });
+    var knob = el('div', { className: 'toggle-knob' });
+    toggleSwitch.appendChild(knob);
+    toggleRow.appendChild(toggleSwitch);
+    panel.appendChild(toggleRow);
+
+    // Actions
+    var actions = el('div', { className: 'detail-actions' });
+
+    var saveBtn = el('button', { className: 'btn btn-accent', textContent: 'Save Changes', onClick: function() {
+      saveUserDetail(user);
+    }});
+    actions.appendChild(saveBtn);
+
+    var resetPwBtn = el('button', { className: 'btn btn-outline', textContent: 'Reset Password', onClick: function() {
+      confirmAction('Reset Password', 'Send a password reset email to ' + user.email + '?', function() {
+        resetUserPassword(user);
+      });
+    }});
+    actions.appendChild(resetPwBtn);
+
+    if (user.role !== 'admin') {
+      var promoteBtn = el('button', { className: 'btn btn-outline', textContent: 'Promote to Admin', onClick: function() {
+        confirmAction('Promote to Admin', 'Are you sure you want to grant admin privileges to ' + (user.name || user.email) + '? This cannot be easily undone.', function() {
+          promoteUser(user);
+        });
+      }});
+      actions.appendChild(promoteBtn);
+    }
+
+    var deleteBtn = el('button', { className: 'btn btn-danger-outline', textContent: 'Delete / Ban User', onClick: function() {
+      confirmAction('Delete User', 'Permanently delete or ban ' + (user.name || user.email) + '? This action cannot be undone.', function() {
+        deleteUser(user);
+      });
+    }});
+    actions.appendChild(deleteBtn);
+
+    panel.appendChild(actions);
+
+    // Show panel
+    overlay.classList.add('open');
+    setTimeout(function() { panel.classList.add('open'); }, 10);
+  }
+
+  function closeUserDetail() {
+    $('detail-overlay').classList.remove('open');
+    $('detail-panel').classList.remove('open');
+  }
+
+  async function saveUserDetail(user) {
+    var name = $('detail-name').value.trim();
+    var org = $('detail-org').value.trim();
+    var role = $('detail-role').value;
+    var isActive = $('detail-active-toggle').classList.contains('on');
+
+    try {
+      var result = await sb.functions.invoke('admin-manage-user', {
+        body: JSON.stringify({
+          action: 'update',
+          user_id: user.user_id,
+          name: name,
+          organization: org,
+          role: role,
+          status: isActive ? 'active' : 'suspended',
+        }),
+      });
+      if (result.error) throw result.error;
+      showToast('User updated successfully', 'success');
+      closeUserDetail();
+      loadUsers();
+    } catch (err) {
+      showToast('Failed to update user: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function resetUserPassword(user) {
+    try {
+      var result = await sb.functions.invoke('admin-manage-user', {
+        body: JSON.stringify({ action: 'reset_password', user_id: user.user_id, email: user.email }),
+      });
+      if (result.error) throw result.error;
+      showToast('Password reset email sent', 'success');
+    } catch (err) {
+      showToast('Failed to reset password: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function promoteUser(user) {
+    try {
+      var result = await sb.functions.invoke('admin-promote', {
+        body: JSON.stringify({ user_id: user.user_id }),
+      });
+      if (result.error) throw result.error;
+      showToast('User promoted to admin', 'success');
+      closeUserDetail();
+      loadUsers();
+    } catch (err) {
+      showToast('Failed to promote user: ' + (err.message || err), 'error');
+    }
+  }
+
+  async function deleteUser(user) {
+    try {
+      var result = await sb.functions.invoke('admin-manage-user', {
+        body: JSON.stringify({ action: 'delete', user_id: user.user_id }),
+      });
+      if (result.error) throw result.error;
+      showToast('User deleted', 'success');
+      closeUserDetail();
+      loadUsers();
+    } catch (err) {
+      showToast('Failed to delete user: ' + (err.message || err), 'error');
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     SUBSCRIPTIONS SECTION
+     ══════════════════════════════════════════ */
+  function buildSubFilterTabs() {
+    var tabs = $('sub-filter-tabs');
+    clear(tabs);
+    ['all', 'active', 'past_due', 'canceled', 'trial', 'expired'].forEach(function(s) {
+      var label = s === 'all' ? 'All' : s === 'past_due' ? 'Past Due' : s.charAt(0).toUpperCase() + s.slice(1);
+      var btn = el('button', {
+        textContent: label,
+        className: s === subsStatusFilter ? 'active' : '',
+        onClick: function() {
+          subsStatusFilter = s;
+          subsPage = 1;
+          buildSubFilterTabs();
+          loadSubscriptions();
+        },
+      });
+      tabs.appendChild(btn);
+    });
+  }
+
+  async function loadSubscriptions() {
+    var wrap = $('subs-table-wrap');
+    clear(wrap);
+    wrap.appendChild(el('div', { className: 'skeleton skeleton-row', style: { margin: '20px', height: '200px' } }));
+
+    try {
+      var result = await sb.rpc('admin_list_subscriptions', {
+        p_status: subsStatusFilter === 'all' ? null : subsStatusFilter,
+        p_offset: (subsPage - 1) * subsPerPage,
+        p_limit: subsPerPage,
+      });
+
+      var data = result.data || [];
+      renderSubsTable(wrap, data);
+      renderSubsPagination(data.length);
+    } catch (err) {
+      clear(wrap);
+      wrap.appendChild(el('div', { className: 'empty-state' }, [
+        el('p', { textContent: 'Failed to load subscriptions. The admin_list_subscriptions RPC may not be deployed yet.' }),
+      ]));
+    }
+  }
+
+  function renderSubsTable(container, subs) {
+    clear(container);
+    var table = el('table');
+    var thead = el('thead');
+    var headerRow = el('tr');
+    ['User', 'Plan', 'Status', 'Interval', 'Period End', 'Stripe ID', 'Actions'].forEach(function(h) {
+      headerRow.appendChild(el('th', { textContent: h }));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    if (subs.length === 0) {
+      var emptyRow = el('tr');
+      emptyRow.appendChild(el('td', { colSpan: '7', style: { textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }, textContent: 'No subscriptions found' }));
+      tbody.appendChild(emptyRow);
+    } else {
+      subs.forEach(function(s) {
+        var row = el('tr');
+
+        // User col (name + email)
+        var userTd = el('td');
+        userTd.appendChild(el('div', { textContent: s.user_name || s.name || '\u2014', style: { fontWeight: '500' } }));
+        userTd.appendChild(el('div', { textContent: s.user_email || s.email || '', style: { fontSize: '0.72rem', color: 'var(--text-muted)' } }));
+        row.appendChild(userTd);
+
+        row.appendChild(el('td', { textContent: s.plan || 'free' }));
+
+        var statusTd = el('td');
+        var statusClass = 'badge-gray';
+        if (s.status === 'active') statusClass = 'badge-green';
+        else if (s.status === 'past_due') statusClass = 'badge-yellow';
+        else if (s.status === 'canceled') statusClass = 'badge-red';
+        else if (s.status === 'trial' || s.status === 'trialing') statusClass = 'badge-blue';
+        statusTd.appendChild(el('span', { className: 'badge ' + statusClass, textContent: s.status || 'unknown' }));
+        row.appendChild(statusTd);
+
+        row.appendChild(el('td', { textContent: s.interval || '\u2014' }));
+        row.appendChild(el('td', { textContent: fmtDate(s.current_period_end || s.period_end) }));
+
+        var stripeIdTd = el('td');
+        var stripeText = s.stripe_subscription_id || s.stripe_id || '\u2014';
+        if (stripeText.length > 16) stripeText = stripeText.substring(0, 16) + '...';
+        stripeIdTd.appendChild(el('span', { textContent: stripeText, style: { fontSize: '0.72rem', fontFamily: 'monospace' } }));
+        row.appendChild(stripeIdTd);
+
+        var actTd = el('td');
+        var overrideBtn = el('button', {
+          className: 'btn btn-outline',
+          textContent: 'Override',
+          style: { padding: '4px 10px', fontSize: '0.75rem' },
+          onClick: function() { openSubOverrideModal(s); },
+        });
+        actTd.appendChild(overrideBtn);
+        row.appendChild(actTd);
+
+        tbody.appendChild(row);
+      });
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  function renderSubsPagination(count) {
+    var pag = $('subs-pagination');
+    clear(pag);
+    pag.appendChild(el('button', { textContent: '\u2190 Prev', disabled: subsPage <= 1, onClick: function() { subsPage--; loadSubscriptions(); } }));
+    pag.appendChild(el('span', { textContent: 'Page ' + subsPage }));
+    pag.appendChild(el('button', { textContent: 'Next \u2192', disabled: count < subsPerPage, onClick: function() { subsPage++; loadSubscriptions(); } }));
+  }
+
+  /* ══════════════════════════════════════════
+     SUBSCRIPTION OVERRIDE MODAL
+     ══════════════════════════════════════════ */
+  function openSubOverrideModal(sub) {
+    var backdrop = $('modal-sub-override');
+    var inner = $('modal-sub-override-inner');
+    clear(inner);
+
+    inner.appendChild(el('h2', { textContent: 'Override Subscription' }));
+
+    var userInfo = el('div', { style: { marginBottom: '16px', fontSize: '0.85rem', color: 'var(--text-muted)' } });
+    userInfo.appendChild(document.createTextNode((sub.user_name || sub.name || 'User') + ' (' + (sub.user_email || sub.email || '') + ')'));
+    inner.appendChild(userInfo);
+
+    // Override Plan
+    var planGrp = el('div', { className: 'field-group' });
+    planGrp.appendChild(el('label', { textContent: 'Override Plan' }));
+    var planSelect = el('select', { id: 'override-plan' });
+    ['', 'trial', 'perevent', 'starter', 'pro', 'enterprise'].forEach(function(p) {
+      var opt = el('option', { value: p, textContent: p ? p.charAt(0).toUpperCase() + p.slice(1) : 'No change' });
+      planSelect.appendChild(opt);
+    });
+    planGrp.appendChild(planSelect);
+    inner.appendChild(planGrp);
+
+    // Extend Trial
+    var trialGrp = el('div', { className: 'field-group' });
+    trialGrp.appendChild(el('label', { textContent: 'Extend Trial (days)' }));
+    trialGrp.appendChild(el('input', { type: 'number', id: 'override-trial-days', min: '0', value: '0', placeholder: '0' }));
+    inner.appendChild(trialGrp);
+
+    // Gift Months
+    var giftPlanGrp = el('div', { className: 'field-group' });
+    giftPlanGrp.appendChild(el('label', { textContent: 'Gift Plan' }));
+    var giftPlanSelect = el('select', { id: 'override-gift-plan' });
+    ['', 'starter', 'pro', 'enterprise'].forEach(function(p) {
+      var opt = el('option', { value: p, textContent: p ? p.charAt(0).toUpperCase() + p.slice(1) : 'None' });
+      giftPlanSelect.appendChild(opt);
+    });
+    giftPlanGrp.appendChild(giftPlanSelect);
+    inner.appendChild(giftPlanGrp);
+
+    var giftMonthsGrp = el('div', { className: 'field-group' });
+    giftMonthsGrp.appendChild(el('label', { textContent: 'Gift Months' }));
+    giftMonthsGrp.appendChild(el('input', { type: 'number', id: 'override-gift-months', min: '1', value: '1', placeholder: '1' }));
+    inner.appendChild(giftMonthsGrp);
+
+    // Actions
+    var actions = el('div', { className: 'modal-actions' });
+    actions.appendChild(el('button', { className: 'btn btn-outline', textContent: 'Cancel', onClick: function() { backdrop.classList.remove('open'); } }));
+    actions.appendChild(el('button', { className: 'btn btn-accent', textContent: 'Apply Override', onClick: function() { applySubOverride(sub, backdrop); } }));
+    inner.appendChild(actions);
+
+    backdrop.classList.add('open');
+  }
+
+  async function applySubOverride(sub, backdrop) {
+    var plan = $('override-plan').value;
+    var trialDays = parseInt($('override-trial-days').value) || 0;
+    var giftPlan = $('override-gift-plan').value;
+    var giftMonths = parseInt($('override-gift-months').value) || 0;
+
+    var payload = {
+      action: 'override',
+      subscription_id: sub.id || sub.subscription_id,
+      user_id: sub.user_id,
+    };
+    if (plan) payload.override_plan = plan;
+    if (trialDays > 0) payload.extend_trial_days = trialDays;
+    if (giftPlan && giftMonths > 0) {
+      payload.gift_plan = giftPlan;
+      payload.gift_months = giftMonths;
+    }
+
+    try {
+      var result = await sb.functions.invoke('admin-manage-subscription', {
+        body: JSON.stringify(payload),
+      });
+      if (result.error) throw result.error;
+      showToast('Subscription override applied', 'success');
+      backdrop.classList.remove('open');
+      loadSubscriptions();
+    } catch (err) {
+      showToast('Failed: ' + (err.message || err), 'error');
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     PROMO CODES SECTION
+     ══════════════════════════════════════════ */
+  function buildPromoTopBar() {
+    var bar = $('promo-top-bar');
+    clear(bar);
+    bar.appendChild(el('div', { className: 'spacer' }));
+    bar.appendChild(el('button', { className: 'btn-primary', textContent: '+ Create Code', onClick: openPromoCreateModal }));
+  }
+
+  async function loadPromoCodes() {
+    var wrap = $('promo-table-wrap');
+    clear(wrap);
+    wrap.appendChild(el('div', { className: 'skeleton skeleton-row', style: { margin: '20px', height: '200px' } }));
+
+    try {
+      var result = await sb.rpc('admin_list_promo_codes');
+      var data = result.data || [];
+      renderPromoTable(wrap, data);
+    } catch (err) {
+      clear(wrap);
+      wrap.appendChild(el('div', { className: 'empty-state' }, [
+        el('p', { textContent: 'Failed to load promo codes. The admin_list_promo_codes RPC may not be deployed yet.' }),
+      ]));
+    }
+  }
+
+  function renderPromoTable(container, codes) {
+    clear(container);
+    var table = el('table');
+    var thead = el('thead');
+    var headerRow = el('tr');
+    ['Code', 'Type', 'Details', 'Max Uses', 'Used', 'Expiry', 'Status', 'Actions'].forEach(function(h) {
+      headerRow.appendChild(el('th', { textContent: h }));
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    if (codes.length === 0) {
+      var emptyRow = el('tr');
+      emptyRow.appendChild(el('td', { colSpan: '8', style: { textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }, textContent: 'No promo codes found' }));
+      tbody.appendChild(emptyRow);
+    } else {
+      codes.forEach(function(c) {
+        var row = el('tr');
+
+        // Code
+        var codeTd = el('td');
+        codeTd.appendChild(el('span', { textContent: c.code, style: { fontFamily: 'monospace', fontWeight: '600' } }));
+        row.appendChild(codeTd);
+
+        // Type
+        var typeTd = el('td');
+        var typeClass = c.type === 'discount' ? 'badge-blue' : c.type === 'trial_extension' ? 'badge-green' : 'badge-purple';
+        var typeLabel = c.type === 'trial_extension' ? 'Trial' : c.type === 'plan_unlock' ? 'Plan' : 'Discount';
+        typeTd.appendChild(el('span', { className: 'badge ' + typeClass, textContent: typeLabel }));
+        row.appendChild(typeTd);
+
+        // Details
+        var details = '';
+        if (c.type === 'discount' && c.stripe_coupon_id) details = 'Coupon: ' + c.stripe_coupon_id;
+        else if (c.type === 'trial_extension' && c.extra_days) details = '+' + c.extra_days + ' days';
+        else if (c.type === 'plan_unlock') details = (c.granted_plan || '') + ' \u00D7 ' + (c.granted_months || 0) + 'mo';
+        row.appendChild(el('td', { textContent: details || '\u2014' }));
+
+        row.appendChild(el('td', { textContent: c.max_uses != null ? String(c.max_uses) : '\u221E' }));
+        row.appendChild(el('td', { textContent: String(c.used_count || c.times_used || 0) }));
+        row.appendChild(el('td', { textContent: fmtDate(c.expires_at) }));
+
+        // Status
+        var statusTd = el('td');
+        var isActive = c.is_active !== false && c.active !== false;
+        statusTd.appendChild(el('span', { className: 'badge ' + (isActive ? 'badge-green' : 'badge-gray'), textContent: isActive ? 'Active' : 'Inactive' }));
+        row.appendChild(statusTd);
+
+        // Actions
+        var actTd = el('td');
+        var toggleBtn = el('button', {
+          className: 'btn btn-outline',
+          textContent: isActive ? 'Deactivate' : 'Activate',
+          style: { padding: '4px 10px', fontSize: '0.75rem', marginRight: '4px' },
+          onClick: function() {
+            var action = isActive ? 'deactivate' : 'activate';
+            if (isActive) {
+              confirmAction('Deactivate Code', 'Deactivate promo code "' + c.code + '"?', function() { togglePromoCode(c, action); });
+            } else {
+              togglePromoCode(c, action);
+            }
+          },
+        });
+        actTd.appendChild(toggleBtn);
+        row.appendChild(actTd);
+
+        tbody.appendChild(row);
+      });
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  async function togglePromoCode(code, action) {
+    try {
+      var result = await sb.functions.invoke('admin-manage-promo', {
+        body: JSON.stringify({ action: action, code_id: code.id }),
+      });
+      if (result.error) throw result.error;
+      showToast('Promo code ' + action + 'd', 'success');
+      loadPromoCodes();
+    } catch (err) {
+      showToast('Failed: ' + (err.message || err), 'error');
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     CREATE PROMO CODE MODAL
+     ══════════════════════════════════════════ */
+  function openPromoCreateModal() {
+    var backdrop = $('modal-promo-create');
+    var inner = $('modal-promo-create-inner');
+    clear(inner);
+
+    inner.appendChild(el('h2', { textContent: 'Create Promo Code' }));
+
+    // Code
+    var codeGrp = el('div', { className: 'field-group' });
+    codeGrp.appendChild(el('label', { textContent: 'Code' }));
+    var codeInput = el('input', { type: 'text', id: 'promo-code-input', placeholder: 'SUMMER2026', style: { textTransform: 'uppercase' } });
+    codeGrp.appendChild(codeInput);
+    inner.appendChild(codeGrp);
+
+    // Type
+    var typeGrp = el('div', { className: 'field-group' });
+    typeGrp.appendChild(el('label', { textContent: 'Type' }));
+    var typeSelect = el('select', { id: 'promo-type-select', onChange: updatePromoTypeFields });
+    [
+      { value: 'discount', label: 'Discount' },
+      { value: 'trial_extension', label: 'Trial Extension' },
+      { value: 'plan_unlock', label: 'Plan Unlock' },
+    ].forEach(function(t) {
+      typeSelect.appendChild(el('option', { value: t.value, textContent: t.label }));
+    });
+    typeGrp.appendChild(typeSelect);
+    inner.appendChild(typeGrp);
+
+    // Dynamic fields container
+    var dynContainer = el('div', { id: 'promo-dynamic-fields' });
+    inner.appendChild(dynContainer);
+
+    // Max Uses
+    var maxGrp = el('div', { className: 'field-group' });
+    maxGrp.appendChild(el('label', { textContent: 'Max Uses (blank = unlimited)' }));
+    maxGrp.appendChild(el('input', { type: 'number', id: 'promo-max-uses', min: '1', placeholder: 'Unlimited' }));
+    inner.appendChild(maxGrp);
+
+    // Expires At
+    var expGrp = el('div', { className: 'field-group' });
+    expGrp.appendChild(el('label', { textContent: 'Expires At' }));
+    expGrp.appendChild(el('input', { type: 'date', id: 'promo-expires' }));
+    inner.appendChild(expGrp);
+
+    // Actions
+    var actions = el('div', { className: 'modal-actions' });
+    actions.appendChild(el('button', { className: 'btn btn-outline', textContent: 'Cancel', onClick: function() { backdrop.classList.remove('open'); } }));
+    actions.appendChild(el('button', { className: 'btn btn-accent', textContent: 'Create', onClick: function() { submitPromoCreate(backdrop); } }));
+    inner.appendChild(actions);
+
+    backdrop.classList.add('open');
+    updatePromoTypeFields();
+  }
+
+  function updatePromoTypeFields() {
+    var type = $('promo-type-select').value;
+    var container = $('promo-dynamic-fields');
+    clear(container);
+
+    if (type === 'discount') {
+      var grp = el('div', { className: 'field-group' });
+      grp.appendChild(el('label', { textContent: 'Stripe Coupon ID' }));
+      grp.appendChild(el('input', { type: 'text', id: 'promo-stripe-coupon', placeholder: 'coupon_abc123' }));
+      container.appendChild(grp);
+    } else if (type === 'trial_extension') {
+      var grp2 = el('div', { className: 'field-group' });
+      grp2.appendChild(el('label', { textContent: 'Extra Days' }));
+      grp2.appendChild(el('input', { type: 'number', id: 'promo-extra-days', min: '1', value: '14' }));
+      container.appendChild(grp2);
+    } else if (type === 'plan_unlock') {
+      var planGrp = el('div', { className: 'field-group' });
+      planGrp.appendChild(el('label', { textContent: 'Granted Plan' }));
+      var planSel = el('select', { id: 'promo-granted-plan' });
+      ['starter', 'pro', 'enterprise'].forEach(function(p) {
+        planSel.appendChild(el('option', { value: p, textContent: p.charAt(0).toUpperCase() + p.slice(1) }));
+      });
+      planGrp.appendChild(planSel);
+      container.appendChild(planGrp);
+
+      var moGrp = el('div', { className: 'field-group' });
+      moGrp.appendChild(el('label', { textContent: 'Granted Months' }));
+      moGrp.appendChild(el('input', { type: 'number', id: 'promo-granted-months', min: '1', value: '1' }));
+      container.appendChild(moGrp);
+    }
+  }
+
+  async function submitPromoCreate(backdrop) {
+    var code = $('promo-code-input').value.trim().toUpperCase();
+    var type = $('promo-type-select').value;
+    var maxUses = $('promo-max-uses').value ? parseInt($('promo-max-uses').value) : null;
+    var expiresAt = $('promo-expires').value || null;
+
+    if (!code) {
+      showToast('Please enter a promo code', 'error');
+      return;
+    }
+
+    var payload = {
+      action: 'create',
+      code: code,
+      type: type,
+      max_uses: maxUses,
+      expires_at: expiresAt,
+    };
+
+    if (type === 'discount') {
+      var couponEl = $('promo-stripe-coupon');
+      payload.stripe_coupon_id = couponEl ? couponEl.value.trim() : '';
+    } else if (type === 'trial_extension') {
+      var daysEl = $('promo-extra-days');
+      payload.extra_days = daysEl ? parseInt(daysEl.value) || 14 : 14;
+    } else if (type === 'plan_unlock') {
+      var grantedPlanEl = $('promo-granted-plan');
+      var grantedMonthsEl = $('promo-granted-months');
+      payload.granted_plan = grantedPlanEl ? grantedPlanEl.value : 'starter';
+      payload.granted_months = grantedMonthsEl ? parseInt(grantedMonthsEl.value) || 1 : 1;
+    }
+
+    try {
+      var result = await sb.functions.invoke('admin-manage-promo', {
+        body: JSON.stringify(payload),
+      });
+      if (result.error) throw result.error;
+      showToast('Promo code created', 'success');
+      backdrop.classList.remove('open');
+      loadPromoCodes();
+    } catch (err) {
+      showToast('Failed: ' + (err.message || err), 'error');
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     AUDIT LOG SECTION
+     ══════════════════════════════════════════ */
+  function buildAuditTopBar() {
+    var bar = $('audit-top-bar');
+    clear(bar);
+
+    var actionSelect = el('select', { onChange: function(e) { auditActionFilter = e.target.value; auditOffset = 0; loadAuditLog(true); } });
+    ['all', 'user_update', 'user_delete', 'user_promote', 'password_reset', 'sub_override', 'promo_create', 'promo_toggle'].forEach(function(a) {
+      var label = a === 'all' ? 'All Actions' : a.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      var opt = el('option', { value: a, textContent: label });
+      if (a === auditActionFilter) opt.selected = true;
+      actionSelect.appendChild(opt);
+    });
+    bar.appendChild(actionSelect);
+
+    bar.appendChild(el('input', { type: 'date', id: 'audit-date-from', value: auditDateFrom, placeholder: 'From', onChange: function(e) { auditDateFrom = e.target.value; auditOffset = 0; loadAuditLog(true); } }));
+    bar.appendChild(el('input', { type: 'date', id: 'audit-date-to', value: auditDateTo, placeholder: 'To', onChange: function(e) { auditDateTo = e.target.value; auditOffset = 0; loadAuditLog(true); } }));
+  }
+
+  async function loadAuditLog(reset) {
+    var feed = $('audit-feed');
+    var loadMoreBtn = $('btn-audit-load-more');
+
+    if (reset) {
+      clear(feed);
+      auditOffset = 0;
+    }
+
+    try {
+      var query = sb.from('leod_admin_audit')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(auditOffset, auditOffset + auditLimit - 1);
+
+      if (auditActionFilter !== 'all') {
+        query = query.eq('action', auditActionFilter);
+      }
+      if (auditDateFrom) {
+        query = query.gte('created_at', auditDateFrom + 'T00:00:00Z');
+      }
+      if (auditDateTo) {
+        query = query.lte('created_at', auditDateTo + 'T23:59:59Z');
+      }
+
+      var result = await query;
+      var data = result.data || [];
+
+      data.forEach(function(entry) {
+        var item = el('div', { className: 'audit-entry' });
+
+        var time = el('div', { className: 'audit-time' });
+        time.appendChild(el('div', { textContent: relativeTime(entry.created_at) }));
+        time.appendChild(el('div', { textContent: fmtDate(entry.created_at), style: { fontSize: '0.68rem' } }));
+        item.appendChild(time);
+
+        var body = el('div', { className: 'audit-body' });
+        body.appendChild(el('div', { className: 'audit-admin', textContent: entry.admin_email || 'System' }));
+
+        var actionRow = el('div', { className: 'audit-action' });
+        var actionBadge = el('span', {
+          className: 'badge ' + (entry.action && entry.action.includes('delete') ? 'badge-red' : entry.action && entry.action.includes('promote') ? 'badge-purple' : 'badge-blue'),
+          textContent: entry.action || 'unknown',
+        });
+        actionRow.appendChild(actionBadge);
+        if (entry.target) {
+          actionRow.appendChild(document.createTextNode(' \u2192 '));
+          actionRow.appendChild(el('span', { textContent: entry.target, style: { color: 'var(--text-muted)' } }));
+        }
+        body.appendChild(actionRow);
+
+        if (entry.details) {
+          var detailsText = typeof entry.details === 'object' ? JSON.stringify(entry.details, null, 2) : String(entry.details);
+          var detailsEl = el('div', { className: 'audit-details', textContent: detailsText });
+          var toggleEl = el('span', { className: 'audit-toggle', textContent: 'Show details', onClick: function() {
+            var isOpen = detailsEl.classList.contains('open');
+            detailsEl.classList.toggle('open');
+            toggleEl.textContent = isOpen ? 'Show details' : 'Hide details';
+          }});
+          body.appendChild(toggleEl);
+          body.appendChild(detailsEl);
+        }
+
+        item.appendChild(body);
+        feed.appendChild(item);
+      });
+
+      // Show/hide load more
+      if (data.length >= auditLimit) {
+        loadMoreBtn.style.display = 'block';
+        auditOffset += auditLimit;
+      } else {
+        loadMoreBtn.style.display = 'none';
+      }
+
+      if (reset && data.length === 0) {
+        feed.appendChild(el('div', { className: 'empty-state' }, [
+          el('p', { textContent: 'No audit log entries found' }),
+        ]));
+      }
+    } catch (err) {
+      if (reset) {
+        clear(feed);
+        feed.appendChild(el('div', { className: 'empty-state' }, [
+          el('p', { textContent: 'Failed to load audit log. The leod_admin_audit table may not exist yet.' }),
+        ]));
+      }
+      loadMoreBtn.style.display = 'none';
+    }
+  }
+
+  /* ══════════════════════════════════════════
+     INIT & EVENT LISTENERS
+     ══════════════════════════════════════════ */
+  function init() {
+    applyTheme(getTheme());
+
+    // Login handlers
+    $('btn-login').addEventListener('click', doLogin);
+    $('login-password').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+    $('login-email').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') $('login-password').focus();
+    });
+
+    // Access denied logout
+    $('btn-denied-logout').addEventListener('click', doLogout);
+
+    // Sidebar logout & theme
+    $('btn-logout').addEventListener('click', doLogout);
+    $('btn-theme-toggle').addEventListener('click', toggleTheme);
+
+    // Mobile menu
+    $('mobile-menu-btn').addEventListener('click', openMobileSidebar);
+    $('sidebar-overlay').addEventListener('click', closeMobileSidebar);
+
+    // Detail panel overlay click to close
+    $('detail-overlay').addEventListener('click', closeUserDetail);
+
+    // Confirm modal backdrop click
+    $('modal-confirm').addEventListener('click', function(e) {
+      if (e.target === $('modal-confirm')) $('modal-confirm').classList.remove('open');
+    });
+
+    // Sub override modal backdrop click
+    $('modal-sub-override').addEventListener('click', function(e) {
+      if (e.target === $('modal-sub-override')) $('modal-sub-override').classList.remove('open');
+    });
+
+    // Promo create modal backdrop click
+    $('modal-promo-create').addEventListener('click', function(e) {
+      if (e.target === $('modal-promo-create')) $('modal-promo-create').classList.remove('open');
+    });
+
+    // Audit load more
+    $('btn-audit-load-more').addEventListener('click', function() {
+      loadAuditLog(false);
+    });
+
+    // Check for existing session
+    sb.auth.getSession().then(function(result) {
+      if (result.data && result.data.session) {
+        currentUser = result.data.session.user;
+        checkAdminAndBoot();
+      }
+    });
+  }
+
+  // Run on DOMContentLoaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
