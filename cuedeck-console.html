@@ -5463,9 +5463,11 @@ function showConfirmEmailScreen(email) {
   resendBtn.textContent = 'Resend confirmation email';
   document.getElementById('confirm-email-screen').style.display = 'flex';
 
-  // Start polling for session (every 3s, no hard deadline — keeps polling)
+  // Start polling for session (every 3s, for up to 5 min)
   stopConfirmPolling();
+  const deadline = Date.now() + 5 * 60 * 1000;
   _confirmPollInterval = setInterval(async () => {
+    if (Date.now() > deadline) { stopConfirmPolling(); return; }
     try {
       const { data: { session } } = await sb.auth.getSession();
       if (session) {
@@ -5476,23 +5478,6 @@ function showConfirmEmailScreen(email) {
       }
     } catch (_) { /* ignore transient errors */ }
   }, 3000);
-
-  // Also re-check session when tab regains focus (mobile tabs suspend polling)
-  window.addEventListener('focus', _confirmFocusCheck);
-}
-
-async function _confirmFocusCheck() {
-  if (!_confirmPollInterval) { window.removeEventListener('focus', _confirmFocusCheck); return; }
-  try {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) {
-      stopConfirmPolling();
-      window.removeEventListener('focus', _confirmFocusCheck);
-      S.user = session.user;
-      document.getElementById('confirm-email-screen').style.display = 'none';
-      await boot();
-    }
-  } catch (_) {}
 }
 
 function stopConfirmPolling() {
@@ -5500,7 +5485,6 @@ function stopConfirmPolling() {
     clearInterval(_confirmPollInterval);
     _confirmPollInterval = null;
   }
-  window.removeEventListener('focus', _confirmFocusCheck);
 }
 
 async function handleResendEmail() {
