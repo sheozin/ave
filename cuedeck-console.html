@@ -6893,11 +6893,37 @@ async function boot() {
       S.dbStatus = 'ok'; refreshDiag();
     } catch (e) {
       S.dbStatus = 'error'; refreshDiag();
-      pushLog('ERROR', 'loadEvents failed: ' + (e.message || e.code || JSON.stringify(e)), null);
-      // Treat query errors as empty (RLS may deny access for new users)
-      // rather than showing a misleading "schema not found" message
-      events = [];
-      S.events = events;
+      document.getElementById('sessions-list').innerHTML = `
+        <div id="empty">
+          <div class="ei">⚠️</div>
+          <h2>Database schema not found</h2>
+          <p>The <code>leod_events</code> table doesn't exist yet.<br>
+             Run the DDL from the implementation spec, then refresh.</p>
+          <pre>-- Supabase SQL Editor:
+CREATE TABLE leod_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL,
+  date       DATE NOT NULL,
+  venue      TEXT,
+  timezone   TEXT NOT NULL DEFAULT 'Europe/Warsaw',
+  active     BOOLEAN NOT NULL DEFAULT true,
+  event_start TIME(0) NOT NULL,
+  event_end   TIME(0) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE leod_clock (
+  id          TEXT PRIMARY KEY DEFAULT 'master',
+  server_time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  tick        BIGINT NOT NULL DEFAULT 0
+);
+
+INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
+        </div>`;
+      document.getElementById('event-name').textContent = 'Schema not found — see console';
+      overlay.style.display = 'none';
+      return;
     }
 
     if (!events.length) {
