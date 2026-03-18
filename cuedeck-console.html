@@ -1536,6 +1536,27 @@
       /* SIGNAGE GRID */
       .sp-grid { grid-template-columns: 1fr; }
       .sp-section { padding: 12px; }
+
+      /* EMPTY STATE GUIDE STEPS — stack vertically on mobile */
+      .empty-guide-steps {
+        flex-direction: column !important;
+        gap: 8px !important;
+        align-items: stretch !important;
+      }
+      .empty-guide-steps > div { text-align: left !important; display: flex !important; align-items: center !important; gap: 10px !important; }
+      .empty-guide-steps > div > span { display: none !important; } /* hide arrows */
+      .empty-guide-steps .eg-num { margin: 0 !important; flex-shrink: 0; }
+
+      /* WELCOME MODAL GUIDE CARDS — stack vertically */
+      .wm-guide-row { flex-direction: column !important; gap: 8px !important; }
+      .wm-guide-card { flex: none !important; width: 100% !important; }
+      .wm-guide-arrow { display: none !important; }
+
+      /* PENDING SCREEN ROLES GRID — single column */
+      .ps-roles-grid { grid-template-columns: 1fr !important; }
+
+      /* QUICK REFERENCE TABLE — horizontal scroll */
+      .qr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     }
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
@@ -2286,8 +2307,8 @@
 // ═══════════════════════════════════════════════════
 // APP INFO & CHANGELOG
 // ═══════════════════════════════════════════════════
-const APP_VERSION    = '1.4.0';
-const APP_BUILD_DATE = '2026-03-10';
+const APP_VERSION    = '1.5.0';
+const APP_BUILD_DATE = '2026-03-18';
 const CHANGELOG = [
   { version: '1.4.0', date: '2026-03-10', items: [
     { type: 'added', text: 'Help system: keyboard shortcuts, quick reference, command palette' },
@@ -5724,18 +5745,18 @@ function showWelcomeModal(role) {
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.65;margin-bottom:16px">
         Let's get your first event ready — it only takes 2 minutes.
       </div>
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:18px">
-        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+      <div class="wm-guide-row" style="display:flex;align-items:center;gap:6px;margin-bottom:18px">
+        <div class="wm-guide-card" style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
           <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">①</span>
           <span style="font-size:10px;color:var(--dim)">Create event</span>
         </div>
-        <span style="color:#334155;font-size:12px">→</span>
-        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+        <span class="wm-guide-arrow" style="color:#334155;font-size:12px">→</span>
+        <div class="wm-guide-card" style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
           <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">②</span>
           <span style="font-size:10px;color:var(--dim)">Add sessions</span>
         </div>
-        <span style="color:#334155;font-size:12px">→</span>
-        <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
+        <span class="wm-guide-arrow" style="color:#334155;font-size:12px">→</span>
+        <div class="wm-guide-card" style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
           <span style="font-size:11px;color:var(--blue);font-weight:800;display:block;margin-bottom:3px">③</span>
           <span style="font-size:10px;color:var(--dim)">Go live</span>
         </div>
@@ -6559,6 +6580,8 @@ let _tipIdx = 0;
 let _tipResizeHandler = null;
 
 function showRoleTips() {
+  // Don't show tips when user has no events (empty state) — they're irrelevant
+  if (!S.events || S.events.length === 0) return;
   const uid = S.user?.id || 'anon';
   const role = S.role;
   const key = 'cuedeck_tips_' + uid + '_' + role;
@@ -6905,13 +6928,13 @@ async function boot() {
       const stepsHtml = labels.map((label, i) =>
         `<div style="flex:1;text-align:center;position:relative">
           ${i < 3 ? '<span style="position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--dim);font-size:14px">›</span>' : ''}
-          <div style="width:22px;height:22px;background:#1e3a5f;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--blue);margin:0 auto 5px">${i + 1}</div>
+          <div class="eg-num" style="width:22px;height:22px;background:#1e3a5f;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--blue);margin:0 auto 5px">${i + 1}</div>
           <div style="font-size:10px;color:var(--dim)">${label}</div>
         </div>`).join('');
       const directorCTA = (S.role === 'director') ? `
         <button class="abtn" style="height:auto;padding:12px 24px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;box-shadow:0 4px 16px rgba(59,130,246,.3)"
           onclick="openEvModal('create')">＋ Create Your First Event</button>
-        <div style="display:flex;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">${stepsHtml}</div>` : '';
+        <div class="empty-guide-steps" style="display:flex;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">${stepsHtml}</div>` : '';
       document.getElementById('sessions-list').innerHTML =
         `<div id="empty"><div class="ei">📅</div><h2>No events yet</h2>` +
         `<p>Start by creating your first event, then add your sessions and team.</p>` +
