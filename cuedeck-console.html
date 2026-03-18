@@ -7020,7 +7020,7 @@ async function boot() {
     setTimeout(() => { S.tlBootDone = true; }, 3000);
 
   } catch (e) {
-    if (['pending','suspended','admin','trial_expired','subscription_expired'].includes(e.message)) return;
+    if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
     setStep(`Boot error: ${e.message}`);
     console.error('CueDeck boot failed:', e);
     setTimeout(() => { overlay.style.display = 'none'; }, 3000);
