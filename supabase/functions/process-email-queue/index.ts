@@ -140,8 +140,11 @@ Deno.serve(async (req) => {
       user_id: queueItem.user_id,
       email_type: queueItem.email_type,
       email_address: queueItem.email_address,
+      subject: emailContent.subject,
+      status: 'sent',
       resend_id: result.id,
       sent_at: new Date().toISOString(),
+      metadata: { queue_id: queueItem.id, scheduled_for: queueItem.scheduled_for },
     })
 
     successCount++

@@ -989,7 +989,74 @@
       <div class="table-wrap" id="promo-table-wrap"></div>
     </div>
 
-    <!-- ── AUDIT LOG ── -->
+    <!-- ── EMAILS SECTION ── -->
+    <div class="section" id="section-emails">
+      <h1>Emails</h1>
+      <p class="section-subtitle">All sent emails &amp; delivery status</p>
+
+      <!-- Delivery Stats & Chart -->
+      <div class="top-bar" id="emails-top-bar" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div class="stats-row" id="emails-stats"></div>
+          <!-- Delivery Rate Chart -->
+          <div id="emails-chart-wrap" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">Delivery Rates (Last 7 Days)</div>
+            <div id="emails-delivery-chart" style="display:flex;align-items:flex-end;gap:4px;height:80px"></div>
+            <div id="emails-delivery-legend" style="display:flex;gap:16px;margin-top:8px;font-size:10px;color:var(--dim)"></div>
+          </div>
+        </div>
+        <!-- Bounce/Failure Alerts -->
+        <div id="emails-alerts" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">⚠ Recent Issues</div>
+          <div id="emails-alerts-list" style="max-height:140px;overflow-y:auto;font-size:12px"></div>
+        </div>
+      </div>
+
+      <!-- Filters & Export -->
+      <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+        <select id="emails-type-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+          <option value="">All Types</option>
+          <option value="founder-welcome">Welcome</option>
+          <option value="invoice">Invoice</option>
+          <option value="feature-deep-dive">Feature Deep Dive</option>
+          <option value="social-proof">Social Proof</option>
+          <option value="check-in">Check-in</option>
+        </select>
+        <select id="emails-status-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+          <option value="">All Statuses</option>
+          <option value="sent">Sent</option>
+          <option value="delivered">Delivered</option>
+          <option value="opened">Opened</option>
+          <option value="clicked">Clicked</option>
+          <option value="bounced">Bounced</option>
+          <option value="failed">Failed</option>
+        </select>
+        <input type="text" id="emails-search" placeholder="Search by email..." onkeyup="if(event.key==='Enter')loadEmails(true)" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+        <button onclick="loadEmails(true)" style="background:var(--blue);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer">Search</button>
+        <button onclick="exportEmailsCSV()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
+          <span style="font-size:14px">↓</span> Export CSV
+        </button>
+      </div>
+
+      <!-- Email Table -->
+      <div id="emails-table-wrap" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+        <table class="admin-table" id="emails-table">
+          <thead>
+            <tr>
+              <th>Recipient</th>
+              <th>Type</th>
+              <th>Subject</th>
+              <th>Status</th>
+              <th>Sent At</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="emails-tbody"></tbody>
+        </table>
+      </div>
+      <div id="emails-pagination" style="display:flex;justify-content:center;gap:8px;margin-top:16px"></div>
+    </div>
+
     <div class="section" id="section-audit">
       <h1>Audit Log</h1>
       <p class="section-subtitle">Admin activity history</p>
@@ -1053,6 +1120,10 @@
   const subsPerPage = 20;
   let subsStatusFilter = 'all';
 
+  // Emails state
+  let emailsPage = 1;
+  const emailsPerPage = 30;
+
   // Audit state
   let auditOffset = 0;
   const auditLimit = 50;
@@ -1072,6 +1143,7 @@
     { id: 'dashboard',     icon: '\u25A3', label: 'Dashboard' },
     { id: 'users',         icon: '\u2606', label: 'Users' },
     { id: 'subscriptions', icon: '\u2605', label: 'Subscriptions' },
+    { id: 'emails',        icon: '\u2709', label: 'Emails' },
     { id: 'promo',         icon: '\u2691', label: 'Promo Codes' },
     { id: 'audit',         icon: '\u2630', label: 'Audit Log' },
   ];
@@ -1383,6 +1455,7 @@
     else if (name === 'users') loadUsers();
     else if (name === 'subscriptions') loadSubscriptions();
     else if (name === 'promo') loadPromoCodes();
+    else if (name === 'emails') { emailsPage = 1; loadEmails(true); }
     else if (name === 'audit') { auditOffset = 0; loadAuditLog(true); }
   }
 
@@ -2149,6 +2222,324 @@
     bar.appendChild(el('div', { className: 'spacer' }));
     bar.appendChild(el('button', { className: 'btn-primary', textContent: '+ Create Code', onClick: openPromoCreateModal }));
   }
+
+  /* ══════════════════════════════════════════
+     EMAILS
+     ══════════════════════════════════════════ */
+
+  async function loadEmails(resetPage) {
+    if (resetPage) emailsPage = 1;
+
+    var tbody = $('emails-tbody');
+    var statsEl = $('emails-stats');
+    clear(tbody);
+    tbody.appendChild(el('tr', {}, [
+      el('td', { colSpan: '6', style: { textAlign: 'center', padding: '40px', color: 'var(--dim)' } }, 'Loading emails...')
+    ]));
+
+    var typeFilter = $('emails-type-filter').value;
+    var statusFilter = $('emails-status-filter') ? $('emails-status-filter').value : '';
+    var searchVal = $('emails-search').value.trim();
+
+    try {
+      // Load stats
+      var statsResult = await sb.rpc('admin_get_email_stats');
+      if (statsResult.data) {
+        var stats = statsResult.data;
+        clear(statsEl);
+        var deliveryRate = stats.total_sent > 0 ? Math.round((stats.delivered || 0) / stats.total_sent * 100) : 0;
+        var openRate = stats.delivered > 0 ? Math.round((stats.opened || 0) / stats.delivered * 100) : 0;
+        statsEl.innerHTML =
+          '<div class="stat-box"><div class="stat-value">' + (stats.total_sent || 0) + '</div><div class="stat-label">Total Sent</div></div>' +
+          '<div class="stat-box"><div class="stat-value">' + deliveryRate + '%</div><div class="stat-label">Delivered</div></div>' +
+          '<div class="stat-box"><div class="stat-value">' + openRate + '%</div><div class="stat-label">Open Rate</div></div>' +
+          '<div class="stat-box"><div class="stat-value" style="color:' + (stats.bounced > 0 ? '#f87171' : 'inherit') + '">' + (stats.bounced || 0) + '</div><div class="stat-label">Bounced</div></div>';
+
+        // Render delivery chart
+        renderDeliveryChart(stats);
+      }
+
+      // Load bounce/failure alerts
+      loadEmailAlerts();
+
+      // Load emails
+      var result = await sb.rpc('admin_list_emails', {
+        p_limit: emailsPerPage,
+        p_offset: (emailsPage - 1) * emailsPerPage,
+        p_type: typeFilter || null,
+        p_status: statusFilter || null,
+        p_search: searchVal || null
+      });
+
+      var emails = result.data || [];
+      clear(tbody);
+
+      if (emails.length === 0) {
+        tbody.appendChild(el('tr', {}, [
+          el('td', { colSpan: '6', style: { textAlign: 'center', padding: '40px', color: 'var(--dim)' } }, 'No emails found')
+        ]));
+        return;
+      }
+
+      emails.forEach(function(em) {
+        var statusBadge = getEmailStatusBadge(em.status);
+        var sentAt = em.sent_at ? new Date(em.sent_at).toLocaleString() : '-';
+        var typeLabel = formatEmailType(em.email_type);
+
+        var tr = el('tr', {}, [
+          el('td', {}, [
+            el('div', { style: { fontWeight: '500' } }, em.user_name || em.email_address),
+            el('div', { style: { fontSize: '11px', color: 'var(--dim)' } }, em.email_address)
+          ]),
+          el('td', {}, el('span', {
+            className: 'badge badge-' + em.email_type,
+            style: { fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.12)', color: '#60a5fa' }
+          }, typeLabel)),
+          el('td', { style: { maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, em.subject || '-'),
+          el('td', {}, statusBadge),
+          el('td', { style: { fontSize: '11px', color: 'var(--dim)' } }, sentAt),
+          el('td', {}, em.resend_id ? el('a', {
+            href: 'https://resend.com/emails/' + em.resend_id,
+            target: '_blank',
+            style: { fontSize: '11px', color: 'var(--blue)' }
+          }, 'View in Resend') : '-')
+        ]);
+        tbody.appendChild(tr);
+      });
+
+      // Pagination
+      renderEmailsPagination(emails.length);
+
+    } catch (e) {
+      console.error('Failed to load emails:', e);
+      clear(tbody);
+      tbody.appendChild(el('tr', {}, [
+        el('td', { colSpan: '6', style: { textAlign: 'center', padding: '40px', color: '#f87171' } }, 'Failed to load emails: ' + e.message)
+      ]));
+    }
+  }
+
+  function renderDeliveryChart(stats) {
+    var chartEl = $('emails-delivery-chart');
+    var legendEl = $('emails-delivery-legend');
+    if (!chartEl) return;
+
+    clear(chartEl);
+    clear(legendEl);
+
+    // Simple bar chart showing delivery breakdown
+    var total = stats.total_sent || 1;
+    var delivered = stats.delivered || 0;
+    var opened = stats.opened || 0;
+    var bounced = stats.bounced || 0;
+    var pending = total - delivered - bounced;
+    if (pending < 0) pending = 0;
+
+    var data = [
+      { label: 'Delivered', value: delivered, color: '#4ade80' },
+      { label: 'Opened', value: opened, color: '#22c55e' },
+      { label: 'Bounced', value: bounced, color: '#f87171' },
+      { label: 'Pending', value: pending, color: '#60a5fa' }
+    ];
+
+    var maxVal = Math.max.apply(null, data.map(function(d) { return d.value; })) || 1;
+
+    data.forEach(function(d) {
+      var barHeight = Math.max(4, (d.value / maxVal) * 70);
+      var bar = el('div', {
+        style: {
+          flex: '1',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '4px'
+        }
+      }, [
+        el('div', {
+          style: {
+            width: '100%',
+            maxWidth: '40px',
+            height: barHeight + 'px',
+            background: d.color,
+            borderRadius: '4px 4px 0 0',
+            transition: 'height 0.3s'
+          },
+          title: d.label + ': ' + d.value
+        }),
+        el('div', { style: { fontSize: '10px', color: 'var(--dim)' } }, d.value)
+      ]);
+      chartEl.appendChild(bar);
+    });
+
+    // Legend
+    data.forEach(function(d) {
+      legendEl.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
+        el('div', { style: { width: '8px', height: '8px', borderRadius: '2px', background: d.color } }),
+        el('span', {}, d.label)
+      ]));
+    });
+  }
+
+  async function loadEmailAlerts() {
+    var alertsEl = $('emails-alerts-list');
+    if (!alertsEl) return;
+
+    clear(alertsEl);
+    alertsEl.appendChild(el('div', { style: { color: 'var(--dim)' } }, 'Loading...'));
+
+    try {
+      // Load recent bounced/failed emails
+      var result = await sb.rpc('admin_list_emails', {
+        p_limit: 10,
+        p_offset: 0,
+        p_status: 'bounced'
+      });
+
+      var alerts = result.data || [];
+      clear(alertsEl);
+
+      if (alerts.length === 0) {
+        alertsEl.appendChild(el('div', { style: { color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' } }, [
+          el('span', {}, '✓'),
+          el('span', {}, 'No bounces or failures')
+        ]));
+        return;
+      }
+
+      alerts.forEach(function(em) {
+        var timeAgo = formatTimeAgo(new Date(em.sent_at));
+        alertsEl.appendChild(el('div', {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '6px 0',
+            borderBottom: '1px solid var(--border)'
+          }
+        }, [
+          el('div', {}, [
+            el('div', { style: { color: '#f87171', fontWeight: '500' } }, em.email_address),
+            el('div', { style: { fontSize: '10px', color: 'var(--dim)' } }, formatEmailType(em.email_type))
+          ]),
+          el('div', { style: { fontSize: '10px', color: 'var(--dim)' } }, timeAgo)
+        ]));
+      });
+    } catch (e) {
+      clear(alertsEl);
+      alertsEl.appendChild(el('div', { style: { color: '#f87171' } }, 'Failed to load alerts'));
+    }
+  }
+
+  function formatTimeAgo(date) {
+    var now = new Date();
+    var diff = Math.floor((now - date) / 1000);
+    if (diff < 60) return diff + 's ago';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return Math.floor(diff / 86400) + 'd ago';
+  }
+
+  async function exportEmailsCSV() {
+    showToast('Exporting emails...', 'info');
+
+    try {
+      // Fetch all emails (up to 1000 for export)
+      var result = await sb.rpc('admin_list_emails', {
+        p_limit: 1000,
+        p_offset: 0,
+        p_type: $('emails-type-filter').value || null,
+        p_status: $('emails-status-filter') ? $('emails-status-filter').value || null : null,
+        p_search: $('emails-search').value.trim() || null
+      });
+
+      var emails = result.data || [];
+      if (emails.length === 0) {
+        showToast('No emails to export', 'warn');
+        return;
+      }
+
+      // Build CSV
+      var headers = ['Email', 'Name', 'Type', 'Subject', 'Status', 'Sent At', 'Opened At', 'Resend ID'];
+      var rows = [headers.join(',')];
+
+      emails.forEach(function(em) {
+        var row = [
+          '"' + (em.email_address || '').replace(/"/g, '""') + '"',
+          '"' + (em.user_name || '').replace(/"/g, '""') + '"',
+          '"' + (em.email_type || '') + '"',
+          '"' + (em.subject || '').replace(/"/g, '""') + '"',
+          '"' + (em.status || 'sent') + '"',
+          '"' + (em.sent_at || '') + '"',
+          '"' + (em.opened_at || '') + '"',
+          '"' + (em.resend_id || '') + '"'
+        ];
+        rows.push(row.join(','));
+      });
+
+      var csv = rows.join('\n');
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'cuedeck-emails-' + new Date().toISOString().slice(0, 10) + '.csv';
+      link.click();
+
+      showToast('Exported ' + emails.length + ' emails', 'success');
+    } catch (e) {
+      console.error('Export failed:', e);
+      showToast('Export failed: ' + e.message, 'error');
+    }
+  }
+
+  function getEmailStatusBadge(status) {
+    var colors = {
+      sent: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa' },
+      delivered: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80' },
+      opened: { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' },
+      clicked: { bg: 'rgba(139,92,246,0.12)', color: '#a78bfa' },
+      bounced: { bg: 'rgba(239,68,68,0.12)', color: '#f87171' },
+      failed: { bg: 'rgba(239,68,68,0.15)', color: '#ef4444' }
+    };
+    var c = colors[status] || colors.sent;
+    return el('span', {
+      style: { fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: c.bg, color: c.color, fontWeight: '500' }
+    }, status || 'sent');
+  }
+
+  function formatEmailType(type) {
+    var labels = {
+      'founder-welcome': 'Welcome',
+      'invoice': 'Invoice',
+      'feature-deep-dive': 'Features',
+      'social-proof': 'Social Proof',
+      'check-in': 'Check-in'
+    };
+    return labels[type] || type;
+  }
+
+  function renderEmailsPagination(count) {
+    var pag = $('emails-pagination');
+    clear(pag);
+
+    pag.appendChild(el('button', {
+      textContent: '\u2190 Prev',
+      disabled: emailsPage <= 1,
+      style: { padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', cursor: emailsPage <= 1 ? 'default' : 'pointer', opacity: emailsPage <= 1 ? '0.5' : '1' },
+      onClick: function() { if (emailsPage > 1) { emailsPage--; loadEmails(); } }
+    }));
+
+    pag.appendChild(el('span', { style: { padding: '6px 12px', color: 'var(--dim)', fontSize: '12px' } }, 'Page ' + emailsPage));
+
+    pag.appendChild(el('button', {
+      textContent: 'Next \u2192',
+      disabled: count < emailsPerPage,
+      style: { padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text)', cursor: count < emailsPerPage ? 'default' : 'pointer', opacity: count < emailsPerPage ? '0.5' : '1' },
+      onClick: function() { if (count >= emailsPerPage) { emailsPage++; loadEmails(); } }
+    }));
+  }
+
+  /* ══════════════════════════════════════════
+     PROMO CODES
+     ══════════════════════════════════════════ */
 
   async function loadPromoCodes() {
     var wrap = $('promo-table-wrap');

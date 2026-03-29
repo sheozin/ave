@@ -97,8 +97,20 @@ Deno.serve(async (req) => {
     user_id: userId,
     email_type: 'founder-welcome',
     email_address: email,
+    subject: emailContent.subject,
+    status: 'sent',
     resend_id: result.id,
     sent_at: new Date().toISOString(),
+    metadata: { name: name || null },
+  })
+
+  // ── Log activity ──────────────────────────────────────────────────
+  await sb.rpc('log_activity', {
+    p_user_id: userId,
+    p_action: 'welcome_email_sent',
+    p_category: 'email',
+    p_description: `Welcome email sent to ${email}`,
+    p_metadata: { resend_id: result.id },
   })
 
   // ── Schedule follow-up emails ───────────────────────────────────

@@ -4,16 +4,15 @@
 export const BRAND = {
   name: 'CueDeck',
   tagline: 'Run every session. Own every moment.',
-  color: '#4A8EFF',
+  color: '#2563EB',
   darkColor: '#1a1a2e',
   logo: 'https://www.cuedeck.io/logo.png',
   website: 'https://www.cuedeck.io',
   app: 'https://app.cuedeck.io',
   founder: {
-    name: 'Sheriff',
+    name: 'Sherif',
     title: 'Founder & CEO',
-    email: 'sheriff@cuedeck.io',
-    photo: 'https://www.cuedeck.io/team/sheriff.jpg'
+    email: 'sherif@cuedeck.io'
   }
 }
 
@@ -60,9 +59,9 @@ const emailWrapper = (content: string, preheader = '') => `
   <div class="preheader">${preheader}</div>
   <div class="wrapper">
     <div class="container">
-      <div class="header">
-        <a href="${BRAND.website}" class="logo">${BRAND.name}</a>
-        <div class="tagline">${BRAND.tagline}</div>
+      <div class="header" style="background-color: #1a1a2e; padding: 32px; text-align: center;">
+        <a href="${BRAND.website}" class="logo" style="color: #2563EB !important; font-size: 28px; font-weight: 700; text-decoration: none;">${BRAND.name}</a>
+        <div class="tagline" style="color: rgba(255,255,255,0.7); font-size: 12px; margin-top: 8px; letter-spacing: 1px;">${BRAND.tagline}</div>
       </div>
       ${content}
       <div class="footer">
@@ -118,7 +117,6 @@ export function founderWelcomeEmail(user: UserData) {
       <p>Reply to this email anytime – it comes directly to me, and I read every single one. I'd love to hear what brought you to CueDeck.</p>
 
       <div class="signature">
-        <img src="${BRAND.founder.photo}" alt="${BRAND.founder.name}" class="signature-photo" onerror="this.style.display='none'">
         <p class="signature-name">${BRAND.founder.name}</p>
         <p class="signature-title">${BRAND.founder.title}, CueDeck</p>
       </div>
