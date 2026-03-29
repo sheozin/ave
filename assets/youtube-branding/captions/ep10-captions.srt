@@ -1,0 +1,591 @@
+1
+00:00:05,000 --> 00:00:08,000
+There's a problem that every conference speaker faces:
+
+2
+00:00:08,300 --> 00:00:12,050
+how do I know how much time I have left
+
+3
+00:00:12,350 --> 00:00:14,350
+without staring at the director?
+
+4
+00:00:14,650 --> 00:00:17,275
+The classic solution is a floor clock,
+
+5
+00:00:17,575 --> 00:00:21,325
+or a hand signal from the back of the room.
+
+6
+00:00:21,625 --> 00:00:24,250
+Both work — but neither is elegant,
+
+7
+00:00:24,550 --> 00:00:28,300
+and neither is visible if the speaker is moving around
+
+8
+00:00:28,600 --> 00:00:30,600
+or focused on a slide.
+
+9
+00:00:30,900 --> 00:00:33,150
+CueDeck's Stage Timer solves this cleanly.
+
+10
+00:00:33,450 --> 00:00:35,700
+It's a full-screen, colour-coded countdown that
+
+11
+00:00:36,000 --> 00:00:39,375
+you put on any screen facing the speaker —
+
+12
+00:00:39,675 --> 00:00:43,425
+a tablet on the lectern, a monitor at the back
+
+13
+00:00:43,725 --> 00:00:47,850
+of the stage, a TV at the side of the room.
+
+14
+00:00:48,150 --> 00:00:50,400
+The speaker glances at it and
+
+15
+00:00:50,700 --> 00:00:52,950
+instantly knows exactly where they stand.
+
+16
+00:00:53,250 --> 00:00:55,250
+No director intervention required.
+
+17
+00:00:55,550 --> 00:01:00,425
+Let's set one up and walk through every state it can be in.
+
+18
+00:01:00,725 --> 00:01:04,850
+The Stage Timer is a display mode in CueDeck's signage system.
+
+19
+00:01:05,150 --> 00:01:08,900
+That means you create it exactly like any other display:
+
+20
+00:01:09,200 --> 00:01:13,325
+open the Signage panel in the director console, click Add Display.
+
+21
+00:01:13,625 --> 00:01:18,125
+Give it a name — something like 'Stage Timer — Main Hall'.
+
+22
+00:01:18,425 --> 00:01:20,425
+Set the zone to 'stage'.
+
+23
+00:01:20,725 --> 00:01:24,475
+Set orientation to portrait if you're using a tablet or
+
+24
+00:01:24,775 --> 00:01:28,525
+a vertical monitor — the layout is designed to work
+
+25
+00:01:28,825 --> 00:01:32,575
+well in both orientations, but portrait is particularly good for
+
+26
+00:01:32,875 --> 00:01:35,875
+a tablet on a stand at the lectern.
+
+27
+00:01:36,175 --> 00:01:38,175
+For content mode, select 'stage-timer'.
+
+28
+00:01:38,475 --> 00:01:40,475
+Hit Save.
+
+29
+00:01:40,775 --> 00:01:42,775
+The display card appears.
+
+30
+00:01:43,075 --> 00:01:45,700
+Now click Open to get the URL.
+
+31
+00:01:45,1000 --> 00:01:47,1000
+There it is.
+
+32
+00:01:48,300 --> 00:01:50,300
+A large, full-screen timer.
+
+33
+00:01:50,600 --> 00:01:54,350
+Right now it's showing the standby state because we haven't
+
+34
+00:01:54,650 --> 00:01:56,650
+started a session yet.
+
+35
+00:01:56,950 --> 00:01:59,950
+Let's go through each state one by one.
+
+36
+00:02:00,250 --> 00:02:02,875
+When no session is currently LIVE or
+
+37
+00:02:03,175 --> 00:02:06,550
+on HOLD, the stage timer shows the standby state.
+
+38
+00:02:06,850 --> 00:02:09,475
+If there's a session coming up —
+
+39
+00:02:09,775 --> 00:02:12,400
+in READY, CALLING, or PLANNED state —
+
+40
+00:02:12,700 --> 00:02:16,075
+the display shows 'NEXT UP IN' at the top,
+
+41
+00:02:16,375 --> 00:02:20,125
+a large countdown to that session's scheduled start time in
+
+42
+00:02:20,425 --> 00:02:23,050
+the centre, and the session title and
+
+43
+00:02:23,350 --> 00:02:25,350
+speaker name at the bottom.
+
+44
+00:02:25,650 --> 00:02:29,400
+This is what the speaker sees as they're preparing backstage
+
+45
+00:02:29,700 --> 00:02:31,700
+or walking to the lectern.
+
+46
+00:02:32,000 --> 00:02:35,750
+They can see exactly how many minutes until their session
+
+47
+00:02:36,050 --> 00:02:39,800
+begins, and confirm they're looking at the right session title.
+
+48
+00:02:40,100 --> 00:02:43,850
+The moment a director clicks Go Live in the production
+
+49
+00:02:44,150 --> 00:02:46,400
+console, the stage timer updates automatically.
+
+50
+00:02:46,700 --> 00:02:50,450
+Supabase pushes the state change via its realtime channel and
+
+51
+00:02:50,750 --> 00:02:53,000
+the display re-renders within a second.
+
+52
+00:02:53,300 --> 00:02:56,300
+The green state: clean, calm, plenty of time.
+
+53
+00:02:56,600 --> 00:02:59,600
+The status badge at the top reads LIVE.
+
+54
+00:02:59,900 --> 00:03:02,900
+The timer in the centre is enormous —
+
+55
+00:03:03,200 --> 00:03:06,950
+we're talking the size that's readable from across a room.
+
+56
+00:03:07,250 --> 00:03:09,500
+Below it, a label reading 'REMAINING'.
+
+57
+00:03:09,800 --> 00:03:13,175
+Underneath the timer, the session title and speaker name.
+
+58
+00:03:13,475 --> 00:03:17,225
+And at the very bottom, a small 'NEXT:' line showing
+
+59
+00:03:17,525 --> 00:03:21,275
+the title of the next session in the programme —
+
+60
+00:03:21,575 --> 00:03:24,200
+so the speaker knows what's following them.
+
+61
+00:03:24,500 --> 00:03:28,250
+There's also a progress bar running across the width of
+
+62
+00:03:28,550 --> 00:03:33,425
+the screen, filling from left to right as the session time is consumed.
+
+63
+00:03:33,725 --> 00:03:35,975
+It's a visual secondary indicator —
+
+64
+00:03:36,275 --> 00:03:38,525
+useful for peripheral awareness even when
+
+65
+00:03:38,825 --> 00:03:42,575
+the number itself is hard to read at a distance.
+
+66
+00:03:42,875 --> 00:03:46,625
+At five minutes remaining, the timer colour shifts to amber.
+
+67
+00:03:46,925 --> 00:03:50,300
+No animation, no flash — a clean, smooth transition.
+
+68
+00:03:50,600 --> 00:03:54,725
+The label below the timer changes from 'REMAINING' to 'WRAPPING UP'.
+
+69
+00:03:55,025 --> 00:03:58,025
+The progress bar also turns amber to match.
+
+70
+00:03:58,325 --> 00:04:03,200
+This is the speaker's cue to start bringing their talk to a conclusion.
+
+71
+00:04:03,500 --> 00:04:06,500
+They don't need eye contact with the director,
+
+72
+00:04:06,800 --> 00:04:09,425
+they don't need a hand signal —
+
+73
+00:04:09,725 --> 00:04:11,725
+the screen is telling them.
+
+74
+00:04:12,025 --> 00:04:15,025
+At two minutes remaining, the timer turns red.
+
+75
+00:04:15,325 --> 00:04:17,325
+The label becomes 'ENDING NOW'.
+
+76
+00:04:17,625 --> 00:04:19,875
+This is the critical threshold —
+
+77
+00:04:20,175 --> 00:04:23,550
+the speaker has ninety seconds to wrap up and
+
+78
+00:04:23,850 --> 00:04:25,850
+hand back to the stage.
+
+79
+00:04:26,150 --> 00:04:28,775
+The red state is hard to ignore.
+
+80
+00:04:29,075 --> 00:04:33,200
+Even in a bright room, a red full-screen display gets attention.
+
+81
+00:04:33,500 --> 00:04:37,250
+The progress bar is now nearly full and also red.
+
+82
+00:04:37,550 --> 00:04:42,050
+When the session runs past its scheduled end time, the timer flips.
+
+83
+00:04:42,350 --> 00:04:45,725
+The status badge at the top now reads 'OVERTIME'.
+
+84
+00:04:46,025 --> 00:04:48,275
+The timer stops counting down and
+
+85
+00:04:48,575 --> 00:04:52,325
+starts counting up — showing a plus sign followed by
+
+86
+00:04:52,625 --> 00:04:55,625
+the number of minutes and seconds over time.
+
+87
+00:04:55,925 --> 00:04:57,925
+And the entire timer flashes.
+
+88
+00:04:58,225 --> 00:05:00,225
+Not subtle.
+
+89
+00:05:00,525 --> 00:05:05,025
+This is intentional — a speaker in OVERRUN needs an unmistakable signal.
+
+90
+00:05:05,325 --> 00:05:09,075
+The director in the production console sees the same OVERRUN
+
+91
+00:05:09,375 --> 00:05:11,625
+status on the session card, and
+
+92
+00:05:11,925 --> 00:05:14,550
+can choose to nudge the session —
+
+93
+00:05:14,850 --> 00:05:17,850
+extending its end time by one minute —
+
+94
+00:05:18,150 --> 00:05:21,525
+if they decide to give the speaker more room.
+
+95
+00:05:21,825 --> 00:05:24,825
+When a nudge is applied from the console,
+
+96
+00:05:25,125 --> 00:05:28,500
+the stage timer display picks it up immediately and
+
+97
+00:05:28,800 --> 00:05:31,425
+the countdown resumes from the extended time.
+
+98
+00:05:31,725 --> 00:05:33,975
+HOLD is the paused state —
+
+99
+00:05:34,275 --> 00:05:38,025
+used when AV needs to stop the session clock temporarily.
+
+100
+00:05:38,325 --> 00:05:42,450
+Maybe there's a technical problem, a fire alarm, an unexpected interruption.
+
+101
+00:05:42,750 --> 00:05:46,500
+When a session goes on HOLD in the production console,
+
+102
+00:05:46,800 --> 00:05:48,800
+the stage timer freezes.
+
+103
+00:05:49,100 --> 00:05:52,850
+The timer stops counting — it holds the exact remaining
+
+104
+00:05:53,150 --> 00:05:55,775
+time at the moment HOLD was triggered.
+
+105
+00:05:56,075 --> 00:05:58,075
+The colour shifts to orange.
+
+106
+00:05:58,375 --> 00:06:00,625
+The status badge changes to 'HOLD'.
+
+107
+00:06:00,925 --> 00:06:03,550
+The label below the timer reads 'PAUSED'.
+
+108
+00:06:03,850 --> 00:06:07,225
+This is important: the timer is frozen, not counting.
+
+109
+00:06:07,525 --> 00:06:11,650
+The speaker and the director both see the same frozen number.
+
+110
+00:06:11,950 --> 00:06:14,200
+When the session resumes — when
+
+111
+00:06:14,500 --> 00:06:17,125
+AV transitions it back to LIVE —
+
+112
+00:06:17,425 --> 00:06:20,800
+the countdown picks up from exactly where it stopped.
+
+113
+00:06:21,100 --> 00:06:25,600
+Time that was on hold doesn't count against the speaker's remaining time.
+
+114
+00:06:25,900 --> 00:06:29,650
+The Stage Timer is designed to work in portrait orientation
+
+115
+00:06:29,950 --> 00:06:31,950
+as well as landscape.
+
+116
+00:06:32,250 --> 00:06:36,000
+Portrait is ideal for a tablet on a lectern stand
+
+117
+00:06:36,300 --> 00:06:40,050
+— the long axis of the screen means the timer
+
+118
+00:06:40,350 --> 00:06:43,725
+can be even larger, and the session title and
+
+119
+00:06:44,025 --> 00:06:46,650
+next session footer have more vertical space.
+
+120
+00:06:46,950 --> 00:06:50,325
+To use portrait, just set orientation to portrait when
+
+121
+00:06:50,625 --> 00:06:54,375
+you create or edit the display in the signage panel.
+
+122
+00:06:54,675 --> 00:06:57,300
+The display page adapts its layout automatically.
+
+123
+00:06:57,600 --> 00:07:00,225
+In practice: buy a cheap tablet mount,
+
+124
+00:07:00,525 --> 00:07:04,275
+prop it on the lectern, open the display URL in
+
+125
+00:07:04,575 --> 00:07:06,825
+full screen, lock the screen orientation.
+
+126
+00:07:07,125 --> 00:07:09,125
+That's your speaker timer.
+
+127
+00:07:09,425 --> 00:07:12,425
+No hardware, no timecode, no dedicated timer device.
+
+128
+00:07:12,725 --> 00:07:15,350
+One quick note on access: directors and
+
+129
+00:07:15,650 --> 00:07:19,400
+stage managers can open the Stage Timer display directly from
+
+130
+00:07:19,700 --> 00:07:22,700
+the context panel in the production console —
+
+131
+00:07:23,000 --> 00:07:26,375
+there's a 'STAGE TIMER' button in the Monitor section,
+
+132
+00:07:26,675 --> 00:07:29,300
+right next to the Stage Monitor button.
+
+133
+00:07:29,600 --> 00:07:34,475
+Clicking it opens the configured Stage Timer display URL in a new tab.
+
+134
+00:07:34,775 --> 00:07:38,525
+If no Stage Timer display has been set up yet,
+
+135
+00:07:38,825 --> 00:07:41,450
+CueDeck will show a toast notification and
+
+136
+00:07:41,750 --> 00:07:45,500
+scroll the signage panel into view so you can create
+
+137
+00:07:45,800 --> 00:07:47,800
+one on the spot.
+
+138
+00:07:48,100 --> 00:07:51,475
+The Stage Timer is a simple concept executed well.
+
+139
+00:07:51,775 --> 00:07:55,150
+One URL, open on any screen facing the stage,
+
+140
+00:07:55,450 --> 00:07:59,950
+and your speakers are self-managing their own time with zero director overhead.
+
+141
+00:08:00,250 --> 00:08:04,375
+Set it up once, and it runs for the entire event.
+
+142
+00:08:04,675 --> 00:08:07,675
+Every session transition, every delay, every HOLD —
+
+143
+00:08:07,975 --> 00:08:09,975
+it all reflects automatically.
+
+144
+00:08:10,275 --> 00:08:12,275
+That wraps up this episode.
+
+145
+00:08:12,575 --> 00:08:16,325
+In the next one we're going into the AI agent
+
+146
+00:08:16,625 --> 00:08:19,625
+modules — the Incident Advisor, the Cue Engine,
+
+147
+00:08:19,925 --> 00:08:21,925
+and the Post-Event Report Generator.
+
+148
+00:08:22,225 --> 00:08:24,225
+See you there.

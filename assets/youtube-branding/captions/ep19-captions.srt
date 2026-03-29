@@ -1,0 +1,483 @@
+1
+00:00:05,000 --> 00:00:08,000
+CueDeck has a free plan, a Pro plan,
+
+2
+00:00:08,300 --> 00:00:10,300
+and an Enterprise option.
+
+3
+00:00:10,600 --> 00:00:13,225
+It also has something a bit unusual:
+
+4
+00:00:13,525 --> 00:00:17,275
+a per-event credit system for production teams who run events
+
+5
+00:00:17,575 --> 00:00:19,575
+occasionally rather than continuously.
+
+6
+00:00:19,875 --> 00:00:23,625
+In this episode I'll walk through all four options —
+
+7
+00:00:23,925 --> 00:00:26,550
+what you get, what the limits are,
+
+8
+00:00:26,850 --> 00:00:29,100
+when each one makes sense —
+
+9
+00:00:29,400 --> 00:00:33,150
+and I'll show you where to find your current usage
+
+10
+00:00:33,450 --> 00:00:36,450
+and how to upgrade directly from the console.
+
+11
+00:00:36,750 --> 00:00:40,125
+There are three subscription plans and one credit option.
+
+12
+00:00:40,425 --> 00:00:43,800
+Free gives you one active event at a time,
+
+13
+00:00:44,100 --> 00:00:46,725
+up to five operators, two signage displays.
+
+14
+00:00:47,025 --> 00:00:49,275
+No AI features, no post-event reports.
+
+15
+00:00:49,575 --> 00:00:52,575
+It's enough to run your first event and
+
+16
+00:00:52,875 --> 00:00:55,125
+evaluate whether CueDeck fits your workflow.
+
+17
+00:00:55,425 --> 00:00:58,050
+No credit card required to sign up.
+
+18
+00:00:58,350 --> 00:01:00,350
+Pro is €79 per month.
+
+19
+00:01:00,650 --> 00:01:02,900
+Unlimited events, up to twenty operators,
+
+20
+00:01:03,200 --> 00:01:06,200
+unlimited signage displays, full AI agent access —
+
+21
+00:01:06,500 --> 00:01:09,125
+Incident Advisor, Cue Engine, Report Generator —
+
+22
+00:01:09,425 --> 00:01:11,425
+and post-event report exports.
+
+23
+00:01:11,725 --> 00:01:15,100
+This is the plan for teams running regular events:
+
+24
+00:01:15,400 --> 00:01:17,400
+conferences, summits, roadshows, anything recurring.
+
+25
+00:01:17,700 --> 00:01:19,700
+Enterprise is custom pricing.
+
+26
+00:01:19,1000 --> 00:01:22,250
+Unlimited operators, dedicated support, custom onboarding,
+
+27
+00:01:22,550 --> 00:01:24,550
+SLA agreements, and volume invoicing.
+
+28
+00:01:24,850 --> 00:01:28,600
+If you're running large-scale events with 50-person production crews or
+
+29
+00:01:28,900 --> 00:01:31,525
+you need a contract and procurement process,
+
+30
+00:01:31,825 --> 00:01:33,825
+Enterprise is the path.
+
+31
+00:01:34,125 --> 00:01:36,125
+And then there's Per-Event credit.
+
+32
+00:01:36,425 --> 00:01:40,175
+This is for the production professional who runs two or
+
+33
+00:01:40,475 --> 00:01:43,475
+three events a year — maybe a freelancer,
+
+34
+00:01:43,775 --> 00:01:46,775
+maybe a team that handles occasional corporate events.
+
+35
+00:01:47,075 --> 00:01:49,325
+You buy a single event credit,
+
+36
+00:01:49,625 --> 00:01:52,250
+it unlocks Pro features for one event,
+
+37
+00:01:52,550 --> 00:01:55,925
+and when that event ends the credit is consumed.
+
+38
+00:01:56,225 --> 00:01:58,225
+No monthly commitment.
+
+39
+00:01:58,525 --> 00:02:02,275
+Your current plan status is always one click away —
+
+40
+00:02:02,575 --> 00:02:04,575
+in the user profile panel.
+
+41
+00:02:04,875 --> 00:02:07,500
+Click your name chip in the header.
+
+42
+00:02:07,800 --> 00:02:10,050
+At the top of the panel:
+
+43
+00:02:10,350 --> 00:02:13,350
+your name, your role, and a plan badge.
+
+44
+00:02:13,650 --> 00:02:17,025
+If you're on Free it shows FREE in grey.
+
+45
+00:02:17,325 --> 00:02:19,325
+Pro shows PRO in blue.
+
+46
+00:02:19,625 --> 00:02:21,625
+Enterprise shows ENTERPRISE in purple.
+
+47
+00:02:21,925 --> 00:02:23,925
+Below that, usage bars.
+
+48
+00:02:24,225 --> 00:02:27,975
+If you're on the Free plan you can see exactly
+
+49
+00:02:28,275 --> 00:02:32,025
+how many events you're using out of your one allowed.
+
+50
+00:02:32,325 --> 00:02:36,075
+If you're on Pro the bars show operator count and
+
+51
+00:02:36,375 --> 00:02:38,375
+display count versus your limits.
+
+52
+00:02:38,675 --> 00:02:40,925
+These update in real time —
+
+53
+00:02:41,225 --> 00:02:44,225
+as soon as you create an event or
+
+54
+00:02:44,525 --> 00:02:46,775
+invite an operator, the bar adjusts.
+
+55
+00:02:47,075 --> 00:02:50,825
+This is useful not just for tracking your own usage
+
+56
+00:02:51,125 --> 00:02:54,500
+but for explaining your limits to a client or
+
+57
+00:02:54,800 --> 00:02:57,050
+a team member: 'we're on Free,
+
+58
+00:02:57,350 --> 00:03:01,100
+we have one event — to run the second event
+
+59
+00:03:01,400 --> 00:03:03,400
+we need to upgrade.'
+
+60
+00:03:03,700 --> 00:03:08,200
+The Billing button inside the profile panel launches the Stripe checkout directly.
+
+61
+00:03:08,500 --> 00:03:11,500
+CueDeck uses Stripe for all payment processing —
+
+62
+00:03:11,800 --> 00:03:15,550
+it's the same payment infrastructure used by most major SaaS
+
+63
+00:03:15,850 --> 00:03:19,225
+products, so your card details are handled by Stripe,
+
+64
+00:03:19,525 --> 00:03:21,525
+not stored by CueDeck.
+
+65
+00:03:21,825 --> 00:03:25,200
+On the checkout screen you'll see the plan options:
+
+66
+00:03:25,500 --> 00:03:28,125
+Pro at €79 per month billed monthly,
+
+67
+00:03:28,425 --> 00:03:32,925
+and Per-Event credit at the current per-event rate for a single-use unlock.
+
+68
+00:03:33,225 --> 00:03:36,600
+Select your plan, enter your card details, and confirm.
+
+69
+00:03:36,900 --> 00:03:39,150
+The upgrade is applied immediately —
+
+70
+00:03:39,450 --> 00:03:42,450
+your plan badge in the profile panel updates,
+
+71
+00:03:42,750 --> 00:03:47,250
+the usage limits change, and AI features unlock without a page refresh.
+
+72
+00:03:47,550 --> 00:03:50,550
+CueDeck also supports VAT invoicing for European businesses.
+
+73
+00:03:50,850 --> 00:03:53,850
+The checkout asks for your billing address and
+
+74
+00:03:54,150 --> 00:03:57,900
+VAT number if applicable — invoices with proper VAT line
+
+75
+00:03:58,200 --> 00:04:00,450
+items are generated automatically by Stripe.
+
+76
+00:04:00,750 --> 00:04:03,000
+Once you're on a paid plan,
+
+77
+00:04:03,300 --> 00:04:07,050
+the Manage Subscription link in the profile panel takes you
+
+78
+00:04:07,350 --> 00:04:09,350
+to the Stripe customer portal.
+
+79
+00:04:09,650 --> 00:04:12,650
+From there you can change your payment method,
+
+80
+00:04:12,950 --> 00:04:16,325
+update your billing address, download past invoices as PDFs,
+
+81
+00:04:16,625 --> 00:04:18,625
+or cancel your subscription.
+
+82
+00:04:18,925 --> 00:04:22,675
+Invoice history is important for production companies billing clients —
+
+83
+00:04:22,975 --> 00:04:26,725
+every monthly charge generates a proper Stripe invoice with a
+
+84
+00:04:27,025 --> 00:04:30,400
+unique number, your billing address, and the line item.
+
+85
+00:04:30,700 --> 00:04:34,075
+Download it, forward it to your accounts department, done.
+
+86
+00:04:34,375 --> 00:04:38,875
+The practical decision tree: If you're just evaluating CueDeck — start Free.
+
+87
+00:04:39,175 --> 00:04:41,800
+Sign up, create your event, run it,
+
+88
+00:04:42,100 --> 00:04:44,100
+see if the workflow fits.
+
+89
+00:04:44,400 --> 00:04:46,400
+No cost, no commitment.
+
+90
+00:04:46,700 --> 00:04:48,950
+If you run events regularly —
+
+91
+00:04:49,250 --> 00:04:53,000
+monthly or more often, or multiple events per year with
+
+92
+00:04:53,300 --> 00:04:57,425
+large crews — Pro at €79 a month is straightforward value.
+
+93
+00:04:57,725 --> 00:05:01,475
+The AI agents alone justify it on any professional production.
+
+94
+00:05:01,775 --> 00:05:05,525
+If you run one or two events a year and
+
+95
+00:05:05,825 --> 00:05:08,075
+don't want a monthly subscription —
+
+96
+00:05:08,375 --> 00:05:10,625
+Per-Event credit is built for you.
+
+97
+00:05:10,925 --> 00:05:13,175
+Buy it when you need it,
+
+98
+00:05:13,475 --> 00:05:15,725
+it unlocks for that event, and
+
+99
+00:05:16,025 --> 00:05:19,775
+you're not paying €79 in the months you're not working.
+
+100
+00:05:20,075 --> 00:05:22,325
+If you're an event management company,
+
+101
+00:05:22,625 --> 00:05:26,000
+a large AV house, or you need procurement process,
+
+102
+00:05:26,300 --> 00:05:30,050
+SLA, or volume pricing — talk to the Enterprise team.
+
+103
+00:05:30,350 --> 00:05:33,350
+There's a contact link on the pricing page.
+
+104
+00:05:33,650 --> 00:05:35,900
+The pricing is designed so that
+
+105
+00:05:36,200 --> 00:05:38,200
+the tool pays for itself.
+
+106
+00:05:38,500 --> 00:05:42,250
+One session overrun caught early by the Cue Engine can
+
+107
+00:05:42,550 --> 00:05:44,800
+save thirty minutes of programme time.
+
+108
+00:05:45,100 --> 00:05:49,975
+One well-written client debrief from the Report Generator can win the next contract.
+
+109
+00:05:50,275 --> 00:05:52,275
+The numbers work.
+
+110
+00:05:52,575 --> 00:05:54,825
+That's the full billing picture —
+
+111
+00:05:55,125 --> 00:05:57,750
+Free for evaluation, Per-Event for occasional users,
+
+112
+00:05:58,050 --> 00:06:00,300
+Pro for regular production teams, and
+
+113
+00:06:00,600 --> 00:06:02,600
+Enterprise for large organisations.
+
+114
+00:06:02,900 --> 00:06:06,275
+Your usage is always visible in the profile panel,
+
+115
+00:06:06,575 --> 00:06:08,825
+upgrading takes two minutes through Stripe,
+
+116
+00:06:09,125 --> 00:06:11,750
+and you can download invoices any time.
+
+117
+00:06:12,050 --> 00:06:15,800
+In the next episode we're going deep on multi-room and
+
+118
+00:06:16,100 --> 00:06:19,100
+multi-track events — how to use room filters,
+
+119
+00:06:19,400 --> 00:06:21,650
+the Programme signage view, anchor sessions,
+
+120
+00:06:21,950 --> 00:06:26,075
+and how to run a three-track conference without losing your mind.
+
+121
+00:06:26,375 --> 00:06:28,375
+I'll see you there.

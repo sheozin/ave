@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stage Timer Screenshot</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0b1120; font-family: Inter, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #fff; overflow: hidden; }
+
+.st-header { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 18px 32px; }
+.st-event { font-size: 13px; color: #64748b; letter-spacing: .05em; }
+.st-status { font-size: 11px; font-weight: 700; letter-spacing: .15em; padding: 4px 16px; border-radius: 4px; background: rgba(239,68,68,.15); color: #ef4444; border: 1px solid rgba(239,68,68,.3); }
+.st-clock { font-size: 14px; color: #94a3b8; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.st-speaker { font-size: clamp(14px, 2vw, 22px); color: #94a3b8; letter-spacing: .08em; margin-bottom: 8px; font-weight: 500; }
+.st-title { font-size: clamp(16px, 2.5vw, 28px); color: #cbd5e1; font-weight: 600; margin-bottom: 32px; text-align: center; max-width: 80%; }
+
+.st-timer { font-size: clamp(100px, 22vw, 280px); font-weight: 800; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; color: #22c55e; }
+.st-timer-lbl { font-size: clamp(12px, 1.8vw, 20px); font-weight: 600; letter-spacing: .22em; color: #4b5563; margin-top: .35em; margin-bottom: .6em; }
+
+.st-progress-wrap { position: absolute; bottom: 60px; left: 10%; right: 10%; height: 6px; background: rgba(255,255,255,.06); border-radius: 3px; }
+.st-progress-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #22c55e 0%, #22c55e 100%); width: 62%; transition: width 1s linear; }
+
+.st-footer { position: absolute; bottom: 18px; display: flex; gap: 32px; font-size: 11px; color: #475569; }
+.st-footer span { display: flex; align-items: center; gap: 6px; }
+.st-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+</style>
+</head>
+<body>
+  <div class="st-header">
+    <span class="st-event">ABC SUMMIT · 2026-03-14</span>
+    <span class="st-status">● LIVE</span>
+    <span class="st-clock">23:14:48</span>
+  </div>
+
+  <div class="st-speaker">Michael Torres · CueDeck</div>
+  <div class="st-title">Production Control with CueDeck</div>
+  <div class="st-timer">14:52</div>
+  <div class="st-timer-lbl">REMAINING</div>
+
+  <div class="st-progress-wrap">
+    <div class="st-progress-bar"></div>
+  </div>
+
+  <div class="st-footer">
+    <span><span class="st-dot"></span> LIVE</span>
+    <span>🎙 2 mics</span>
+    <span>📹 Recording</span>
+    <span>📡 Streaming</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Approach A — Persistent Display Code</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0b1120;color:#e2e8f0;font-family:'Inter','SF Pro',system-ui,sans-serif;padding:32px 40px}
+h1{font-size:22px;color:#e2e8f0;font-weight:700;margin-bottom:32px}
+h2{font-size:15px;color:#94a3b8;font-weight:500;margin-bottom:16px;text-transform:uppercase;letter-spacing:1.5px}
+.section{margin-bottom:48px}
+.vs{display:flex;gap:32px;align-items:stretch}
+.card{background:#111827;border:1px solid #1e293b;border-radius:12px;padding:20px;flex:1}
+.card h3{font-size:13px;color:#64748b;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+.arrow{font-size:28px;color:#3b82f6;align-self:center;flex-shrink:0}
+
+.display-card{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.display-left{display:flex;align-items:center;gap:12px}
+.display-code{background:#1e293b;color:#60a5fa;font-family:'SF Mono',ui-monospace,monospace;font-size:18px;font-weight:700;padding:6px 14px;border-radius:6px;letter-spacing:2px}
+.display-name{font-size:14px;color:#e2e8f0;font-weight:500}
+.display-meta{font-size:11px;color:#64748b;margin-top:2px}
+.display-actions{display:flex;gap:6px}
+.btn{padding:6px 12px;border-radius:6px;border:1px solid #1e293b;background:#111827;color:#94a3b8;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.btn-copy{border-color:#3b82f6;color:#60a5fa}
+
+.uuid{font-family:'SF Mono',ui-monospace,monospace;font-size:11px;color:#475569;word-break:break-all;background:#0f172a;padding:10px 14px;border-radius:6px;border:1px solid #1e293b;line-height:1.6}
+.shortcode-big{font-family:'SF Mono',ui-monospace,monospace;font-size:28px;color:#60a5fa;font-weight:700;background:#0f172a;padding:10px 14px;border-radius:6px;text-align:center;letter-spacing:3px;border:1px solid #1e293b}
+
+.status-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;margin-right:4px;vertical-align:middle}
+.status-off{background:#ef4444}
+.hint{font-size:11px;color:#3b82f6;margin-top:8px;background:#0f172a;border:1px solid #1e3a5f;padding:6px 12px;border-radius:6px;display:inline-block}
+
+.display-page{background:#000;border-radius:12px;overflow:hidden;border:2px solid #1e293b;max-width:540px}
+.display-header{background:#0f172a;padding:10px 20px;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.display-body{padding:36px 24px;text-align:center}
+.pairing-big{font-family:'SF Mono',ui-monospace,monospace;font-size:52px;font-weight:800;color:#60a5fa;letter-spacing:6px;margin:12px 0}
+.reconnect-input{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;color:#e2e8f0;font-family:'SF Mono',ui-monospace,monospace;font-size:18px;width:160px;text-align:center;margin-right:8px;outline:none}
+.reconnect-input:focus{border-color:#3b82f6}
+.reconnect-btn{background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer}
+.or-divider{color:#475569;margin:24px 0;font-size:11px;text-transform:uppercase;letter-spacing:2px}
+
+.flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.flow-step{background:#111827;border:1px solid #1e293b;border-radius:8px;padding:10px 16px;font-size:12px;text-align:center;min-width:140px}
+.flow-step strong{color:#60a5fa;display:block;font-size:14px;margin-bottom:2px}
+.flow-arrow{color:#3b82f6;font-size:18px;flex-shrink:0}
+.flow-step.hl{border-color:#3b82f6;background:#0c1629}
+</style>
+</head>
+<body>
+
+<h1>Approach A: Persistent Display Code</h1>
+
+<!-- Section 1: Console display cards -->
+<div class="section">
+  <h2>Console — Signage Panel</h2>
+  <div style="max-width:700px">
+    <div class="display-card">
+      <div class="display-left">
+        <div class="display-code">LBY-1</div>
+        <div>
+          <div class="display-name">Lobby Entrance</div>
+          <div class="display-meta"><span class="status-dot"></span>Online · Schedule · Landscape</div>
+        </div>
+      </div>
+      <div class="display-actions">
+        <button class="btn btn-copy">📋 LBY-1</button>
+        <button class="btn">⚡ Flash</button>
+        <button class="btn">⚙️</button>
+      </div>
+    </div>
+    <div class="display-card">
+      <div class="display-left">
+        <div class="display-code">STG-L</div>
+        <div>
+          <div class="display-name">Stage Left Monitor</div>
+          <div class="display-meta"><span class="status-dot"></span>Online · Stage Timer · Landscape</div>
+        </div>
+      </div>
+      <div class="display-actions">
+        <button class="btn btn-copy">📋 STG-L</button>
+        <button class="btn">⚡ Flash</button>
+        <button class="btn">⚙️</button>
+      </div>
+    </div>
+    <div class="display-card">
+      <div class="display-left">
+        <div class="display-code">RM-2</div>
+        <div>
+          <div class="display-name">Room 2 Schedule</div>
+          <div class="display-meta"><span class="status-dot status-off"></span>Offline · Timeline · Portrait</div>
+        </div>
+      </div>
+      <div class="display-actions">
+        <button class="btn btn-copy">📋 RM-2</button>
+        <button class="btn">⚡ Flash</button>
+        <button class="btn">⚙️</button>
+      </div>
+    </div>
+  </div>
+  <div class="hint">📋 Copy button now copies the short code — not a 36-char UUID</div>
+</div>
+
+<!-- Section 2: Before/After -->
+<div class="section">
+  <h2>Before → After</h2>
+  <div class="vs" style="max-width:640px">
+    <div class="card">
+      <h3>❌ Before (UUID)</h3>
+      <div class="uuid">f4a2b7c1-8d3e-4f5a-9b1c-2d7e8f9a0b3c</div>
+      <div style="font-size:12px;color:#ef4444;margin-top:10px">36 characters · impossible to type · meaningless</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="card">
+      <h3>✅ After (Short Code)</h3>
+      <div class="shortcode-big">LBY-1</div>
+      <div style="font-size:12px;color:#22c55e;margin-top:10px">4-5 chars · human-readable · persistent</div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Display page reconnect -->
+<div class="section">
+  <h2>Display Page — Reconnect Flow</h2>
+  <div class="display-page">
+    <div class="display-header">
+      <span style="font-weight:600">CueDeck Display</span>
+      <span style="font-size:11px;color:#64748b">Waiting for connection…</span>
+    </div>
+    <div class="display-body">
+      <div style="font-size:13px;color:#94a3b8">New display? Your pairing code:</div>
+      <div class="pairing-big">A7K-3M2</div>
+      <div style="font-size:12px;color:#475569">Enter this in the console to pair · Expires in 4:32</div>
+
+      <div class="or-divider">— or reconnect existing display —</div>
+
+      <input class="reconnect-input" placeholder="e.g. LBY-1" value="LBY-1">
+      <button class="reconnect-btn">Reconnect</button>
+      <div style="font-size:11px;color:#64748b;margin-top:10px">Enter the display's short code to reconnect</div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Flow diagram -->
+<div class="section">
+  <h2>How It Works</h2>
+  <div class="flow">
+    <div class="flow-step hl"><strong>First time</strong>Display shows<br>pairing code</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><strong>Director pairs</strong>Types code<br>in console</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><strong>Short code assigned</strong>LBY-1 saved<br>permanently</div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step hl"><strong>Display reboots?</strong>Type LBY-1<br>to reconnect</div>
+  </div>
+</div>
+
+</body>
+</html>

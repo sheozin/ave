@@ -1,0 +1,212 @@
+[
+  {
+    "ep": 1,
+    "title": "Welcome & Overview",
+    "text": "WHAT IS CUEDECK?",
+    "subtitle": "Full Walkthrough",
+    "bg": "linear-gradient(135deg, #1e3a5f 0%, #3b82f6 100%)",
+    "accent": "#3b82f6",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 2,
+    "title": "Your First Event",
+    "text": "CREATE YOUR FIRST EVENT",
+    "subtitle": "Step by Step",
+    "bg": "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)",
+    "accent": "#2563eb",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 3,
+    "title": "Running Live",
+    "text": "GO LIVE",
+    "subtitle": "Session State Machine",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#22c55e",
+    "badge": "LIVE",
+    "badgeColor": "#22c55e"
+  },
+  {
+    "ep": 4,
+    "title": "Roles & Team",
+    "text": "TEAM ROLES",
+    "subtitle": "Invite Your Crew",
+    "bg": "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+    "accent": "#8b5cf6",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 5,
+    "title": "Broadcast Bar",
+    "text": "BROADCAST BAR",
+    "subtitle": "Instant Crew Messaging",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+    "accent": "#3b82f6",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 6,
+    "title": "Delay Cascade",
+    "text": "DELAY CASCADE",
+    "subtitle": "Never Lose Your Programme",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#f59e0b",
+    "badge": "+5 MIN",
+    "badgeColor": "#f59e0b"
+  },
+  {
+    "ep": 7,
+    "title": "Digital Signage",
+    "text": "DIGITAL SIGNAGE",
+    "subtitle": "Set Up in 5 Min",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1a2744 100%)",
+    "accent": "#06b6d4",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 8,
+    "title": "11 Display Modes",
+    "text": "11 DISPLAY MODES",
+    "subtitle": "Full Guide",
+    "bg": "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+    "accent": "#a855f7",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 9,
+    "title": "Stage Monitor",
+    "text": "STAGE MONITOR",
+    "subtitle": "Always Know What's Live",
+    "bg": "linear-gradient(135deg, #0a1628 0%, #0f172a 100%)",
+    "accent": "#22c55e",
+    "badge": "LIVE",
+    "badgeColor": "#22c55e"
+  },
+  {
+    "ep": 10,
+    "title": "Stage Timer",
+    "text": "STAGE TIMER",
+    "subtitle": "Speaker Self-Management",
+    "bg": "linear-gradient(135deg, #0a1628 0%, #0f172a 100%)",
+    "accent": "#22c55e",
+    "badge": "12:45",
+    "badgeColor": "#22c55e"
+  },
+  {
+    "ep": 11,
+    "title": "AI Incident Advisor",
+    "text": "AI INCIDENT ADVISOR",
+    "subtitle": "Crisis Co-Pilot",
+    "bg": "linear-gradient(135deg, #1a0a0a 0%, #2d1515 100%)",
+    "accent": "#ef4444",
+    "badge": "AI",
+    "badgeColor": "#ef4444"
+  },
+  {
+    "ep": 12,
+    "title": "AI Cue Engine",
+    "text": "CUE ENGINE",
+    "subtitle": "8-Min AI Checklist",
+    "bg": "linear-gradient(135deg, #1a1400 0%, #2d2200 100%)",
+    "accent": "#f59e0b",
+    "badge": "AI",
+    "badgeColor": "#f59e0b"
+  },
+  {
+    "ep": 13,
+    "title": "AI Report Generator",
+    "text": "AI REPORT",
+    "subtitle": "Instant Post-Event Debrief",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#6366f1",
+    "badge": "AI",
+    "badgeColor": "#6366f1"
+  },
+  {
+    "ep": 14,
+    "title": "Timeline & Programme",
+    "text": "TIMELINE & PROGRAMME",
+    "subtitle": "Attendee Screens",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1a2744 100%)",
+    "accent": "#06b6d4",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 15,
+    "title": "Sponsor Logos",
+    "text": "SPONSOR LOGOS",
+    "subtitle": "Rotating Branding",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#eab308",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 16,
+    "title": "Event Log & Report",
+    "text": "EVENT LOG",
+    "subtitle": "Full Accountability",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#94a3b8",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 17,
+    "title": "Keyboard Shortcuts",
+    "text": "KEYBOARD SHORTCUTS",
+    "subtitle": "Power User Mode",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#f59e0b",
+    "badge": "⌘K",
+    "badgeColor": "#f59e0b"
+  },
+  {
+    "ep": 18,
+    "title": "Mobile & Tablet",
+    "text": "MOBILE & TABLET",
+    "subtitle": "Any Device",
+    "bg": "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+    "accent": "#3b82f6",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 19,
+    "title": "Plans & Billing",
+    "text": "PLANS & BILLING",
+    "subtitle": "Which One Is Right?",
+    "bg": "linear-gradient(135deg, #1e293b 0%, #1e3a5f 100%)",
+    "accent": "#3b82f6",
+    "badge": "PRO",
+    "badgeColor": "#3b82f6"
+  },
+  {
+    "ep": 20,
+    "title": "Multi-Room Events",
+    "text": "MULTI-ROOM",
+    "subtitle": "3-Track Conference",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+    "accent": "#8b5cf6",
+    "badge": null,
+    "badgeColor": null
+  },
+  {
+    "ep": 21,
+    "title": "Full Walkthrough",
+    "text": "FULL WALKTHROUGH",
+    "subtitle": "Ep 21 Finale",
+    "bg": "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+    "accent": "#22c55e",
+    "badge": "FINALE",
+    "badgeColor": "#22c55e"
+  }
+]

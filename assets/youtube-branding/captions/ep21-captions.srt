@@ -1,0 +1,851 @@
+1
+00:00:05,000 --> 00:00:08,750
+It's eight forty-five on the morning of Tech Summit 2026.
+
+2
+00:00:09,050 --> 00:00:13,175
+Doors open in fifteen minutes, the first session starts in seventy-five.
+
+3
+00:00:13,475 --> 00:00:16,475
+I've got ten sessions loaded across two rooms,
+
+4
+00:00:16,775 --> 00:00:20,525
+three signage displays running, and a stage manager connecting from
+
+5
+00:00:20,825 --> 00:00:22,825
+the Main Stage right now.
+
+6
+00:00:23,125 --> 00:00:26,500
+This is a full event run on CueDeck —
+
+7
+00:00:26,800 --> 00:00:30,550
+no cuts, no feature callouts, just a complete show day
+
+8
+00:00:30,850 --> 00:00:33,100
+from first check to last session.
+
+9
+00:00:33,400 --> 00:00:35,400
+Let's go.
+
+10
+00:00:35,700 --> 00:00:37,950
+First thing every morning: programme check.
+
+11
+00:00:38,250 --> 00:00:42,000
+I need to confirm every session is in place before
+
+12
+00:00:42,300 --> 00:00:44,300
+anyone steps on stage.
+
+13
+00:00:44,600 --> 00:00:46,600
+Ten sessions.
+
+14
+00:00:46,900 --> 00:00:49,900
+Seven on Main Stage, three on Workshop B.
+
+15
+00:00:50,200 --> 00:00:52,200
+Let me run through them.
+
+16
+00:00:52,500 --> 00:00:55,125
+Session 1: Registration & Welcome Break —
+
+17
+00:00:55,425 --> 00:00:57,675
+Main Stage — 09:00 to 09:30.
+
+18
+00:00:57,975 --> 00:00:59,975
+PLANNED.
+
+19
+00:01:00,275 --> 00:01:03,275
+Session 2: Opening Keynote — Sarah Chen —
+
+20
+00:01:03,575 --> 00:01:05,825
+Main Stage — 09:30 to 10:15.
+
+21
+00:01:06,125 --> 00:01:08,125
+PLANNED.
+
+22
+00:01:08,425 --> 00:01:10,675
+Session 3: Product Deep Dive —
+
+23
+00:01:10,975 --> 00:01:14,350
+Alex Morgan — Main Stage — 10:15 to 11:00.
+
+24
+00:01:14,650 --> 00:01:16,650
+PLANNED.
+
+25
+00:01:16,950 --> 00:01:19,575
+Workshop B Panel — 10:15 parallel —
+
+26
+00:01:19,875 --> 00:01:21,875
+three sessions, all PLANNED.
+
+27
+00:01:22,175 --> 00:01:24,425
+The anchor sessions are in place:
+
+28
+00:01:24,725 --> 00:01:28,100
+Coffee Break at 11:00 and Networking Lunch at 13:00.
+
+29
+00:01:28,400 --> 00:01:30,650
+Closing Keynote — 16:00 — anchor.
+
+30
+00:01:30,950 --> 00:01:32,950
+All confirmed.
+
+31
+00:01:33,250 --> 00:01:35,250
+Programme is clean.
+
+32
+00:01:35,550 --> 00:01:37,800
+No orphaned sessions, no missing speakers.
+
+33
+00:01:38,100 --> 00:01:41,850
+The clock sync indicator in the header is green —
+
+34
+00:01:42,150 --> 00:01:44,150
+we're live with the database.
+
+35
+00:01:44,450 --> 00:01:46,450
+Three displays up this morning.
+
+36
+00:01:46,750 --> 00:01:49,750
+The Lobby Board is in Timeline mode —
+
+37
+00:01:50,050 --> 00:01:54,175
+attendees can see the full day schedule as they come in.
+
+38
+00:01:54,475 --> 00:01:57,475
+It's on the screen in the registration area.
+
+39
+00:01:57,775 --> 00:02:01,150
+Main Stage Timer is in Stage Timer mode —
+
+40
+00:02:01,450 --> 00:02:05,950
+this is the countdown clock on the confidence monitor facing the speakers.
+
+41
+00:02:06,250 --> 00:02:09,625
+It'll start running the moment the session goes LIVE.
+
+42
+00:02:09,925 --> 00:02:13,300
+Main Stage Confidence is the full confidence monitor —
+
+43
+00:02:13,600 --> 00:02:16,600
+speaker name, session title, time remaining, current status.
+
+44
+00:02:16,900 --> 00:02:20,650
+On a screen facing the stage, visible to the presenter.
+
+45
+00:02:20,950 --> 00:02:22,950
+Displays are running.
+
+46
+00:02:23,250 --> 00:02:25,875
+Lobby board is showing the full programme.
+
+47
+00:02:26,175 --> 00:02:28,800
+We're ready to receive the first attendees.
+
+48
+00:02:29,100 --> 00:02:31,100
+Emma is online.
+
+49
+00:02:31,400 --> 00:02:33,650
+Stage manager for Main Stage —
+
+50
+00:02:33,950 --> 00:02:37,700
+she signed in from the iPad on the stage wing
+
+51
+00:02:38,000 --> 00:02:40,000
+about two minutes ago.
+
+52
+00:02:40,300 --> 00:02:43,675
+I can see her connection status in the header.
+
+53
+00:02:43,975 --> 00:02:45,975
+Emma, we're good.
+
+54
+00:02:46,275 --> 00:02:48,275
+Programme is confirmed.
+
+55
+00:02:48,575 --> 00:02:52,700
+Your first cue is Registration at nine hundred — stand by.
+
+56
+00:02:53,000 --> 00:02:55,000
+Eight fifty-eight.
+
+57
+00:02:55,300 --> 00:02:57,550
+Two minutes before the published start.
+
+58
+00:02:57,850 --> 00:02:59,850
+Registration goes READY.
+
+59
+00:03:00,150 --> 00:03:02,400
+Emma sees that on her iPad.
+
+60
+00:03:02,700 --> 00:03:04,700
+Attendees are at the doors.
+
+61
+00:03:05,000 --> 00:03:07,000
+Nine oh-one.
+
+62
+00:03:07,300 --> 00:03:09,925
+Doors are open, welcome music is on.
+
+63
+00:03:10,225 --> 00:03:12,225
+Session 1 is LIVE.
+
+64
+00:03:12,525 --> 00:03:14,525
+The stage timer is running.
+
+65
+00:03:14,825 --> 00:03:18,575
+The lobby board has flipped the Registration session to active.
+
+66
+00:03:18,875 --> 00:03:21,875
+Nine twenty-eight — registration wraps two minutes early.
+
+67
+00:03:22,175 --> 00:03:24,175
+Session 1 ENDED.
+
+68
+00:03:24,475 --> 00:03:26,475
+Good start.
+
+69
+00:03:26,775 --> 00:03:29,400
+Session 2 goes READY at nine twenty-eight.
+
+70
+00:03:29,700 --> 00:03:31,950
+Sarah should be in the wings.
+
+71
+00:03:32,250 --> 00:03:34,250
+I'll call her to stage.
+
+72
+00:03:34,550 --> 00:03:36,550
+CALLING state.
+
+73
+00:03:36,850 --> 00:03:39,475
+Emma sees this on her iPad —
+
+74
+00:03:39,775 --> 00:03:43,525
+that's her cue to walk Sarah to the stage entrance.
+
+75
+00:03:43,825 --> 00:03:45,825
+Broadcast sent.
+
+76
+00:03:46,125 --> 00:03:48,750
+Every operator in the room knows where
+
+77
+00:03:49,050 --> 00:03:51,300
+Sarah is and what's happening next.
+
+78
+00:03:51,600 --> 00:03:53,600
+Nine thirty-two.
+
+79
+00:03:53,900 --> 00:03:57,275
+Sarah is on stage, intro is done, she's speaking.
+
+80
+00:03:57,575 --> 00:03:59,575
+Opening Keynote is LIVE.
+
+81
+00:03:59,875 --> 00:04:01,875
+Planned start was nine-thirty.
+
+82
+00:04:02,175 --> 00:04:05,175
+We're two minutes late — within normal tolerance.
+
+83
+00:04:05,475 --> 00:04:09,225
+The stage timer is running, the confidence monitor on stage
+
+84
+00:04:09,525 --> 00:04:11,775
+shows the session title and time.
+
+85
+00:04:12,075 --> 00:04:14,700
+There it is — the Cue Engine.
+
+86
+00:04:15,000 --> 00:04:19,125
+Eight minutes out from the planned end time, it fires automatically.
+
+87
+00:04:19,425 --> 00:04:22,425
+That's my cue to start the pre-cue sequence:
+
+88
+00:04:22,725 --> 00:04:24,975
+confirm the next speaker is ready,
+
+89
+00:04:25,275 --> 00:04:27,900
+confirm AV is set for the handoff.
+
+90
+00:04:28,200 --> 00:04:30,200
+Dismiss.
+
+91
+00:04:30,500 --> 00:04:33,500
+Sarah is still going at ten sixteen —
+
+92
+00:04:33,800 --> 00:04:35,800
+she's running a minute long.
+
+93
+00:04:36,100 --> 00:04:38,100
+I'll nudge the cascade.
+
+94
+00:04:38,400 --> 00:04:40,400
+Two-minute nudge applied.
+
+95
+00:04:40,700 --> 00:04:44,825
+The cascade shifted everything downstream on Main Stage by two minutes.
+
+96
+00:04:45,125 --> 00:04:49,625
+Workshop B is unaffected — those sessions are on their own track.
+
+97
+00:04:49,925 --> 00:04:51,925
+Ten seventeen.
+
+98
+00:04:52,225 --> 00:04:54,225
+Keynote wraps.
+
+99
+00:04:54,525 --> 00:04:57,900
+Sarah gets a round of applause, she's been great.
+
+100
+00:04:58,200 --> 00:05:00,200
+Session 2 ENDED.
+
+101
+00:05:00,500 --> 00:05:02,750
+We're running two minutes behind planned.
+
+102
+00:05:03,050 --> 00:05:05,675
+The cascade has already adjusted everything —
+
+103
+00:05:05,975 --> 00:05:07,975
+no manual work needed.
+
+104
+00:05:08,275 --> 00:05:10,275
+Ten seventeen.
+
+105
+00:05:10,575 --> 00:05:12,575
+Session 3 goes READY.
+
+106
+00:05:12,875 --> 00:05:15,125
+Alex Morgan is in the wings.
+
+107
+00:05:15,425 --> 00:05:19,175
+Simultaneously, Workshop B Panel is starting on the parallel track.
+
+108
+00:05:19,475 --> 00:05:21,475
+Workshop B goes READY.
+
+109
+00:05:21,775 --> 00:05:23,775
+Two simultaneous sessions in pre-cue.
+
+110
+00:05:24,075 --> 00:05:28,200
+This is the multi-track reality: both tracks are moving at once.
+
+111
+00:05:28,500 --> 00:05:32,250
+I'm keeping the director view and switching between room filters.
+
+112
+00:05:32,550 --> 00:05:35,175
+Session 3 — Product Deep Dive —
+
+113
+00:05:35,475 --> 00:05:38,100
+LIVE on Main Stage at ten nineteen.
+
+114
+00:05:38,400 --> 00:05:42,150
+Two minutes behind planned, as expected after the keynote nudge.
+
+115
+00:05:42,450 --> 00:05:44,450
+Workshop B Panel LIVE.
+
+116
+00:05:44,750 --> 00:05:46,750
+Both tracks running.
+
+117
+00:05:47,050 --> 00:05:50,800
+The Programme signage board in the lobby is showing both
+
+118
+00:05:51,100 --> 00:05:54,850
+sessions as active — attendees in the corridor can see
+
+119
+00:05:55,150 --> 00:05:57,150
+exactly where to go.
+
+120
+00:05:57,450 --> 00:05:59,450
+It's eleven-oh-five.
+
+121
+00:05:59,750 --> 00:06:02,750
+Workshop B Panel has flipped to OVERRUN —
+
+122
+00:06:03,050 --> 00:06:06,050
+it was supposed to end at eleven hundred.
+
+123
+00:06:06,350 --> 00:06:08,600
+The moderator is still taking questions.
+
+124
+00:06:08,900 --> 00:06:11,150
+I need to make a decision:
+
+125
+00:06:11,450 --> 00:06:14,825
+cut it now, or let it run and cascade.
+
+126
+00:06:15,125 --> 00:06:18,875
+I'll let it run to eleven-ten and cascade five minutes.
+
+127
+00:06:19,175 --> 00:06:21,175
+Five-minute delay applied.
+
+128
+00:06:21,475 --> 00:06:24,475
+All subsequent Workshop B sessions have shifted —
+
+129
+00:06:24,775 --> 00:06:28,525
+but the Networking Lunch at thirteen hundred is an anchor.
+
+130
+00:06:28,825 --> 00:06:30,825
+It doesn't move.
+
+131
+00:06:31,125 --> 00:06:35,250
+The gap before lunch on Workshop B is now slightly tighter.
+
+132
+00:06:35,550 --> 00:06:39,300
+The afternoon sessions on Workshop B will need to move
+
+133
+00:06:39,600 --> 00:06:41,850
+briskly, but the programme is intact.
+
+134
+00:06:42,150 --> 00:06:44,400
+Five minutes late on Workshop B.
+
+135
+00:06:44,700 --> 00:06:47,325
+I'm broadcasting to the whole crew —
+
+136
+00:06:47,625 --> 00:06:51,750
+and to anyone on the registration role watching the session queue.
+
+137
+00:06:52,050 --> 00:06:55,800
+The lobby board has already updated the Workshop B times
+
+138
+00:06:56,100 --> 00:06:58,350
+automatically from the cascade — but
+
+139
+00:06:58,650 --> 00:07:00,650
+the broadcast message gives context.
+
+140
+00:07:00,950 --> 00:07:02,950
+People appreciate the transparency.
+
+141
+00:07:03,250 --> 00:07:05,250
+The afternoon runs cleanly.
+
+142
+00:07:05,550 --> 00:07:08,175
+The cascade absorbed the Workshop B overrun.
+
+143
+00:07:08,475 --> 00:07:12,975
+Lunch break at thirteen hundred on the dot — the anchor held.
+
+144
+00:07:13,275 --> 00:07:15,900
+The afternoon keynote went live at fifteen-fifty,
+
+145
+00:07:16,200 --> 00:07:18,450
+eight minutes early, wrapped on time.
+
+146
+00:07:18,750 --> 00:07:20,750
+One by one, sessions end.
+
+147
+00:07:21,050 --> 00:07:23,675
+By seventeen-ten, all ten sessions are ENDED.
+
+148
+00:07:23,975 --> 00:07:26,225
+The Main Stage timer has stopped.
+
+149
+00:07:26,525 --> 00:07:29,900
+The lobby board is showing all sessions as completed.
+
+150
+00:07:30,200 --> 00:07:32,200
+Tech Summit 2026 is done.
+
+151
+00:07:32,500 --> 00:07:34,500
+The event is over.
+
+152
+00:07:34,800 --> 00:07:36,800
+Let's close it out properly.
+
+153
+00:07:37,100 --> 00:07:39,100
+I click Generate Report.
+
+154
+00:07:39,400 --> 00:07:42,775
+The modal opens and the thinking animation starts —
+
+155
+00:07:43,075 --> 00:07:46,075
+you can see the five steps working through:
+
+156
+00:07:46,375 --> 00:07:48,625
+analysing session data, processing the log,
+
+157
+00:07:48,925 --> 00:07:51,550
+calculating metrics, drafting the summary, writing recommendations.
+
+158
+00:07:51,850 --> 00:07:53,850
+Summary tab first.
+
+159
+00:07:54,150 --> 00:07:57,525
+Four stat cards: ten sessions, ninety percent on-time rate,
+
+160
+00:07:57,825 --> 00:08:01,200
+plus one point eight minutes average overrun, zero incidents.
+
+161
+00:08:01,500 --> 00:08:03,500
+Clean day.
+
+162
+00:08:03,800 --> 00:08:06,050
+The executive summary from Claude reads:
+
+163
+00:08:06,350 --> 00:08:10,100
+'Tech Summit 2026 ran a highly efficient programme across two
+
+164
+00:08:10,400 --> 00:08:12,400
+tracks with minimal schedule variance.
+
+165
+00:08:12,700 --> 00:08:15,325
+The opening keynote ran two minutes long,
+
+166
+00:08:15,625 --> 00:08:17,875
+absorbed by a standard delay cascade,
+
+167
+00:08:18,175 --> 00:08:21,925
+and a single five-minute overrun on Workshop B was managed
+
+168
+00:08:22,225 --> 00:08:24,850
+without impact to the Networking Lunch anchor.
+
+169
+00:08:25,150 --> 00:08:27,775
+Overall execution reflects strong pre-event preparation and
+
+170
+00:08:28,075 --> 00:08:31,825
+responsive real-time management.' That goes directly into my client email.
+
+171
+00:08:32,125 --> 00:08:35,875
+Sessions tab: every session, planned versus actual, delta in minutes.
+
+172
+00:08:36,175 --> 00:08:39,175
+Two orange rows — the keynote nudge and
+
+173
+00:08:39,475 --> 00:08:41,475
+the Workshop B overrun.
+
+174
+00:08:41,775 --> 00:08:45,150
+Everything else is on time or within a minute.
+
+175
+00:08:45,450 --> 00:08:47,450
+That's a very good day.
+
+176
+00:08:47,750 --> 00:08:49,750
+And the recommendations.
+
+177
+00:08:50,050 --> 00:08:53,800
+Claude has flagged three things: consider adding a two-minute buffer
+
+178
+00:08:54,100 --> 00:08:57,850
+to the opening keynote slot in the next Tech Summit
+
+179
+00:08:58,150 --> 00:09:01,525
+iteration, confirm Workshop B moderator briefing on time management,
+
+180
+00:09:01,825 --> 00:09:05,575
+and review the lobby signage placement for better visibility of
+
+181
+00:09:05,875 --> 00:09:08,125
+the Workshop B track timing updates.
+
+182
+00:09:08,425 --> 00:09:10,425
+Specific.
+
+183
+00:09:10,725 --> 00:09:12,725
+Actionable.
+
+184
+00:09:13,025 --> 00:09:15,275
+Based on what actually happened today.
+
+185
+00:09:15,575 --> 00:09:18,200
+That was a full event on CueDeck.
+
+186
+00:09:18,500 --> 00:09:23,375
+We started at eight forty-five with ten PLANNED sessions and three signage displays.
+
+187
+00:09:23,675 --> 00:09:27,050
+We ran two parallel tracks, managed a keynote overrun,
+
+188
+00:09:27,350 --> 00:09:29,600
+absorbed a five-minute Workshop B cascade,
+
+189
+00:09:29,900 --> 00:09:32,150
+held the anchor sessions in place,
+
+190
+00:09:32,450 --> 00:09:35,075
+kept the crew informed with two broadcasts,
+
+191
+00:09:35,375 --> 00:09:38,375
+and finished with all ten sessions ENDED and
+
+192
+00:09:38,675 --> 00:09:40,925
+a client-ready report in three clicks.
+
+193
+00:09:41,225 --> 00:09:43,850
+Everything we covered in this series —
+
+194
+00:09:44,150 --> 00:09:46,775
+the session state machine, the roles and
+
+195
+00:09:47,075 --> 00:09:50,075
+team invites, the broadcast bar, the delay cascade,
+
+196
+00:09:50,375 --> 00:09:53,000
+the digital signage system, the AI agents,
+
+197
+00:09:53,300 --> 00:09:55,550
+the keyboard shortcuts, the mobile workflow,
+
+198
+00:09:55,850 --> 00:09:59,600
+the billing — it all came together in today's run.
+
+199
+00:09:59,900 --> 00:10:02,525
+This is what CueDeck is built for.
+
+200
+00:10:02,825 --> 00:10:06,575
+Not the setup, not the configuration — the show day.
+
+201
+00:10:06,875 --> 00:10:09,125
+When the clock is running and
+
+202
+00:10:09,425 --> 00:10:12,425
+the speakers are walking to the stage and
+
+203
+00:10:12,725 --> 00:10:17,600
+you need to be three moves ahead of the programme at all times.
+
+204
+00:10:17,900 --> 00:10:20,150
+If you've watched this series and
+
+205
+00:10:20,450 --> 00:10:23,450
+you're ready to run your first event —
+
+206
+00:10:23,750 --> 00:10:26,375
+the free plan is live at app.cuedeck.io.
+
+207
+00:10:26,675 --> 00:10:28,675
+Your first event costs nothing.
+
+208
+00:10:28,975 --> 00:10:31,975
+Sign up, load your programme, and run it.
+
+209
+00:10:32,275 --> 00:10:36,025
+If you've run it and you want to go deeper
+
+210
+00:10:36,325 --> 00:10:38,575
+— subscribe, because we're building more.
+
+211
+00:10:38,875 --> 00:10:42,250
+New features, new tutorials, production stories from real events.
+
+212
+00:10:42,550 --> 00:10:44,550
+Thanks for watching the series.
+
+213
+00:10:44,850 --> 00:10:47,475
+I'll see you in the next one.

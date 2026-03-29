@@ -1,0 +1,207 @@
+1
+00:00:05,000 --> 00:00:08,750
+If you've ever had to manage a live conference —
+
+2
+00:00:09,050 --> 00:00:12,050
+keeping track of which speaker is on stage,
+
+3
+00:00:12,350 --> 00:00:16,100
+whether they're running late, what the AV team is doing,
+
+4
+00:00:16,400 --> 00:00:18,650
+what the interpreter room needs —
+
+5
+00:00:18,950 --> 00:00:21,575
+you know how chaotic it can get.
+
+6
+00:00:21,875 --> 00:00:26,000
+CueDeck is a realtime production console built specifically for live events.
+
+7
+00:00:26,300 --> 00:00:28,925
+One URL, every role, everything synced instantly.
+
+8
+00:00:29,225 --> 00:00:32,225
+Let me show you what it can do.
+
+9
+00:00:32,525 --> 00:00:35,150
+CueDeck lives entirely in the browser —
+
+10
+00:00:35,450 --> 00:00:39,575
+no app to install, no setup wizard that takes three hours.
+
+11
+00:00:39,875 --> 00:00:43,250
+You sign in, pick your event, and you're in.
+
+12
+00:00:43,550 --> 00:00:46,925
+What you see here is the Production Console —
+
+13
+00:00:47,225 --> 00:00:49,225
+this is the director view.
+
+14
+00:00:49,525 --> 00:00:54,025
+On the left you've got a live session list for today's event.
+
+15
+00:00:54,325 --> 00:00:56,575
+Each card shows the session title,
+
+16
+00:00:56,875 --> 00:00:59,500
+the room, the speaker, the planned time,
+
+17
+00:00:59,800 --> 00:01:01,800
+and the current status.
+
+18
+00:01:02,100 --> 00:01:05,100
+On the right is the context panel —
+
+19
+00:01:05,400 --> 00:01:07,650
+this is where you take action.
+
+20
+00:01:07,950 --> 00:01:10,575
+Go live, put a session on hold,
+
+21
+00:01:10,875 --> 00:01:13,875
+call the speaker to stage, apply a delay.
+
+22
+00:01:14,175 --> 00:01:16,425
+Every action is a single click,
+
+23
+00:01:16,725 --> 00:01:20,850
+and it propagates to every connected device in under a second.
+
+24
+00:01:21,150 --> 00:01:24,900
+CueDeck has six roles, each with exactly the right level
+
+25
+00:01:25,200 --> 00:01:27,200
+of access for the job.
+
+26
+00:01:27,500 --> 00:01:29,750
+The Director has full control —
+
+27
+00:01:30,050 --> 00:01:32,050
+they see everything, do everything.
+
+28
+00:01:32,350 --> 00:01:35,725
+Stage managers can transition sessions and mark speaker arrivals.
+
+29
+00:01:36,025 --> 00:01:39,025
+AV can see what's live and what's coming.
+
+30
+00:01:39,325 --> 00:01:43,075
+Interpretation rooms get a dedicated view with the session queue.
+
+31
+00:01:43,375 --> 00:01:45,625
+Registration sees who's next on stage.
+
+32
+00:01:45,925 --> 00:01:50,050
+And the Signage role manages the digital displays around the venue.
+
+33
+00:01:50,350 --> 00:01:54,100
+Everyone gets the right information at the right time —
+
+34
+00:01:54,400 --> 00:01:57,400
+no more group chats, no more walkie-talkie chaos.
+
+35
+00:01:57,700 --> 00:02:01,450
+Over the next episodes we're going to walk through every
+
+36
+00:02:01,750 --> 00:02:04,375
+feature — live, in a real event.
+
+37
+00:02:04,675 --> 00:02:06,925
+We'll create an event from scratch,
+
+38
+00:02:07,225 --> 00:02:10,975
+add sessions, run them through the full state machine —
+
+39
+00:02:11,275 --> 00:02:13,275
+READY, LIVE, HOLD, ENDED.
+
+40
+00:02:13,575 --> 00:02:16,575
+You'll see the delay cascade, the broadcast bar,
+
+41
+00:02:16,875 --> 00:02:19,875
+the digital signage system with ten display modes,
+
+42
+00:02:20,175 --> 00:02:22,425
+the AI agents that help when
+
+43
+00:02:22,725 --> 00:02:25,350
+things go sideways, the stage confidence monitor,
+
+44
+00:02:25,650 --> 00:02:28,275
+the stage timer, and a lot more.
+
+45
+00:02:28,575 --> 00:02:32,325
+By the end of this series you'll be able to
+
+46
+00:02:32,625 --> 00:02:35,625
+run your first production event on CueDeck solo.
+
+47
+00:02:35,925 --> 00:02:39,675
+CueDeck is free to try — no credit card needed.
+
+48
+00:02:39,975 --> 00:02:42,225
+Head to app.cuedeck.io, create your account,
+
+49
+00:02:42,525 --> 00:02:45,525
+and follow along with the next episode where
+
+50
+00:02:45,825 --> 00:02:48,450
+we'll set up our first event together.
+
+51
+00:02:48,750 --> 00:02:52,125
+If you've got questions drop them in the comments.
+
+52
+00:02:52,425 --> 00:02:54,675
+I'll see you in episode two.

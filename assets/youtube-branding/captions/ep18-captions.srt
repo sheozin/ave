@@ -1,0 +1,463 @@
+1
+00:00:05,000 --> 00:00:08,750
+One of the questions I get asked most often about
+
+2
+00:00:09,050 --> 00:00:12,050
+CueDeck is: does it work on a tablet?
+
+3
+00:00:12,350 --> 00:00:14,350
+What about a phone?
+
+4
+00:00:14,650 --> 00:00:18,025
+Can my stage manager use it on an iPad?
+
+5
+00:00:18,325 --> 00:00:20,575
+The answer is yes — and
+
+6
+00:00:20,875 --> 00:00:25,000
+in this episode I'll show you exactly what that looks like.
+
+7
+00:00:25,300 --> 00:00:27,550
+CueDeck is a browser app, which
+
+8
+00:00:27,850 --> 00:00:31,600
+means it runs on any device with a modern browser
+
+9
+00:00:31,900 --> 00:00:33,900
+and an internet connection.
+
+10
+00:00:34,200 --> 00:00:37,200
+The layout adapts to the screen it's on.
+
+11
+00:00:37,500 --> 00:00:39,500
+Let me show you how.
+
+12
+00:00:39,800 --> 00:00:43,550
+I'll use the browser's device emulation tools so you can
+
+13
+00:00:43,850 --> 00:00:45,850
+see the responsive layout clearly.
+
+14
+00:00:46,150 --> 00:00:50,650
+This is what CueDeck looks like on an iPad in portrait orientation.
+
+15
+00:00:50,950 --> 00:00:52,950
+Notice what's changed.
+
+16
+00:00:53,250 --> 00:00:56,1000
+The role bar — the strip of role buttons at
+
+17
+00:00:57,300 --> 00:01:01,050
+the top — has wrapped onto two lines instead of
+
+18
+00:01:01,350 --> 00:01:03,350
+trying to squeeze into one.
+
+19
+00:01:03,650 --> 00:01:07,775
+The session list takes up the full width of the screen.
+
+20
+00:01:08,075 --> 00:01:11,825
+The context panel, which on desktop sits to the right
+
+21
+00:01:12,125 --> 00:01:15,500
+of the session list, moves to a sheet that
+
+22
+00:01:15,800 --> 00:01:18,050
+slides up from the bottom when
+
+23
+00:01:18,350 --> 00:01:20,350
+you tap a session.
+
+24
+00:01:20,650 --> 00:01:23,650
+On a tablet the interaction model is tap-first.
+
+25
+00:01:23,950 --> 00:01:26,200
+Tap a session to select it.
+
+26
+00:01:26,500 --> 00:01:28,500
+The action sheet comes up.
+
+27
+00:01:28,800 --> 00:01:31,800
+Tap the action button to trigger the transition.
+
+28
+00:01:32,100 --> 00:01:35,850
+It works exactly the same as the desktop version —
+
+29
+00:01:36,150 --> 00:01:39,150
+just with your thumb instead of a mouse.
+
+30
+00:01:39,450 --> 00:01:42,450
+The context panel sheet uses the same data,
+
+31
+00:01:42,750 --> 00:01:46,125
+the same real-time sync, and the same state machine.
+
+32
+00:01:46,425 --> 00:01:48,675
+Nothing is simplified or removed —
+
+33
+00:01:48,975 --> 00:01:50,975
+it's the same production tool.
+
+34
+00:01:51,275 --> 00:01:56,150
+Here's the setup I'd recommend for a stage manager running a single room.
+
+35
+00:01:56,450 --> 00:01:58,450
+They're in Stage role.
+
+36
+00:01:58,750 --> 00:02:01,750
+They have an iPad on a stand or
+
+37
+00:02:02,050 --> 00:02:04,675
+a table just offstage — portrait orientation,
+
+38
+00:02:04,975 --> 00:02:06,975
+tablet stand, screen always on.
+
+39
+00:02:07,275 --> 00:02:11,025
+They can see the entire session list for their room
+
+40
+00:02:11,325 --> 00:02:15,075
+— filter by room, and only their sessions are showing.
+
+41
+00:02:15,375 --> 00:02:18,375
+When a speaker arrives they tap the session,
+
+42
+00:02:18,675 --> 00:02:21,675
+tap Speaker Arrived, the director sees it immediately.
+
+43
+00:02:21,975 --> 00:02:24,600
+When it's time to go live —
+
+44
+00:02:24,900 --> 00:02:27,150
+if the stage manager has that
+
+45
+00:02:27,450 --> 00:02:29,700
+permission — one tap, one confirmation,
+
+46
+00:02:30,000 --> 00:02:32,000
+the session is live.
+
+47
+00:02:32,300 --> 00:02:34,300
+No radio call needed.
+
+48
+00:02:34,600 --> 00:02:38,350
+The director sees it on their screen the same moment
+
+49
+00:02:38,650 --> 00:02:40,900
+the stage manager taps the button.
+
+50
+00:02:41,200 --> 00:02:44,575
+The buttons are large enough for reliable touch input.
+
+51
+00:02:44,875 --> 00:02:49,750
+There's no tiny click target that's easy to misfire when you're under pressure.
+
+52
+00:02:50,050 --> 00:02:53,800
+The state machine still enforces all the same rules —
+
+53
+00:02:54,100 --> 00:02:57,850
+you can't accidentally put something LIVE that isn't READY first.
+
+54
+00:02:58,150 --> 00:03:00,775
+Now let's look at a phone —
+
+55
+00:03:01,075 --> 00:03:03,700
+this is the registration desk use case.
+
+56
+00:03:04,000 --> 00:03:07,375
+The Registration role has the simplest view in CueDeck:
+
+57
+00:03:07,675 --> 00:03:10,300
+the upcoming session queue, who's on next,
+
+58
+00:03:10,600 --> 00:03:13,975
+and a read-only status of what's live right now.
+
+59
+00:03:14,275 --> 00:03:17,650
+That's all the information a registration team needs —
+
+60
+00:03:17,950 --> 00:03:20,950
+they're not running transitions, they're answering attendee questions.
+
+61
+00:03:21,250 --> 00:03:23,875
+On a phone that view stacks cleanly.
+
+62
+00:03:24,175 --> 00:03:26,425
+Session cards fill the full width,
+
+63
+00:03:26,725 --> 00:03:30,475
+the current status badge is large enough to read at
+
+64
+00:03:30,775 --> 00:03:35,275
+a glance, and the next session's speaker name and title are prominent.
+
+65
+00:03:35,575 --> 00:03:39,325
+A registration team member can keep this open on their
+
+66
+00:03:39,625 --> 00:03:43,000
+personal phone or a shared device at the desk,
+
+67
+00:03:43,300 --> 00:03:46,300
+and the screen updates automatically without a refresh.
+
+68
+00:03:46,600 --> 00:03:50,725
+The moment the director takes a session LIVE, it appears here.
+
+69
+00:03:51,025 --> 00:03:53,025
+No app to install.
+
+70
+00:03:53,325 --> 00:03:55,575
+They sign in, pick their role,
+
+71
+00:03:55,875 --> 00:03:58,500
+and the screen stays live all day.
+
+72
+00:03:58,800 --> 00:04:02,550
+For directors who run on a laptop with a tablet
+
+73
+00:04:02,850 --> 00:04:05,850
+beside them — this is a useful configuration.
+
+74
+00:04:06,150 --> 00:04:08,400
+The tablet is your second monitor.
+
+75
+00:04:08,700 --> 00:04:11,325
+Open CueDeck in Safari on the iPad,
+
+76
+00:04:11,625 --> 00:04:13,875
+keep it in landscape orientation, and
+
+77
+00:04:14,175 --> 00:04:17,925
+you have the full director view with all controls available.
+
+78
+00:04:18,225 --> 00:04:21,975
+Some directors I've spoken to use the tablet specifically for
+
+79
+00:04:22,275 --> 00:04:26,025
+the signage panel — they keep their signage displays open
+
+80
+00:04:26,325 --> 00:04:30,075
+on the iPad so they can monitor what's showing on
+
+81
+00:04:30,375 --> 00:04:33,750
+the venue screens without switching windows on their laptop.
+
+82
+00:04:34,050 --> 00:04:36,300
+Two views, one account, fully synced.
+
+83
+00:04:36,600 --> 00:04:39,975
+A few practical tips for mobile and tablet setups.
+
+84
+00:04:40,275 --> 00:04:42,525
+First: use a dedicated browser tab,
+
+85
+00:04:42,825 --> 00:04:44,825
+not a general browsing session.
+
+86
+00:04:45,125 --> 00:04:48,875
+Keep CueDeck as its own pinned tab on the device.
+
+87
+00:04:49,175 --> 00:04:51,425
+It's easier to find under pressure.
+
+88
+00:04:51,725 --> 00:04:55,475
+Second: on iOS, you can add CueDeck to your Home
+
+89
+00:04:55,775 --> 00:04:59,150
+Screen from Safari — tap the share button and
+
+90
+00:04:59,450 --> 00:05:01,450
+choose 'Add to Home Screen'.
+
+91
+00:05:01,750 --> 00:05:05,500
+It opens full-screen like a native app, no browser chrome.
+
+92
+00:05:05,800 --> 00:05:10,300
+That's a cleaner experience on an iPad in portrait on a stand.
+
+93
+00:05:10,600 --> 00:05:12,600
+Third: keep the screen on.
+
+94
+00:05:12,900 --> 00:05:17,025
+Most tablets dim the display after a minute of no interaction.
+
+95
+00:05:17,325 --> 00:05:19,575
+Go into your device settings and
+
+96
+00:05:19,875 --> 00:05:22,500
+set the screen timeout to 'Never' or
+
+97
+00:05:22,800 --> 00:05:25,425
+the longest available option for show day.
+
+98
+00:05:25,725 --> 00:05:30,225
+You don't want the screen going dark while you're watching a speaker.
+
+99
+00:05:30,525 --> 00:05:32,525
+Fourth: about internet connectivity.
+
+100
+00:05:32,825 --> 00:05:36,575
+CueDeck requires an active internet connection for realtime sync —
+
+101
+00:05:36,875 --> 00:05:41,000
+it's communicating with Supabase for every state change and every broadcast.
+
+102
+00:05:41,300 --> 00:05:44,675
+If you're backstage at a venue with unreliable WiFi,
+
+103
+00:05:44,975 --> 00:05:47,600
+test your connection before the event starts.
+
+104
+00:05:47,900 --> 00:05:52,775
+A strong 4G signal on a mobile data connection is a reliable fallback.
+
+105
+00:05:53,075 --> 00:05:56,450
+CueDeck works on any modern browser, on any device.
+
+106
+00:05:56,750 --> 00:06:00,500
+The layout adapts, the touch targets are the right size,
+
+107
+00:06:00,800 --> 00:06:04,175
+and every role is usable on a phone or
+
+108
+00:06:04,475 --> 00:06:06,475
+tablet without any feature degradation.
+
+109
+00:06:06,775 --> 00:06:09,775
+For most production teams the sweet spot is:
+
+110
+00:06:10,075 --> 00:06:14,200
+director on a laptop, stage managers on tablets, registration on phones.
+
+111
+00:06:14,500 --> 00:06:18,250
+Everyone connected, everyone synced, no one staring at a laptop
+
+112
+00:06:18,550 --> 00:06:21,550
+screen when they should be watching the stage.
+
+113
+00:06:21,850 --> 00:06:24,100
+Next episode is about billing —
+
+114
+00:06:24,400 --> 00:06:28,150
+the plans, the pricing, how the per-event credit option works,
+
+115
+00:06:28,450 --> 00:06:31,825
+and how to upgrade when your team is ready.
+
+116
+00:06:32,125 --> 00:06:34,125
+I'll see you there.

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Display Pairing</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0b1120; font-family: Inter, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: #fff; }
+.card { background: #111827; border: 1px solid #1e293b; border-radius: 16px; padding: 48px 64px; text-align: center; max-width: 480px; }
+.logo { font-size: 28px; font-weight: 800; margin-bottom: 4px; }
+.logo .cue { color: #fff; }
+.logo .deck { color: #3b82f6; }
+.logo .display-label { font-size: 16px; font-weight: 600; letter-spacing: .2em; color: #4a6278; margin-left: 8px; }
+.subtitle { font-size: 11px; letter-spacing: .35em; color: #4a6278; font-weight: 600; margin-bottom: 32px; }
+.pair-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+.pair-code { font-size: 52px; font-weight: 800; letter-spacing: 10px; color: #fff; font-family: 'Courier New', monospace; margin-bottom: 8px; }
+.pair-hint { font-size: 11px; color: #64748b; margin-bottom: 24px; }
+.status-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px #34d399; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+.status-text { font-size: 11px; color: #34d399; }
+.timer { font-size: 10px; color: #4b5563; margin-top: 12px; }
+.divider { border-top: 1px solid #1e293b; margin: 24px 0 16px; }
+.manual-label { font-size: 10px; color: #4b5563; margin-bottom: 8px; }
+.manual-row { display: flex; gap: 8px; justify-content: center; }
+.manual-input { background: #0f172a; border: 1px solid #334155; color: #e5e7eb; padding: 6px 10px; border-radius: 6px; font-size: 11px; width: 180px; text-align: center; font-family: monospace; }
+.manual-btn { background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.4); color: #60a5fa; border-radius: 6px; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo" style="display:flex;align-items:center;gap:10px;justify-content:center"><svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" style="width:28px;height:28px;flex-shrink:0"><defs><linearGradient id="ss-bg" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect width="40" height="40" rx="12" fill="url(#ss-bg)"/><path d="M 25 10 A 10.5 10.5 0 1 0 25 30" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/></svg><span class="cue">Cue</span><span class="deck">Deck</span> <span class="display-label">DISPLAY</span></div>
+    <div class="subtitle">DIGITAL SIGNAGE</div>
+    <div class="pair-label">Pairing Code</div>
+    <div class="pair-code">A7K-3M2</div>
+    <div class="pair-hint">Enter this code in your CueDeck console to connect</div>
+    <div class="status-row">
+      <span class="dot"></span>
+      <span class="status-text">Waiting for connection...</span>
+    </div>
+    <div class="timer">Expires in 4:32</div>
+    <div class="divider"></div>
+    <div class="manual-label">Or enter Display ID manually:</div>
+    <div class="manual-row">
+      <input class="manual-input" type="text" placeholder="Display UUID" readonly>
+      <button class="manual-btn">Connect</button>
+    </div>
+  </div>
+</body>
+</html>

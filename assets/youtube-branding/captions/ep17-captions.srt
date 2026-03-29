@@ -1,0 +1,487 @@
+1
+00:00:05,000 --> 00:00:07,000
+Here's a scenario.
+
+2
+00:00:07,300 --> 00:00:09,300
+You're running a live keynote.
+
+3
+00:00:09,600 --> 00:00:12,225
+The speaker is thirty seconds from wrapping.
+
+4
+00:00:12,525 --> 00:00:14,775
+You need to end this session,
+
+5
+00:00:15,075 --> 00:00:17,325
+set the next one to ready,
+
+6
+00:00:17,625 --> 00:00:21,750
+and trigger a broadcast — all in the next ninety seconds.
+
+7
+00:00:22,050 --> 00:00:25,800
+The stage manager is on comms asking for a cue.
+
+8
+00:00:26,100 --> 00:00:30,600
+The client is standing next to you asking how the schedule looks.
+
+9
+00:00:30,900 --> 00:00:34,650
+You don't have time to move a mouse to the
+
+10
+00:00:34,950 --> 00:00:37,575
+right place and click three different buttons.
+
+11
+00:00:37,875 --> 00:00:42,000
+You need to work fast, with your eyes on the room.
+
+12
+00:00:42,300 --> 00:00:46,425
+CueDeck has a full keyboard shortcut system built for exactly this.
+
+13
+00:00:46,725 --> 00:00:48,725
+Let me show you everything.
+
+14
+00:00:49,025 --> 00:00:51,650
+The `?` key opens the shortcut reference.
+
+15
+00:00:51,950 --> 00:00:54,575
+You don't have to memorise anything —
+
+16
+00:00:54,875 --> 00:00:57,500
+this panel is always one keypress away.
+
+17
+00:00:57,800 --> 00:01:00,050
+On the left, the navigation shortcuts.
+
+18
+00:01:00,350 --> 00:01:02,975
+On the right, help and general commands.
+
+19
+00:01:03,275 --> 00:01:06,275
+Every shortcut in the app is listed here.
+
+20
+00:01:06,575 --> 00:01:10,700
+Let me walk through the ones you'll actually use every day.
+
+21
+00:01:10,1000 --> 00:01:13,1000
+The `/` key focuses the search bar instantly.
+
+22
+00:01:14,300 --> 00:01:16,550
+Start typing a session name and
+
+23
+00:01:16,850 --> 00:01:20,600
+the list filters in real time — no mouse required.
+
+24
+00:01:20,900 --> 00:01:22,900
+`B` opens the broadcast bar.
+
+25
+00:01:23,200 --> 00:01:25,450
+You can type a message and
+
+26
+00:01:25,750 --> 00:01:28,375
+hit Enter without ever leaving the keyboard.
+
+27
+00:01:28,675 --> 00:01:31,300
+`R` sets the selected session to READY.
+
+28
+00:01:31,600 --> 00:01:35,350
+One key, one action — as long as the session
+
+29
+00:01:35,650 --> 00:01:38,275
+is in a state that allows it.
+
+30
+00:01:38,575 --> 00:01:41,950
+`Escape` closes any open modal, dismisses the broadcast bar,
+
+31
+00:01:42,250 --> 00:01:45,250
+clears the search — your universal exit key.
+
+32
+00:01:45,550 --> 00:01:48,550
+And `Cmd+K` — or `Ctrl+K` on Windows —
+
+33
+00:01:48,850 --> 00:01:50,850
+opens the command palette.
+
+34
+00:01:51,150 --> 00:01:53,400
+That one gets its own section.
+
+35
+00:01:53,700 --> 00:01:57,825
+Press `/` and the cursor jumps straight into the search field.
+
+36
+00:01:58,125 --> 00:02:01,875
+I start typing 'workshop' and the session list filters immediately.
+
+37
+00:02:02,175 --> 00:02:04,175
+Everything else disappears.
+
+38
+00:02:04,475 --> 00:02:07,100
+I can see exactly what I need.
+
+39
+00:02:07,400 --> 00:02:11,900
+Arrow key down to navigate, Escape to clear and get everything back.
+
+40
+00:02:12,200 --> 00:02:14,825
+For a 30-session event with three rooms,
+
+41
+00:02:15,125 --> 00:02:18,875
+this is how you find anything in under two seconds.
+
+42
+00:02:19,175 --> 00:02:22,925
+Press `B` and the broadcast bar opens at the top
+
+43
+00:02:23,225 --> 00:02:25,850
+of the screen — ready to type.
+
+44
+00:02:26,150 --> 00:02:29,900
+I type my message — 'Sarah Chen please make your
+
+45
+00:02:30,200 --> 00:02:33,575
+way to the Main Stage' — and hit Enter.
+
+46
+00:02:33,875 --> 00:02:38,000
+That message goes to every connected device in under a second.
+
+47
+00:02:38,300 --> 00:02:40,300
+No menu.
+
+48
+00:02:40,600 --> 00:02:42,600
+No clicking.
+
+49
+00:02:42,900 --> 00:02:44,900
+Just `B`, type, Enter.
+
+50
+00:02:45,200 --> 00:02:48,950
+The character counter updates as I type so I know
+
+51
+00:02:49,250 --> 00:02:52,250
+I'm within the display limit for signage screens.
+
+52
+00:02:52,550 --> 00:02:54,800
+And if I change my mind,
+
+53
+00:02:55,100 --> 00:02:57,725
+`Escape` closes the bar without sending anything.
+
+54
+00:02:58,025 --> 00:03:00,275
+This is the command palette, and
+
+55
+00:03:00,575 --> 00:03:04,325
+it's the fastest way to do anything in CueDeck —
+
+56
+00:03:04,625 --> 00:03:07,625
+especially if you already know what you want.
+
+57
+00:03:07,925 --> 00:03:10,175
+It searches across two things simultaneously:
+
+58
+00:03:10,475 --> 00:03:13,850
+your live sessions, and a set of static commands.
+
+59
+00:03:14,150 --> 00:03:16,775
+Start typing and it fuzzy-matches against both.
+
+60
+00:03:17,075 --> 00:03:20,450
+Type 'keyn' and I get the two keynote sessions.
+
+61
+00:03:20,750 --> 00:03:24,125
+I can navigate the list with the up and
+
+62
+00:03:24,425 --> 00:03:27,050
+down arrows — watch the highlight move.
+
+63
+00:03:27,350 --> 00:03:30,350
+Press Enter and I jump straight to that
+
+64
+00:03:30,650 --> 00:03:32,650
+session in the list.
+
+65
+00:03:32,950 --> 00:03:35,575
+The context panel opens on the right,
+
+66
+00:03:35,875 --> 00:03:38,125
+ready for me to take action.
+
+67
+00:03:38,425 --> 00:03:42,175
+Type 'go live' and the static 'Go Live' command appears
+
+68
+00:03:42,475 --> 00:03:46,225
+— pressing Enter on that triggers the Go Live action
+
+69
+00:03:46,525 --> 00:03:48,525
+on the currently selected session.
+
+70
+00:03:48,825 --> 00:03:50,825
+No clicking required.
+
+71
+00:03:51,125 --> 00:03:54,500
+The palette closes the moment I confirm an action.
+
+72
+00:03:54,800 --> 00:03:58,175
+`Escape` at any point closes it without doing anything.
+
+73
+00:03:58,475 --> 00:04:00,725
+The keyboard navigation is fully consistent:
+
+74
+00:04:01,025 --> 00:04:04,025
+up and down arrows to move through results,
+
+75
+00:04:04,325 --> 00:04:06,575
+Enter to confirm, Escape to exit.
+
+76
+00:04:06,875 --> 00:04:10,625
+Once you know those three keys you can use the
+
+77
+00:04:10,925 --> 00:04:13,175
+palette entirely without touching the mouse.
+
+78
+00:04:13,475 --> 00:04:16,475
+The `R` shortcut is a single-key action —
+
+79
+00:04:16,775 --> 00:04:19,775
+it sets the selected session to READY immediately,
+
+80
+00:04:20,075 --> 00:04:22,075
+without opening any modal.
+
+81
+00:04:22,375 --> 00:04:26,125
+This is the shortcut that gets used more than any
+
+82
+00:04:26,425 --> 00:04:28,425
+other in a live run.
+
+83
+00:04:28,725 --> 00:04:32,475
+You've just ended a session, you select the next one
+
+84
+00:04:32,775 --> 00:04:35,025
+in the list, you hit `R`.
+
+85
+00:04:35,325 --> 00:04:38,325
+The stage manager gets the READY signal instantly.
+
+86
+00:04:38,625 --> 00:04:40,875
+Then you pick up your radio.
+
+87
+00:04:41,175 --> 00:04:43,425
+Three keypresses to advance the programme:
+
+88
+00:04:43,725 --> 00:04:45,975
+click the next session, `R`, done.
+
+89
+00:04:46,275 --> 00:04:48,900
+Or if you're on the command palette,
+
+90
+00:04:49,200 --> 00:04:51,450
+you don't even need the click.
+
+91
+00:04:51,750 --> 00:04:56,250
+Let me run through a realistic sequence using nothing but the keyboard.
+
+92
+00:04:56,550 --> 00:04:58,550
+Watch.
+
+93
+00:04:58,850 --> 00:05:02,600
+End the current session — I'll use the command palette.
+
+94
+00:05:02,900 --> 00:05:05,525
+`Cmd+K`, type 'end', select End Session, Enter.
+
+95
+00:05:05,825 --> 00:05:07,825
+Session 1 is now ENDED.
+
+96
+00:05:08,125 --> 00:05:11,875
+Select session 2 — arrow key down in the session
+
+97
+00:05:12,175 --> 00:05:14,175
+list, Enter to open it.
+
+98
+00:05:14,475 --> 00:05:17,475
+Hit `R` — session 2 is now READY.
+
+99
+00:05:17,775 --> 00:05:20,025
+Broadcast the speaker call — `B`,
+
+100
+00:05:20,325 --> 00:05:23,325
+type 'Marco Rossi to the stage please', Enter.
+
+101
+00:05:23,625 --> 00:05:25,625
+Done.
+
+102
+00:05:25,925 --> 00:05:30,800
+Check the schedule — `/`, type the next session name, Escape to return.
+
+103
+00:05:31,100 --> 00:05:33,100
+Entire sequence.
+
+104
+00:05:33,400 --> 00:05:35,400
+No mouse.
+
+105
+00:05:35,700 --> 00:05:37,700
+Twelve keypresses.
+
+106
+00:05:38,000 --> 00:05:41,000
+In a high-pressure moment on a live stage,
+
+107
+00:05:41,300 --> 00:05:43,300
+that speed is real.
+
+108
+00:05:43,600 --> 00:05:48,475
+It's the difference between keeping up with the show and falling behind it.
+
+109
+00:05:48,775 --> 00:05:52,900
+Keyboard shortcuts and the command palette are the production professional's interface.
+
+110
+00:05:53,200 --> 00:05:56,950
+They reward the operators who invest ten minutes learning them
+
+111
+00:05:57,250 --> 00:06:00,625
+with a measurably faster, smoother, less error-prone show day.
+
+112
+00:06:00,925 --> 00:06:03,925
+The full reference is always one `?` away.
+
+113
+00:06:04,225 --> 00:06:07,225
+Start with the four essentials: `?` for help,
+
+114
+00:06:07,525 --> 00:06:09,775
+`B` for broadcast, `/` for search,
+
+115
+00:06:10,075 --> 00:06:12,075
+`Cmd+K` for everything else.
+
+116
+00:06:12,375 --> 00:06:14,375
+The rest will come naturally.
+
+117
+00:06:14,675 --> 00:06:17,300
+Next episode: CueDeck on mobile and tablet.
+
+118
+00:06:17,600 --> 00:06:21,350
+How the layout adapts, practical setups for stage managers on
+
+119
+00:06:21,650 --> 00:06:24,275
+an iPad and registration on a phone,
+
+120
+00:06:24,575 --> 00:06:28,325
+and what you need to know about running realtime production
+
+121
+00:06:28,625 --> 00:06:30,625
+on a handheld device.
+
+122
+00:06:30,925 --> 00:06:32,925
+I'll see you there.

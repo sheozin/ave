@@ -1,0 +1,487 @@
+1
+00:00:05,000 --> 00:00:08,375
+When you're running a live event as a director,
+
+2
+00:00:08,675 --> 00:00:10,675
+your eyes are everywhere.
+
+3
+00:00:10,975 --> 00:00:13,975
+You're watching the session list, the broadcast bar,
+
+4
+00:00:14,275 --> 00:00:16,900
+the delay strip, the operator presence indicators.
+
+5
+00:00:17,200 --> 00:00:19,450
+Somewhere in the middle of that,
+
+6
+00:00:19,750 --> 00:00:23,500
+you also need to know what's actually happening on stage
+
+7
+00:00:23,800 --> 00:00:28,675
+at this exact moment — without having to hunt for the session card.
+
+8
+00:00:28,975 --> 00:00:31,975
+That's what the Stage Confidence Monitor is for.
+
+9
+00:00:32,275 --> 00:00:35,650
+One click and your entire screen becomes a single,
+
+10
+00:00:35,950 --> 00:00:38,575
+giant, impossible-to-miss display of the current session.
+
+11
+00:00:38,875 --> 00:00:40,875
+Let me show you.
+
+12
+00:00:41,175 --> 00:00:44,925
+In the context panel on the right side of the
+
+13
+00:00:45,225 --> 00:00:47,850
+director console — the same panel that
+
+14
+00:00:48,150 --> 00:00:50,400
+shows your quick action buttons —
+
+15
+00:00:50,700 --> 00:00:52,950
+scroll down to the Monitor section.
+
+16
+00:00:53,250 --> 00:00:57,750
+You'll see a button labeled 'Stage Monitor' with a little screen icon.
+
+17
+00:00:58,050 --> 00:01:00,050
+Click it.
+
+18
+00:01:00,350 --> 00:01:02,600
+The overlay fills the entire screen.
+
+19
+00:01:02,900 --> 00:01:05,900
+This is not a new browser window or
+
+20
+00:01:06,200 --> 00:01:09,575
+a new tab — it's a fixed overlay that
+
+21
+00:01:09,875 --> 00:01:13,1000
+sits on top of the production console at z-index nine thousand.
+
+22
+00:01:14,300 --> 00:01:16,550
+Your console is still running underneath,
+
+23
+00:01:16,850 --> 00:01:19,475
+all your realtime subscriptions are still live,
+
+24
+00:01:19,775 --> 00:01:22,025
+you haven't navigated away from anything.
+
+25
+00:01:22,325 --> 00:01:26,075
+At the top: the live session status in red —
+
+26
+00:01:26,375 --> 00:01:29,750
+a pulsing dot and the words 'YOU ARE LIVE'.
+
+27
+00:01:30,050 --> 00:01:33,800
+In the centre: the session title in massive type —
+
+28
+00:01:34,100 --> 00:01:37,100
+responsive, so it scales with your screen size.
+
+29
+00:01:37,400 --> 00:01:40,400
+Up to eighty pixels on a large display.
+
+30
+00:01:40,700 --> 00:01:42,700
+Below that, the speaker's name.
+
+31
+00:01:42,1000 --> 00:01:44,1000
+Below that: the timer.
+
+32
+00:01:45,300 --> 00:01:47,925
+A large monospaced countdown showing minutes and
+
+33
+00:01:48,225 --> 00:01:51,225
+seconds remaining — the exact same clock that
+
+34
+00:01:51,525 --> 00:01:54,525
+drives the timer cards in the session list,
+
+35
+00:01:54,825 --> 00:01:58,200
+synced to the server via CueDeck's clock offset mechanism.
+
+36
+00:01:58,500 --> 00:02:02,250
+At the bottom of the centre section: the next session.
+
+37
+00:02:02,550 --> 00:02:05,175
+Title, speaker, room, scheduled start time —
+
+38
+00:02:05,475 --> 00:02:08,850
+everything the director needs to think one step ahead.
+
+39
+00:02:09,150 --> 00:02:12,900
+And in a thin footer bar at the very bottom:
+
+40
+00:02:13,200 --> 00:02:15,450
+the live clock on the right,
+
+41
+00:02:15,750 --> 00:02:17,1000
+the event name on the left.
+
+42
+00:02:18,300 --> 00:02:22,050
+The timer on the stage monitor uses the same three-colour
+
+43
+00:02:22,350 --> 00:02:24,600
+scheme you'll see everywhere in CueDeck.
+
+44
+00:02:24,900 --> 00:02:28,275
+Green: the session has more than five minutes remaining.
+
+45
+00:02:28,575 --> 00:02:30,575
+You're in good shape.
+
+46
+00:02:30,875 --> 00:02:33,500
+The label below the timer says 'REMAINING'.
+
+47
+00:02:33,800 --> 00:02:35,800
+Amber: under five minutes left.
+
+48
+00:02:36,100 --> 00:02:38,725
+The timer colour shifts to amber and
+
+49
+00:02:39,025 --> 00:02:41,275
+the label changes to 'WRAPPING UP'.
+
+50
+00:02:41,575 --> 00:02:45,325
+This is your nudge to start thinking about the transition.
+
+51
+00:02:45,625 --> 00:02:47,625
+Red: under two minutes.
+
+52
+00:02:47,925 --> 00:02:49,925
+The label becomes 'ENDING NOW'.
+
+53
+00:02:50,225 --> 00:02:54,350
+Time to get ready to call the next session to stage.
+
+54
+00:02:54,650 --> 00:02:57,275
+If the session goes into OVERRUN —
+
+55
+00:02:57,575 --> 00:02:59,825
+past its scheduled end time —
+
+56
+00:03:00,125 --> 00:03:03,500
+the timer flips to show a positive number and
+
+57
+00:03:03,800 --> 00:03:05,800
+the label changes to 'OVERTIME'.
+
+58
+00:03:06,100 --> 00:03:10,975
+The timer counts upward, telling you exactly how far over time you are.
+
+59
+00:03:11,275 --> 00:03:13,900
+These thresholds are the same five-minute and
+
+60
+00:03:14,200 --> 00:03:17,200
+two-minute marks used in the session cards and
+
+61
+00:03:17,500 --> 00:03:19,750
+the stage timer display mode —
+
+62
+00:03:20,050 --> 00:03:23,050
+the whole system speaks the same visual language.
+
+63
+00:03:23,350 --> 00:03:27,100
+In practice, the Stage Confidence Monitor is for a very
+
+64
+00:03:27,400 --> 00:03:31,150
+specific moment: when the director needs to be physically watching
+
+65
+00:03:31,450 --> 00:03:33,700
+something else — the stage door,
+
+66
+00:03:34,000 --> 00:03:37,750
+the operator feed, a conversation with the venue manager —
+
+67
+00:03:38,050 --> 00:03:41,800
+but still needs peripheral awareness of the current session state.
+
+68
+00:03:42,100 --> 00:03:45,475
+You pop it open on a secondary monitor or
+
+69
+00:03:45,775 --> 00:03:49,525
+a dedicated screen, and you never have to dig through
+
+70
+00:03:49,825 --> 00:03:53,575
+the session list to answer 'how much time does the
+
+71
+00:03:53,875 --> 00:03:55,875
+current speaker have left'.
+
+72
+00:03:56,175 --> 00:03:59,175
+It's right there, full screen, two metres away.
+
+73
+00:03:59,475 --> 00:04:02,100
+It also syncs immediately with state changes.
+
+74
+00:04:02,400 --> 00:04:06,150
+The moment you or another director transitions the session —
+
+75
+00:04:06,450 --> 00:04:09,450
+ENDED, HOLD, OVERRUN — the stage monitor updates.
+
+76
+00:04:09,750 --> 00:04:11,750
+No delay, no refresh.
+
+77
+00:04:12,050 --> 00:04:15,425
+The live session switches, the next session moves up,
+
+78
+00:04:15,725 --> 00:04:18,725
+and the timer resets for the new context.
+
+79
+00:04:19,025 --> 00:04:22,775
+The stage monitor isn't only useful when something is LIVE.
+
+80
+00:04:23,075 --> 00:04:25,325
+When a session is READY or
+
+81
+00:04:25,625 --> 00:04:29,000
+CALLING — meaning it's been flagged to start but
+
+82
+00:04:29,300 --> 00:04:33,425
+hasn't gone live yet — the monitor shows a different state.
+
+83
+00:04:33,725 --> 00:04:36,725
+The status line changes to 'STANDING BY —
+
+84
+00:04:37,025 --> 00:04:39,025
+STARTING SHORTLY' in amber.
+
+85
+00:04:39,325 --> 00:04:41,575
+The title and speaker are shown.
+
+86
+00:04:41,875 --> 00:04:45,625
+The timer shows the scheduled start time rather than a
+
+87
+00:04:45,925 --> 00:04:48,175
+countdown, and the colour is amber.
+
+88
+00:04:48,475 --> 00:04:51,850
+And if there's genuinely nothing active at all —
+
+89
+00:04:52,150 --> 00:04:55,900
+between events, or before the first session of the day
+
+90
+00:04:56,200 --> 00:04:59,575
+— the monitor shows 'STANDBY' with the event name,
+
+91
+00:04:59,875 --> 00:05:02,500
+and the next session details below it.
+
+92
+00:05:02,800 --> 00:05:04,800
+You still have context.
+
+93
+00:05:05,100 --> 00:05:07,725
+You're never looking at a blank screen.
+
+94
+00:05:08,025 --> 00:05:11,775
+To close the monitor, hit the small 'CLOSE' button in
+
+95
+00:05:12,075 --> 00:05:14,700
+the top right corner of the overlay.
+
+96
+00:05:15,000 --> 00:05:17,000
+That's it.
+
+97
+00:05:17,300 --> 00:05:21,050
+Your console comes back exactly as you left it —
+
+98
+00:05:21,350 --> 00:05:23,350
+nothing reloaded, no state lost.
+
+99
+00:05:23,650 --> 00:05:25,900
+You can also press Escape —
+
+100
+00:05:26,200 --> 00:05:29,950
+the keyboard handler recognises Escape as a dismiss for overlays,
+
+101
+00:05:30,250 --> 00:05:32,250
+so it works here too.
+
+102
+00:05:32,550 --> 00:05:34,550
+Stage Monitor isn't director-only.
+
+103
+00:05:34,850 --> 00:05:38,600
+The AV role and the signage role also have access
+
+104
+00:05:38,900 --> 00:05:42,275
+to the Stage Monitor button in their context panel.
+
+105
+00:05:42,575 --> 00:05:46,325
+The AV team can open it to keep track of
+
+106
+00:05:46,625 --> 00:05:49,625
+what's live while they're managing their equipment feeds.
+
+107
+00:05:49,925 --> 00:05:54,800
+The signage operator can use it to coordinate timing for manual override actions.
+
+108
+00:05:55,100 --> 00:05:58,100
+Stage and registration roles don't have the button,
+
+109
+00:05:58,400 --> 00:06:02,525
+because their views already surface what they need at a glance.
+
+110
+00:06:02,825 --> 00:06:06,575
+But any role that benefits from a dedicated confidence display
+
+111
+00:06:06,875 --> 00:06:08,875
+has access to it.
+
+112
+00:06:09,175 --> 00:06:11,175
+Simple feature, high value.
+
+113
+00:06:11,475 --> 00:06:13,475
+One button, full-screen context.
+
+114
+00:06:13,775 --> 00:06:17,525
+The monitor pulls from the same live data as everything
+
+115
+00:06:17,825 --> 00:06:21,575
+else in CueDeck — it's not a separate system or
+
+116
+00:06:21,875 --> 00:06:26,000
+a separate subscription, just a different view on the same state.
+
+117
+00:06:26,300 --> 00:06:30,050
+In the next episode we move from this director-facing display
+
+118
+00:06:30,350 --> 00:06:34,100
+to something the speaker themselves looks at: the Stage Timer.
+
+119
+00:06:34,400 --> 00:06:38,150
+That's a full-screen countdown designed to sit on a monitor
+
+120
+00:06:38,450 --> 00:06:40,700
+or tablet facing the stage —
+
+121
+00:06:41,000 --> 00:06:45,125
+so the presenter always knows exactly how much time they have.
+
+122
+00:06:45,425 --> 00:06:47,425
+See you there.

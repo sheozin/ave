@@ -1,0 +1,77 @@
+{
+  "cookies": [
+    {
+      "name": "m",
+      "value": "22f460e6-eb99-465e-872d-c965bb0140dcfe88df",
+      "domain": "m.stripe.com",
+      "path": "/",
+      "expires": 1808052093.267398,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "__stripe_mid",
+      "value": "d3665109-79ea-4aaf-9fbf-3d8888d0fa224a525a",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1805028093,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "__stripe_sid",
+      "value": "c6fcd245-7e95-4606-ba01-336b57094fb0bc39f6",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1773493893,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:7230",
+      "localStorage": [
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_director",
+          "value": "1"
+        },
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_signage",
+          "value": "1"
+        },
+        {
+          "name": "cuedeck_ck_65777804-7f2d-48fa-b93a-6a4f68ed0f04_dismissed",
+          "value": "1"
+        },
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_av",
+          "value": "1"
+        },
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_reg",
+          "value": "1"
+        },
+        {
+          "name": "sb-sawekpguemzvuvvulfbc-auth-token",
+          "value": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6IjJkOWYzMDcwLTEwOGMtNDM3Mi05N2IzLTI3ZmUwMTdhNzU0NSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3Nhd2VrcGd1ZW16dnV2dnVsZmJjLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI2NTc3NzgwNC03ZjJkLTQ4ZmEtYjkzYS02YTRmNjhlZDBmMDQiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzczNDk1Njk0LCJpYXQiOjE3NzM0OTIwOTQsImVtYWlsIjoiZGVtb0BjdWVkZWNrLmlvIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6ImRlbW9AY3VlZGVjay5pbyIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJEZW1vIFVzZXIiLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6IjY1Nzc3ODA0LTdmMmQtNDhmYS1iOTNhLTZhNGY2OGVkMGYwNCJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzczNDkyMDk0fV0sInNlc3Npb25faWQiOiJiNWM4MWZmOC0zNGNmLTQ3YTAtYjQ3MS04MjNhMTZhNTFkYWIiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.JUwsIEj2eFIOOCy1bcNDTGcg3tlOcFvaD12GrKU-TQpkiMQLHnv6RQTqnNU3jH8Xi9rZsm984AagbTRr9XbMAA\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1773495694,\"refresh_token\":\"ab3q6edmxalz\",\"user\":{\"id\":\"65777804-7f2d-48fa-b93a-6a4f68ed0f04\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"demo@cuedeck.io\",\"email_confirmed_at\":\"2026-03-12T23:03:10.147416Z\",\"phone\":\"\",\"confirmation_sent_at\":\"2026-03-12T23:02:44.657989Z\",\"confirmed_at\":\"2026-03-12T23:03:10.147416Z\",\"last_sign_in_at\":\"2026-03-14T12:41:34.057309813Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email\":\"demo@cuedeck.io\",\"email_verified\":true,\"full_name\":\"Demo User\",\"phone_verified\":false,\"sub\":\"65777804-7f2d-48fa-b93a-6a4f68ed0f04\"},\"identities\":[{\"identity_id\":\"cd5813ea-4b48-440f-a66c-18d7c00b3305\",\"id\":\"65777804-7f2d-48fa-b93a-6a4f68ed0f04\",\"user_id\":\"65777804-7f2d-48fa-b93a-6a4f68ed0f04\",\"identity_data\":{\"email\":\"demo@cuedeck.io\",\"email_verified\":false,\"full_name\":\"Demo User\",\"phone_verified\":false,\"sub\":\"65777804-7f2d-48fa-b93a-6a4f68ed0f04\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-03-12T23:02:44.636559Z\",\"created_at\":\"2026-03-12T23:02:44.637202Z\",\"updated_at\":\"2026-03-12T23:02:44.637202Z\",\"email\":\"demo@cuedeck.io\"}],\"created_at\":\"2026-03-12T23:02:44.558853Z\",\"updated_at\":\"2026-03-14T12:41:34.077821Z\",\"is_anonymous\":false},\"weak_password\":null}"
+        },
+        {
+          "name": "cuedeck_last_role_65777804-7f2d-48fa-b93a-6a4f68ed0f04",
+          "value": "director"
+        },
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_interp",
+          "value": "1"
+        },
+        {
+          "name": "cuedeck_tips_65777804-7f2d-48fa-b93a-6a4f68ed0f04_stage",
+          "value": "1"
+        }
+      ]
+    }
+  ]
+}

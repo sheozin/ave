@@ -994,27 +994,27 @@
       <h1>Emails</h1>
       <p class="section-subtitle">All sent emails &amp; delivery status</p>
 
-      <!-- Delivery Stats & Chart -->
-      <div class="top-bar" id="emails-top-bar" style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-        <div>
-          <div class="stats-row" id="emails-stats"></div>
-          <!-- Delivery Rate Chart -->
-          <div id="emails-chart-wrap" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-            <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">Delivery Rates (Last 7 Days)</div>
-            <div id="emails-delivery-chart" style="display:flex;align-items:flex-end;gap:4px;height:80px"></div>
-            <div id="emails-delivery-legend" style="display:flex;gap:16px;margin-top:8px;font-size:10px;color:var(--dim)"></div>
-          </div>
+      <!-- Stats Row -->
+      <div id="emails-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+      <!-- Chart & Alerts Grid -->
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+        <!-- Delivery Rate Chart -->
+        <div id="emails-chart-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">Delivery Rates (Last 7 Days)</div>
+          <div id="emails-delivery-chart" style="display:flex;align-items:flex-end;gap:8px;height:100px"></div>
+          <div id="emails-delivery-legend" style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--dim)"></div>
         </div>
         <!-- Bounce/Failure Alerts -->
         <div id="emails-alerts" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px">
-          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">⚠ Recent Issues</div>
-          <div id="emails-alerts-list" style="max-height:140px;overflow-y:auto;font-size:12px"></div>
+          <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px">Recent Issues</div>
+          <div id="emails-alerts-list" style="max-height:160px;overflow-y:auto;font-size:12px"></div>
         </div>
       </div>
 
       <!-- Filters & Export -->
-      <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
-        <select id="emails-type-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
+        <select id="emails-type-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:12px">
           <option value="">All Types</option>
           <option value="founder-welcome">Welcome</option>
           <option value="invoice">Invoice</option>
@@ -1022,7 +1022,7 @@
           <option value="social-proof">Social Proof</option>
           <option value="check-in">Check-in</option>
         </select>
-        <select id="emails-status-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
+        <select id="emails-status-filter" onchange="loadEmails(true)" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:12px">
           <option value="">All Statuses</option>
           <option value="sent">Sent</option>
           <option value="delivered">Delivered</option>
@@ -1031,15 +1031,15 @@
           <option value="bounced">Bounced</option>
           <option value="failed">Failed</option>
         </select>
-        <input type="text" id="emails-search" placeholder="Search by email..." onkeyup="if(event.key==='Enter')loadEmails(true)" style="flex:1;background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px">
-        <button onclick="loadEmails(true)" style="background:var(--blue);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer">Search</button>
-        <button onclick="exportEmailsCSV()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:4px">
-          <span style="font-size:14px">↓</span> Export CSV
+        <input type="text" id="emails-search" placeholder="Search by email..." onkeyup="if(event.key==='Enter')loadEmails(true)" style="flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:12px">
+        <button onclick="loadEmails(true)" style="background:var(--blue);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:500">Search</button>
+        <button onclick="exportEmailsCSV()" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;font-weight:500">
+          <span>↓</span> Export CSV
         </button>
       </div>
 
       <!-- Email Table -->
-      <div id="emails-table-wrap" style="margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div id="emails-table-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
         <table class="admin-table" id="emails-table">
           <thead>
             <tr>
@@ -2249,11 +2249,16 @@
         clear(statsEl);
         var deliveryRate = stats.total_sent > 0 ? Math.round((stats.delivered || 0) / stats.total_sent * 100) : 0;
         var openRate = stats.delivered > 0 ? Math.round((stats.opened || 0) / stats.delivered * 100) : 0;
+
+        var statBoxStyle = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center';
+        var statValueStyle = 'font-size:28px;font-weight:700;color:var(--text);line-height:1.2';
+        var statLabelStyle = 'font-size:11px;color:var(--dim);margin-top:4px;text-transform:uppercase;letter-spacing:0.5px';
+
         statsEl.innerHTML =
-          '<div class="stat-box"><div class="stat-value">' + (stats.total_sent || 0) + '</div><div class="stat-label">Total Sent</div></div>' +
-          '<div class="stat-box"><div class="stat-value">' + deliveryRate + '%</div><div class="stat-label">Delivered</div></div>' +
-          '<div class="stat-box"><div class="stat-value">' + openRate + '%</div><div class="stat-label">Open Rate</div></div>' +
-          '<div class="stat-box"><div class="stat-value" style="color:' + (stats.bounced > 0 ? '#f87171' : 'inherit') + '">' + (stats.bounced || 0) + '</div><div class="stat-label">Bounced</div></div>';
+          '<div style="' + statBoxStyle + '"><div style="' + statValueStyle + '">' + (stats.total_sent || 0) + '</div><div style="' + statLabelStyle + '">Total Sent</div></div>' +
+          '<div style="' + statBoxStyle + '"><div style="' + statValueStyle + ';color:#4ade80">' + deliveryRate + '%</div><div style="' + statLabelStyle + '">Delivered</div></div>' +
+          '<div style="' + statBoxStyle + '"><div style="' + statValueStyle + ';color:#60a5fa">' + openRate + '%</div><div style="' + statLabelStyle + '">Open Rate</div></div>' +
+          '<div style="' + statBoxStyle + '"><div style="' + statValueStyle + ';color:' + (stats.bounced > 0 ? '#f87171' : 'var(--text)') + '">' + (stats.bounced || 0) + '</div><div style="' + statLabelStyle + '">Bounced</div></div>';
 
         // Render delivery chart
         renderDeliveryChart(stats);
@@ -2345,37 +2350,38 @@
     var maxVal = Math.max.apply(null, data.map(function(d) { return d.value; })) || 1;
 
     data.forEach(function(d) {
-      var barHeight = Math.max(4, (d.value / maxVal) * 70);
+      var barHeight = Math.max(8, (d.value / maxVal) * 80);
       var bar = el('div', {
         style: {
           flex: '1',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '4px'
+          justifyContent: 'flex-end',
+          gap: '6px'
         }
       }, [
+        el('div', { style: { fontSize: '12px', fontWeight: '600', color: d.color } }, d.value),
         el('div', {
           style: {
             width: '100%',
-            maxWidth: '40px',
+            maxWidth: '50px',
             height: barHeight + 'px',
             background: d.color,
-            borderRadius: '4px 4px 0 0',
+            borderRadius: '6px 6px 0 0',
             transition: 'height 0.3s'
           },
           title: d.label + ': ' + d.value
-        }),
-        el('div', { style: { fontSize: '10px', color: 'var(--dim)' } }, d.value)
+        })
       ]);
       chartEl.appendChild(bar);
     });
 
     // Legend
     data.forEach(function(d) {
-      legendEl.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '4px' } }, [
-        el('div', { style: { width: '8px', height: '8px', borderRadius: '2px', background: d.color } }),
-        el('span', {}, d.label)
+      legendEl.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '6px' } }, [
+        el('div', { style: { width: '10px', height: '10px', borderRadius: '3px', background: d.color } }),
+        el('span', { style: { fontWeight: '500' } }, d.label)
       ]));
     });
   }

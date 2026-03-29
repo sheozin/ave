@@ -1,0 +1,459 @@
+1
+00:00:05,000 --> 00:00:07,000
+Every conference has sponsors.
+
+2
+00:00:07,300 --> 00:00:11,425
+And every sponsor expects to see their logo on the screens.
+
+3
+00:00:11,725 --> 00:00:15,475
+In CueDeck, the Sponsor signage mode handles this automatically —
+
+4
+00:00:15,775 --> 00:00:19,525
+you upload the logos, set how long each one displays,
+
+5
+00:00:19,825 --> 00:00:23,575
+and they rotate in a clean fade loop on any
+
+6
+00:00:23,875 --> 00:00:25,875
+display you assign them to.
+
+7
+00:00:26,175 --> 00:00:29,925
+In this episode I'll show you how to upload sponsors,
+
+8
+00:00:30,225 --> 00:00:33,225
+configure timing, and build a display sequence that
+
+9
+00:00:33,525 --> 00:00:36,900
+rotates between sponsor branding and your session content automatically.
+
+10
+00:00:37,200 --> 00:00:40,200
+Sponsor logos are managed from the Signage panel.
+
+11
+00:00:40,500 --> 00:00:43,125
+There's a dedicated Sponsors section here —
+
+12
+00:00:43,425 --> 00:00:45,675
+separate from your display configuration —
+
+13
+00:00:45,975 --> 00:00:48,600
+where you manage the sponsor list that
+
+14
+00:00:48,900 --> 00:00:50,900
+feeds the Sponsor mode.
+
+15
+00:00:51,200 --> 00:00:54,200
+Each sponsor has a name, a logo file,
+
+16
+00:00:54,500 --> 00:00:56,750
+and a display duration in seconds.
+
+17
+00:00:57,050 --> 00:00:59,300
+The list feeds every display that
+
+18
+00:00:59,600 --> 00:01:01,850
+is set to Sponsor mode —
+
+19
+00:01:02,150 --> 00:01:04,400
+so you manage the logos once,
+
+20
+00:01:04,700 --> 00:01:07,700
+and they appear on all the relevant screens.
+
+21
+00:01:07,1000 --> 00:01:10,625
+You can also set a sort order,
+
+22
+00:01:10,925 --> 00:01:12,925
+which controls the rotation sequence.
+
+23
+00:01:13,225 --> 00:01:15,225
+Let's add a sponsor.
+
+24
+00:01:15,525 --> 00:01:17,525
+Click Add Sponsor.
+
+25
+00:01:17,825 --> 00:01:20,825
+You'll get a small form: the sponsor's name,
+
+26
+00:01:21,125 --> 00:01:24,125
+a logo upload, and display duration in seconds.
+
+27
+00:01:24,425 --> 00:01:29,300
+For the logo file: the recommended format is PNG with a transparent background.
+
+28
+00:01:29,600 --> 00:01:33,350
+This is important — the Sponsor mode renders on a
+
+29
+00:01:33,650 --> 00:01:38,150
+dark background, so a PNG with transparency will look clean and professional.
+
+30
+00:01:38,450 --> 00:01:42,200
+A white-background JPEG will look like a white rectangle in
+
+31
+00:01:42,500 --> 00:01:44,750
+the middle of a dark screen.
+
+32
+00:01:45,050 --> 00:01:48,425
+Recommended size is 800 by 600 pixels or larger.
+
+33
+00:01:48,725 --> 00:01:51,725
+CueDeck scales the image to fit the display,
+
+34
+00:01:52,025 --> 00:01:55,400
+so going bigger is fine — it won't pixelate.
+
+35
+00:01:55,700 --> 00:01:59,075
+Going smaller may look soft on a large TV.
+
+36
+00:01:59,375 --> 00:02:03,125
+I'll upload this sponsor logo, set the name to Platinum
+
+37
+00:02:03,425 --> 00:02:06,800
+Partner, and set the display duration to eight seconds.
+
+38
+00:02:07,100 --> 00:02:10,850
+Hit Save — the logo uploads to the leod-assets storage
+
+39
+00:02:11,150 --> 00:02:14,900
+bucket and the sponsor is added to the rotation immediately.
+
+40
+00:02:15,200 --> 00:02:17,825
+Add as many sponsors as you need.
+
+41
+00:02:18,125 --> 00:02:21,125
+Each one gets its own duration setting —
+
+42
+00:02:21,425 --> 00:02:24,050
+so if your title sponsor paid more,
+
+43
+00:02:24,350 --> 00:02:28,475
+you can give them twelve seconds while other sponsors get six.
+
+44
+00:02:28,775 --> 00:02:31,775
+The rotation respects the individual durations per sponsor,
+
+45
+00:02:32,075 --> 00:02:34,075
+not a global setting.
+
+46
+00:02:34,375 --> 00:02:37,000
+The sort order determines the rotation sequence.
+
+47
+00:02:37,300 --> 00:02:41,050
+Drag to reorder, or manually set the order number —
+
+48
+00:02:41,350 --> 00:02:43,975
+your title sponsor can always appear first.
+
+49
+00:02:44,275 --> 00:02:48,025
+Once the logos are uploaded, they're live immediately on any
+
+50
+00:02:48,325 --> 00:02:50,325
+display running Sponsor mode.
+
+51
+00:02:50,625 --> 00:02:52,875
+No page refresh, no redeploy —
+
+52
+00:02:53,175 --> 00:02:57,300
+the display picks up the new sponsor via the realtime subscription.
+
+53
+00:02:57,600 --> 00:03:00,225
+To show sponsors on a specific screen,
+
+54
+00:03:00,525 --> 00:03:03,525
+open the display in the Signage panel and
+
+55
+00:03:03,825 --> 00:03:06,075
+set the Content Mode to Sponsors.
+
+56
+00:03:06,375 --> 00:03:09,750
+That display will now rotate through your sponsor list,
+
+57
+00:03:10,050 --> 00:03:12,675
+each logo displayed for its configured duration.
+
+58
+00:03:12,975 --> 00:03:14,975
+Here's what it looks like.
+
+59
+00:03:15,275 --> 00:03:18,275
+Clean, centred, full-screen logo on a dark background.
+
+60
+00:03:18,575 --> 00:03:21,575
+After the configured duration, it fades out and
+
+61
+00:03:21,875 --> 00:03:23,875
+the next sponsor fades in.
+
+62
+00:03:24,175 --> 00:03:27,925
+The transitions are smooth — no flash, no hard cut.
+
+63
+00:03:28,225 --> 00:03:31,225
+If a sponsor has no logo uploaded —
+
+64
+00:03:31,525 --> 00:03:36,400
+just a name — the mode renders the name in large text instead.
+
+65
+00:03:36,700 --> 00:03:39,700
+So you're never showing a broken image placeholder.
+
+66
+00:03:40,000 --> 00:03:43,750
+The most practical setup for venue displays isn't a screen
+
+67
+00:03:44,050 --> 00:03:46,050
+that shows sponsors full-time.
+
+68
+00:03:46,350 --> 00:03:51,225
+It's a screen that cycles between useful session content and sponsor branding automatically.
+
+69
+00:03:51,525 --> 00:03:54,525
+CueDeck has a sequence builder for exactly this.
+
+70
+00:03:54,825 --> 00:03:58,575
+In the display edit modal, scroll down to the Sequence
+
+71
+00:03:58,875 --> 00:04:00,875
+section and enable it.
+
+72
+00:04:01,175 --> 00:04:04,925
+Then build your rotation: add a slide for the NextUp
+
+73
+00:04:05,225 --> 00:04:08,975
+mode — the card showing what's on stage now and
+
+74
+00:04:09,275 --> 00:04:13,775
+what's coming next — and set it to run for thirty seconds.
+
+75
+00:04:14,075 --> 00:04:17,075
+Add a second slide for Sponsors mode and
+
+76
+00:04:17,375 --> 00:04:19,375
+set it to ten seconds.
+
+77
+00:04:19,675 --> 00:04:21,675
+Save the display.
+
+78
+00:04:21,975 --> 00:04:24,600
+Now it runs: thirty seconds of NextUp,
+
+79
+00:04:24,900 --> 00:04:27,525
+ten seconds of sponsors, back to NextUp,
+
+80
+00:04:27,825 --> 00:04:30,075
+back to sponsors — automatically, indefinitely.
+
+81
+00:04:30,375 --> 00:04:34,125
+You can build sequences with as many slides as you
+
+82
+00:04:34,425 --> 00:04:37,425
+need, combining any of CueDeck's ten display modes:
+
+83
+00:04:37,725 --> 00:04:40,725
+NextUp, Timeline, Programme, Sponsors, Clock, Countdown, and more.
+
+84
+00:04:41,025 --> 00:04:43,275
+Each slide has its own duration.
+
+85
+00:04:43,575 --> 00:04:46,575
+A few practical tips for sponsor logos that
+
+86
+00:04:46,875 --> 00:04:48,875
+look professional on venue screens.
+
+87
+00:04:49,175 --> 00:04:51,175
+Always use PNG with transparency.
+
+88
+00:04:51,475 --> 00:04:53,475
+Never JPEG.
+
+89
+00:04:53,775 --> 00:04:55,775
+Minimum 800 by 600 pixels.
+
+90
+00:04:56,075 --> 00:04:59,075
+For a 4K screen, go 1600 by 900.
+
+91
+00:04:59,375 --> 00:05:02,375
+If a sponsor only gives you a JPEG,
+
+92
+00:05:02,675 --> 00:05:04,925
+open it in any image editor,
+
+93
+00:05:05,225 --> 00:05:08,225
+remove the white background, and export as PNG.
+
+94
+00:05:08,525 --> 00:05:12,275
+Ten minutes of prep prevents an embarrassing white box on
+
+95
+00:05:12,575 --> 00:05:14,825
+a display during the coffee break.
+
+96
+00:05:15,125 --> 00:05:18,500
+Duration: eight to ten seconds is the sweet spot.
+
+97
+00:05:18,800 --> 00:05:22,175
+Long enough to read, short enough to keep rotating.
+
+98
+00:05:22,475 --> 00:05:25,100
+Avoid anything shorter than five seconds —
+
+99
+00:05:25,400 --> 00:05:27,650
+logos need a moment to register.
+
+100
+00:05:27,950 --> 00:05:30,950
+And if you're running the Sequence mode —
+
+101
+00:05:31,250 --> 00:05:33,500
+mixing sponsors with session content —
+
+102
+00:05:33,800 --> 00:05:38,675
+the sponsor duration within the sequence is separate from the per-logo rotation duration.
+
+103
+00:05:38,975 --> 00:05:43,475
+The sequence controls how long the display spends in Sponsor mode total.
+
+104
+00:05:43,775 --> 00:05:47,525
+The per-logo duration controls how quickly it cycles through individual
+
+105
+00:05:47,825 --> 00:05:49,825
+sponsors within that window.
+
+106
+00:05:50,125 --> 00:05:53,500
+Upload your logos, set durations, build a sequence that
+
+107
+00:05:53,800 --> 00:05:56,050
+mixes sponsor time with session content,
+
+108
+00:05:56,350 --> 00:06:00,850
+and every screen in the venue is handling your sponsor commitments automatically.
+
+109
+00:06:01,150 --> 00:06:03,775
+That wraps up the signage series —
+
+110
+00:06:04,075 --> 00:06:06,075
+Timeline, Programme, and Sponsors.
+
+111
+00:06:06,375 --> 00:06:10,125
+In the next episode we're going deeper into the display
+
+112
+00:06:10,425 --> 00:06:13,800
+system: the full sequence builder, all ten display modes,
+
+113
+00:06:14,100 --> 00:06:17,100
+and how to configure a multi-zone venue where
+
+114
+00:06:17,400 --> 00:06:20,400
+different screens show different content for different audiences.
+
+115
+00:06:20,700 --> 00:06:22,950
+Subscribe so you don't miss it.

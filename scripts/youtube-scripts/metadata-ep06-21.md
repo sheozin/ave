@@ -12,8 +12,8 @@
 When a session runs long, CueDeck's delay cascade automatically shifts every subsequent session in your programme — no manual edits, no spreadsheet recalculations. In this episode I'll show you exactly how it works, what anchor sessions do, and how to reset delays instantly.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 5 — Broadcast Bar → [EP5 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 5 — Broadcast Bar → https://www.youtube.com/watch?v=2ZqYHw2TI_E
 
 Timestamps:
 0:00 Intro — why manual rescheduling fails
@@ -44,8 +44,8 @@ Timestamps:
 CueDeck's signage system turns any browser tab into a live display for your venue. Lobby monitors, stage-side screens, backstage tablets — all updating in realtime from your console. In this episode I'll show you how to create your first display, generate a URL, and set up a rotating sequence.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 6 — Delay Cascade → [EP6 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 6 — Delay Cascade → https://www.youtube.com/watch?v=vq4hef-0uCg
 
 Timestamps:
 0:00 Intro — what the signage system does
@@ -76,8 +76,8 @@ Timestamps:
 CueDeck has 11 display modes for your venue screens — from a full session schedule to a speaker countdown to a time×room programme grid. In this episode I walk through every single one so you know exactly which mode to use where.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 7 — Digital Signage Setup → [EP7 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 7 — Digital Signage Setup → https://www.youtube.com/watch?v=ZD8xXyBt7ec
 
 Timestamps:
 0:00 Intro — the 11 modes overview
@@ -113,8 +113,8 @@ Timestamps:
 The Stage Confidence Monitor is a fullscreen overlay that shows the current LIVE session in giant text — always visible, always in sync. In this episode I'll show you how to open it, what each state looks like, and how directors use it to keep eyes on stage instead of on a screen.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 8 — All 11 Display Modes → [EP8 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 8 — All 11 Display Modes → https://www.youtube.com/watch?v=ntM9NZkPWR8
 
 Timestamps:
 0:00 Intro
@@ -145,8 +145,8 @@ Timestamps:
 The Stage Timer is a fullscreen countdown display for the speaker — mounted on a monitor facing the stage so presenters can self-manage their time. In this episode I'll set one up from scratch and walk through all six visual states: standby, live (green/amber/red), overrun, and hold.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 9 — Stage Confidence Monitor → [EP9 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 9 — Stage Confidence Monitor → https://www.youtube.com/watch?v=5pnrAtIQBZI
 
 Timestamps:
 0:00 Intro — the speaker self-management problem
@@ -181,8 +181,8 @@ Timestamps:
 When something goes wrong on stage — tech failure, no-show speaker, fire alarm — the AI Incident Advisor gives you a prioritised action plan in seconds. In this episode I'll show you how it works and demo it with a real incident scenario.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 10 — Stage Timer → [EP10 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 10 — Stage Timer → https://www.youtube.com/watch?v=33BRPEqgbc4
 
 Timestamps:
 0:00 Intro — the problem with crisis moments
@@ -215,8 +215,8 @@ Timestamps:
 The CueDeck Cue Engine fires 8 minutes before every session starts with an AI-generated readiness checklist — mic tested? slides loaded? speaker arrived? In this episode I'll show you how it works and why it catches more problems than any manual reminder system.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 11 — AI Incident Advisor → [EP11 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 11 — AI Incident Advisor → https://www.youtube.com/watch?v=TIT9jqmMRNo
 
 Timestamps:
 0:00 Intro — the 8-minute window
@@ -248,8 +248,8 @@ Timestamps:
 After the last session ends, CueDeck's AI Report Generator analyses your event data and produces a full debrief — session variance, incident log, executive summary, and AI narrative — ready to send to your client or team. In this episode I'll walk through every tab.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 12 — AI Cue Engine → [EP12 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 12 — AI Cue Engine → https://www.youtube.com/watch?v=TE98wtdXehk
 
 Timestamps:
 0:00 Intro
@@ -281,8 +281,8 @@ Timestamps:
 CueDeck's Timeline and Programme signage modes turn your lobby monitors and corridor screens into live conference boards that update automatically as sessions start and end. In this episode I'll set up both modes and show the difference between them.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 13 — AI Report Generator → [EP13 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 13 — AI Report Generator → https://www.youtube.com/watch?v=oZwY2JgGap0
 
 Timestamps:
 0:00 Intro — attendee-facing screens
@@ -314,8 +314,8 @@ Timestamps:
 CueDeck's Sponsor signage mode displays rotating sponsor logos on your venue screens — automatically cycling through sponsors at configurable durations. In this episode I'll upload logos, set per-sponsor timing, and build a sequence that mixes sponsors with session info.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 14 — Timeline & Programme → [EP14 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 14 — Timeline & Programme → https://www.youtube.com/watch?v=lk71z8RF9v0
 
 Timestamps:
 0:00 Intro — why sponsors need screen time
@@ -347,8 +347,8 @@ Timestamps:
 CueDeck logs every state transition, every team action, every delay — with timestamps and actor names. In this episode I'll show you the event log, the AI variance report, and how to export a CSV from Supabase for client billing and debrief.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 15 — Sponsor Logos → [EP15 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 15 — Sponsor Logos → https://www.youtube.com/watch?v=c4AnQanOUJ8
 
 Timestamps:
 0:00 Intro — the accountability problem
@@ -379,8 +379,8 @@ Timestamps:
 In a live event, your eyes are on stage — not on a mouse. CueDeck's keyboard shortcuts and Cmd+K command palette let you run the entire console without ever clicking. In this episode I'll walk through every shortcut and demo a full session transition without touching the mouse.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 16 — Post-Event Report → [EP16 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 16 — Post-Event Report → https://www.youtube.com/watch?v=kRl2s2Y1lOo
 
 Timestamps:
 0:00 Intro — eyes on stage, not on mouse
@@ -414,8 +414,8 @@ Timestamps:
 CueDeck runs in any browser — no app to install. Stage managers on an iPad, registration on a phone, director on a tablet. In this episode I'll show you exactly how CueDeck adapts to smaller screens and give you a practical setup guide for each role.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 17 — Keyboard Shortcuts → [EP17 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 17 — Keyboard Shortcuts → https://www.youtube.com/watch?v=GOpXBCaK7VI
 
 Timestamps:
 0:00 Intro
@@ -448,7 +448,7 @@ CueDeck has a plan for every event size — from a free single-event trial to un
 
 🚀 Try CueDeck free → https://app.cuedeck.io
 💰 Pricing → https://cuedeck.io/pricing
-📖 Full playlist → [PLAYLIST LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
 
 Timestamps:
 0:00 Intro
@@ -481,8 +481,8 @@ Timestamps:
 Managing a multi-track conference with sessions running in parallel across three rooms? CueDeck handles it with room filters, per-room stage managers, anchor sessions, and the Programme grid view. In this episode I'll run a full 3-track conference setup end-to-end.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 19 — Billing & Plans → [EP19 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 19 — Billing & Plans → https://www.youtube.com/watch?v=T6Xbtl8BMhM
 
 Timestamps:
 0:00 Intro — the multi-track challenge
@@ -514,7 +514,7 @@ Timestamps:
 This is the capstone episode. No feature callouts, no pauses — just a full event run from 8:45am setup to the final post-event report. Tech Summit 2026. 10 sessions. 3 rooms. Everything you've learned across this series, running live.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
 ⬅️ Previous: Episode 20 — Multi-Room Events → [EP20 LINK]
 
 Timestamps:

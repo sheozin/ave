@@ -1,0 +1,183 @@
+1
+00:00:05,000 --> 00:00:08,000
+Group chats during a live event are noise.
+
+2
+00:00:08,300 --> 00:00:11,300
+By the time someone reads a message and
+
+3
+00:00:11,600 --> 00:00:13,600
+replies, the moment has passed.
+
+4
+00:00:13,900 --> 00:00:16,150
+CueDeck's broadcast bar solves this —
+
+5
+00:00:16,450 --> 00:00:19,075
+one message, every connected device, zero round-trips.
+
+6
+00:00:19,375 --> 00:00:23,125
+The broadcast bar sits at the top of the console.
+
+7
+00:00:23,425 --> 00:00:25,675
+Directors type a message, hit send,
+
+8
+00:00:25,975 --> 00:00:29,350
+and it appears immediately across all connected devices —
+
+9
+00:00:29,650 --> 00:00:31,900
+every stage manager, every AV engineer,
+
+10
+00:00:32,200 --> 00:00:36,325
+every interpretation booth — as a coloured overlay they can't miss.
+
+11
+00:00:36,625 --> 00:00:39,250
+Messages dismiss when each person taps them.
+
+12
+00:00:39,550 --> 00:00:42,175
+The director can see who's cleared it.
+
+13
+00:00:42,475 --> 00:00:45,475
+It's not a chat — it's a command.
+
+14
+00:00:45,775 --> 00:00:47,775
+Let's send one.
+
+15
+00:00:48,075 --> 00:00:50,075
+Click the broadcast bar.
+
+16
+00:00:50,375 --> 00:00:54,500
+Type your message — 'Delay 5 minutes — hold all transitions'.
+
+17
+00:00:54,800 --> 00:00:56,800
+There's a character counter.
+
+18
+00:00:57,100 --> 00:00:59,350
+Keep it short and punchy —
+
+19
+00:00:59,650 --> 00:01:01,650
+this is a live environment.
+
+20
+00:01:01,950 --> 00:01:03,950
+Hit Send.
+
+21
+00:01:04,250 --> 00:01:06,250
+Watch.
+
+22
+00:01:06,550 --> 00:01:08,550
+Boom.
+
+23
+00:01:08,850 --> 00:01:11,100
+Every connected role sees it instantly.
+
+24
+00:01:11,400 --> 00:01:16,275
+The banner sits at the top of their view until they dismiss it.
+
+25
+00:01:16,575 --> 00:01:19,200
+They can't accidentally miss it scrolling past.
+
+26
+00:01:19,500 --> 00:01:22,125
+For common situations you'll use over and
+
+27
+00:01:22,425 --> 00:01:24,425
+over, CueDeck has broadcast presets.
+
+28
+00:01:24,725 --> 00:01:26,975
+One click — no typing needed.
+
+29
+00:01:27,275 --> 00:01:30,275
+'HOLD — Do not proceed.' Great for when
+
+30
+00:01:30,575 --> 00:01:33,200
+you need everything to pause right now.
+
+31
+00:01:33,500 --> 00:01:35,500
+'Speakers to stage immediately.' Self-explanatory.
+
+32
+00:01:35,800 --> 00:01:39,550
+'Running 5 minutes late — adjust your clocks.' The director
+
+33
+00:01:39,850 --> 00:01:43,225
+can customise these presets for each event in advance.
+
+34
+00:01:43,525 --> 00:01:46,150
+We'll show that in the signage episode.
+
+35
+00:01:46,450 --> 00:01:49,825
+Each person dismisses the message on their own device.
+
+36
+00:01:50,125 --> 00:01:53,125
+The director doesn't need to clear it globally.
+
+37
+00:01:53,425 --> 00:01:57,175
+Local dismiss means everyone works at their own pace once
+
+38
+00:01:57,475 --> 00:01:59,475
+they've acknowledged the instruction.
+
+39
+00:01:59,775 --> 00:02:03,525
+The broadcast stays visible until dismissed — it doesn't auto-fade.
+
+40
+00:02:03,825 --> 00:02:05,825
+Clear, instant, impossible to miss.
+
+41
+00:02:06,125 --> 00:02:08,125
+That's the broadcast bar.
+
+42
+00:02:08,425 --> 00:02:10,425
+Next episode — delay management.
+
+43
+00:02:10,725 --> 00:02:13,725
+What happens when a session runs long and
+
+44
+00:02:14,025 --> 00:02:17,775
+you need to cascade a delay through the rest of
+
+45
+00:02:18,075 --> 00:02:20,325
+the programme without losing your mind.
+
+46
+00:02:20,625 --> 00:02:22,625
+See you in episode six.

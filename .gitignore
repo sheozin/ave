@@ -46,3 +46,15 @@ archive/
 # Backup / scratch files
 *.bak
 .vercel
+
+# Local tool configs
+.claude/
+.superpowers/
+
+# macOS app bundles
+*.app/
+
+# Debug logs
+*-debug.log
+firebase-debug.log
+cuedeck-marketing/

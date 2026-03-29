@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CueDeck Design Mockup — 4 Feature Areas</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0f1a; color: #e5e7eb; font-family: 'Inter', -apple-system, sans-serif; }
+
+  .page-header {
+    background: linear-gradient(135deg, #0f172a, #1e3a8a);
+    padding: 40px 48px 32px;
+    border-bottom: 1px solid rgba(59,130,246,0.2);
+  }
+  .page-header h1 { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #fff; }
+  .page-header p { font-size: 14px; color: #93c5fd; margin-top: 6px; }
+
+  .sections { max-width: 1260px; margin: 0 auto; padding: 48px 32px; }
+
+  .section {
+    margin-bottom: 64px;
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .section-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 20px 28px;
+    background: rgba(59,130,246,0.06);
+    border-bottom: 1px solid #1e293b;
+  }
+  .section-num {
+    background: #3b82f6; color: #fff; font-size: 11px; font-weight: 800;
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .section-header h2 { font-size: 18px; font-weight: 700; color: #fff; }
+  .section-body { padding: 28px; }
+  .section-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: #3b82f6; margin-bottom: 16px;
+  }
+
+  /* ─── Mockup card (dark CueDeck style) ─── */
+  .mock {
+    background: #131c2c;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .mock-title {
+    padding: 12px 16px;
+    font-size: 14px; font-weight: 700; color: #fff;
+    border-bottom: 1px solid #1e293b;
+    background: rgba(255,255,255,0.02);
+  }
+  .mock-body { padding: 16px; }
+
+  /* ─── Shared UI elements ─── */
+  .input-field {
+    background: #0f172a; border: 1px solid #334155; color: #e5e7eb;
+    padding: 8px 12px; border-radius: 6px; font-size: 12px; font-family: inherit;
+    outline: none; width: 100%;
+  }
+  .input-field::placeholder { color: #64748b; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    border: none; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .btn-primary { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.4); color: #60a5fa; }
+  .btn-green { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #34d399; }
+  .btn-amber { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #fbbf24; }
+  .btn-red { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #f87171; }
+  .btn-ghost { background: transparent; border: 1px solid #334155; color: #9ca3af; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+  }
+  .badge-green { background: rgba(16,185,129,0.15); color: #34d399; }
+  .badge-red { background: rgba(239,68,68,0.12); color: #f87171; }
+  .badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .badge-amber { background: rgba(245,158,11,0.12); color: #fbbf24; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-green { background: #34d399; box-shadow: 0 0 6px #34d399; }
+  .dot-red { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+  .dot-gray { background: #4b5563; }
+
+  .divider { border-top: 1px solid #1e293b; margin: 14px 0; }
+  .dim { color: #64748b; font-size: 11px; }
+  .muted { color: #9ca3af; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .arrow-label {
+    display: flex; align-items: center; gap: 8px; margin: 16px 0;
+    font-size: 12px; color: #60a5fa; font-weight: 600;
+  }
+  .arrow-label::before { content: '→'; font-size: 16px; }
+
+  .new-tag {
+    background: #34d399; color: #000; font-size: 9px; font-weight: 800;
+    padding: 1px 5px; border-radius: 3px; letter-spacing: 0.05em;
+    margin-left: 6px; vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>CueDeck Feature Design — 4 Areas</h1>
+  <p>Current state (left) vs Proposed design (right) for each feature</p>
+</div>
+
+<div class="sections">
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- AREA 1: SIGNAGE DISPLAY CONNECTION                 -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">1</div>
+    <h2>Signage Display Connection</h2>
+  </div>
+  <div class="section-body">
+    <div class="two-col">
+
+      <!-- CURRENT -->
+      <div>
+        <div class="section-label">Current — Manual URL Copy</div>
+        <div class="mock">
+          <div class="mock-title">cuedeck-display.html (on the TV screen)</div>
+          <div class="mock-body" style="text-align:center; padding: 40px 20px;">
+            <div style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px;">Enter Display ID</div>
+            <input class="input-field" style="max-width: 240px; text-align: center; margin: 0 auto 16px; display: block;" placeholder="paste-display-uuid-here">
+            <button class="btn btn-primary">Connect</button>
+            <div style="margin-top: 20px; font-size: 11px; color: #4b5563;">User must copy UUID from console and paste here</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROPOSED -->
+      <div>
+        <div class="section-label">Proposed — Pairing Code <span class="new-tag">NEW</span></div>
+        <div class="mock">
+          <div class="mock-title">cuedeck-display.html (on the TV screen)</div>
+          <div class="mock-body" style="text-align:center; padding: 32px 20px;">
+            <div style="font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">Pairing Code</div>
+            <div style="font-size: 48px; font-weight: 800; letter-spacing: 8px; color: #fff; font-family: monospace; margin-bottom: 6px;">A7K-3M2</div>
+            <div style="font-size: 11px; color: #64748b; margin-bottom: 20px;">Enter this code in your CueDeck console to connect</div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <span class="dot dot-green"></span>
+              <span style="font-size: 11px; color: #34d399;">Waiting for connection...</span>
+            </div>
+            <div style="margin-top: 16px; font-size: 10px; color: #4b5563;">Code expires in 4:32</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-label" style="margin: 24px 0 16px;">Console side — Add Display wizard</div>
+
+    <div class="mock" style="max-width: 480px;">
+      <div class="mock-title">Add Display <span class="new-tag">NEW WIZARD</span></div>
+      <div class="mock-body">
+        <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+          <div style="flex: 1; padding: 16px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; text-align: center; cursor: pointer;">
+            <div style="font-size: 24px; margin-bottom: 4px;">🔗</div>
+            <div style="font-size: 12px; font-weight: 600; color: #60a5fa;">Pairing Code</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Enter code from screen</div>
+          </div>
+          <div style="flex: 1; padding: 16px; background: rgba(255,255,255,0.02); border: 1px solid #1e293b; border-radius: 8px; text-align: center; cursor: pointer;">
+            <div style="font-size: 24px; margin-bottom: 4px;">⚙️</div>
+            <div style="font-size: 12px; font-weight: 600; color: #9ca3af;">Manual Setup</div>
+            <div style="font-size: 10px; color: #4b5563; margin-top: 2px;">Configure without screen</div>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: #64748b; margin-bottom: 8px;">Enter the code shown on your screen:</div>
+        <div style="display: flex; gap: 8px;">
+          <input class="input-field" style="flex: 1; font-size: 18px; text-align: center; letter-spacing: 4px; font-family: monospace;" placeholder="A7K-3M2">
+          <button class="btn btn-green" style="padding: 8px 20px;">Connect</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-label" style="margin: 24px 0 16px;">Device Dashboard — Signage panel rows</div>
+
+    <div class="mock" style="max-width: 600px;">
+      <div class="mock-title">Signage Displays <span class="new-tag">ENHANCED</span></div>
+      <div class="mock-body" style="padding: 0;">
+        <!-- Row 1 - online -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #1e293b;">
+          <span class="dot dot-green"></span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: #fff;">Lobby Monitor</div>
+            <div style="font-size: 10px; color: #64748b;">schedule · landscape · Main Stage</div>
+          </div>
+          <span class="badge badge-green">Online</span>
+          <span style="font-size: 10px; color: #4b5563;">12s ago</span>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">▶ Launch</button>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">QR</button>
+        </div>
+        <!-- Row 2 - online -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #1e293b;">
+          <span class="dot dot-green"></span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: #fff;">Backstage Screen</div>
+            <div style="font-size: 10px; color: #64748b;">next-up · landscape</div>
+          </div>
+          <span class="badge badge-green">Online</span>
+          <span style="font-size: 10px; color: #4b5563;">5s ago</span>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">▶ Launch</button>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">QR</button>
+        </div>
+        <!-- Row 3 - offline -->
+        <div style="display: flex; align-items: center; gap: 12px; padding: 12px 16px;">
+          <span class="dot dot-red"></span>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 13px; font-weight: 600; color: #fff;">Registration Desk</div>
+            <div style="font-size: 10px; color: #64748b;">agenda · portrait</div>
+          </div>
+          <span class="badge badge-red">Offline</span>
+          <span style="font-size: 10px; color: #4b5563;">3h ago</span>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">▶ Launch</button>
+          <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">QR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- AREA 2: USER PROFILES                              -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">2</div>
+    <h2>User Profiles</h2>
+  </div>
+  <div class="section-body">
+    <div class="two-col">
+
+      <!-- CURRENT -->
+      <div>
+        <div class="section-label">Current — Read-only profile</div>
+        <div class="mock" style="max-width: 300px;">
+          <div class="mock-body" style="text-align: center;">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: #1e40af; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 18px; font-weight: 700; color: #fff;">JS</div>
+            <div style="font-size: 14px; font-weight: 700; color: #fff;">John Sek</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">sherif.mka@protonmail.com</div>
+            <div style="margin-top: 8px;"><span class="badge badge-blue">Director</span></div>
+            <div style="margin-top: 6px; font-size: 11px; color: #34d399;">PRO · Active</div>
+            <div class="divider"></div>
+            <button class="btn btn-red" style="width: 100%; justify-content: center;">⏻ Sign Out</button>
+            <div style="margin-top: 12px; font-size: 10px; color: #4b5563;">No way to edit name, org, phone, or billing info</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROPOSED -->
+      <div>
+        <div class="section-label">Proposed — Editable profile <span class="new-tag">NEW</span></div>
+        <div class="mock" style="max-width: 300px;">
+          <div class="mock-body">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+              <div style="width: 48px; height: 48px; border-radius: 50%; background: #1e40af; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: #fff; flex-shrink: 0;">JS</div>
+              <div style="flex: 1;">
+                <div style="font-size: 14px; font-weight: 700; color: #fff;">John Sek</div>
+                <div style="font-size: 11px; color: #64748b;">sherif.mka@protonmail.com</div>
+              </div>
+              <button class="btn btn-ghost" style="font-size: 10px; padding: 4px 8px;">✎ Edit</button>
+            </div>
+
+            <div style="font-size: 10px; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; font-weight: 700;">Personal Details</div>
+
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">Name</div>
+              <input class="input-field" value="John Sek" style="font-size: 12px; padding: 6px 10px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">Organization</div>
+              <input class="input-field" value="CTS" style="font-size: 12px; padding: 6px 10px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">Phone</div>
+              <input class="input-field" placeholder="+41 79 123 4567" style="font-size: 12px; padding: 6px 10px;">
+            </div>
+
+            <div class="divider"></div>
+
+            <div style="font-size: 10px; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; font-weight: 700;">Billing Details <span class="badge badge-blue" style="font-size: 8px;">Director</span></div>
+
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">Company Name</div>
+              <input class="input-field" placeholder="Company Ltd." style="font-size: 12px; padding: 6px 10px;">
+            </div>
+            <div style="margin-bottom: 8px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">VAT / Tax ID</div>
+              <input class="input-field" placeholder="CHE-123.456.789" style="font-size: 12px; padding: 6px 10px;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <div style="font-size: 10px; color: #64748b; margin-bottom: 3px;">Billing Address</div>
+              <textarea class="input-field" rows="2" placeholder="Street, City, Country" style="font-size: 12px; padding: 6px 10px; resize: none;"></textarea>
+            </div>
+
+            <button class="btn btn-green" style="width: 100%; justify-content: center; padding: 8px;">Save Changes</button>
+
+            <div class="divider"></div>
+            <div style="display: flex; gap: 8px;">
+              <span class="badge badge-blue">Director</span>
+              <span class="badge badge-green">PRO · Active</span>
+            </div>
+            <div style="margin-top: 10px;">
+              <button class="btn btn-red" style="width: 100%; justify-content: center;">⏻ Sign Out</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- AREA 3: ENHANCED OPERATORS MODAL                   -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">3</div>
+    <h2>Enhanced Operators Modal</h2>
+  </div>
+  <div class="section-body">
+    <div class="two-col">
+
+      <!-- CURRENT -->
+      <div>
+        <div class="section-label">Current — Basic list</div>
+        <div class="mock" style="max-width: 480px;">
+          <div class="mock-title">Operator Accounts</div>
+          <div class="mock-body">
+            <div style="font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;">Invite New Operator</div>
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+              <input class="input-field" placeholder="Email address" style="flex: 1; min-width: 120px;">
+              <input class="input-field" placeholder="Name" style="width: 100px;">
+              <select class="input-field" style="width: 96px;"><option>Stage</option></select>
+              <button class="btn btn-primary">Send Invite</button>
+            </div>
+            <div class="divider"></div>
+
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">John Sek <span class="dim">· CTS</span></div>
+                <div style="font-size: 11px; color: #64748b;">sherif.mka@protonmail.com</div>
+              </div>
+              <select class="input-field" style="width: 96px;"><option>Director</option></select>
+              <button class="btn btn-green" style="font-size: 10px;">Update</button>
+            </div>
+            <div class="divider"></div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Jane Doe</div>
+                <div style="font-size: 11px; color: #64748b;">jane@example.com</div>
+              </div>
+              <select class="input-field" style="width: 96px;"><option>Pending</option></select>
+              <button class="btn btn-amber" style="font-size: 10px;">Approve</button>
+            </div>
+
+            <div style="margin-top: 16px; text-align: right;">
+              <button class="btn btn-ghost">Close</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 8px; font-size: 10px; color: #4b5563;">No search, no last-active, no suspend, no remove</div>
+      </div>
+
+      <!-- PROPOSED -->
+      <div>
+        <div class="section-label">Proposed — Enhanced management <span class="new-tag">NEW</span></div>
+        <div class="mock" style="max-width: 580px;">
+          <div class="mock-title">Operator Accounts</div>
+          <div class="mock-body">
+            <div style="font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;">Invite New Operator</div>
+            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 12px;">
+              <input class="input-field" placeholder="Email address" style="flex: 1; min-width: 120px;">
+              <input class="input-field" placeholder="Name" style="width: 100px;">
+              <select class="input-field" style="width: 96px;"><option>Stage</option></select>
+              <button class="btn btn-primary">Send Invite</button>
+            </div>
+
+            <!-- Search bar NEW -->
+            <div style="margin-bottom: 12px;">
+              <input class="input-field" placeholder="🔍  Search operators..." style="width: 100%;">
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Row 1 - Active director -->
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">
+                  John Sek <span class="dim">· CTS</span>
+                </div>
+                <div style="font-size: 11px; color: #64748b;">sherif.mka@protonmail.com</div>
+                <div style="font-size: 10px; color: #4b5563; margin-top: 2px;">
+                  <span class="dot dot-green" style="width: 5px; height: 5px;"></span> Last seen: <span style="color: #34d399;">2h ago</span>
+                </div>
+              </div>
+              <select class="input-field" style="width: 96px;"><option>Director</option></select>
+              <button class="btn btn-green" style="font-size: 10px;">Update</button>
+              <button class="btn btn-amber" style="font-size: 10px;">⏸</button>
+            </div>
+            <div class="divider"></div>
+
+            <!-- Row 2 - Pending -->
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">Jane Doe</div>
+                <div style="font-size: 11px; color: #64748b;">jane@example.com</div>
+                <div style="font-size: 10px; color: #4b5563; margin-top: 2px;">
+                  <span class="dot dot-gray" style="width: 5px; height: 5px;"></span> Last seen: <span style="color: #64748b;">never</span>
+                </div>
+              </div>
+              <select class="input-field" style="width: 96px;"><option>Pending</option></select>
+              <button class="btn btn-amber" style="font-size: 10px;">Approve</button>
+              <button class="btn btn-red" style="font-size: 10px;">🗑</button>
+            </div>
+            <div class="divider"></div>
+
+            <!-- Row 3 - Suspended -->
+            <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; opacity: 0.6;">
+              <div style="flex: 1;">
+                <div style="font-size: 13px; font-weight: 600; color: #fff;">
+                  Mike T <span class="dim">· Freelance</span>
+                  <span class="badge badge-red" style="font-size: 8px; margin-left: 4px;">SUSPENDED</span>
+                </div>
+                <div style="font-size: 11px; color: #64748b;">mike@example.com</div>
+                <div style="font-size: 10px; color: #4b5563; margin-top: 2px;">
+                  <span class="dot dot-red" style="width: 5px; height: 5px;"></span> Last seen: <span style="color: #64748b;">5d ago</span>
+                </div>
+              </div>
+              <select class="input-field" style="width: 96px;"><option>AV</option></select>
+              <button class="btn btn-green" style="font-size: 10px; white-space: nowrap;">▶ Activate</button>
+              <button class="btn btn-red" style="font-size: 10px;">🗑</button>
+            </div>
+
+            <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center;">
+              <div style="font-size: 10px; color: #4b5563;">3 operators · 1 pending · 1 suspended</div>
+              <button class="btn btn-ghost">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- AREA 4: PROMO / GIFT CODES                         -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-num">4</div>
+    <h2>Promo / Gift Codes</h2>
+  </div>
+  <div class="section-body">
+
+    <div class="section-label">User-facing — "Have a code?" in billing modal <span class="new-tag">NEW</span></div>
+
+    <div class="two-col">
+      <!-- Billing modal code input -->
+      <div>
+        <div class="mock" style="max-width: 420px;">
+          <div class="mock-title">Plans & Billing</div>
+          <div class="mock-body">
+            <div style="display: flex; gap: 10px; margin-bottom: 16px;">
+              <div style="flex: 1; padding: 12px; border: 1px solid #1e293b; border-radius: 8px; text-align: center;">
+                <div style="font-size: 12px; font-weight: 700; color: #fff;">Per-Event</div>
+                <div style="font-size: 20px; font-weight: 800; color: #fff; margin: 4px 0;">€39</div>
+                <div style="font-size: 10px; color: #64748b;">one-time</div>
+              </div>
+              <div style="flex: 1; padding: 12px; border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; text-align: center; background: rgba(59,130,246,0.05);">
+                <div style="font-size: 12px; font-weight: 700; color: #60a5fa;">Starter</div>
+                <div style="font-size: 20px; font-weight: 800; color: #fff; margin: 4px 0;">€59</div>
+                <div style="font-size: 10px; color: #64748b;">/month</div>
+              </div>
+              <div style="flex: 1; padding: 12px; border: 1px solid rgba(16,185,129,0.3); border-radius: 8px; text-align: center; background: rgba(16,185,129,0.05);">
+                <div style="font-size: 12px; font-weight: 700; color: #34d399;">Pro</div>
+                <div style="font-size: 20px; font-weight: 800; color: #fff; margin: 4px 0;">€99</div>
+                <div style="font-size: 10px; color: #64748b;">/month</div>
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">Have a promo or gift code?</div>
+            <div style="display: flex; gap: 8px;">
+              <input class="input-field" placeholder="Enter code (e.g. LAUNCH20)" style="flex: 1; font-family: monospace; letter-spacing: 1px;">
+              <button class="btn btn-green">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trial expiry screen -->
+      <div>
+        <div class="mock" style="max-width: 420px;">
+          <div class="mock-title">Trial Expired Screen</div>
+          <div class="mock-body" style="text-align: center; padding: 32px 20px;">
+            <div style="font-size: 40px; margin-bottom: 8px;">⏰</div>
+            <div style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px;">Your trial has ended</div>
+            <div style="font-size: 12px; color: #64748b; margin-bottom: 20px;">Choose a plan to continue using CueDeck</div>
+            <button class="btn btn-primary" style="padding: 10px 24px; font-size: 13px; margin-bottom: 16px;">View Plans</button>
+
+            <div class="divider"></div>
+
+            <div style="font-size: 11px; color: #9ca3af; margin-bottom: 8px;">Have a code? <span class="new-tag">NEW</span></div>
+            <div style="display: flex; gap: 8px; max-width: 280px; margin: 0 auto;">
+              <input class="input-field" placeholder="Enter code" style="flex: 1; font-family: monospace; text-align: center;">
+              <button class="btn btn-green">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-label" style="margin: 24px 0 16px;">Code types (managed in Supabase Studio)</div>
+
+    <div class="mock" style="max-width: 700px;">
+      <div class="mock-title">leod_promo_codes table — 3 code types</div>
+      <div class="mock-body" style="padding: 0;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <thead>
+            <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid #1e293b;">
+              <th style="padding: 8px 12px; text-align: left; color: #64748b; font-weight: 600;">Code</th>
+              <th style="padding: 8px 12px; text-align: left; color: #64748b; font-weight: 600;">Type</th>
+              <th style="padding: 8px 12px; text-align: left; color: #64748b; font-weight: 600;">Effect</th>
+              <th style="padding: 8px 12px; text-align: left; color: #64748b; font-weight: 600;">Uses</th>
+              <th style="padding: 8px 12px; text-align: left; color: #64748b; font-weight: 600;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid #1e293b;">
+              <td style="padding: 8px 12px; font-family: monospace; color: #fff; font-weight: 600;">LAUNCH20</td>
+              <td style="padding: 8px 12px;"><span class="badge badge-blue">discount</span></td>
+              <td style="padding: 8px 12px; color: #9ca3af;">20% off via Stripe coupon</td>
+              <td style="padding: 8px 12px; color: #9ca3af;">3 / 100</td>
+              <td style="padding: 8px 12px;"><span class="badge badge-green">active</span></td>
+            </tr>
+            <tr style="border-bottom: 1px solid #1e293b;">
+              <td style="padding: 8px 12px; font-family: monospace; color: #fff; font-weight: 600;">EVENTPRO</td>
+              <td style="padding: 8px 12px;"><span class="badge badge-amber">trial_ext</span></td>
+              <td style="padding: 8px 12px; color: #9ca3af;">+27 days trial (→ 30 days total)</td>
+              <td style="padding: 8px 12px; color: #9ca3af;">12 / ∞</td>
+              <td style="padding: 8px 12px;"><span class="badge badge-green">active</span></td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 12px; font-family: monospace; color: #fff; font-weight: 600;">VIP2026</td>
+              <td style="padding: 8px 12px;"><span class="badge" style="background: rgba(168,85,247,0.15); color: #c084fc;">plan_unlock</span></td>
+              <td style="padding: 8px 12px; color: #9ca3af;">Free Pro plan for 6 months</td>
+              <td style="padding: 8px 12px; color: #9ca3af;">1 / 5</td>
+              <td style="padding: 8px 12px;"><span class="badge badge-green">active</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /sections -->
+
+</body>
+</html>

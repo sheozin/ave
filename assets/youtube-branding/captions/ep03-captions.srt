@@ -1,0 +1,355 @@
+1
+00:00:05,000 --> 00:00:07,000
+Your event is set up.
+
+2
+00:00:07,300 --> 00:00:09,300
+Sessions are in.
+
+3
+00:00:09,600 --> 00:00:11,600
+It's showtime.
+
+4
+00:00:11,900 --> 00:00:15,650
+In this episode I'm going to walk you through the
+
+5
+00:00:15,950 --> 00:00:18,200
+entire session lifecycle — from PLANNED,
+
+6
+00:00:18,500 --> 00:00:21,125
+through READY, CALLING, LIVE, HOLD, and ENDED.
+
+7
+00:00:21,425 --> 00:00:23,675
+This is the core of CueDeck,
+
+8
+00:00:23,975 --> 00:00:27,350
+and once you understand how the state machine works,
+
+9
+00:00:27,650 --> 00:00:29,900
+running a complex event becomes straightforward.
+
+10
+00:00:30,200 --> 00:00:33,950
+Every session in CueDeck lives in one of eight states:
+
+11
+00:00:34,250 --> 00:00:36,500
+PLANNED — it's on the programme,
+
+12
+00:00:36,800 --> 00:00:38,800
+nothing has happened yet.
+
+13
+00:00:39,100 --> 00:00:41,725
+READY — the room is set up,
+
+14
+00:00:42,025 --> 00:00:44,025
+we're expecting the speaker.
+
+15
+00:00:44,325 --> 00:00:47,700
+CALLING — the speaker is being called to stage.
+
+16
+00:00:47,1000 --> 00:00:50,250
+LIVE — on stage right now.
+
+17
+00:00:50,550 --> 00:00:53,550
+HOLD — live but paused, speaker is waiting.
+
+18
+00:00:53,850 --> 00:00:57,600
+OVERRUN — the session went past its scheduled end time.
+
+19
+00:00:57,900 --> 00:00:59,900
+ENDED — finished.
+
+20
+00:01:00,200 --> 00:01:02,825
+CANCELLED — removed from the running order.
+
+21
+00:01:03,125 --> 00:01:05,125
+Transitions flow in one direction.
+
+22
+00:01:05,425 --> 00:01:09,175
+You can't accidentally move a session backwards through the machine.
+
+23
+00:01:09,475 --> 00:01:12,475
+And every state change is timestamped and logged.
+
+24
+00:01:12,775 --> 00:01:15,775
+It's 9:15 — fifteen minutes before the keynote.
+
+25
+00:01:16,075 --> 00:01:18,075
+The room is set up.
+
+26
+00:01:18,375 --> 00:01:20,625
+Let's move Sarah's session to READY.
+
+27
+00:01:20,925 --> 00:01:23,175
+Click the session to select it.
+
+28
+00:01:23,475 --> 00:01:25,725
+The context panel shows 'Set Ready'.
+
+29
+00:01:26,025 --> 00:01:28,025
+Click it.
+
+30
+00:01:28,325 --> 00:01:31,325
+The card flips to a green READY badge.
+
+31
+00:01:31,625 --> 00:01:34,625
+Every connected device — the stage manager's phone,
+
+32
+00:01:34,925 --> 00:01:37,550
+the AV laptop, the display monitors —
+
+33
+00:01:37,850 --> 00:01:39,850
+updates in under a second.
+
+34
+00:01:40,150 --> 00:01:42,150
+9:25.
+
+35
+00:01:42,450 --> 00:01:44,700
+Time to call Sarah to stage.
+
+36
+00:01:44,1000 --> 00:01:46,1000
+Click CALLING.
+
+37
+00:01:47,300 --> 00:01:51,050
+The card goes amber — every stage manager knows to
+
+38
+00:01:51,350 --> 00:01:53,350
+go find the speaker.
+
+39
+00:01:53,650 --> 00:01:57,400
+The broadcast bar can send a message to the whole
+
+40
+00:01:57,700 --> 00:01:59,950
+crew at the same time —
+
+41
+00:02:00,250 --> 00:02:02,500
+we'll cover that in episode five.
+
+42
+00:02:02,800 --> 00:02:04,800
+Sarah's on stage.
+
+43
+00:02:05,100 --> 00:02:07,100
+It's 9:30.
+
+44
+00:02:07,400 --> 00:02:09,400
+Hit GO LIVE.
+
+45
+00:02:09,700 --> 00:02:11,950
+The session card turns bright green,
+
+46
+00:02:12,250 --> 00:02:14,500
+the status changes to LIVE, and
+
+47
+00:02:14,800 --> 00:02:16,800
+the actual_start timestamp is recorded.
+
+48
+00:02:17,100 --> 00:02:19,100
+The clock starts.
+
+49
+00:02:19,400 --> 00:02:21,650
+If you have digital displays or
+
+50
+00:02:21,950 --> 00:02:24,575
+a stage confidence monitor set up —
+
+51
+00:02:24,875 --> 00:02:27,500
+we'll build those in episodes eight and
+
+52
+00:02:27,800 --> 00:02:31,550
+nine — they all flip to show this session live.
+
+53
+00:02:31,850 --> 00:02:34,100
+Sometimes you need to pause mid-session.
+
+54
+00:02:34,400 --> 00:02:37,025
+Fire alarm, technical issue, speaker needs water.
+
+55
+00:02:37,325 --> 00:02:39,325
+Hit HOLD.
+
+56
+00:02:39,625 --> 00:02:41,625
+The session freezes.
+
+57
+00:02:41,925 --> 00:02:43,925
+The stage timer freezes.
+
+58
+00:02:44,225 --> 00:02:47,225
+Everyone on every device sees the HOLD state.
+
+59
+00:02:47,525 --> 00:02:50,900
+When you're ready to resume, click LIVE again —
+
+60
+00:02:51,200 --> 00:02:53,825
+the session continues from where it was,
+
+61
+00:02:54,125 --> 00:02:56,125
+timer picks back up.
+
+62
+00:02:56,425 --> 00:02:59,425
+Sarah went 3 minutes over on her demo.
+
+63
+00:02:59,725 --> 00:03:03,100
+We need to adjust the rest of the programme.
+
+64
+00:03:03,400 --> 00:03:07,150
+The nudge buttons add or subtract a minute from the
+
+65
+00:03:07,450 --> 00:03:09,450
+current session's end time.
+
+66
+00:03:09,750 --> 00:03:13,500
+The delay cascade automatically shifts every subsequent PLANNED session forward.
+
+67
+00:03:13,800 --> 00:03:18,675
+You can see the knock-on effect ripple down the session list in realtime.
+
+68
+00:03:18,975 --> 00:03:22,350
+We'll go deep on delay management in episode six.
+
+69
+00:03:22,650 --> 00:03:24,650
+Session done.
+
+70
+00:03:24,950 --> 00:03:26,950
+Click END SESSION.
+
+71
+00:03:27,250 --> 00:03:30,250
+Status flips to ENDED with a green check.
+
+72
+00:03:30,550 --> 00:03:32,550
+Actual end time is recorded.
+
+73
+00:03:32,850 --> 00:03:35,850
+The time variance — how far over or
+
+74
+00:03:36,150 --> 00:03:38,775
+under planned — is calculated and stored.
+
+75
+00:03:39,075 --> 00:03:42,450
+You'll see all of this in the post-event report.
+
+76
+00:03:42,750 --> 00:03:45,750
+On the next session — the panel —
+
+77
+00:03:46,050 --> 00:03:50,550
+you can mark speakers as arrived before the session is even called.
+
+78
+00:03:50,850 --> 00:03:54,600
+The stage manager ticks 'Speaker Arrived' on each panellist as
+
+79
+00:03:54,900 --> 00:03:56,900
+they check in backstage.
+
+80
+00:03:57,200 --> 00:04:01,325
+Directors can see at a glance whether all speakers are present.
+
+81
+00:04:01,625 --> 00:04:05,000
+This feeds into the pre-cue AI agent too —
+
+82
+00:04:05,300 --> 00:04:07,300
+but that's episode ten.
+
+83
+00:04:07,600 --> 00:04:09,600
+That's the full session lifecycle.
+
+84
+00:04:09,900 --> 00:04:13,275
+PLANNED → READY → CALLING → LIVE → ENDED,
+
+85
+00:04:13,575 --> 00:04:16,575
+with HOLD and delay nudges along the way.
+
+86
+00:04:16,875 --> 00:04:20,250
+In the next episode we'll look at roles —
+
+87
+00:04:20,550 --> 00:04:22,800
+how to invite your team and
+
+88
+00:04:23,100 --> 00:04:25,725
+what each role can see and do.
+
+89
+00:04:26,025 --> 00:04:28,025
+See you in episode four.

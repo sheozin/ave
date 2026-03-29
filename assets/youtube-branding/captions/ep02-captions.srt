@@ -1,0 +1,283 @@
+1
+00:00:05,000 --> 00:00:08,750
+In episode one we got a quick tour of CueDeck.
+
+2
+00:00:09,050 --> 00:00:11,050
+Now let's actually build something.
+
+3
+00:00:11,350 --> 00:00:15,100
+In the next few minutes I'm going to create a
+
+4
+00:00:15,400 --> 00:00:17,650
+full conference event, add sessions, and
+
+5
+00:00:17,950 --> 00:00:20,200
+have it ready to run live.
+
+6
+00:00:20,500 --> 00:00:22,750
+This is 'Tech Summit 2026' —
+
+7
+00:00:23,050 --> 00:00:25,300
+a single-day tech conference in London.
+
+8
+00:00:25,600 --> 00:00:27,600
+Let's go.
+
+9
+00:00:27,900 --> 00:00:29,900
+You land here.
+
+10
+00:00:30,200 --> 00:00:33,200
+Enter your email and password, hit sign in.
+
+11
+00:00:33,500 --> 00:00:36,500
+CueDeck uses Supabase Auth under the hood —
+
+12
+00:00:36,800 --> 00:00:40,550
+your credentials are secure and the session persists across tabs.
+
+13
+00:00:40,850 --> 00:00:42,850
+First time here?
+
+14
+00:00:43,150 --> 00:00:46,900
+Click 'Create Account', enter the invite code your director gave
+
+15
+00:00:47,200 --> 00:00:49,450
+you, or start a free trial.
+
+16
+00:00:49,750 --> 00:00:52,750
+We'll cover the invite flow in episode seven.
+
+17
+00:00:53,050 --> 00:00:56,800
+For a brand new account, the setup wizard kicks in.
+
+18
+00:00:57,100 --> 00:00:59,350
+Four steps — create your event,
+
+19
+00:00:59,650 --> 00:01:01,900
+add a session, invite your team,
+
+20
+00:01:02,200 --> 00:01:04,200
+set up a display.
+
+21
+00:01:04,500 --> 00:01:06,500
+Let's follow it.
+
+22
+00:01:06,800 --> 00:01:08,800
+Step one: create the event.
+
+23
+00:01:09,100 --> 00:01:11,100
+Name: Tech Summit 2026.
+
+24
+00:01:11,400 --> 00:01:13,400
+Date: April 15th.
+
+25
+00:01:13,700 --> 00:01:15,700
+Timezone: Europe London.
+
+26
+00:01:15,1000 --> 00:01:17,1000
+Event runs 9am to 6pm.
+
+27
+00:01:18,300 --> 00:01:20,300
+Venue: Grand Convention Centre London.
+
+28
+00:01:20,600 --> 00:01:22,600
+Hit Save.
+
+29
+00:01:22,900 --> 00:01:25,900
+Now we have an event with no sessions.
+
+30
+00:01:26,200 --> 00:01:28,200
+Let's add them.
+
+31
+00:01:28,500 --> 00:01:30,500
+Click the plus button.
+
+32
+00:01:30,800 --> 00:01:33,800
+Each session has a title, a type —
+
+33
+00:01:34,100 --> 00:01:36,350
+keynote, panel, workshop, break, sponsor —
+
+34
+00:01:36,650 --> 00:01:39,275
+a room name, a speaker, their company,
+
+35
+00:01:39,575 --> 00:01:41,825
+planned start and end times, and
+
+36
+00:01:42,125 --> 00:01:45,125
+a sort order to control the running order.
+
+37
+00:01:45,425 --> 00:01:49,175
+I'll also tick 'Recording' and 'Streaming' for the keynote —
+
+38
+00:01:49,475 --> 00:01:53,225
+these flags appear on every role's view so the AV
+
+39
+00:01:53,525 --> 00:01:55,525
+team knows what to prep.
+
+40
+00:01:55,825 --> 00:01:57,825
+Save.
+
+41
+00:01:58,125 --> 00:02:00,375
+There it is — first session,
+
+42
+00:02:00,675 --> 00:02:02,925
+status PLANNED, showing in the list.
+
+43
+00:02:03,225 --> 00:02:05,475
+I'll add a few more —
+
+44
+00:02:05,775 --> 00:02:08,025
+a panel and a lunch break.
+
+45
+00:02:08,325 --> 00:02:12,075
+Notice the lunch break is type 'break' so it renders
+
+46
+00:02:12,375 --> 00:02:15,375
+with a different visual treatment in the list.
+
+47
+00:02:15,675 --> 00:02:19,050
+In a real event you'd add all ten or
+
+48
+00:02:19,350 --> 00:02:21,350
+twenty sessions up front.
+
+49
+00:02:21,650 --> 00:02:25,400
+You can also duplicate sessions from a previous event —
+
+50
+00:02:25,700 --> 00:02:29,075
+there's a seed-from option in the event modal that
+
+51
+00:02:29,375 --> 00:02:31,375
+copies the full schedule.
+
+52
+00:02:31,675 --> 00:02:33,675
+Need to reorder?
+
+53
+00:02:33,975 --> 00:02:36,975
+Click the up/down arrows on any session card,
+
+54
+00:02:37,275 --> 00:02:39,275
+or edit the sort_order directly.
+
+55
+00:02:39,575 --> 00:02:41,575
+The list re-sorts instantly.
+
+56
+00:02:41,875 --> 00:02:45,625
+To edit a session — click anywhere on the card.
+
+57
+00:02:45,925 --> 00:02:47,925
+The modal comes back pre-filled.
+
+58
+00:02:48,225 --> 00:02:51,975
+Change the speaker, adjust the time, tick or untick flags.
+
+59
+00:02:52,275 --> 00:02:54,275
+Save.
+
+60
+00:02:54,575 --> 00:02:56,825
+Once you have a full programme,
+
+61
+00:02:57,125 --> 00:02:59,375
+the filter bar keeps you sane.
+
+62
+00:02:59,675 --> 00:03:03,050
+Type a speaker name — matching sessions surface immediately.
+
+63
+00:03:03,350 --> 00:03:07,100
+Click a room chip to see just that room's schedule.
+
+64
+00:03:07,400 --> 00:03:10,775
+Filter by status to find everything that's still PLANNED.
+
+65
+00:03:11,075 --> 00:03:15,575
+These filters are local — they don't affect what anyone else sees.
+
+66
+00:03:15,875 --> 00:03:19,250
+That's it — event created, sessions in, programme structured.
+
+67
+00:03:19,550 --> 00:03:23,300
+In the next episode we'll go live for the first
+
+68
+00:03:23,600 --> 00:03:27,350
+time and walk through the full session state machine —
+
+69
+00:03:27,650 --> 00:03:29,650
+READY, CALLING, LIVE, HOLD, ENDED.
+
+70
+00:03:29,950 --> 00:03:32,200
+Subscribe so you don't miss it.
+
+71
+00:03:32,500 --> 00:03:34,500
+See you in episode three.

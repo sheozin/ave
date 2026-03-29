@@ -1,0 +1,547 @@
+1
+00:00:05,000 --> 00:00:08,000
+Every live event production team knows the feeling.
+
+2
+00:00:08,300 --> 00:00:10,300
+The keynote runs long.
+
+3
+00:00:10,600 --> 00:00:13,225
+Or a panel goes fifteen minutes over.
+
+4
+00:00:13,525 --> 00:00:17,275
+Suddenly your entire afternoon programme is out of sync —
+
+5
+00:00:17,575 --> 00:00:20,575
+and you're the only person who knows it.
+
+6
+00:00:20,875 --> 00:00:24,625
+In this episode we're going to look at one of
+
+7
+00:00:24,925 --> 00:00:27,550
+CueDeck's most useful features: the delay cascade.
+
+8
+00:00:27,850 --> 00:00:31,600
+It's how you absorb overruns without losing control of your
+
+9
+00:00:31,900 --> 00:00:35,275
+programme, and it takes about three seconds to use.
+
+10
+00:00:35,575 --> 00:00:39,325
+Before we hit any buttons, let's understand the two numbers
+
+11
+00:00:39,625 --> 00:00:41,625
+CueDeck tracks behind the scenes.
+
+12
+00:00:41,925 --> 00:00:45,300
+Every session in the database has a `planned_start` and
+
+13
+00:00:45,600 --> 00:00:50,475
+a `planned_end` — those are the times your programme was originally designed around.
+
+14
+00:00:50,775 --> 00:00:52,775
+They never change.
+
+15
+00:00:53,075 --> 00:00:55,325
+Think of them as your baseline.
+
+16
+00:00:55,625 --> 00:00:59,375
+When you apply a delay, CueDeck writes to a separate
+
+17
+00:00:59,675 --> 00:01:01,925
+pair of fields: `scheduled_start` and `scheduled_end`.
+
+18
+00:01:02,225 --> 00:01:04,475
+These are the working times —
+
+19
+00:01:04,775 --> 00:01:07,775
+the live reality of your programme right now.
+
+20
+00:01:08,075 --> 00:01:11,825
+On top of that, each session carries two delay counters.
+
+21
+00:01:12,125 --> 00:01:15,875
+`delay_minutes` is the delay applied directly to this specific session
+
+22
+00:01:16,175 --> 00:01:18,800
+— it's what caused the original ripple.
+
+23
+00:01:19,100 --> 00:01:22,475
+`cumulative_delay` is the total shift this session has accumulated,
+
+24
+00:01:22,775 --> 00:01:26,900
+which can be larger if multiple delays have been applied upstream.
+
+25
+00:01:27,200 --> 00:01:30,950
+You can see the cumulative delay on every affected session
+
+26
+00:01:31,250 --> 00:01:33,875
+card — that amber tag showing plus-something-minutes.
+
+27
+00:01:34,175 --> 00:01:37,925
+That number tells you how far behind the original programme
+
+28
+00:01:38,225 --> 00:01:40,475
+this session is sitting right now.
+
+29
+00:01:40,775 --> 00:01:45,275
+This session, for example, is running ten minutes behind its planned start.
+
+30
+00:01:45,575 --> 00:01:47,825
+The director applied a delay upstream,
+
+31
+00:01:48,125 --> 00:01:50,750
+and it cascaded down to here automatically.
+
+32
+00:01:51,050 --> 00:01:53,675
+Let me show you how that works.
+
+33
+00:01:53,975 --> 00:01:57,350
+In the director view, whenever a session is READY,
+
+34
+00:01:57,650 --> 00:02:01,400
+CALLING, or LIVE, you'll see a row of amber buttons
+
+35
+00:02:01,700 --> 00:02:04,325
+labeled +MIN — five, ten, and fifteen.
+
+36
+00:02:04,625 --> 00:02:06,625
+These are your delay controls.
+
+37
+00:02:06,925 --> 00:02:10,675
+Let's say the current session was scheduled to end at
+
+38
+00:02:10,975 --> 00:02:14,725
+two-fifteen, but it's two-twenty and the speaker is still going.
+
+39
+00:02:15,025 --> 00:02:17,025
+I'll hit plus-five.
+
+40
+00:02:17,325 --> 00:02:19,325
+Watch the session list.
+
+41
+00:02:19,625 --> 00:02:21,875
+Every session below this one that
+
+42
+00:02:22,175 --> 00:02:25,925
+is in a PLANNED state just shifted forward five minutes.
+
+43
+00:02:26,225 --> 00:02:28,475
+Their `scheduled_start` and `scheduled_end` both moved.
+
+44
+00:02:28,775 --> 00:02:32,150
+The amber plus-five tag appeared on each of them.
+
+45
+00:02:32,450 --> 00:02:35,825
+And up at the top of the session list,
+
+46
+00:02:36,125 --> 00:02:39,875
+the delay strip appeared — it tells us the programme
+
+47
+00:02:40,175 --> 00:02:43,550
+is now running plus-five minutes, with three sessions affected.
+
+48
+00:02:43,850 --> 00:02:48,350
+The director console doesn't reload, it doesn't ask for a confirmation dialog.
+
+49
+00:02:48,650 --> 00:02:51,650
+The cascade happens client-side first for instant feedback,
+
+50
+00:02:51,950 --> 00:02:55,700
+and then writes to the database in the background for
+
+51
+00:02:56,000 --> 00:02:58,000
+all other connected devices.
+
+52
+00:02:58,300 --> 00:03:01,675
+But here's the scenario most multi-day conferences run into:
+
+53
+00:03:01,975 --> 00:03:04,600
+you have fixed-time slots that cannot move.
+
+54
+00:03:04,900 --> 00:03:07,150
+The lunch break at one o'clock.
+
+55
+00:03:07,450 --> 00:03:09,450
+The opening ceremony.
+
+56
+00:03:09,750 --> 00:03:11,750
+The gala dinner at seven.
+
+57
+00:03:12,050 --> 00:03:15,800
+Those sessions need to hold their ground no matter what
+
+58
+00:03:16,100 --> 00:03:18,100
+happens in the morning.
+
+59
+00:03:18,400 --> 00:03:20,650
+That's what anchor sessions are for.
+
+60
+00:03:20,950 --> 00:03:24,700
+When you tick the Anchor checkbox on a session in
+
+61
+00:03:25,000 --> 00:03:27,250
+the edit modal, you're telling CueDeck:
+
+62
+00:03:27,550 --> 00:03:29,550
+stop the cascade here.
+
+63
+00:03:29,850 --> 00:03:33,600
+Watch what happens when I apply a delay with an
+
+64
+00:03:33,900 --> 00:03:35,900
+anchor session in the list.
+
+65
+00:03:36,200 --> 00:03:38,825
+The sessions between the live one and
+
+66
+00:03:39,125 --> 00:03:41,125
+the lunch break all shifted.
+
+67
+00:03:41,425 --> 00:03:44,050
+But the lunch break itself didn't move.
+
+68
+00:03:44,350 --> 00:03:46,350
+Neither did anything after it.
+
+69
+00:03:46,650 --> 00:03:48,900
+The anchor absorbed the delay —
+
+70
+00:03:49,200 --> 00:03:52,575
+it acts as a firewall for your fixed-time commitments.
+
+71
+00:03:52,875 --> 00:03:55,875
+And in the delay strip at the top,
+
+72
+00:03:56,175 --> 00:03:59,550
+you'll see the anchor is called out by name:
+
+73
+00:03:59,850 --> 00:04:03,600
+it tells you the cascade stopped at 'Lunch Break, 13:00'.
+
+74
+00:04:03,900 --> 00:04:07,650
+That's your reminder that your afternoon is still on schedule.
+
+75
+00:04:07,950 --> 00:04:11,700
+There's a second set of controls that's specifically for the
+
+76
+00:04:12,000 --> 00:04:14,625
+session that's currently LIVE: the nudge buttons.
+
+77
+00:04:14,925 --> 00:04:17,550
+These are different from the delay cascade.
+
+78
+00:04:17,850 --> 00:04:21,600
+Nudge only affects the session that's running right now —
+
+79
+00:04:21,900 --> 00:04:26,400
+it moves its end time by one minute without cascading anything downstream.
+
+80
+00:04:26,700 --> 00:04:28,700
+It's for micro-corrections.
+
+81
+00:04:29,000 --> 00:04:32,375
+If a speaker wraps up a minute early and
+
+82
+00:04:32,675 --> 00:04:36,425
+you want to give the AV team a slightly longer
+
+83
+00:04:36,725 --> 00:04:38,725
+transition window, hit minus-one.
+
+84
+00:04:39,025 --> 00:04:43,900
+If they need just one more minute to finish their thought, hit plus-one.
+
+85
+00:04:44,200 --> 00:04:47,200
+The timer in the live card updates immediately,
+
+86
+00:04:47,500 --> 00:04:52,000
+and so does the stage timer display if you have one connected.
+
+87
+00:04:52,300 --> 00:04:54,300
+Small adjustments, no drama.
+
+88
+00:04:54,600 --> 00:04:56,850
+Now let's say the session that
+
+89
+00:04:57,150 --> 00:05:00,900
+was running late actually ended on time after all —
+
+90
+00:05:01,200 --> 00:05:04,200
+or maybe you applied a delay by accident,
+
+91
+00:05:04,500 --> 00:05:07,125
+or the event got back on track.
+
+92
+00:05:07,425 --> 00:05:10,425
+You want to wipe the slate clean and
+
+93
+00:05:10,725 --> 00:05:12,975
+go back to the original programme.
+
+94
+00:05:13,275 --> 00:05:15,900
+Hit Reset delays in the orange strip.
+
+95
+00:05:16,200 --> 00:05:19,200
+CueDeck asks for a single confirmation tap —
+
+96
+00:05:19,500 --> 00:05:21,750
+it changed to 'Confirm reset?' —
+
+97
+00:05:22,050 --> 00:05:24,050
+because this is destructive.
+
+98
+00:05:24,350 --> 00:05:29,225
+Once I confirm, every session's scheduled times go back to their planned originals.
+
+99
+00:05:29,525 --> 00:05:31,525
+Every delay tag disappears.
+
+100
+00:05:31,825 --> 00:05:33,825
+The delay strip goes away.
+
+101
+00:05:34,125 --> 00:05:36,125
+The programme is clean again.
+
+102
+00:05:36,425 --> 00:05:39,425
+Under the hood, CueDeck is writing `scheduled_start` and
+
+103
+00:05:39,725 --> 00:05:43,475
+`scheduled_end` back to `planned_start` and `planned_end` for every affected session,
+
+104
+00:05:43,775 --> 00:05:46,025
+and zeroing out both delay counters.
+
+105
+00:05:46,325 --> 00:05:48,575
+A few things worth knowing when
+
+106
+00:05:48,875 --> 00:05:50,875
+you're running a multi-room event.
+
+107
+00:05:51,175 --> 00:05:54,925
+First: the cascade only touches sessions in the same programme
+
+108
+00:05:55,225 --> 00:05:57,475
+sequence as the session you delayed.
+
+109
+00:05:57,775 --> 00:06:01,150
+It works through sort order, not through room assignment.
+
+110
+00:06:01,450 --> 00:06:04,450
+So if Hall A is running late and
+
+111
+00:06:04,750 --> 00:06:09,250
+you delay Hall A's keynote, sessions in Hall B are not touched.
+
+112
+00:06:09,550 --> 00:06:13,300
+You'd apply a delay to Hall B separately if needed.
+
+113
+00:06:13,600 --> 00:06:16,225
+Second: the cascade stops at ENDED and
+
+114
+00:06:16,525 --> 00:06:19,150
+CANCELLED sessions too — it skips them.
+
+115
+00:06:19,450 --> 00:06:23,200
+So if a session was cancelled earlier in the day,
+
+116
+00:06:23,500 --> 00:06:26,125
+it won't interfere with the propagation logic.
+
+117
+00:06:26,425 --> 00:06:29,800
+Third: for events with a hard parallel track —
+
+118
+00:06:30,100 --> 00:06:33,850
+say, a workshop that always runs from two to three
+
+119
+00:06:34,150 --> 00:06:36,400
+regardless of the plenary room —
+
+120
+00:06:36,700 --> 00:06:40,075
+make the first session of that track an anchor.
+
+121
+00:06:40,375 --> 00:06:44,125
+That way no director action on the main stage can
+
+122
+00:06:44,425 --> 00:06:46,675
+accidentally push your workshop slots around.
+
+123
+00:06:46,975 --> 00:06:50,725
+And finally: the delay strip is visible to all roles
+
+124
+00:06:51,025 --> 00:06:55,150
+in director view, not just the person who applied the delay.
+
+125
+00:06:55,450 --> 00:06:59,200
+So your whole team can see at a glance that
+
+126
+00:06:59,500 --> 00:07:02,500
+the programme is running plus-ten and plan accordingly.
+
+127
+00:07:02,800 --> 00:07:06,175
+The delay cascade is one of those features that
+
+128
+00:07:06,475 --> 00:07:09,100
+sounds complicated until you've used it once,
+
+129
+00:07:09,400 --> 00:07:14,275
+and then you wonder how you ever ran a live event without it.
+
+130
+00:07:14,575 --> 00:07:16,825
+One click shifts your entire programme.
+
+131
+00:07:17,125 --> 00:07:19,375
+Anchor sessions protect your fixed times.
+
+132
+00:07:19,675 --> 00:07:23,425
+Nudge gives you per-minute surgical control on the running session.
+
+133
+00:07:23,725 --> 00:07:27,475
+And reset brings everything back to plan in two taps.
+
+134
+00:07:27,775 --> 00:07:31,525
+In the next episode we're moving into the digital signage
+
+135
+00:07:31,825 --> 00:07:35,575
+system — how to set up displays around your venue
+
+136
+00:07:35,875 --> 00:07:39,250
+and get them all pulling live data from CueDeck.
+
+137
+00:07:39,550 --> 00:07:41,550
+See you there.

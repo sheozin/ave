@@ -1,0 +1,547 @@
+1
+00:00:05,000 --> 00:00:07,000
+The event is over.
+
+2
+00:00:07,300 --> 00:00:09,300
+Every session is ENDED.
+
+3
+00:00:09,600 --> 00:00:12,225
+The last speaker has left the stage.
+
+4
+00:00:12,525 --> 00:00:17,025
+Now comes the part that production teams usually dread — the debrief.
+
+5
+00:00:17,325 --> 00:00:19,325
+Which sessions ran late?
+
+6
+00:00:19,625 --> 00:00:21,625
+By how much?
+
+7
+00:00:21,925 --> 00:00:23,925
+Who triggered what, and when?
+
+8
+00:00:24,225 --> 00:00:27,600
+If something went wrong at two-thirty, what exactly happened?
+
+9
+00:00:27,900 --> 00:00:31,650
+CueDeck has been recording every single action throughout the day
+
+10
+00:00:31,950 --> 00:00:34,200
+— every state change, every delay,
+
+11
+00:00:34,500 --> 00:00:36,500
+every broadcast, every actor.
+
+12
+00:00:36,800 --> 00:00:39,800
+That data doesn't disappear when the event ends.
+
+13
+00:00:40,100 --> 00:00:43,475
+In this episode we're going to look at where
+
+14
+00:00:43,775 --> 00:00:46,025
+it lives, how to read it,
+
+15
+00:00:46,325 --> 00:00:50,075
+and how to turn it into a document you can
+
+16
+00:00:50,375 --> 00:00:52,375
+actually send to a client.
+
+17
+00:00:52,675 --> 00:00:56,425
+The event log is the audit trail for everything that
+
+18
+00:00:56,725 --> 00:00:58,725
+happened during the day.
+
+19
+00:00:59,025 --> 00:01:02,025
+It lives in the `leod_event_log` table in Supabase,
+
+20
+00:01:02,325 --> 00:01:07,200
+and CueDeck surfaces it right here in the console — no SQL required.
+
+21
+00:01:07,500 --> 00:01:09,750
+Every row is a state transition.
+
+22
+00:01:10,050 --> 00:01:13,050
+Time it happened, the session it applies to,
+
+23
+00:01:13,350 --> 00:01:16,350
+what the transition was — PLANNED to READY,
+
+24
+00:01:16,650 --> 00:01:19,275
+READY to LIVE, LIVE to ENDED —
+
+25
+00:01:19,575 --> 00:01:21,575
+and which operator triggered it.
+
+26
+00:01:21,875 --> 00:01:23,875
+Name and role, both recorded.
+
+27
+00:01:24,175 --> 00:01:26,175
+Let me scroll through this.
+
+28
+00:01:26,475 --> 00:01:29,850
+You can see exactly how Session 2 played out.
+
+29
+00:01:30,150 --> 00:01:32,775
+Ready at nine-oh-two, speaker called at nine-oh-four,
+
+30
+00:01:33,075 --> 00:01:35,075
+went live at nine-oh-five.
+
+31
+00:01:35,375 --> 00:01:39,875
+That's a three-minute window from ready to live — tighter than average.
+
+32
+00:01:40,175 --> 00:01:42,175
+Good execution.
+
+33
+00:01:42,475 --> 00:01:44,475
+Now look further down.
+
+34
+00:01:44,775 --> 00:01:46,775
+Here's the delay at ten-forty-seven.
+
+35
+00:01:47,075 --> 00:01:49,075
+The panel was running long.
+
+36
+00:01:49,375 --> 00:01:53,875
+Five minutes applied, cascade fired to every subsequent session in that room.
+
+37
+00:01:54,175 --> 00:01:57,175
+The log captured exactly when it happened and
+
+38
+00:01:57,475 --> 00:01:59,475
+who made the call.
+
+39
+00:01:59,775 --> 00:02:03,525
+If a client asks 'why did the afternoon session start
+
+40
+00:02:03,825 --> 00:02:06,450
+twelve minutes late,' this is your answer.
+
+41
+00:02:06,750 --> 00:02:09,375
+You can point to a specific row,
+
+42
+00:02:09,675 --> 00:02:12,300
+a specific time, and a specific person.
+
+43
+00:02:12,600 --> 00:02:14,600
+That's the accountability layer.
+
+44
+00:02:14,900 --> 00:02:18,650
+Under the hood the log table has everything you'd want
+
+45
+00:02:18,950 --> 00:02:20,950
+for a proper audit trail.
+
+46
+00:02:21,250 --> 00:02:23,875
+Every row has the session ID and
+
+47
+00:02:24,175 --> 00:02:27,175
+title — so you can filter by session.
+
+48
+00:02:27,475 --> 00:02:30,850
+The `from_status` and `to_status` columns capture the full transition,
+
+49
+00:02:31,150 --> 00:02:33,150
+not just the destination.
+
+50
+00:02:33,450 --> 00:02:36,075
+The actor fields record who triggered it:
+
+51
+00:02:36,375 --> 00:02:39,375
+their ID, their role, and their display name.
+
+52
+00:02:39,675 --> 00:02:42,300
+And `created_at` is a full timezone-aware timestamp.
+
+53
+00:02:42,600 --> 00:02:44,850
+There's also a notes column —
+
+54
+00:02:45,150 --> 00:02:48,900
+that's populated when a broadcast goes out alongside a state
+
+55
+00:02:49,200 --> 00:02:52,950
+change, or when the Incident Advisor logs a flagged event.
+
+56
+00:02:53,250 --> 00:02:57,000
+You'll never need to dig this deep for a normal
+
+57
+00:02:57,300 --> 00:03:00,300
+debrief — CueDeck surfaces it in the console.
+
+58
+00:03:00,600 --> 00:03:03,600
+But when a client wants a formal record,
+
+59
+00:03:03,900 --> 00:03:06,150
+or when something went wrong and
+
+60
+00:03:06,450 --> 00:03:09,450
+you need the raw data, it's all here.
+
+61
+00:03:09,750 --> 00:03:13,125
+Now let's connect the log to the client-facing output.
+
+62
+00:03:13,425 --> 00:03:17,175
+The Report Generator — which we covered in Episode 13
+
+63
+00:03:17,475 --> 00:03:20,100
+— pulls all of this data and
+
+64
+00:03:20,400 --> 00:03:23,775
+presents it in a format you can actually send.
+
+65
+00:03:24,075 --> 00:03:27,075
+The Sessions tab is where the variance lives.
+
+66
+00:03:27,375 --> 00:03:31,125
+Every session, side by side: planned start time from your
+
+67
+00:03:31,425 --> 00:03:34,800
+original programme, actual start time from the event log,
+
+68
+00:03:35,100 --> 00:03:37,100
+and the delta in minutes.
+
+69
+00:03:37,400 --> 00:03:39,400
+Positive numbers mean late.
+
+70
+00:03:39,700 --> 00:03:42,325
+Negative means you were ahead of schedule.
+
+71
+00:03:42,625 --> 00:03:44,625
+Look at the colour coding.
+
+72
+00:03:44,925 --> 00:03:48,300
+Green rows started on time or within a minute.
+
+73
+00:03:48,600 --> 00:03:53,100
+Orange sessions drifted two to four minutes late — normal production variance.
+
+74
+00:03:53,400 --> 00:03:57,150
+The red rows are where you had real schedule pressure.
+
+75
+00:03:57,450 --> 00:04:01,200
+In this example, the afternoon keynote started seven minutes late
+
+76
+00:04:01,500 --> 00:04:04,875
+— that's the one where the delay cascade fired.
+
+77
+00:04:05,175 --> 00:04:08,925
+The log tells you why: the panel before it ran
+
+78
+00:04:09,225 --> 00:04:11,850
+over, the delay was applied at ten-forty-seven,
+
+79
+00:04:12,150 --> 00:04:14,150
+and it rolled downstream.
+
+80
+00:04:14,450 --> 00:04:18,575
+This is not a story you have to reconstruct from notes.
+
+81
+00:04:18,875 --> 00:04:21,500
+It's already here, timestamped to the second.
+
+82
+00:04:21,800 --> 00:04:24,800
+For clients who want a full spreadsheet —
+
+83
+00:04:25,100 --> 00:04:27,725
+or for your own production archive —
+
+84
+00:04:28,025 --> 00:04:31,025
+there's a SQL export query included with CueDeck.
+
+85
+00:04:31,325 --> 00:04:33,950
+Paste this into the Supabase SQL Editor,
+
+86
+00:04:34,250 --> 00:04:38,750
+replace the event ID placeholder with your event's UUID, and run it.
+
+87
+00:04:39,050 --> 00:04:42,800
+What you get back is one row per session with
+
+88
+00:04:43,100 --> 00:04:45,350
+every timing field: planned start and
+
+89
+00:04:45,650 --> 00:04:49,025
+end, scheduled start and end after any delay cascade,
+
+90
+00:04:49,325 --> 00:04:52,325
+actual start and end from the live run,
+
+91
+00:04:52,625 --> 00:04:57,125
+and the variance in minutes against both the planned and scheduled times.
+
+92
+00:04:57,425 --> 00:05:00,050
+It also includes the production flags —
+
+93
+00:05:00,350 --> 00:05:04,100
+speaker arrived, mic type, recording on or off, streaming, interpretation.
+
+94
+00:05:04,400 --> 00:05:08,150
+Everything that was set on the session record comes through.
+
+95
+00:05:08,450 --> 00:05:12,200
+Hit Export CSV and you have a spreadsheet you can
+
+96
+00:05:12,500 --> 00:05:16,250
+open in Excel or Google Sheets in about three seconds.
+
+97
+00:05:16,550 --> 00:05:19,925
+Filter it, sort it by variance, chart the deltas.
+
+98
+00:05:20,225 --> 00:05:22,475
+That's your post-event data asset —
+
+99
+00:05:22,775 --> 00:05:25,775
+it follows every event you run on CueDeck.
+
+100
+00:05:26,075 --> 00:05:29,450
+Four things this gets you in the real world.
+
+101
+00:05:29,750 --> 00:05:31,750
+First, client debrief.
+
+102
+00:05:32,050 --> 00:05:35,800
+Within an hour of the event ending you can send
+
+103
+00:05:36,100 --> 00:05:39,850
+a professional written summary — generated by the Report Generator
+
+104
+00:05:40,150 --> 00:05:43,525
+— with the variance data attached as a CSV.
+
+105
+00:05:43,825 --> 00:05:46,075
+That turnaround time is a differentiator.
+
+106
+00:05:46,375 --> 00:05:48,375
+Second, billing justification.
+
+107
+00:05:48,675 --> 00:05:52,050
+If you're billing for overtime on a specific room,
+
+108
+00:05:52,350 --> 00:05:54,350
+the timestamps are your evidence.
+
+109
+00:05:54,650 --> 00:05:58,025
+You went live at nine-oh-five, you wrapped at eighteen-forty-two.
+
+110
+00:05:58,325 --> 00:06:00,950
+That's the billable day, in the database.
+
+111
+00:06:01,250 --> 00:06:03,250
+Third, incident accountability.
+
+112
+00:06:03,550 --> 00:06:05,800
+If something went wrong at fourteen-thirty-two,
+
+113
+00:06:06,100 --> 00:06:09,475
+you have a log entry with the exact time,
+
+114
+00:06:09,775 --> 00:06:13,525
+the operator who responded, and the system that was affected.
+
+115
+00:06:13,825 --> 00:06:18,325
+No 'I think it was around half two' — it was fourteen-thirty-two.
+
+116
+00:06:18,625 --> 00:06:20,625
+And fourth, continuous improvement.
+
+117
+00:06:20,925 --> 00:06:22,925
+Run three events.
+
+118
+00:06:23,225 --> 00:06:25,225
+Export the variance CSVs.
+
+119
+00:06:25,525 --> 00:06:28,150
+Plot the average delay per session type.
+
+120
+00:06:28,450 --> 00:06:32,200
+You'll know within two events whether your keynotes consistently run
+
+121
+00:06:32,500 --> 00:06:35,125
+long, whether your breaks are too short,
+
+122
+00:06:35,425 --> 00:06:38,050
+and where to add buffer next year.
+
+123
+00:06:38,350 --> 00:06:43,225
+That kind of institutional knowledge used to live in a production manager's head.
+
+124
+00:06:43,525 --> 00:06:45,525
+Now it's in a table.
+
+125
+00:06:45,825 --> 00:06:50,700
+The event log and the post-event report are the accountability layer in CueDeck.
+
+126
+00:06:51,000 --> 00:06:54,000
+Every transition is stored, every actor is identified,
+
+127
+00:06:54,300 --> 00:06:56,550
+every minute of variance is measured.
+
+128
+00:06:56,850 --> 00:06:59,100
+Used together — the in-console log,
+
+129
+00:06:59,400 --> 00:07:02,775
+the AI Report Generator, and the SQL export —
+
+130
+00:07:03,075 --> 00:07:06,825
+you have everything you need to close out an event
+
+131
+00:07:07,125 --> 00:07:09,375
+professionally and improve the next one.
+
+132
+00:07:09,675 --> 00:07:13,425
+In the next episode we're going deep on something that
+
+133
+00:07:13,725 --> 00:07:17,475
+changes how fast you can work inside the console —
+
+134
+00:07:17,775 --> 00:07:20,025
+keyboard shortcuts and the command palette.
+
+135
+00:07:20,325 --> 00:07:24,075
+If you've ever wished you could trigger a session transition
+
+136
+00:07:24,375 --> 00:07:28,125
+without taking your eyes off the stage, that's the episode.
+
+137
+00:07:28,425 --> 00:07:30,425
+See you there.

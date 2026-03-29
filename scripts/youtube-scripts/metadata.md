@@ -12,7 +12,7 @@
 CueDeck is a realtime production console for managing live conferences and events — session states, roles, digital signage, AI agents, and more. In this first episode I'll give you a full overview of what CueDeck does and walk you through every feature we'll cover in this series.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
 
 Timestamps:
 0:00 Intro — the problem with live event production
@@ -42,8 +42,8 @@ Subscribe for the rest of the series — new episode every week!
 In this episode I'll walk you through creating a live conference event in CueDeck from scratch — event details, sessions, rooms, speakers, flags, and the running order. By the end you'll have a full programme ready to run live.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 1 — Overview → [EP1 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 1 — Overview → https://www.youtube.com/watch?v=YzZuZiprSao
 
 Timestamps:
 0:00 Intro
@@ -75,8 +75,8 @@ The demo event used in this tutorial: "Tech Summit 2026" — 10 sessions across 
 This is the core of CueDeck. In this episode I'll walk through the full session lifecycle — from PLANNED to READY, CALLING, LIVE, HOLD, OVERRUN, and ENDED — live on screen. You'll also see the delay nudge cascade and the speaker arrived flag.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 2 — Create Your First Event → [EP2 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 2 — Create Your First Event → https://www.youtube.com/watch?v=v0CM_4XKMcQ
 
 Timestamps:
 0:00 Intro
@@ -111,8 +111,8 @@ All state changes sync to every connected device in under 1 second.
 CueDeck has 6 roles — Director, Stage, AV, Interpretation, Registration, and Signage. In this episode I'll show you exactly what each role can see and do, and walk through the team invite flow so you can get your whole crew connected before show day.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 3 — Running Your Event Live → [EP3 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 3 — Running Your Event Live → https://www.youtube.com/watch?v=NDeJfYDrcns
 
 Timestamps:
 0:00 Intro
@@ -148,8 +148,8 @@ Every role gets the right information — nothing more, nothing less.
 No more group chats during a live event. The CueDeck broadcast bar sends a message to every connected device instantly — stage managers, AV engineers, interpretation booths, everyone. In this episode I'll show you how it works and how to set up presets for your most common messages.
 
 🚀 Try CueDeck free → https://app.cuedeck.io
-📖 Full playlist → [PLAYLIST LINK]
-⬅️ Previous: Episode 4 — Roles & Team Management → [EP4 LINK]
+📖 Full playlist → https://www.youtube.com/playlist?list=PLwpbeJtHyHMk8RH5MuSA4IkjVkSAhBoQu
+⬅️ Previous: Episode 4 — Roles & Team Management → https://www.youtube.com/watch?v=DxrMZCBU4Cs
 
 Timestamps:
 0:00 Intro
