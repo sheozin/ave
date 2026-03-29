@@ -6851,6 +6851,17 @@ async function boot() {
       setStep('Loading user…');
       await loadUserRole();
       renderUserChip();
+
+      // Track first login for welcome email
+      try {
+        const { data: loginData } = await sb.rpc('handle_first_login', { p_user_id: S.user.id });
+        if (loginData?.welcome_email_queued) {
+          console.log('[CueDeck] Welcome email queued for new user');
+        }
+      } catch (e) {
+        // Non-critical — don't block boot
+        console.warn('[CueDeck] First login tracking failed:', e.message);
+      }
     }
 
     // 0.5. Subscription check
