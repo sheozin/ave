@@ -698,6 +698,19 @@
     .sb-action-btn:active { transform: scale(.98); }
     .sb-action-btn:disabled { opacity: .35; cursor: not-allowed; }
     .sb-action-btn .sb-btn-icon { font-size: 14px; flex-shrink: 0; }
+    /* AVE Brain panel */
+    .brain-card { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:8px 10px; margin-bottom:6px; }
+    .brain-card:last-child { margin-bottom:0; }
+    .brain-card-title { font-size:11px; font-weight:600; color:var(--text-primary); line-height:1.3; margin-bottom:3px; }
+    .brain-urgency { font-size:10px; font-family:monospace; }
+    .brain-urgency.hi { color:#f87171; }
+    .brain-urgency.mid { color:#facc15; }
+    .brain-urgency.lo { color:var(--dim); }
+    .brain-hall { font-size:10px; color:var(--dim); margin-left:6px; }
+    .brain-empty { font-size:11px; color:var(--dim); padding:4px 0; }
+    .brain-link { display:block; font-size:10px; color:var(--accent); text-decoration:none; margin-top:8px; text-align:right; }
+    .brain-link:hover { text-decoration:underline; }
+    .brain-error { font-size:10px; color:var(--dim); }
 
     /* ── AI key styles removed (proxy handles auth server-side) ── */
     .ai-key-input {
@@ -1923,6 +1936,13 @@
       </div>
     </div>
 
+    <!-- AVE Brain panel (director only) -->
+    <div class="sb-section" id="ave-brain-wrap" style="display:none">
+      <div class="sb-title">AVE BRAIN</div>
+      <div id="ave-brain-cards"><p class="brain-empty">Loading&hellip;</p></div>
+      <a href="https://ave-brain.vercel.app/insights" target="_blank" rel="noopener" class="brain-link">View all &rarr;</a>
+    </div>
+
     <!-- Clock -->
     <div class="sb-section">
       <div class="sb-title">SERVER CLOCK</div>
@@ -2329,9 +2349,12 @@
 // ═══════════════════════════════════════════════════
 // APP INFO & CHANGELOG
 // ═══════════════════════════════════════════════════
-const APP_VERSION    = '1.4.0';
-const APP_BUILD_DATE = '2026-03-10';
+const APP_VERSION    = '1.5.0';
+const APP_BUILD_DATE = '2026-04-09';
 const CHANGELOG = [
+  { version: '1.5.0', date: '2026-04-09', items: [
+    { type: 'added', text: 'AVE Brain panel in sidebar — top 3 insights from the Growth Analyst' },
+  ]},
   { version: '1.4.0', date: '2026-03-10', items: [
     { type: 'added', text: 'Help system: keyboard shortcuts, quick reference, command palette' },
     { type: 'added', text: 'About panel with version info and legal links' },
@@ -4728,6 +4751,8 @@ function setRole(role) {
   // Show AI agents panel for director only
   const aiWrap = document.getElementById('ai-agents-wrap');
   if (aiWrap) aiWrap.style.display = role === 'director' ? '' : 'none';
+  const brainWrap = document.getElementById('ave-brain-wrap');
+  if (brainWrap) { brainWrap.style.display = role === 'director' ? '' : 'none'; if (role === 'director') loadBrainInsights(); }
   buildFilterBar();
   renderSessions();
   buildBCPresets();
@@ -7243,9 +7268,13 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     if (S.role === 'director' && (!S.planLimits || S.planLimits.ai)) {
       const aiWrap = document.getElementById('ai-agents-wrap');
       if (aiWrap) aiWrap.style.display = '';
+      const brainWrap = document.getElementById('ave-brain-wrap');
+      if (brainWrap) { brainWrap.style.display = ''; loadBrainInsights(); }
     } else {
       const aiWrap = document.getElementById('ai-agents-wrap');
       if (aiWrap) aiWrap.style.display = 'none';
+      const brainWrap = document.getElementById('ave-brain-wrap');
+      if (brainWrap) brainWrap.style.display = 'none';
     }
 
     overlay.style.display = 'none';
@@ -7282,6 +7311,53 @@ initAuth();
 // ═══ AI AGENT KEY MANAGEMENT ══════════════════════════════════════════════
 
 // Called before every agent button — ensures init() ran even if boot() missed it
+  async function loadBrainInsights() {
+    const wrap = document.getElementById('ave-brain-wrap');
+    const container = document.getElementById('ave-brain-cards');
+    if (!wrap || !container) return;
+    try {
+      const res = await fetch('https://ave-brain.vercel.app/api/insights');
+      if (!res.ok) throw new Error('fetch failed');
+      const json = await res.json();
+      const insights = Array.isArray(json.insights) ? json.insights : [];
+      while (container.firstChild) container.removeChild(container.firstChild);
+      if (insights.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'brain-empty';
+        p.textContent = 'No insights yet today.';
+        container.appendChild(p);
+        return;
+      }
+      insights.slice(0, 3).forEach(ins => {
+        const u = Math.round(ins.urgency * 100);
+        const urgencyClass = u >= 70 ? 'hi' : u >= 40 ? 'mid' : 'lo';
+        const card = document.createElement('div');
+        card.className = 'brain-card';
+        const title = document.createElement('div');
+        title.className = 'brain-card-title';
+        title.textContent = ins.title;
+        const meta = document.createElement('div');
+        const urgSpan = document.createElement('span');
+        urgSpan.className = 'brain-urgency ' + urgencyClass;
+        urgSpan.textContent = u + '%';
+        const hallSpan = document.createElement('span');
+        hallSpan.className = 'brain-hall';
+        hallSpan.textContent = ins.hall;
+        meta.appendChild(urgSpan);
+        meta.appendChild(hallSpan);
+        card.appendChild(title);
+        card.appendChild(meta);
+        container.appendChild(card);
+      });
+    } catch (_) {
+      while (container.firstChild) container.removeChild(container.firstChild);
+      const p = document.createElement('p');
+      p.className = 'brain-error';
+      p.textContent = 'Could not load insights.';
+      container.appendChild(p);
+    }
+  }
+
 function ensureAgentsInited() {
   if (window._cueDeckAgentsInit) return;
   if (typeof CueDeckIncidentAdvisor === 'undefined') return;
