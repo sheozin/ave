@@ -80,9 +80,37 @@ const CueDeckI18n = (() => {
       'bc.placeholder':   'Type a message to all operators...',
 
       // Signage
-      'sign.pairDisplay': 'Pair a Display',
-      'sign.enterCode':   'Enter pairing code',
-      'sign.howToConnect': 'How to connect a display',
+      'sign.pairDisplay':     'Pair a Display',
+      'sign.enterCode':       'Enter pairing code',
+      'sign.howToConnect':    'How to connect a display',
+      'sign.registeredDisplays': 'REGISTERED DISPLAYS',
+      'sign.globalOverride':  'GLOBAL DISPLAY OVERRIDE',
+      'sign.sponsorLibrary':  'SPONSOR LIBRARY',
+      'sign.copyId':          'Copy ID',
+      'sign.launch':          'Launch',
+      'sign.reset':           'Reset',
+      'sign.edit':            'Edit',
+      'sign.pushAll':         '→ PUSH ALL',
+
+      // Roles
+      'role.director':  'DIRECTOR',
+      'role.stage':     'STAGE',
+      'role.av':        'AV',
+      'role.interp':    'INTERP',
+      'role.reg':       'REG',
+      'role.signage':   'SIGNAGE',
+      'role.label':     'ROLE',
+
+      // Filter bar
+      'filter.timeline':    'Timeline',
+      'filter.list':        'List',
+      'filter.clearAll':    'Clear All',
+      'filter.searchPlaceholder': '...search title / speaker',
+
+      // Header
+      'hdr.operators':  'Operators',
+      'hdr.help':       'Help',
+      'hdr.sessions':   'sessions',
 
       // Misc
       'misc.search':      'Search sessions...',
@@ -156,9 +184,34 @@ const CueDeckI18n = (() => {
       'bc.label':         'بث عام',
       'bc.placeholder':   'اكتب رسالة لجميع المشغلين...',
 
-      'sign.pairDisplay': 'ربط شاشة',
-      'sign.enterCode':   'أدخل رمز الربط',
-      'sign.howToConnect': 'كيفية توصيل شاشة',
+      'sign.pairDisplay':     'ربط شاشة',
+      'sign.enterCode':       'أدخل رمز الربط',
+      'sign.howToConnect':    'كيفية توصيل شاشة',
+      'sign.registeredDisplays': 'الشاشات المسجلة',
+      'sign.globalOverride':  'تجاوز عام للشاشات',
+      'sign.sponsorLibrary':  'مكتبة الرعاة',
+      'sign.copyId':          'نسخ المعرف',
+      'sign.launch':          'تشغيل',
+      'sign.reset':           'إعادة تعيين',
+      'sign.edit':            'تعديل',
+      'sign.pushAll':         '← دفع الكل',
+
+      'role.director':  'مدير',
+      'role.stage':     'مسرح',
+      'role.av':        'صوتيات',
+      'role.interp':    'ترجمة',
+      'role.reg':       'تسجيل',
+      'role.signage':   'شاشات',
+      'role.label':     'الدور',
+
+      'filter.timeline':    'الجدول الزمني',
+      'filter.list':        'قائمة',
+      'filter.clearAll':    'مسح الكل',
+      'filter.searchPlaceholder': '...بحث بالعنوان / المتحدث',
+
+      'hdr.operators':  'المشغلون',
+      'hdr.help':       'مساعدة',
+      'hdr.sessions':   'جلسات',
 
       'misc.search':      'بحث في الجلسات...',
       'misc.allStatuses': 'جميع الحالات',

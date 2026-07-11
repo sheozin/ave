@@ -4069,7 +4069,7 @@ function renderSignagePanel() {
   list.innerHTML = `
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
-      <span class="sp-section-title">GLOBAL DISPLAY OVERRIDE</span>
+      <span class="sp-section-title">${t('sign.globalOverride')}</span>
       ${activeOverride ? `<button class="abtn abtn-sm btn-grey" onclick="clearGlobalOverride()">✕ Clear All</button>` : ''}
     </div>
     <div class="sp-global-bar">
@@ -4082,18 +4082,18 @@ function renderSignagePanel() {
 
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
-      <span class="sp-section-title">REGISTERED DISPLAYS (${S.displays.length})</span>
-      <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">＋ Add Display</button>
+      <span class="sp-section-title">${t('sign.registeredDisplays')} (${S.displays.length})</span>
+      <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">＋ ${t('btn.addDisplay')}</button>
     </div>
     <div class="sp-grid">${displayCards}</div>
     <div style="border-top:1px solid var(--border-section);margin-top:12px;padding-top:12px">
-      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">Pair a Display</div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">${t('sign.pairDisplay')}</div>
       <div style="display:flex;gap:6px">
-        <input id="sp-pair-code" type="text" placeholder="Enter pairing code (e.g. A7K-3M2)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:2px;text-transform:uppercase;outline:none">
+        <input id="sp-pair-code" type="text" placeholder="${t('sign.enterCode')} (e.g. A7K-3M2)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:2px;text-transform:uppercase;outline:none">
         <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">🔗 Pair</button>
       </div>
       <div style="margin-top:10px;padding:10px 12px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.8">
-        <div style="color:#60a5fa;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">How to connect a display</div>
+        <div style="color:#60a5fa;font-weight:700;font-size:10px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">${t('sign.howToConnect')}</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <span style="background:#3b82f6;color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">1</span>
           <span>On the TV or screen, open this URL in any browser:</span>
@@ -4116,8 +4116,8 @@ function renderSignagePanel() {
 
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
-      <span class="sp-section-title">SPONSOR LIBRARY (${S.sponsors.length})</span>
-      <button class="abtn abtn-sm btn-blue" onclick="openSponsorModal('add')">＋ Add Sponsor</button>
+      <span class="sp-section-title">${t('sign.sponsorLibrary')} (${S.sponsors.length})</span>
+      <button class="abtn abtn-sm btn-blue" onclick="openSponsorModal('add')">＋ ${t('btn.addSponsor')}</button>
     </div>
     <div class="sp-sponsor-grid">${sponsorCards}</div>
   </div>
@@ -5120,14 +5120,14 @@ function buildFilterBar() {
   const stOpts = statuses.map(st =>
     `<option value="${st}" ${F.status===st?'selected':''}>${st}</option>`).join('');
   bar.innerHTML =
-    '<input id="fb-search" type="search" placeholder="search title / speaker\u2026"' +
+    '<input id="fb-search" type="search" placeholder="' + t('filter.searchPlaceholder') + '"' +
     ' value="' + esc(F.text) + '" oninput="onFilterInput(event)">' +
     '<button id="filter-toggle-btn" onclick="toggleFilters()">\u25BE Filters</button>' +
     '<select id="fb-status" onchange="onFilterChange()">' +
-    '<option value="' + (!F.status?'" selected':'"') + '>All statuses</option>' + stOpts +
+    '<option value="' + (!F.status?'" selected':'"') + '>' + t('misc.allStatuses') + '</option>' + stOpts +
     '</select>' +
     '<select id="fb-room" onchange="onFilterChange()">' +
-    '<option value="' + (!F.room?'" selected':'"') + '>All rooms</option>' + roomOpts +
+    '<option value="' + (!F.room?'" selected':'"') + '>' + t('misc.allRooms') + '</option>' + roomOpts +
     '</select>' +
     '<button id="fb-clear" class="' + (isFilterActive()?'visible':'') + '" onclick="clearFilters()">\u2715 clear</button>' +
     '<span id="fb-count"></span>' +
