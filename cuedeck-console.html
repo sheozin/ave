@@ -1577,15 +1577,26 @@
     }
 
     /* ── RTL SUPPORT ────────────────────────────────────────────── */
+    /* Header + logo always LTR — brand identity stays consistent */
+    [dir="rtl"] #header { direction: ltr; }
+    [dir="rtl"] .logo { direction: ltr; }
+    /* Sidebar slides from left in RTL */
     [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
     [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
-    [dir="rtl"] .sc-top { flex-direction: row-reverse; }
+    /* Session cards: text aligns right, but keep checkbox+sort+badge order */
+    [dir="rtl"] .sc-top { direction: rtl; }
+    [dir="rtl"] .sc-title { text-align: right; }
     [dir="rtl"] .sc-meta { direction: rtl; }
+    [dir="rtl"] .sc-times { direction: rtl; }
     [dir="rtl"] .sc-actions { direction: rtl; }
+    /* Filter bar + broadcast */
     [dir="rtl"] #filter-bar { direction: rtl; }
     [dir="rtl"] #bc-bar { direction: rtl; }
+    /* Modals */
     [dir="rtl"] .ev-modal-card { direction: rtl; text-align: right; }
     [dir="rtl"] .ev-modal-actions { flex-direction: row-reverse; }
+    /* Role bar stays LTR (role names are English identifiers) */
+    [dir="rtl"] #role-bar { direction: ltr; }
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
