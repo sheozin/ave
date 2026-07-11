@@ -1,0 +1,13 @@
+{
+  "name": "CueDeck Console",
+  "short_name": "CueDeck",
+  "description": "Live event production console",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B0F14",
+  "theme_color": "#0B0F14",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -2,10 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0B0F14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>CueDeck — Production Console</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/favicon.svg">
+  <link rel="manifest" href="/console-manifest.json">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://js.stripe.com/v3/"></script>
   <style>
@@ -1572,11 +1577,17 @@
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
-      .abtn { min-height: 44px; }
-      .rbtn { min-height: 36px; }
-      button, select, input { min-height: 36px; }
+      .abtn { min-height: 48px; font-size: 13px; padding: 8px 16px; }
+      .rbtn { min-height: 40px; }
+      button, select, input { min-height: 40px; }
       button { touch-action: manipulation; }
-      .sc-mgmt-btn { padding: 4px 8px; font-size: 14px; }
+      .sc-mgmt-btn { padding: 6px 10px; font-size: 16px; }
+      .sc-actions { gap: 6px; }
+      .sc-actions .abtn { flex: 1; min-height: 48px; font-size: 13px; font-weight: 700; }
+      .toast-close { min-width: 44px; min-height: 44px; font-size: 20px; }
+      .batch-chk { width: 20px !important; height: 20px !important; }
+      #batch-bar .abtn { min-height: 40px; }
+      #undo-btn { min-height: 44px; font-size: 13px; padding: 8px 20px; }
     }
   </style>
 </head>
