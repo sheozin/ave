@@ -4695,6 +4695,19 @@ function pushLog(action, detail, sessionId) {
   S.log.unshift({ action, detail, sessionId, ts: correctedNow() });
   if (S.log.length > 60) S.log.pop();
   renderLog();
+
+  // Desktop notification for key events when tab is not focused
+  const sess = sessionId ? S.sessions.find(x => x.id === sessionId) : null;
+  const name = sess ? sess.title : '';
+  if (action === 'STATUS' && detail) {
+    sendDesktopNotif(`${name || 'Session'}: ${detail}`, 'CueDeck — State Change', `status-${sessionId}`);
+  } else if (action === 'ERROR') {
+    sendDesktopNotif(`Error: ${detail}`, 'CueDeck — Alert', 'error');
+  } else if (action === 'DELAY') {
+    sendDesktopNotif(`Delay: ${detail}`, name ? `CueDeck — ${name}` : 'CueDeck', 'delay');
+  } else if (action === 'BROADCAST' && detail !== 'cleared') {
+    sendDesktopNotif(`Broadcast: ${detail}`, 'CueDeck — Message', 'broadcast');
+  }
 }
 
 // ── Toast notifications ──────────────────────────────────────────────────────
@@ -4727,6 +4740,39 @@ function dismissToast(el) {
   el.classList.add('toast-out');
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
+
+// ═══════════════════════════════════════════════════
+// DESKTOP NOTIFICATIONS
+// ═══════════════════════════════════════════════════
+let _notifEnabled = false;
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') { _notifEnabled = true; return; }
+  if (Notification.permission !== 'denied') {
+    const perm = await Notification.requestPermission();
+    _notifEnabled = perm === 'granted';
+  }
+}
+
+function sendDesktopNotif(title, body, tag) {
+  if (!_notifEnabled || document.visibilityState === 'visible') return;
+  try {
+    const n = new Notification(title, {
+      body, tag: tag || 'cuedeck',
+      icon: '/favicon.svg',
+      badge: '/favicon.svg',
+      requireInteraction: false
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    setTimeout(() => n.close(), 8000);
+  } catch {}
+}
+
+// Request permission on first user interaction
+document.addEventListener('click', function _reqNotif() {
+  requestNotifPermission();
+  document.removeEventListener('click', _reqNotif);
+}, { once: true });
 
 function pushLogFromRow(row) {
   const detail = row.from_status
