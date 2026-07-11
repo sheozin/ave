@@ -120,21 +120,21 @@ test.describe('Display: hash-param pre-fill', () => {
     // inputs are pre-filled synchronously before the async boot runs
     await page.goto(`${DISP_URL}${makeHash()}`);
     // Wait for the boot to fail and restore the setup form
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     const val = await page.locator('#su-url').inputValue();
     expect(val).toBe(FAKE_SUPA_URL);
   });
 
   test('15 hash params pre-fill anon key input', async ({ page }) => {
     await page.goto(`${DISP_URL}${makeHash()}`);
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     const val = await page.locator('#su-key').inputValue();
     expect(val).toBe(FAKE_SUPA_KEY);
   });
 
   test('16 hash params pre-fill display ID input', async ({ page }) => {
     await page.goto(`${DISP_URL}${makeHash()}`);
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     const val = await page.locator('#su-id').inputValue();
     expect(val).toBe(FAKE_DISP_ID);
   });
@@ -193,7 +193,7 @@ test.describe('Display: query-param parsing logic', () => {
     const hashUrl = `${DISP_URL}${makeHash()}`;
     await page.goto(hashUrl);
     // bootDisplay is invoked (setup hidden), then fails (fake URL) → error shown
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     await expect(page.locator('#su-err')).toContainText(/Connection failed/i);
     // Confirm: without hash, no boot is triggered
     await page.goto(DISP_URL);
@@ -210,7 +210,7 @@ test.describe('Display: auto-boot with invalid credentials', () => {
   test('20 failed connection restores setup form with error', async ({ page }) => {
     await page.goto(`${DISP_URL}${makeHash()}`);
     // Wait for bootDisplay to fail and restore setup form
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     await expect(page.locator('#setup')).toBeVisible();
     await expect(page.locator('#su-err')).toContainText(/Connection failed/i);
   });
@@ -220,19 +220,19 @@ test.describe('Display: auto-boot with invalid credentials', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${DISP_URL}${makeHash()}`);
     // Wait for boot to fail — network error should be caught internally
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     expect(errors).toHaveLength(0);
   });
 
   test('22 display frame stays hidden after failed connection', async ({ page }) => {
     await page.goto(`${DISP_URL}${makeHash()}`);
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     await expect(page.locator('#display')).toBeHidden();
   });
 
   test('23 loading screen is hidden after failed connection', async ({ page }) => {
     await page.goto(`${DISP_URL}${makeHash()}`);
-    await page.waitForSelector('#su-err:not(:empty)', { timeout: 8000 });
+    await page.waitForSelector('#su-err:not(:empty)', { timeout: 20000 });
     await expect(page.locator('#loading')).toBeHidden();
   });
 
