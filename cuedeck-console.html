@@ -11,6 +11,7 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/favicon.svg">
   <link rel="manifest" href="/console-manifest.json">
+  <script src="/cuedeck-i18n.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://js.stripe.com/v3/"></script>
   <style>
@@ -1575,6 +1576,17 @@
       .sp-section { padding: 12px; }
     }
 
+    /* ── RTL SUPPORT ────────────────────────────────────────────── */
+    [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
+    [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
+    [dir="rtl"] .sc-top { flex-direction: row-reverse; }
+    [dir="rtl"] .sc-meta { direction: rtl; }
+    [dir="rtl"] .sc-actions { direction: rtl; }
+    [dir="rtl"] #filter-bar { direction: rtl; }
+    [dir="rtl"] #bc-bar { direction: rtl; }
+    [dir="rtl"] .ev-modal-card { direction: rtl; text-align: right; }
+    [dir="rtl"] .ev-modal-actions { flex-direction: row-reverse; }
+
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
       .abtn { min-height: 48px; font-size: 13px; padding: 8px 16px; }
@@ -1769,6 +1781,15 @@
   <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
     &#x1F465; Operators <span id="users-badge"></span>
   </button>
+  <select id="lang-switcher" onchange="CueDeckI18n.setLocale(this.value);location.reload()"
+    title="Language"
+    style="background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);
+           padding:3px 6px;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;outline:none">
+    <option value="en">EN</option>
+    <option value="ar">AR</option>
+    <option value="pl">PL</option>
+    <option value="de">DE</option>
+  </select>
   <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
   <button id="help-btn" onclick="toggleHelpMenu()" title="Help &middot; Press ? anytime">Help<span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
   <div id="help-dropdown" class="help-dropdown">
@@ -7451,6 +7472,11 @@ function wizSkip() {
 // ═══════════════════════════════════════════════════
 async function boot() {
   const overlay = document.getElementById('loading-overlay');
+
+  // Set language switcher to current locale
+  const langSel = document.getElementById('lang-switcher');
+  if (langSel) langSel.value = CueDeckI18n.getLocale();
+
   try {
     // 0. User role
     if (S.user) {
