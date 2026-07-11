@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ── RESET & BASE ── */
+:root { --brand: #3b82f6; }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:#05060f}
 body{
@@ -164,7 +165,7 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
 /* Video progress bar */
 .sp-video-progress{
   position:absolute;bottom:0;left:0;height:3px;
-  background:linear-gradient(90deg,#3b82f6,#6366f1);
+  background:linear-gradient(90deg,var(--brand),#6366f1);
   transition:width .3s linear;border-radius:0 2px 0 0;
 }
 
@@ -579,6 +580,13 @@ async function bootDisplay(url, key, id) {
     const { data: ev } = await sb.from('leod_events')
       .select('*').eq('id', D.event_id).single();
     S.event = ev;
+
+    // 3b. Apply custom branding from event
+    if (ev) {
+      if (ev.brand_color) document.documentElement.style.setProperty('--brand', ev.brand_color);
+      if (ev.client_logo) S.clientLogo = ev.client_logo;
+      if (ev.client_name) S.clientName = ev.client_name;
+    }
 
     // 4. Load sessions
     const { data: sessions } = await sb.from('leod_sessions')
