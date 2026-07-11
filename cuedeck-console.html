@@ -2267,6 +2267,15 @@
   <div class="ev-modal-card" style="max-width:480px">
     <div class="ev-modal-title" id="sess-modal-title">New Session</div>
 
+    <!-- Session Templates -->
+    <div id="smv-template-bar" style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+      <select id="smv-tpl-select" onchange="loadSessionTemplate(this.value)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:5px 8px;border-radius:6px;font-size:11px;font-family:inherit">
+        <option value="">— Load template —</option>
+      </select>
+      <button class="abtn abtn-sm btn-blue" onclick="saveSessionTemplate()" style="font-size:10px;white-space:nowrap">Save as Template</button>
+      <button class="abtn abtn-sm btn-grey" onclick="deleteSessionTemplate()" id="smv-tpl-del" style="font-size:10px;display:none">Delete</button>
+    </div>
+
     <div style="display:flex;gap:8px">
       <label style="width:64px">#<input id="smv-sort" type="number" min="1" step="1"></label>
       <label style="flex:1">Title<input id="smv-title" type="text" required></label>
@@ -5181,6 +5190,84 @@ async function seedSessions(fromEventId, toEventId) {
 // ═══════════════════════════════════════════════════
 // SESSION MODAL
 // ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// SESSION TEMPLATES (localStorage)
+// ═══════════════════════════════════════════════════
+function getSessionTemplates() {
+  try { return JSON.parse(localStorage.getItem('cuedeck_session_templates') || '[]'); }
+  catch { return []; }
+}
+function saveSessionTemplates(tpls) {
+  localStorage.setItem('cuedeck_session_templates', JSON.stringify(tpls));
+}
+function refreshTemplateDropdown() {
+  const sel = document.getElementById('smv-tpl-select');
+  if (!sel) return;
+  const tpls = getSessionTemplates();
+  // Build options safely using DOM methods
+  sel.textContent = '';
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = '— Load template —';
+  sel.appendChild(defaultOpt);
+  tpls.forEach((t, i) => {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  document.getElementById('smv-tpl-del').style.display = 'none';
+}
+function saveSessionTemplate() {
+  const name = prompt('Template name:');
+  if (!name || !name.trim()) return;
+  const tpl = {
+    name: name.trim(),
+    type:    document.getElementById('smv-type').value,
+    room:    document.getElementById('smv-room').value,
+    mics:    document.getElementById('smv-mics').value,
+    anchor:  document.getElementById('smv-anchor').checked,
+    rec:     document.getElementById('smv-rec').checked,
+    stream:  document.getElementById('smv-stream').checked,
+    remote:  document.getElementById('smv-remote').checked,
+    interp:  document.getElementById('smv-interp').checked,
+    notes:   document.getElementById('smv-notes').value,
+  };
+  const tpls = getSessionTemplates();
+  tpls.push(tpl);
+  saveSessionTemplates(tpls);
+  refreshTemplateDropdown();
+  pushToast(`Template "${name.trim()}" saved`, 'success');
+}
+function loadSessionTemplate(idx) {
+  if (idx === '' || idx === undefined) { document.getElementById('smv-tpl-del').style.display = 'none'; return; }
+  const tpls = getSessionTemplates();
+  const t = tpls[parseInt(idx, 10)];
+  if (!t) return;
+  document.getElementById('smv-type').value     = t.type   || 'Keynote';
+  document.getElementById('smv-room').value     = t.room   || '';
+  document.getElementById('smv-mics').value     = t.mics   || 0;
+  document.getElementById('smv-anchor').checked = !!t.anchor;
+  document.getElementById('smv-rec').checked    = !!t.rec;
+  document.getElementById('smv-stream').checked = !!t.stream;
+  document.getElementById('smv-remote').checked = !!t.remote;
+  document.getElementById('smv-interp').checked = !!t.interp;
+  document.getElementById('smv-notes').value    = t.notes  || '';
+  document.getElementById('smv-tpl-del').style.display = '';
+  pushToast(`Loaded "${t.name}"`, 'info');
+}
+function deleteSessionTemplate() {
+  const sel = document.getElementById('smv-tpl-select');
+  const idx = parseInt(sel.value, 10);
+  if (isNaN(idx)) return;
+  const tpls = getSessionTemplates();
+  const name = tpls[idx]?.name;
+  tpls.splice(idx, 1);
+  saveSessionTemplates(tpls);
+  refreshTemplateDropdown();
+  pushToast(`Template "${name}" deleted`, 'info');
+}
+
 function openSessModal(mode, sessionId) {
   sessModalMode = mode;
   sessModalId   = sessionId || null;
@@ -5205,6 +5292,8 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-mics').value   = 0;
     document.getElementById('smv-notes').value  = '';
     document.getElementById('smv-del').style.display = 'none';
+    document.getElementById('smv-template-bar').style.display = 'flex';
+    refreshTemplateDropdown();
   } else {
     const s = S.sessions.find(x => x.id === sessionId);
     if (!s) return;
@@ -5225,6 +5314,7 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-mics').value   = s.mics  || 0;
     document.getElementById('smv-notes').value  = s.notes || '';
     document.getElementById('smv-del').style.display = '';
+    document.getElementById('smv-template-bar').style.display = 'none';
   }
   document.getElementById('sess-modal').style.display = 'flex';
 }
