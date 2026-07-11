@@ -1585,6 +1585,17 @@
 <!-- TOAST NOTIFICATIONS -->
 <div id="toast-container"></div>
 
+<!-- UNDO BAR -->
+<div id="undo-bar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+  background:#1e293b;border:1px solid var(--border);border-radius:10px;padding:10px 18px;
+  display:none;align-items:center;gap:12px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5);
+  font-size:13px;color:var(--text-primary)">
+  <span id="undo-msg"></span>
+  <button id="undo-btn" class="abtn btn-amber" style="font-size:11px;padding:5px 14px" onclick="executeUndo()">UNDO</button>
+  <span id="undo-timer" style="font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:20px"></span>
+  <button style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:0 2px" onclick="dismissUndo()">×</button>
+</div>
+
 <!-- LOADING / LOGIN -->
 <div id="loading-overlay">
   <div class="load-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="ll-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#ll-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text></svg></div>
@@ -2704,6 +2715,51 @@ function confirmCancel(sessionId, btn) {
   }
 }
 
+// ═══════════════════════════════════════════════════
+// UNDO SYSTEM — 10s window to revert ENDED/CANCELLED
+// ═══════════════════════════════════════════════════
+let _undoState = null;
+let _undoTimer = null;
+let _undoCountdown = null;
+
+function offerUndo(sessionId, prevStatus, sessionTitle) {
+  dismissUndo(); // clear any existing
+  _undoState = { sessionId, prevStatus };
+  const bar = document.getElementById('undo-bar');
+  document.getElementById('undo-msg').textContent = `"${sessionTitle}" → ${prevStatus === 'LIVE' ? 'ENDED' : 'CANCELLED'}`;
+  bar.style.display = 'flex';
+  let remaining = 10;
+  document.getElementById('undo-timer').textContent = `${remaining}s`;
+  _undoCountdown = setInterval(() => {
+    remaining--;
+    document.getElementById('undo-timer').textContent = `${remaining}s`;
+    if (remaining <= 0) dismissUndo();
+  }, 1000);
+  _undoTimer = setTimeout(dismissUndo, 10_500);
+}
+
+function dismissUndo() {
+  _undoState = null;
+  clearTimeout(_undoTimer);
+  clearInterval(_undoCountdown);
+  document.getElementById('undo-bar').style.display = 'none';
+}
+
+async function executeUndo() {
+  if (!_undoState) return;
+  const { sessionId, prevStatus } = _undoState;
+  dismissUndo();
+  // Revert to previous status via direct DB write
+  const { error } = await sb.from('leod_sessions')
+    .update({ status: prevStatus, actual_end: null })
+    .eq('id', sessionId);
+  if (error) { pushToast(`Undo failed: ${error.message}`, 'error'); return; }
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (s) { s.status = prevStatus; s.actual_end = null; renderSessions(); }
+  pushToast(`Reverted to ${prevStatus}`, 'success');
+  pushLog('UNDO', `reverted to ${prevStatus}`, sessionId);
+}
+
 // END SESSION two-step confirmation (same pattern as PR-015 CANCEL)
 const _endPending = new Map();
 function confirmEnd(sessionId, btn) {
@@ -2833,6 +2889,12 @@ async function transition(sessionId, toStatus) {
         server_time_ms: correctedNow(),
       }).catch((e) => { pushLog('WARN', `event_log write failed: ${e?.message ?? e}`, sessionId); });
     }
+  }
+
+  // Offer undo for destructive transitions (ENDED, CANCELLED)
+  if (success && (toStatus === 'ENDED' || toStatus === 'CANCELLED')) {
+    const sess = S.sessions.find(x => x.id === sessionId);
+    offerUndo(sessionId, prevStatus, sess?.title || 'Session');
   }
 }
 
