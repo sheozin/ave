@@ -3751,6 +3751,12 @@ function subscribeDisplays(eventId) {
 function renderSignagePanel() {
   const list = document.getElementById('sessions-list');
   if (!list) return;
+
+  // Preserve pairing code input if user is typing
+  const pairInput = document.getElementById('sp-pair-code');
+  const savedPairCode = pairInput?.value || '';
+  const pairHasFocus = pairInput === document.activeElement;
+
   const now = Date.now();
   const ONLINE_MS = 60_000;
 
@@ -3889,6 +3895,15 @@ function renderSignagePanel() {
     <code>cuedeck-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
     Open in any browser -- supports landscape &amp; portrait. Heartbeat every 30s.
   </div>`;
+
+  // Restore pairing code input value after re-render
+  if (savedPairCode) {
+    const newInput = document.getElementById('sp-pair-code');
+    if (newInput) {
+      newInput.value = savedPairCode;
+      if (pairHasFocus) newInput.focus();
+    }
+  }
 }
 
 // ── Pair display by code ────────────────────────────────────
