@@ -2532,21 +2532,28 @@ const EF_MAP = {
 };
 
 // Button config
-const BTN_CFG = {
-  LIVE:      { label:'GO LIVE',      cls:'btn-green'  },
-  READY:     { label:'SET READY',    cls:'btn-amber'  },
-  CALLING:   { label:'CALL SPEAKER', cls:'btn-amber'  },
-  HOLD:      { label:'HOLD',         cls:'btn-red'    },
-  ENDED:     { label:'END SESSION',  cls:'btn-red'    },
-  PLANNED:   { label:'DE-ARM',       cls:'btn-grey'   },
-  CANCELLED: { label:'CANCEL',       cls:'btn-grey'   },
-};
-const BTN_LABEL_OVERRIDE = {
-  'HOLD→LIVE':      'RESUME',
-  'CANCELLED→PLANNED': 'REINSTATE',
-  'CALLING→READY':  'PULL BACK',
-  'CALLING→LIVE':   'CONFIRM ON STAGE',
-};
+function getBtnCfg() {
+  return {
+    LIVE:      { label: t('btn.goLive'),      cls:'btn-green'  },
+    READY:     { label: t('btn.setReady'),    cls:'btn-amber'  },
+    CALLING:   { label: t('btn.callSpeaker'), cls:'btn-amber'  },
+    HOLD:      { label: t('btn.hold'),        cls:'btn-red'    },
+    ENDED:     { label: t('btn.endSession'),  cls:'btn-red'    },
+    PLANNED:   { label: t('btn.deArm'),       cls:'btn-grey'   },
+    CANCELLED: { label: t('btn.cancel'),      cls:'btn-grey'   },
+  };
+}
+function getBtnOverride() {
+  return {
+    'HOLD→LIVE':         t('btn.resume'),
+    'CANCELLED→PLANNED': t('btn.reinstate'),
+    'CALLING→READY':     t('btn.pullBack'),
+    'CALLING→LIVE':      t('btn.confirmOnStage'),
+  };
+}
+// Keep backward compat for any code referencing the old consts
+const BTN_CFG = getBtnCfg();
+const BTN_LABEL_OVERRIDE = getBtnOverride();
 
 // ═══════════════════════════════════════════════════
 // CLOCK
@@ -3523,8 +3530,8 @@ function cardHTML(s, nowMs) {
     progHTML  = `<div class="prog-wrap"><div class="prog-fill ${overrun?'ov':''}" style="width:${pct}%"></div></div>`;
     const remClass = overrun ? 'ov' : remain < 60_000 ? 'warn-red' : remain < 300_000 ? 'warn-amber' : '';
     timerHTML = `<div class="live-timer">
-      <span class="lt-elapsed">elapsed ${fmtDur(elapsed)}</span>
-      <span class="lt-remain ${remClass}" data-sid="${s.id}">${overrun?'OVERRUN +'+fmtDur(-remain):fmtDur(remain)+' left'}</span>
+      <span class="lt-elapsed">${t('time.elapsed')} ${fmtDur(elapsed)}</span>
+      <span class="lt-remain ${remClass}" data-sid="${s.id}">${overrun?t('time.overrun')+' +'+fmtDur(-remain):fmtDur(remain)+' '+t('time.remaining')}</span>
       ${s.speaker_arrived?'<span class="arrived-tag">✓ arrived</span>':''}
     </div>`;
   }
@@ -3565,7 +3572,7 @@ function cardHTML(s, nowMs) {
     ${isDirector ? `<input type="checkbox" class="batch-chk" data-sid="${s.id}" onclick="event.stopPropagation();toggleBatchSelect('${s.id}',this.checked)" style="width:14px;height:14px;accent-color:#3b82f6;cursor:pointer;flex-shrink:0" ${_batchSelected.has(s.id)?'checked':''}>` : ''}
     <span class="sc-num">${s.sort_order}</span>
     <span class="sc-title">${esc(s.title)}</span>
-    <span class="badge badge-${s.status}">${s.status}</span>
+    <span class="badge badge-${s.status}">${t('status.' + s.status)}</span>
     ${mgmt}
   </div>
   <div class="sc-meta">
@@ -3575,9 +3582,9 @@ function cardHTML(s, nowMs) {
     ${flags}
   </div>
   <div class="sc-times">
-    <div class="tc"><span class="tl">PLANNED</span><span class="tv">${s.planned_start}–${s.planned_end}</span></div>
-    <div class="tc"><span class="tl">SCHEDULED</span><span class="tv ${delayed?'late':''}">${s.scheduled_start}–${s.scheduled_end}</span></div>
-    ${s.actual_start ? `<div class="tc"><span class="tl">STARTED</span><span class="tv">${fmtTS(s.actual_start)}</span></div>` : ''}
+    <div class="tc"><span class="tl">${t('time.planned')}</span><span class="tv">${s.planned_start}–${s.planned_end}</span></div>
+    <div class="tc"><span class="tl">${t('time.scheduled')}</span><span class="tv ${delayed?'late':''}">${s.scheduled_start}–${s.scheduled_end}</span></div>
+    ${s.actual_start ? `<div class="tc"><span class="tl">${t('time.started')}</span><span class="tv">${fmtTS(s.actual_start)}</span></div>` : ''}
     ${delayed ? `<span class="delay-tag">+${s.cumulative_delay}min</span>` : ''}
   </div>
   ${timerHTML}
@@ -3658,9 +3665,11 @@ function buildButtons(s) {
 
   if (!possible.length && !canDelay && !canArrive) return '';
 
+  const _btnCfg = getBtnCfg();
+  const _btnOvr = getBtnOverride();
   const btnHtml = possible.map(to => {
-    const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
-    const label = BTN_LABEL_OVERRIDE[`${s.status}→${to}`] || cfg.label;
+    const cfg   = _btnCfg[to] || { label: to, cls: 'btn-blue' };
+    const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
       return `<button class="abtn ${cfg.cls}" onclick="confirmCancel('${s.id}',this)">${label}</button>`;
@@ -3745,15 +3754,17 @@ function buildCtxPanel() {
   let html = '';
   const cbtn = (label, cls, action, icon = '') =>
     `<button class="ctx-btn ${cls}" onclick="${action}">${icon ? icon + ' ' : ''}${label}</button>`;
-  const lbl = t => `<div class="ctx-section-lbl">${t}</div>`;
+  const sectionLbl = v => `<div class="ctx-section-lbl">${v}</div>`;
 
   if (role === 'director' || role === 'stage') {
     if (tgt) {
-      html += lbl('QUICK ACTIONS');
-      const possible = (ALLOWED[tgt.status] || []).filter(t => (ROLE_WRITE[role] || []).includes(t));
+      html += sectionLbl('QUICK ACTIONS');
+      const _btnCfg2 = getBtnCfg();
+      const _btnOvr2 = getBtnOverride();
+      const possible = (ALLOWED[tgt.status] || []).filter(st => (ROLE_WRITE[role] || []).includes(st));
       possible.forEach(to => {
-        const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
-        const label = BTN_LABEL_OVERRIDE[`${tgt.status}→${to}`] || cfg.label;
+        const cfg   = _btnCfg2[to] || { label: to, cls: 'btn-blue' };
+        const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
         if (to === 'CANCELLED') {
           html += cbtn(label, cfg.cls, `confirmCancel('${esc(tgt.id)}',event.target)`);
         } else if (to === 'ENDED') {
@@ -3767,16 +3778,16 @@ function buildCtxPanel() {
                      tgt.speaker_arrived ? 'btn-grey' : 'btn-blue',
                      `markArrived('${esc(tgt.id)}', ${!tgt.speaker_arrived})`);
     }
-    html += lbl('MONITOR');
+    html += sectionLbl('MONITOR');
     html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
     html += cbtn('STAGE TIMER', 'btn-blue', 'openStageTimerDisplay()', '⏱');
 
   } else if (role === 'av') {
     if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
-      html += lbl('AV CONTROL');
+      html += sectionLbl('AV CONTROL');
       html += cbtn('HOLD SESSION', 'btn-amber', `transition('${esc(tgt.id)}','HOLD')`, '⏸');
     }
-    html += lbl('MONITOR');
+    html += sectionLbl('MONITOR');
     html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
 
   } else if (role === 'signage') {
@@ -3785,31 +3796,31 @@ function buildCtxPanel() {
       const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
       return t && (Date.now() - t) < 60_000;
     }).length;
-    html += lbl('DISPLAYS');
+    html += sectionLbl('DISPLAYS');
     html += `<div style="font-size:11px;color:var(--dim);padding:2px 2px 5px">${dispCount} registered · <span style="color:var(--green)">${onlineCount} online</span></div>`;
-    html += lbl('GLOBAL OVERRIDE');
+    html += sectionLbl('GLOBAL OVERRIDE');
     html += cbtn('☕ Break Screen',  'btn-purple', "sendGlobalOverride('break')");
     html += cbtn('⚡ 5-Min Recall', 'btn-amber',  "sendGlobalOverride('recall')");
     html += cbtn('🏢 Sponsor Reel', 'btn-blue',   "sendGlobalOverride('sponsors')");
     html += cbtn('📋 Back to Schedule','btn-grey', "sendGlobalOverride('schedule')");
     if (S.displays.some(d => d.override_content?.mode))
       html += cbtn('✕ Clear Override','btn-grey','clearGlobalOverride()');
-    html += lbl('MONITOR');
+    html += sectionLbl('MONITOR');
     html += cbtn('⊡ STAGE MONITOR', 'btn-blue', 'openStageMonitor()');
 
   } else if (role === 'reg') {
-    html += lbl('LOBBY');
+    html += sectionLbl('LOBBY');
     if (tgt) html += cbtn('ANNOUNCE SESSION', 'btn-blue',
       `sendBroadcastQuick('📢 ${esc(tgt.title).substring(0,40)} — starting now. Please take your seats.','info')`, '📢');
     html += cbtn('BREAK ALERT', 'btn-amber', "sendBroadcastQuick('☕ Coffee break starting now','info')", '☕');
 
   } else if (role === 'interp') {
     if (tgt) {
-      html += lbl('BOOTH STATUS');
+      html += sectionLbl('BOOTH STATUS');
       const isActive = tgt.status === 'LIVE' || tgt.status === 'OVERRUN';
       html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${isActive ? '◉ SESSION LIVE' : '◈ STANDBY'}</div>`;
       if (tgt.interpretation && tgt.languages?.length) {
-        html += lbl('CHANNELS');
+        html += sectionLbl('CHANNELS');
         tgt.languages.forEach(lang => { html += `<span class="ctx-lang-chip">${esc(lang)}</span>`; });
       }
     }
@@ -5432,7 +5443,7 @@ function openSessModal(mode, sessionId) {
   document.getElementById('smv-error').textContent = '';
 
   if (mode === 'add') {
-    document.getElementById('sess-modal-title').textContent = 'New Session';
+    document.getElementById('sess-modal-title').textContent = t('sess.new');
     const maxSort = S.sessions.reduce((m, s) => Math.max(m, s.sort_order || 0), 0);
     document.getElementById('smv-sort').value   = maxSort + 1;
     document.getElementById('smv-title').value  = '';
@@ -5455,7 +5466,7 @@ function openSessModal(mode, sessionId) {
   } else {
     const s = S.sessions.find(x => x.id === sessionId);
     if (!s) return;
-    document.getElementById('sess-modal-title').textContent = 'Edit Session';
+    document.getElementById('sess-modal-title').textContent = t('sess.edit');
     document.getElementById('smv-sort').value   = s.sort_order || '';
     document.getElementById('smv-title').value  = s.title      || '';
     document.getElementById('smv-type').value   = s.type       || 'Keynote';
