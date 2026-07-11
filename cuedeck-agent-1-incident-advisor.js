@@ -241,6 +241,38 @@ const CueDeckIncidentAdvisor = (() => {
   const _seen             = new Map(); // key: "system::location" → last trigger timestamp
   const INCIDENT_COOLDOWN = 60_000;    // ms — 60s cooldown per unique system+location
 
+  // Sanitize user-controlled strings before prompt injection
+  function _sanitize(str, maxLen = 200) {
+    if (!str) return '';
+    return String(str)
+      .replace(/[\x00-\x1F\x7F]/g, '')  // strip control chars
+      .replace(/---+/g, '')              // strip prompt separators
+      .replace(/```/g, '')               // strip code fences
+      .slice(0, maxLen)
+      .trim();
+  }
+
+  // API throttle: max 3 calls per 60s, 30s timeout
+  let _apiCallTimes = [];
+  const API_MAX_CALLS = 3;
+  const API_WINDOW_MS = 60_000;
+  const API_TIMEOUT_MS = 30_000;
+
+  function _isThrottled() {
+    const now = Date.now();
+    _apiCallTimes = _apiCallTimes.filter(t => now - t < API_WINDOW_MS);
+    if (_apiCallTimes.length >= API_MAX_CALLS) return true;
+    _apiCallTimes.push(now);
+    return false;
+  }
+
+  function _withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), ms))
+    ]);
+  }
+
   // ═══════════════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════════════
@@ -285,16 +317,16 @@ const CueDeckIncidentAdvisor = (() => {
   // CLAUDE API CALL
   // ═══════════════════════════════════════════════════
   async function _fetchAIAdvice(incident) {
-    if (!_opts.supabaseClient) { _renderFallback(incident); return; }
+    if (!_opts.supabaseClient || _isThrottled()) { _renderFallback(incident); return; }
 
     const prompt = `You are an AV technical expert for live corporate events. An incident has been detected during a live conference.
 
 Incident Details:
-- System: ${incident.system}
-- Location: ${incident.location || 'Not specified'}
-- Severity: ${incident.severity || 'Warning'}
-- Description: ${incident.description || 'No description provided'}
-- Time: ${incident.timestamp || 'Just now'}
+- System: ${_sanitize(incident.system, 50)}
+- Location: ${_sanitize(incident.location, 100) || 'Not specified'}
+- Severity: ${_sanitize(incident.severity, 20) || 'Warning'}
+- Description: ${_sanitize(incident.description, 300) || 'No description provided'}
+- Time: ${_sanitize(incident.timestamp, 30) || 'Just now'}
 
 Respond ONLY with valid JSON in this exact format, no markdown:
 {
@@ -304,13 +336,16 @@ Respond ONLY with valid JSON in this exact format, no markdown:
 }`;
 
     try {
-      const { data, error } = await _opts.supabaseClient.functions.invoke('ai-proxy', {
-        body: {
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 1000,
-          messages:   [{ role: 'user', content: prompt }]
-        }
-      });
+      const { data, error } = await _withTimeout(
+        _opts.supabaseClient.functions.invoke('ai-proxy', {
+          body: {
+            model:      'claude-haiku-4-5-20251001',
+            max_tokens: 1000,
+            messages:   [{ role: 'user', content: prompt }]
+          }
+        }),
+        API_TIMEOUT_MS
+      );
 
       if (error) throw new Error(error.message);
 

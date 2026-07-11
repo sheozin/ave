@@ -225,6 +225,38 @@ const CueDeckReportAgent = (() => {
   let thinkingTimer = null;
   let _opts         = {};
 
+  // Sanitize user-controlled strings before prompt injection
+  function _sanitize(str, maxLen = 200) {
+    if (!str) return '';
+    return String(str)
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      .replace(/---+/g, '')
+      .replace(/```/g, '')
+      .slice(0, maxLen)
+      .trim();
+  }
+
+  // API throttle: max 3 calls per 60s, 30s timeout
+  let _apiCallTimes = [];
+  const API_MAX_CALLS = 3;
+  const API_WINDOW_MS = 60_000;
+  const API_TIMEOUT_MS = 30_000;
+
+  function _isThrottled() {
+    const now = Date.now();
+    _apiCallTimes = _apiCallTimes.filter(t => now - t < API_WINDOW_MS);
+    if (_apiCallTimes.length >= API_MAX_CALLS) return true;
+    _apiCallTimes.push(now);
+    return false;
+  }
+
+  function _withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), ms))
+    ]);
+  }
+
   // ═══════════════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════════════
@@ -341,21 +373,21 @@ const CueDeckReportAgent = (() => {
   async function generateReport(eventData) {
     const apiKey = window.CUEDECK_API_KEY;
 
-    const incidentSummary = (eventData.incidents || []).map(inc =>
-      `- ${inc.system} at ${inc.location}: ${inc.description || 'No description'} — ${inc.resolved ? 'Resolved' : inc.escalated ? 'Escalated' : 'Unresolved'}`
+    const incidentSummary = (eventData.incidents || []).slice(0, 20).map(inc =>
+      `- ${_sanitize(inc.system, 50)} at ${_sanitize(inc.location, 50)}: ${_sanitize(inc.description, 150) || 'No description'} — ${inc.resolved ? 'Resolved' : inc.escalated ? 'Escalated' : 'Unresolved'}`
     ).join('\n') || '- No incidents recorded';
 
-    const sessionSummary = (eventData.sessions || []).map(s =>
-      `- ${s.startTime || s.scheduled_start || '?'} ${s.title} (${s.room || s.location || '—'})`
+    const sessionSummary = (eventData.sessions || []).slice(0, 50).map(s =>
+      `- ${_sanitize(s.startTime || s.scheduled_start, 10) || '?'} ${_sanitize(s.title, 80)} (${_sanitize(s.room || s.location, 50) || '—'})`
     ).join('\n') || '- No session data';
 
     const prompt = `You are a senior AV production manager. Generate a professional post-event operations report.
 
 EVENT DETAILS:
-- Event: ${eventData.eventName}
-- Client: ${eventData.client || 'Not specified'}
-- Date: ${eventData.date || 'Today'}
-- Venue: ${eventData.venue || 'Not specified'}
+- Event: ${_sanitize(eventData.eventName, 100)}
+- Client: ${_sanitize(eventData.client, 100) || 'Not specified'}
+- Date: ${_sanitize(eventData.date, 30) || 'Today'}
+- Venue: ${_sanitize(eventData.venue, 100) || 'Not specified'}
 
 SESSIONS:
 ${sessionSummary}
@@ -364,10 +396,10 @@ INCIDENTS:
 ${incidentSummary}
 
 PERFORMANCE STATS:
-- Peak Attendees: ${eventData.stats?.peakAttendees || 'N/A'}
-- Total Stream Minutes: ${eventData.stats?.totalStreamMinutes || 'N/A'}
-- Average Bitrate: ${eventData.stats?.avgBitrate || 'N/A'}
-- Uptime: ${eventData.stats?.uptimePercent || 'N/A'}%
+- Peak Attendees: ${_sanitize(String(eventData.stats?.peakAttendees || ''), 10) || 'N/A'}
+- Total Stream Minutes: ${_sanitize(String(eventData.stats?.totalStreamMinutes || ''), 10) || 'N/A'}
+- Average Bitrate: ${_sanitize(String(eventData.stats?.avgBitrate || ''), 20) || 'N/A'}
+- Uptime: ${_sanitize(String(eventData.stats?.uptimePercent || ''), 10) || 'N/A'}%
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -384,14 +416,18 @@ Respond ONLY with valid JSON, no markdown:
 
     try {
       if (!_opts.supabaseClient) throw new Error('No Supabase client');
+      if (_isThrottled()) throw new Error('Rate limit — too many requests');
 
-      const { data, error } = await _opts.supabaseClient.functions.invoke('ai-proxy', {
-        body: {
-          model:      'claude-sonnet-4-6',
-          max_tokens: 1200,
-          messages:   [{ role: 'user', content: prompt }]
-        }
-      });
+      const { data, error } = await _withTimeout(
+        _opts.supabaseClient.functions.invoke('ai-proxy', {
+          body: {
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1200,
+            messages:   [{ role: 'user', content: prompt }]
+          }
+        }),
+        API_TIMEOUT_MS
+      );
 
       if (error) throw new Error(error.message);
 
@@ -407,6 +443,15 @@ Respond ONLY with valid JSON, no markdown:
     ['ra-step-1','ra-step-2','ra-step-3','ra-step-4','ra-step-5'].forEach(id => {
       document.getElementById(id).className = 'ra-thinking-step done';
     });
+
+    // Archive report to database
+    if (_opts.supabaseClient && reportData) {
+      _opts.supabaseClient.from('leod_reports').insert({
+        event_id:     eventData.eventId || null,
+        generated_by: eventData.userId  || null,
+        report_data:  reportData
+      }).then(() => {}).catch(e => console.warn('[CueDeck] Report archive failed:', e.message));
+    }
 
     setTimeout(() => renderReport(), 600);
   }
@@ -500,7 +545,7 @@ Respond ONLY with valid JSON, no markdown:
           <div class="ra-section-title">Session Log</div>
           <table class="ra-table">
             <thead><tr><th>Time</th><th>Session</th><th>Location</th><th>Status</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" style="color:#3a5580;font-family:IBM Plex Mono,monospace;font-size:11px">No session data available</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="4" style="color:#9CA3AF;font-family:IBM Plex Mono,monospace;font-size:11px">No session data available</td></tr>'}</tbody>
           </table>
         </div>
       `;

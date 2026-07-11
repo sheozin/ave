@@ -263,6 +263,38 @@ const CueDeckCueEngine = (() => {
   // Default: Date.now() (client time, may have skew — pass correctedNow for accuracy)
   let _nowFn = () => Date.now();
 
+  // Sanitize user-controlled strings before prompt injection
+  function _sanitize(str, maxLen = 200) {
+    if (!str) return '';
+    return String(str)
+      .replace(/[\x00-\x1F\x7F]/g, '')
+      .replace(/---+/g, '')
+      .replace(/```/g, '')
+      .slice(0, maxLen)
+      .trim();
+  }
+
+  // API throttle: max 3 calls per 60s, 30s timeout
+  let _apiCallTimes = [];
+  const API_MAX_CALLS = 3;
+  const API_WINDOW_MS = 60_000;
+  const API_TIMEOUT_MS = 30_000;
+
+  function _isThrottled() {
+    const now = Date.now();
+    _apiCallTimes = _apiCallTimes.filter(t => now - t < API_WINDOW_MS);
+    if (_apiCallTimes.length >= API_MAX_CALLS) return true;
+    _apiCallTimes.push(now);
+    return false;
+  }
+
+  function _withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), ms))
+    ]);
+  }
+
   // ═══════════════════════════════════════════════════
   // SESSION ADAPTER
   // Converts CueDeck's native S.sessions schema to CueEngine format:
@@ -416,16 +448,16 @@ const CueDeckCueEngine = (() => {
   // CLAUDE API — fetch tailored checklist
   // ═══════════════════════════════════════════════════
   async function fetchCueChecklist(session) {
-    if (!_supabaseClient) { renderFallbackChecklist(session); return; }
+    if (!_supabaseClient || _isThrottled()) { renderFallbackChecklist(session); return; }
 
     const prompt = `You are an AV production manager for live corporate conferences. Generate a pre-cue checklist for the upcoming session.
 
-Session: ${session.title}
-Start Time: ${session.startTime}
-Location: ${session.location || 'Main Hall'}
-AV Systems: ${(session.systems || []).join(', ') || 'Standard PA, slides, streaming'}
-Interpretation Languages: ${(session.interpreters || []).join(', ') || 'None'}
-Notes: ${session.notes || 'None'}
+Session: ${_sanitize(session.title, 100)}
+Start Time: ${_sanitize(session.startTime, 10)}
+Location: ${_sanitize(session.location, 100) || 'Main Hall'}
+AV Systems: ${_sanitize((session.systems || []).join(', '), 200) || 'Standard PA, slides, streaming'}
+Interpretation Languages: ${_sanitize((session.interpreters || []).join(', '), 100) || 'None'}
+Notes: ${_sanitize(session.notes, 300) || 'None'}
 Time until cue: ${alertMinutes} minutes
 
 Respond ONLY with valid JSON, no markdown:
@@ -438,13 +470,16 @@ Respond ONLY with valid JSON, no markdown:
 Generate 6-8 specific, actionable items.`;
 
     try {
-      const { data, error } = await _supabaseClient.functions.invoke('ai-proxy', {
-        body: {
-          model:      'claude-haiku-4-5-20251001',
-          max_tokens: 1000,
-          messages:   [{ role: 'user', content: prompt }]
-        }
-      });
+      const { data, error } = await _withTimeout(
+        _supabaseClient.functions.invoke('ai-proxy', {
+          body: {
+            model:      'claude-haiku-4-5-20251001',
+            max_tokens: 1000,
+            messages:   [{ role: 'user', content: prompt }]
+          }
+        }),
+        API_TIMEOUT_MS
+      );
 
       if (error) throw new Error(error.message);
 

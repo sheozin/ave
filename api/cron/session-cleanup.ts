@@ -16,24 +16,56 @@ export default async function handler(req: Request) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 7);
 
-  const { data, error } = await supabase
+  // Step 1: Find sessions to archive
+  const { data: toArchive, error: findErr } = await supabase
     .from("leod_sessions")
-    .delete()
+    .select("*")
     .eq("status", "ENDED")
-    .lt("updated_at", cutoff.toISOString())
-    .select("id");
+    .lt("updated_at", cutoff.toISOString());
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  if (findErr) {
+    return new Response(JSON.stringify({ error: findErr.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
 
+  let archived = 0;
+
+  if (toArchive && toArchive.length > 0) {
+    // Step 2: Insert into archive table (soft-delete)
+    const { error: archiveErr } = await supabase
+      .from("leod_sessions_archive")
+      .upsert(toArchive.map((s: Record<string, unknown>) => ({ ...s, archived_at: new Date().toISOString() })));
+
+    if (archiveErr) {
+      return new Response(JSON.stringify({ error: `Archive failed: ${archiveErr.message}` }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Step 3: Delete originals only after successful archive
+    const ids = toArchive.map((s: Record<string, unknown>) => s.id);
+    const { error: delErr } = await supabase
+      .from("leod_sessions")
+      .delete()
+      .in("id", ids);
+
+    if (delErr) {
+      return new Response(JSON.stringify({ error: `Delete failed: ${delErr.message}` }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    archived = ids.length;
+  }
+
   return new Response(
     JSON.stringify({
       ok: true,
-      archived: data?.length ?? 0,
+      archived,
       cutoff: cutoff.toISOString(),
     }),
     { headers: { "Content-Type": "application/json" } }

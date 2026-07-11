@@ -408,8 +408,15 @@ window.addEventListener('DOMContentLoaded', () => {
   const url = get('url') || SUPABASE_URL;   // fall back to hardcoded
   const key = get('key') || SUPABASE_ANON_KEY;
 
-  // Check localStorage for previously paired display
-  const savedId = localStorage.getItem('cuedeck_display_id');
+  // Check localStorage for previously paired display (expires after 30 days)
+  let savedId = localStorage.getItem('cuedeck_display_id');
+  const savedAt = localStorage.getItem('cuedeck_display_paired_at');
+  const PAIRING_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  if (savedId && savedAt && (Date.now() - Number(savedAt)) > PAIRING_EXPIRY_MS) {
+    localStorage.removeItem('cuedeck_display_id');
+    localStorage.removeItem('cuedeck_display_paired_at');
+    savedId = null;
+  }
 
   const bootId = id || savedId;
 
@@ -605,8 +612,9 @@ async function bootDisplay(url, key, id) {
     // 10. Resync clock every 5 min
     setInterval(syncClock, 300_000);
 
-    // Save display ID for auto-reconnect on next launch
+    // Save display ID + pairing timestamp for auto-reconnect (expires after 30 days)
     localStorage.setItem('cuedeck_display_id', id);
+    localStorage.setItem('cuedeck_display_paired_at', String(Date.now()));
 
     render();
     startSequence();  // Begin cycling if display has a sequence playlist
