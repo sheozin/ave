@@ -2695,6 +2695,26 @@ function confirmCancel(sessionId, btn) {
   }
 }
 
+// END SESSION two-step confirmation (same pattern as PR-015 CANCEL)
+const _endPending = new Map();
+function confirmEnd(sessionId, btn) {
+  if (_endPending.has(sessionId)) {
+    clearTimeout(_endPending.get(sessionId));
+    _endPending.delete(sessionId);
+    btn.textContent = 'END';
+    btn.classList.remove('confirm-pending');
+    transition(sessionId, 'ENDED');
+  } else {
+    btn.textContent = 'CONFIRM END';
+    btn.classList.add('confirm-pending');
+    const t = setTimeout(() => {
+      _endPending.delete(sessionId);
+      if (btn.isConnected) { btn.textContent = 'END'; btn.classList.remove('confirm-pending'); }
+    }, 3000);
+    _endPending.set(sessionId, t);
+  }
+}
+
 async function transition(sessionId, toStatus) {
   const s = S.sessions.find(x => x.id === sessionId);
   if (!s) return;
@@ -2891,8 +2911,22 @@ async function sendBroadcast() {
   }
 }
 
+const _clearBCArmed = { armed: false, timer: null };
 async function clearBroadcast() {
   if (!S.event) return;
+  const btn = document.querySelector('[onclick*="clearBroadcast"]');
+  if (!_clearBCArmed.armed) {
+    _clearBCArmed.armed = true;
+    if (btn) btn.textContent = 'CONFIRM CLEAR';
+    _clearBCArmed.timer = setTimeout(() => {
+      _clearBCArmed.armed = false;
+      if (btn) btn.textContent = 'CLEAR';
+    }, 3000);
+    return;
+  }
+  _clearBCArmed.armed = false;
+  clearTimeout(_clearBCArmed.timer);
+  if (btn) btn.textContent = 'CLEAR';
   await sb.from('leod_broadcast')
     .update({ message: '', sent_at: new Date().toISOString() })
     .eq('id', 'global').eq('event_id', S.event.id);
@@ -3464,6 +3498,10 @@ function buildButtons(s) {
     if (to === 'CANCELLED') {
       return `<button class="abtn ${cfg.cls}" onclick="confirmCancel('${s.id}',this)">${label}</button>`;
     }
+    // END SESSION uses two-step confirmation to prevent accidental ending
+    if (to === 'ENDED') {
+      return `<button class="abtn ${cfg.cls}" onclick="confirmEnd('${s.id}',this)">${label}</button>`;
+    }
     return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
   }).join('');
 
@@ -3549,7 +3587,13 @@ function buildCtxPanel() {
       possible.forEach(to => {
         const cfg   = BTN_CFG[to] || { label: to, cls: 'btn-blue' };
         const label = BTN_LABEL_OVERRIDE[`${tgt.status}→${to}`] || cfg.label;
-        html += cbtn(label, cfg.cls, `transition('${esc(tgt.id)}','${to}')`);
+        if (to === 'CANCELLED') {
+          html += cbtn(label, cfg.cls, `confirmCancel('${esc(tgt.id)}',event.target)`);
+        } else if (to === 'ENDED') {
+          html += cbtn(label, cfg.cls, `confirmEnd('${esc(tgt.id)}',event.target)`);
+        } else {
+          html += cbtn(label, cfg.cls, `transition('${esc(tgt.id)}','${to}')`);
+        }
       });
       if (role === 'stage' && tgt.speaker && !['ENDED','CANCELLED'].includes(tgt.status))
         html += cbtn(tgt.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED',
@@ -4080,6 +4124,16 @@ async function saveDisplay() {
 
 async function deleteDisplay() {
   if (!_dispModalId) return;
+  const btn = document.getElementById('dm-del');
+  if (btn.dataset.armed !== 'yes') {
+    btn.dataset.armed  = 'yes';
+    btn.textContent    = 'Are you sure?';
+    btn.style.animation = 'pulse-confirm .5s';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.animation = ''; }, 3000);
+    return;
+  }
+  btn.dataset.armed = '';
+  btn.textContent   = 'Delete';
   const { error } = await sb.from('leod_signage_displays').delete().eq('id', _dispModalId);
   if (error) { document.getElementById('dm-error').textContent = error.message; return; }
   closeDisplayModal();
@@ -4222,6 +4276,16 @@ async function saveSponsor() {
 
 async function deleteSponsorFromModal() {
   if (!_sponModalId) return;
+  const btn = document.getElementById('spm-del');
+  if (btn.dataset.armed !== 'yes') {
+    btn.dataset.armed  = 'yes';
+    btn.textContent    = 'Are you sure?';
+    btn.style.animation = 'pulse-confirm .5s';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.animation = ''; }, 3000);
+    return;
+  }
+  btn.dataset.armed = '';
+  btn.textContent   = 'Delete';
   const { error } = await sb.from('leod_signage_sponsors').delete().eq('id', _sponModalId);
   if (error) { document.getElementById('spm-error').textContent = error.message; return; }
   closeSponsorModal();
