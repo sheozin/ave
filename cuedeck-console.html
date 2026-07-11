@@ -7498,6 +7498,8 @@ async function boot() {
   // Set language switcher to current locale
   const langSel = document.getElementById('lang-switcher');
   if (langSel) langSel.value = CueDeckI18n.getLocale();
+  // Translate static DOM elements based on current locale
+  CueDeckI18n.translateStaticDOM();
 
   try {
     // 0. User role

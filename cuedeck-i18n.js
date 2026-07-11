@@ -310,6 +310,73 @@ const CueDeckI18n = (() => {
 
   function getLocale() { return _locale; }
 
+  // Translate static DOM elements after page load
+  // Maps CSS selector → translation key
+  function translateStaticDOM() {
+    if (_locale === 'en') return; // English is the source, skip
+    const map = {
+      // Role bar
+      '#role-bar > label':          'role.label',
+      // Header buttons
+      '#users-btn':                 'hdr.operators',
+      '#help-btn':                  'hdr.help',
+      // Broadcast bar
+      '#bc-bar > label':            'bc.label',
+      '#bc-input':                  null, // placeholder handled below
+    };
+    // Role buttons by data-role attribute
+    const roleMap = {
+      'director': 'role.director',
+      'stage':    'role.stage',
+      'av':       'role.av',
+      'interp':   'role.interp',
+      'reg':      'role.reg',
+      'signage':  'role.signage',
+    };
+
+    // Update mapped elements
+    for (const [sel, key] of Object.entries(map)) {
+      if (!key) continue;
+      const el = document.querySelector(sel);
+      if (el) {
+        // Preserve child elements (like badge spans)
+        const children = [...el.childNodes].filter(n => n.nodeType === 1);
+        if (children.length > 0) {
+          // Find first text node and replace it
+          for (const node of el.childNodes) {
+            if (node.nodeType === 3 && node.textContent.trim()) {
+              node.textContent = t(key);
+              break;
+            }
+          }
+        } else {
+          el.textContent = t(key);
+        }
+      }
+    }
+
+    // Role buttons
+    document.querySelectorAll('.rbtn').forEach(btn => {
+      const role = btn.dataset.role || btn.textContent.trim().toLowerCase();
+      if (roleMap[role]) btn.textContent = t(roleMap[role]);
+    });
+
+    // Broadcast input placeholder
+    const bcInput = document.getElementById('bc-input');
+    if (bcInput) bcInput.placeholder = t('bc.placeholder');
+
+    // Filter bar Clear All button
+    const clearBtn = document.getElementById('fb-clear');
+    if (clearBtn) clearBtn.textContent = t('filter.clearAll');
+
+    // View toggle pills
+    document.querySelectorAll('.fb-view-pill').forEach(pill => {
+      const text = pill.textContent.trim().toLowerCase();
+      if (text.includes('timeline')) pill.childNodes[pill.childNodes.length - 1].textContent = ' ' + t('filter.timeline');
+      if (text.includes('list')) pill.childNodes[pill.childNodes.length - 1].textContent = ' ' + t('filter.list');
+    });
+  }
+
   function getAvailableLocales() {
     return [
       { code: 'en', name: 'English',  flag: '🇬🇧' },
@@ -323,7 +390,7 @@ const CueDeckI18n = (() => {
   const saved = localStorage.getItem('cuedeck_locale');
   if (saved && translations[saved]) setLocale(saved);
 
-  return { t, setLocale, getLocale, getAvailableLocales };
+  return { t, setLocale, getLocale, getAvailableLocales, translateStaticDOM };
 })();
 
 // Global shortcut
