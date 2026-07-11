@@ -8209,5 +8209,61 @@ async function submitFeedback() {
 <script src="cuedeck-agent-1-incident-advisor.js"></script>
 <script src="cuedeck-agent-2-cue-engine.js"></script>
 <script src="cuedeck-agent-3-report-generator.js"></script>
+<script>
+// ═══════════════════════════════════════════════════
+// SERVICE WORKER + OFFLINE QUEUE
+// ═══════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/console-sw.js').catch(() => {});
+}
+
+// IndexedDB offline queue for state transitions
+const _offlineQueue = {
+  _db: null,
+  async _open() {
+    if (this._db) return this._db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('cuedeck_offline', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('queue', { keyPath: 'id', autoIncrement: true });
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async enqueue(action) {
+    const db = await this._open();
+    const tx = db.transaction('queue', 'readwrite');
+    tx.objectStore('queue').add({ ...action, queued_at: Date.now() });
+  },
+  async drain() {
+    const db = await this._open();
+    const tx = db.transaction('queue', 'readonly');
+    const items = await new Promise(resolve => {
+      const req = tx.objectStore('queue').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+    if (!items.length) return;
+    let synced = 0;
+    for (const item of items) {
+      try {
+        if (item.type === 'transition') {
+          await transition(item.sessionId, item.toStatus);
+        }
+        // Remove from queue after success
+        const dtx = db.transaction('queue', 'readwrite');
+        dtx.objectStore('queue').delete(item.id);
+        synced++;
+      } catch {}
+    }
+    if (synced > 0) pushToast(`Synced ${synced} offline action${synced>1?'s':''}`, 'success');
+  }
+};
+
+// Drain offline queue when coming back online
+window.addEventListener('online', () => {
+  pushToast('Back online — syncing...', 'info');
+  _offlineQueue.drain();
+});
+</script>
 </body>
 </html>
