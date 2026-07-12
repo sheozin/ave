@@ -266,6 +266,37 @@ const CueDeckI18n = (() => {
       'diag.realtime':        'realtime',
       'diag.clockSync':       'clock sync',
       'diag.edgeFunctions':   'edge functions',
+      'diag.sessions':        'sessions',
+      'diag.live':            'live',
+
+      // Session types
+      'type.Keynote':         'Keynote',
+      'type.Panel':           'Panel',
+      'type.Workshop':        'Workshop',
+      'type.Break':           'Break',
+      'type.Presentation':    'Presentation',
+      'type.Other':           'Other',
+
+      // Bottom bar / broadcast
+      'bc.send':              'SEND',
+      'bc.clear':             'CLEAR',
+      'bc.hold':              'Hold',
+      'bc.phones':            'Phones',
+      'bc.delay':             'Delay',
+      'bc.seats':             'Seats',
+      'bc.break':             'Break',
+      'bc.broadcast':         'BROADCAST',
+
+      // Presence header
+      'presence.director':    'director',
+      'presence.stage':       'stage',
+      'presence.av':          'av',
+      'presence.interp':      'interp',
+      'presence.reg':         'reg',
+
+      // Header misc
+      'hdr.event':            'EVENT',
+      'hdr.offset':           'offset',
 
       // CSV import
       'csv.import':           'Import Sessions (CSV)',
@@ -499,6 +530,33 @@ const CueDeckI18n = (() => {
       'diag.realtime':        'الوقت الحقيقي',
       'diag.clockSync':       'مزامنة الساعة',
       'diag.edgeFunctions':   'الوظائف',
+      'diag.sessions':        'جلسات',
+      'diag.live':            'مباشر',
+
+      'type.Keynote':         'كلمة رئيسية',
+      'type.Panel':           'حوار',
+      'type.Workshop':        'ورشة عمل',
+      'type.Break':           'استراحة',
+      'type.Presentation':    'عرض تقديمي',
+      'type.Other':           'أخرى',
+
+      'bc.send':              'إرسال',
+      'bc.clear':             'مسح',
+      'bc.hold':              'توقف',
+      'bc.phones':            'هواتف',
+      'bc.delay':             'تأخير',
+      'bc.seats':             'مقاعد',
+      'bc.break':             'استراحة',
+      'bc.broadcast':         'بث عام',
+
+      'presence.director':    'مدير',
+      'presence.stage':       'مسرح',
+      'presence.av':          'صوتيات',
+      'presence.interp':      'ترجمة',
+      'presence.reg':         'تسجيل',
+
+      'hdr.event':            'الحدث',
+      'hdr.offset':           'فرق التوقيت',
 
       'csv.import':           'استيراد جلسات (CSV)',
       'csv.dragDrop':         'اسحب وأفلت ملف CSV أو اضغط للتصفح',
@@ -567,7 +625,84 @@ const CueDeckI18n = (() => {
       'time.remaining':   'pozostało',
 
       'dash.noEvents':    'Brak wydarzeń',
-      'misc.search':      'Szukaj sesji...',
+
+      'confirm.areYouSure':   'Czy na pewno?',
+      'confirm.confirmCancel':'POTWIERDŹ ANULOWANIE',
+      'confirm.confirmEnd':   'POTWIERDŹ ZAKOŃCZENIE',
+      'confirm.confirmClear': 'POTWIERDŹ CZYSZCZENIE',
+      'confirm.confirmReset': 'Potwierdź reset?',
+
+      'toast.refreshed':    'Odświeżono',
+      'toast.displayPaired':'Ekran połączony!',
+      'toast.invalidCode':  'Wprowadź prawidłowy 6-znakowy kod',
+      'toast.noEvent':      'Nie wybrano wydarzenia',
+
+      'disp.addDisplay':    'Dodaj ekran',
+      'disp.editDisplay':   'Edytuj ekran',
+      'disp.addSponsor':    'Dodaj sponsora',
+      'disp.editSponsor':   'Edytuj sponsora',
+
+      'type.Keynote':       'Wykład',
+      'type.Panel':         'Panel',
+      'type.Workshop':      'Warsztaty',
+      'type.Break':         'Przerwa',
+      'type.Presentation':  'Prezentacja',
+      'type.Other':         'Inne',
+
+      'bc.send':            'WYŚLIJ',
+      'bc.clear':           'WYCZYŚĆ',
+      'bc.hold':            'Wstrzymaj',
+      'bc.phones':          'Telefony',
+      'bc.delay':           'Opóźnienie',
+      'bc.seats':           'Miejsca',
+      'bc.break':           'Przerwa',
+      'bc.broadcast':       'KOMUNIKAT',
+
+      'role.director':      'REŻYSER',
+      'role.stage':         'SCENA',
+      'role.av':            'AV',
+      'role.interp':        'TŁUMACZ',
+      'role.reg':           'REJESTR.',
+      'role.signage':       'EKRANY',
+      'role.label':         'ROLA',
+
+      'filter.timeline':    'Oś czasu',
+      'filter.list':        'Lista',
+      'filter.clearAll':    'Wyczyść',
+      'filter.searchPlaceholder': '...szukaj tytułu / mówcy',
+
+      'hdr.operators':      'Operatorzy',
+      'hdr.help':           'Pomoc',
+      'hdr.sessions':       'sesje',
+      'hdr.event':          'WYDARZENIE',
+
+      'diag.database':      'baza danych',
+      'diag.realtime':      'czas rzecz.',
+      'diag.clockSync':     'synch. zegara',
+      'diag.edgeFunctions': 'funkcje',
+      'diag.sessions':      'sesje',
+      'diag.live':          'na żywo',
+
+      'sign.registeredDisplays': 'ZAREJESTROWANE EKRANY',
+      'sign.globalOverride':  'GLOBALNE NADPISANIE',
+      'sign.sponsorLibrary':  'BIBLIOTEKA SPONSORÓW',
+      'sign.pairDisplay':     'Sparuj ekran',
+
+      'delay.resetDelays':    'Resetuj opóźnienia',
+      'delay.confirmReset':   'Potwierdzić reset?',
+
+      'help.shortcuts':       'Skróty klawiszowe',
+      'help.quickRef':        'Podręcznik',
+      'help.whatsNew':        'Co nowego',
+      'help.docs':            'Dokumentacja',
+      'help.feedback':        'Wyślij opinię',
+      'help.contact':         'Kontakt z pomocą',
+      'help.about':           'O CueDeck',
+
+      'profile.signOut':      'Wyloguj',
+      'misc.search':          'Szukaj sesji...',
+      'misc.allStatuses':     'Wszystkie statusy',
+      'misc.allRooms':        'Wszystkie sale',
     },
 
     de: {
@@ -604,7 +739,84 @@ const CueDeckI18n = (() => {
       'time.remaining':   'verbleibend',
 
       'dash.noEvents':    'Keine Veranstaltungen',
-      'misc.search':      'Sitzungen suchen...',
+
+      'confirm.areYouSure':   'Sind Sie sicher?',
+      'confirm.confirmCancel':'ABBRUCH BESTÄTIGEN',
+      'confirm.confirmEnd':   'BEENDEN BESTÄTIGEN',
+      'confirm.confirmClear': 'LÖSCHEN BESTÄTIGEN',
+      'confirm.confirmReset': 'Reset bestätigen?',
+
+      'toast.refreshed':    'Aktualisiert',
+      'toast.displayPaired':'Display verbunden!',
+      'toast.invalidCode':  'Gültigen 6-stelligen Code eingeben',
+      'toast.noEvent':      'Kein Event ausgewählt',
+
+      'disp.addDisplay':    'Display hinzufügen',
+      'disp.editDisplay':   'Display bearbeiten',
+      'disp.addSponsor':    'Sponsor hinzufügen',
+      'disp.editSponsor':   'Sponsor bearbeiten',
+
+      'type.Keynote':       'Keynote',
+      'type.Panel':         'Podium',
+      'type.Workshop':      'Workshop',
+      'type.Break':         'Pause',
+      'type.Presentation':  'Vortrag',
+      'type.Other':         'Sonstiges',
+
+      'bc.send':            'SENDEN',
+      'bc.clear':           'LÖSCHEN',
+      'bc.hold':            'Halt',
+      'bc.phones':          'Telefone',
+      'bc.delay':           'Verzögerung',
+      'bc.seats':           'Plätze',
+      'bc.break':           'Pause',
+      'bc.broadcast':       'DURCHSAGE',
+
+      'role.director':      'REGIE',
+      'role.stage':         'BÜHNE',
+      'role.av':            'AV',
+      'role.interp':        'DOLM.',
+      'role.reg':           'EMPFANG',
+      'role.signage':       'ANZEIGEN',
+      'role.label':         'ROLLE',
+
+      'filter.timeline':    'Zeitachse',
+      'filter.list':        'Liste',
+      'filter.clearAll':    'Zurücksetzen',
+      'filter.searchPlaceholder': '...Titel / Sprecher suchen',
+
+      'hdr.operators':      'Operatoren',
+      'hdr.help':           'Hilfe',
+      'hdr.sessions':       'Sitzungen',
+      'hdr.event':          'EVENT',
+
+      'diag.database':      'Datenbank',
+      'diag.realtime':      'Echtzeit',
+      'diag.clockSync':     'Uhr-Sync',
+      'diag.edgeFunctions': 'Funktionen',
+      'diag.sessions':      'Sitzungen',
+      'diag.live':          'live',
+
+      'sign.registeredDisplays': 'REGISTRIERTE DISPLAYS',
+      'sign.globalOverride':  'GLOBALE ÜBERSCHREIBUNG',
+      'sign.sponsorLibrary':  'SPONSOREN-BIBLIOTHEK',
+      'sign.pairDisplay':     'Display koppeln',
+
+      'delay.resetDelays':    'Verzögerungen zurücksetzen',
+      'delay.confirmReset':   'Reset bestätigen?',
+
+      'help.shortcuts':       'Tastenkürzel',
+      'help.quickRef':        'Kurzreferenz',
+      'help.whatsNew':        'Neuigkeiten',
+      'help.docs':            'Dokumentation',
+      'help.feedback':        'Feedback senden',
+      'help.contact':         'Support kontaktieren',
+      'help.about':           'Über CueDeck',
+
+      'profile.signOut':      'Abmelden',
+      'misc.search':          'Sitzungen suchen...',
+      'misc.allStatuses':     'Alle Status',
+      'misc.allRooms':        'Alle Räume',
     },
   };
 
@@ -757,6 +969,47 @@ const CueDeckI18n = (() => {
     // Logout button title
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.title = t('profile.signOut');
+
+    // Broadcast bottom bar buttons
+    document.querySelectorAll('#bc-bar button').forEach(btn => {
+      const txt = btn.textContent.trim();
+      if (txt === 'SEND') btn.textContent = t('bc.send');
+      if (txt === 'CLEAR') btn.textContent = t('bc.clear');
+    });
+
+    // Broadcast preset buttons at far right
+    document.querySelectorAll('[onclick*="insertPreset"]').forEach(btn => {
+      const presets = { 'Hold': 'bc.hold', 'Phones': 'bc.phones', 'Delay': 'bc.delay', 'Seats': 'bc.seats', 'Break': 'bc.break' };
+      for (const [en, key] of Object.entries(presets)) {
+        if (btn.textContent.includes(en)) {
+          btn.textContent = btn.textContent.replace(en, t(key));
+        }
+      }
+    });
+
+    // "BROADCAST" label
+    document.querySelectorAll('#bc-bar span').forEach(el => {
+      if (el.textContent.trim() === 'BROADCAST') el.textContent = t('bc.broadcast');
+    });
+
+    // Presence indicators in header
+    document.querySelectorAll('.pr-role').forEach(el => {
+      const presMap = { 'director': 'presence.director', 'stage': 'presence.stage', 'av': 'presence.av', 'interp': 'presence.interp', 'reg': 'presence.reg' };
+      const key = presMap[el.textContent.trim().toLowerCase()];
+      if (key) el.textContent = t(key);
+    });
+
+    // Diagnostic "sessions: N" and "live" label
+    document.querySelectorAll('#diag-bar span').forEach(el => {
+      if (el.textContent.trim().startsWith('sessions')) el.textContent = el.textContent.replace('sessions', t('diag.sessions'));
+    });
+    const connLbl = document.getElementById('conn-lbl');
+    if (connLbl && connLbl.textContent.trim() === 'live') connLbl.textContent = t('diag.live');
+
+    // EVENT label
+    document.querySelectorAll('#ev-select-wrap label, #ev-select-wrap span').forEach(el => {
+      if (el.textContent.trim() === 'EVENT') el.textContent = t('hdr.event');
+    });
   }
 
   function getAvailableLocales() {

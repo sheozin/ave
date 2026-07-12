@@ -1577,26 +1577,56 @@
     }
 
     /* ── RTL SUPPORT ────────────────────────────────────────────── */
-    /* Header + logo always LTR — brand identity stays consistent */
-    [dir="rtl"] #header { direction: ltr; }
+    /* Header: logo stays LTR, rest flows RTL */
     [dir="rtl"] .logo { direction: ltr; }
+    [dir="rtl"] #header { direction: rtl; }
     /* Sidebar slides from left in RTL */
     [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
     [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
-    /* Session cards: text aligns right, but keep checkbox+sort+badge order */
-    [dir="rtl"] .sc-top { direction: rtl; }
+    /* Role bar: RTL direction with translated labels */
+    [dir="rtl"] #role-bar { direction: rtl; }
+    /* Session cards: full RTL layout */
+    [dir="rtl"] .sc { direction: rtl; text-align: right; }
+    [dir="rtl"] .sc-top { direction: rtl; flex-direction: row-reverse; }
     [dir="rtl"] .sc-title { text-align: right; }
-    [dir="rtl"] .sc-meta { direction: rtl; }
+    [dir="rtl"] .sc-meta { direction: rtl; justify-content: flex-end; }
     [dir="rtl"] .sc-times { direction: rtl; }
-    [dir="rtl"] .sc-actions { direction: rtl; }
+    [dir="rtl"] .sc-actions { direction: rtl; flex-direction: row-reverse; }
+    [dir="rtl"] .sc-mgmt { flex-direction: row-reverse; }
+    [dir="rtl"] .sc-notes-toggle { text-align: right; }
+    [dir="rtl"] .delay-tag { margin-left: 0; margin-right: auto; }
     /* Filter bar + broadcast */
     [dir="rtl"] #filter-bar { direction: rtl; }
-    [dir="rtl"] #bc-bar { direction: rtl; }
+    [dir="rtl"] #bc-bar { direction: rtl; flex-direction: row-reverse; }
+    [dir="rtl"] #bc-input { text-align: right; }
+    /* Diagnostic bar */
+    [dir="rtl"] #diag-bar { direction: rtl; }
     /* Modals */
     [dir="rtl"] .ev-modal-card { direction: rtl; text-align: right; }
+    [dir="rtl"] .ev-modal-card label { text-align: right; }
+    [dir="rtl"] .ev-modal-card input, [dir="rtl"] .ev-modal-card select, [dir="rtl"] .ev-modal-card textarea { text-align: right; }
     [dir="rtl"] .ev-modal-actions { flex-direction: row-reverse; }
-    /* Role bar stays LTR (role names are English identifiers) */
-    [dir="rtl"] #role-bar { direction: ltr; }
+    /* Signage panel */
+    [dir="rtl"] .sp-section { direction: rtl; text-align: right; }
+    [dir="rtl"] .sp-section-hdr { flex-direction: row-reverse; }
+    [dir="rtl"] .sp-grid { direction: rtl; }
+    /* Delay strip */
+    [dir="rtl"] #delay-strip { direction: rtl; flex-direction: row-reverse; }
+    /* Toast + undo + batch bars */
+    [dir="rtl"] .toast { direction: rtl; }
+    [dir="rtl"] #undo-bar { direction: rtl; }
+    [dir="rtl"] #batch-bar { direction: rtl; }
+    /* Event selector area */
+    [dir="rtl"] #ev-select-wrap { direction: rtl; }
+    /* Profile panel */
+    [dir="rtl"] .profile-panel { direction: rtl; text-align: right; right: auto; left: 0; }
+    /* Help dropdown */
+    [dir="rtl"] .help-dropdown { direction: rtl; text-align: right; right: auto; left: 10px; }
+    [dir="rtl"] .help-dropdown button { text-align: right; }
+    /* Log feed */
+    [dir="rtl"] .log-entry { direction: rtl; text-align: right; }
+    /* Presence bar */
+    [dir="rtl"] #presence-bar { direction: rtl; }
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
@@ -3590,7 +3620,7 @@ function cardHTML(s, nowMs) {
   <div class="sc-meta">
     ${s.speaker ? `<span class="spk">${esc(s.speaker)}${s.company?` · ${esc(s.company)}`:''}</span>` : ''}
     ${s.room    ? `<span>${esc(s.room)}</span>` : ''}
-    <span>${esc(s.type)}</span>
+    <span>${t('type.' + s.type) !== 'type.' + s.type ? t('type.' + s.type) : esc(s.type)}</span>
     ${flags}
   </div>
   <div class="sc-times">
