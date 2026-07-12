@@ -2767,7 +2767,7 @@ function confirmCancel(sessionId, btn) {
     transition(sessionId, 'CANCELLED');
   } else {
     // First click — show confirm state
-    btn.textContent = 'CONFIRM CANCEL';
+    btn.textContent = t('confirm.confirmCancel');
     btn.classList.add('confirm-pending');
     const t = setTimeout(() => {
       _cancelPending.delete(sessionId);
@@ -2832,7 +2832,7 @@ function confirmEnd(sessionId, btn) {
     btn.classList.remove('confirm-pending');
     transition(sessionId, 'ENDED');
   } else {
-    btn.textContent = 'CONFIRM END';
+    btn.textContent = t('confirm.confirmEnd');
     btn.classList.add('confirm-pending');
     const t = setTimeout(() => {
       _endPending.delete(sessionId);
@@ -3170,7 +3170,7 @@ document.addEventListener('keydown', e => {
     case 'R':
       if (!S.event) return;
       loadSnapshot(S.event.id).catch(() => {});
-      pushToast('Refreshed', 'info');
+      pushToast(t('toast.refreshed'), 'info');
       break;
   }
 });
@@ -3501,11 +3501,12 @@ async function resetAllDelays() {
   const btn = document.getElementById('ds-reset-btn');
   if (!btn) return;
   if (btn.dataset.armed !== 'yes') {
-    btn.dataset.armed = 'yes'; btn.textContent = 'Confirm reset?';
-    setTimeout(() => { if (btn) { btn.dataset.armed = ''; btn.textContent = 'Reset delays'; } }, 3000);
+    btn.dataset.armed = 'yes'; btn.textContent = t('confirm.confirmReset');
+    setTimeout(() => { if (btn) { btn.dataset.armed = ''; btn.textContent = t('delay.resetDelays'); }
+ }, 3000);
     return;
   }
-  btn.dataset.armed = ''; btn.textContent = 'Reset delays';
+  btn.dataset.armed = ''; btn.textContent = t('delay.resetDelays');
 
   const toReset = S.sessions.filter(s => (s.cumulative_delay || 0) > 0 || (s.delay_minutes || 0) > 0);
   for (const s of toReset) {
@@ -3756,7 +3757,7 @@ function buildCtxPanel() {
     subEl.className = `ctx-sub ctx-sub-${tgt.status.toLowerCase()}`;
   } else {
     titleEl.className = 'ctx-title ctx-empty';
-    titleEl.textContent = 'No active session';
+    titleEl.textContent = t('stage.noActive');
     subEl.textContent = '';
     subEl.className = 'ctx-sub';
   }
@@ -4143,11 +4144,11 @@ function renderSignagePanel() {
 async function pairDisplayByCode(code) {
   code = (code || '').replace('-', '').toUpperCase();
   if (!code || code.length < 6) {
-    pushToast('Enter a valid 6-character pairing code', 'warn');
+    pushToast(t('toast.invalidCode'), 'warn');
     return;
   }
   if (!S.event) {
-    pushToast('No event selected', 'error');
+    pushToast(t('toast.noEvent'), 'error');
     return;
   }
 
@@ -4158,15 +4159,15 @@ async function pairDisplayByCode(code) {
     .single();
 
   if (error || !pairing) {
-    pushToast('Invalid pairing code', 'error');
+    pushToast(t('toast.invalidPairing'), 'error');
     return;
   }
   if (new Date(pairing.expires_at) < new Date()) {
-    pushToast('Pairing code expired', 'error');
+    pushToast(t('toast.codeExpired'), 'error');
     return;
   }
   if (pairing.display_id) {
-    pushToast('Code already used', 'error');
+    pushToast(t('toast.codeUsed'), 'error');
     return;
   }
 
@@ -4193,7 +4194,7 @@ async function pairDisplayByCode(code) {
     .update({ display_id: display.id, event_id: S.event.id })
     .eq('code', code);
 
-  pushToast('✓ Display paired successfully!', 'success');
+  pushToast('✓ ' + t('toast.displayPaired'), 'success');
   await loadDisplays(S.event.id);
   if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
 }
@@ -4242,7 +4243,7 @@ function openDisplayModal(mode, id) {
   const err = document.getElementById('dm-error');
   if (err) err.textContent = '';
   const delBtn = document.getElementById('dm-del');
-  document.getElementById('disp-modal-title').textContent = mode === 'edit' ? 'Edit Display' : 'Add Display';
+  document.getElementById('disp-modal-title').textContent = mode === 'edit' ? t('disp.editDisplay') : t('disp.addDisplay');
   if (delBtn) delBtn.style.display = mode === 'edit' ? '' : 'none';
 
   if (mode === 'edit' && id) {
@@ -4290,8 +4291,8 @@ async function saveDisplay() {
   const orient = document.getElementById('dm-orient').value;
   const mode   = document.getElementById('dm-mode').value;
   const room   = document.getElementById('dm-room').value.trim() || null;
-  if (!name) { err.textContent = 'Display name is required.'; return; }
-  if (!S.event) { err.textContent = 'No active event selected.'; return; }
+  if (!name) { err.textContent = t('disp.nameRequired'); return; }
+  if (!S.event) { err.textContent = t('disp.noEvent'); return; }
 
   const seqEnabled = document.getElementById('dm-seq-enable').checked;
   const sequence   = seqEnabled && _seqSlides.length ? _seqSlides : null;
@@ -4316,7 +4317,7 @@ async function deleteDisplay() {
   const btn = document.getElementById('dm-del');
   if (btn.dataset.armed !== 'yes') {
     btn.dataset.armed  = 'yes';
-    btn.textContent    = 'Are you sure?';
+    btn.textContent    = t('confirm.areYouSure');
     btn.style.animation = 'pulse-confirm .5s';
     setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.animation = ''; }, 3000);
     return;
@@ -4366,7 +4367,7 @@ function openSponsorModal(mode, id) {
   const err = document.getElementById('spm-error');
   if (err) err.textContent = '';
   const delBtn = document.getElementById('spm-del');
-  document.getElementById('spon-modal-title').textContent = mode === 'edit' ? 'Edit Sponsor' : 'Add Sponsor';
+  document.getElementById('spon-modal-title').textContent = mode === 'edit' ? t('disp.editSponsor') : t('disp.addSponsor');
   if (delBtn) delBtn.style.display = mode === 'edit' ? '' : 'none';
   document.getElementById('spm-preview').style.display = 'none';
   document.getElementById('spm-file').value = '';
@@ -4428,8 +4429,8 @@ async function saveSponsor() {
   const name = document.getElementById('spm-name').value.trim();
   const bg   = document.getElementById('spm-bg').value;
   const file = document.getElementById('spm-file').files[0];
-  if (!name) { err.textContent = 'Sponsor name is required.'; return; }
-  if (!S.event) { err.textContent = 'No active event.'; return; }
+  if (!name) { err.textContent = t('disp.sponsorRequired'); return; }
+  if (!S.event) { err.textContent = t('disp.noActiveEvent'); return; }
 
   let logo_url = _sponModalId ? (S.sponsors.find(s => s.id === _sponModalId)?.logo_url ?? null) : null;
 
@@ -4468,7 +4469,7 @@ async function deleteSponsorFromModal() {
   const btn = document.getElementById('spm-del');
   if (btn.dataset.armed !== 'yes') {
     btn.dataset.armed  = 'yes';
-    btn.textContent    = 'Are you sure?';
+    btn.textContent    = t('confirm.areYouSure');
     btn.style.animation = 'pulse-confirm .5s';
     setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.animation = ''; }, 3000);
     return;
@@ -4746,7 +4747,7 @@ function toggleAutoStart() {
   if (!S.autoStart) S._autoStarted = new Set();
   const btn = document.getElementById('auto-start-btn');
   if (btn) btn.classList.toggle('enabled', S.autoStart);
-  pushToast(S.autoStart ? '⏱ Auto-start enabled' : 'Auto-start disabled', 'info');
+  pushToast(S.autoStart ? '⏱ ' + t('toast.autoStartEnabled') : t('toast.autoStartDisabled'), 'info');
 }
 
 function checkAutoStart() {
@@ -4768,7 +4769,7 @@ function checkAutoStart() {
 
 // ── Event Log Export ─────────────────────────────────
 function exportLog() {
-  if (!S.log.length) { pushToast('Log is empty', 'warn'); return; }
+  if (!S.log.length) { pushToast(t('toast.logEmpty'), 'warn'); return; }
   const lines = ['Time,Action,Detail,SessionId'];
   for (const e of S.log) {
     const ts  = new Date(e.ts).toTimeString().substring(0, 8);
@@ -4797,10 +4798,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function handleCSVImport(file) {
-  if (!S.event) { pushToast('Select an event first', 'warn'); return; }
+  if (!S.event) { pushToast(t('toast.selectEvent'), 'warn'); return; }
   let text; try { text = await file.text(); } catch(e) { pushToast('Could not read file', 'error'); return; }
   const lines = text.trim().split(/\r?\n/);
-  if (lines.length < 2) { pushToast('CSV appears empty', 'error'); return; }
+  if (lines.length < 2) { pushToast(t('toast.csvEmpty'), 'error'); return; }
   const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
   const col = (...names) => { for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i; } return -1; };
   const cTitle = col('title','name','session','topic');
@@ -4811,7 +4812,7 @@ async function handleCSVImport(file) {
   const cType  = col('type','format','category');
   const cNotes = col('notes','note','instructions','tech rider');
   if (cTitle === -1 || cStart === -1 || cEnd === -1) {
-    pushToast('CSV needs: title, start, end columns', 'error'); return;
+    pushToast(t('toast.csvNeeds'), 'error'); return;
   }
   const cell = (row, idx) => idx === -1 ? null : ((row[idx] || '').replace(/^"|"$/g,'').trim() || null);
   const maxSort = Math.max(0, ...S.sessions.map(s => s.sort_order || 0));
@@ -4830,7 +4831,7 @@ async function handleCSVImport(file) {
       actual_start: null, actual_end: null,
     });
   }
-  if (!sessions.length) { pushToast('No valid rows found', 'warn'); return; }
+  if (!sessions.length) { pushToast(t('toast.noValidRows'), 'warn'); return; }
   const { error } = await sb.from('leod_sessions').insert(sessions);
   if (error) { pushToast(`Import failed: ${error.message}`, 'error'); return; }
   pushToast(`✓ Imported ${sessions.length} session${sessions.length !== 1 ? 's' : ''}`, 'success');

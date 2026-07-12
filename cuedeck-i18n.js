@@ -112,13 +112,177 @@ const CueDeckI18n = (() => {
       'hdr.help':       'Help',
       'hdr.sessions':   'sessions',
 
+      // Display modal
+      'disp.addDisplay':    'Add Display',
+      'disp.editDisplay':   'Edit Display',
+      'disp.addSponsor':    'Add Sponsor',
+      'disp.editSponsor':   'Edit Sponsor',
+      'disp.nameRequired':  'Display name is required.',
+      'disp.noEvent':       'No active event selected.',
+      'disp.sponsorRequired':'Sponsor name is required.',
+      'disp.noActiveEvent': 'No active event.',
+      'disp.online':        'online',
+      'disp.offline':       'offline',
+      'disp.landscape':     'landscape',
+      'disp.portrait':      'portrait',
+      'disp.schedule':      'schedule',
+      'disp.wayfinding':    'wayfinding',
+      'disp.sponsors':      'sponsors',
+      'disp.agenda':        'agenda',
+      'disp.timeline':      'timeline',
+      'disp.programme':     'programme',
+      'disp.break':         'break',
+      'disp.custom':        'custom',
+      'disp.stageTimer':    'stage timer',
+
+      // Stage monitor
+      'stage.youAreLive':   'YOU ARE LIVE',
+      'stage.remaining':    'REMAINING',
+      'stage.nextSession':  'NEXT SESSION',
+      'stage.noActive':     'No active session',
+      'stage.standby':      'STANDBY',
+
+      // Toasts
+      'toast.refreshed':        'Refreshed',
+      'toast.undoFailed':       'Undo failed',
+      'toast.reverted':         'Reverted to',
+      'toast.updatedByOther':   'Updated by another operator — refreshing',
+      'toast.delayApplied':     'Delay applied',
+      'toast.sessionsShifted':  'sessions shifted',
+      'toast.delayRetry':       'Another delay is being applied — wait and retry',
+      'toast.invalidCode':      'Enter a valid 6-character pairing code',
+      'toast.noEvent':          'No event selected',
+      'toast.invalidPairing':   'Invalid pairing code',
+      'toast.codeExpired':      'Pairing code expired',
+      'toast.codeUsed':         'Code already used',
+      'toast.displayPaired':    'Display paired successfully!',
+      'toast.autoStartEnabled': 'Auto-start enabled',
+      'toast.autoStartDisabled':'Auto-start disabled',
+      'toast.autoStarted':      'Auto-started',
+      'toast.logEmpty':         'Log is empty',
+      'toast.selectEvent':      'Select an event first',
+      'toast.csvEmpty':         'CSV appears empty',
+      'toast.csvNeeds':         'CSV needs: title, start, end columns',
+      'toast.noValidRows':      'No valid rows found',
+      'toast.importFailed':     'Import failed',
+      'toast.imported':         'Imported',
+      'toast.sessions':         'sessions',
+      'toast.nudgeApplied':     'nudge applied',
+      'toast.noStageTimer':     'No Stage Timer display configured',
+
+      // Delay strip
+      'delay.running':        'RUNNING',
+      'delay.sessionsAffected':'sessions affected',
+      'delay.nextAnchor':     'Next Anchor',
+      'delay.resetDelays':    'Reset delays',
+      'delay.confirmReset':   'Confirm reset?',
+
+      // Batch
+      'batch.selected':       'selected',
+      'batch.setReady':       'SET READY',
+      'batch.endAll':         'END ALL',
+      'batch.cancelAll':      'CANCEL ALL',
+      'batch.clickAgain':     'Click again to confirm',
+
+      // Undo
+      'undo.undo':            'UNDO',
+      'undo.ended':           'ENDED',
+      'undo.cancelled':       'CANCELLED',
+
+      // Event modal
+      'event.new':            'New Event',
+      'event.edit':           'Edit Event',
+      'event.name':           'Event Name',
+      'event.date':           'Date',
+      'event.timezone':       'Timezone',
+      'event.venue':          'Venue',
+      'event.startTime':      'Start Time',
+      'event.endTime':        'End Time',
+
+      // Users modal
+      'users.title':          'Operators',
+      'users.invite':         'Invite Operator',
+      'users.pending':        'Pending',
+      'users.active':         'Active',
+      'users.suspended':      'Suspended',
+      'users.noOperators':    'No operators yet',
+
+      // Feedback
+      'feedback.title':       'Send Feedback',
+      'feedback.rate':        'How is your experience?',
+      'feedback.category':    'Category',
+      'feedback.general':     'General',
+      'feedback.bug':         'Bug Report',
+      'feedback.feature':     'Feature Request',
+      'feedback.praise':      'Praise',
+      'feedback.message':     'Your message',
+      'feedback.send':        'Send Feedback',
+
+      // Help menu
+      'help.shortcuts':       'Keyboard Shortcuts',
+      'help.quickRef':        'Quick Reference',
+      'help.whatsNew':        'What\'s New',
+      'help.docs':            'Documentation',
+      'help.feedback':        'Send Feedback',
+      'help.contact':         'Contact Support',
+      'help.about':           'About CueDeck',
+
+      // Profile panel
+      'profile.plan':         'Plan',
+      'profile.billing':      'Billing',
+      'profile.signOut':      'Sign Out',
+
+      // Auth
+      'auth.login':           'Sign In',
+      'auth.register':        'Register',
+      'auth.email':           'Email',
+      'auth.password':        'Password',
+      'auth.name':            'Full Name',
+      'auth.organization':    'Organization',
+      'auth.forgotPassword':  'Forgot password?',
+      'auth.noAccount':       'Don\'t have an account?',
+      'auth.hasAccount':      'Already have an account?',
+
+      // Confirm dialogs
+      'confirm.areYouSure':   'Are you sure?',
+      'confirm.confirm':      'Confirm?',
+      'confirm.confirmCancel':'CONFIRM CANCEL',
+      'confirm.confirmEnd':   'CONFIRM END',
+      'confirm.confirmClear': 'CONFIRM CLEAR',
+      'confirm.confirmReset': 'Confirm reset?',
+
+      // Onboarding
+      'onboard.welcome':      'Welcome to CueDeck',
+      'onboard.step1':        'Create your first event',
+      'onboard.step2':        'Add sessions to your schedule',
+      'onboard.step3':        'Set up a display',
+      'onboard.step4':        'Invite your first operator',
+      'onboard.skip':         'Skip for now',
+      'onboard.next':         'Next',
+      'onboard.finish':       'Finish',
+
+      // Diagnostic bar
+      'diag.database':        'database',
+      'diag.realtime':        'realtime',
+      'diag.clockSync':       'clock sync',
+      'diag.edgeFunctions':   'edge functions',
+
+      // CSV import
+      'csv.import':           'Import Sessions (CSV)',
+      'csv.dragDrop':         'Drag & drop a CSV file or click to browse',
+
       // Misc
-      'misc.search':      'Search sessions...',
-      'misc.allStatuses': 'All statuses',
-      'misc.allRooms':    'All rooms',
-      'misc.online':      'Back online — syncing...',
-      'misc.saved':       'Saved',
-      'misc.loading':     'Loading...',
+      'misc.search':          'Search sessions...',
+      'misc.allStatuses':     'All statuses',
+      'misc.allRooms':        'All rooms',
+      'misc.online':          'Back online — syncing...',
+      'misc.saved':           'Saved',
+      'misc.loading':         'Loading...',
+      'misc.noEvents':        'No events yet',
+      'misc.createFirst':     'Create your first event to get started',
+      'misc.version':         'Version',
+      'misc.copy':            'Copy',
+      'misc.copied':          'Copied!',
     },
 
     ar: {
@@ -196,6 +360,149 @@ const CueDeckI18n = (() => {
       'sign.edit':            'تعديل',
       'sign.pushAll':         '← دفع الكل',
 
+      'disp.addDisplay':    'إضافة شاشة',
+      'disp.editDisplay':   'تعديل الشاشة',
+      'disp.addSponsor':    'إضافة راعي',
+      'disp.editSponsor':   'تعديل الراعي',
+      'disp.nameRequired':  'اسم الشاشة مطلوب.',
+      'disp.noEvent':       'لا يوجد حدث مفعّل.',
+      'disp.sponsorRequired':'اسم الراعي مطلوب.',
+      'disp.noActiveEvent': 'لا يوجد حدث مفعّل.',
+      'disp.online':        'متصل',
+      'disp.offline':       'غير متصل',
+      'disp.landscape':     'أفقي',
+      'disp.portrait':      'عمودي',
+      'disp.schedule':      'الجدول',
+      'disp.wayfinding':    'الإرشاد',
+      'disp.sponsors':      'الرعاة',
+      'disp.agenda':        'جدول الأعمال',
+      'disp.timeline':      'الجدول الزمني',
+      'disp.programme':     'البرنامج',
+      'disp.break':         'استراحة',
+      'disp.custom':        'مخصص',
+      'disp.stageTimer':    'مؤقت المسرح',
+
+      'stage.youAreLive':   'أنت على الهواء',
+      'stage.remaining':    'المتبقي',
+      'stage.nextSession':  'الجلسة التالية',
+      'stage.noActive':     'لا توجد جلسة نشطة',
+      'stage.standby':      'انتظار',
+
+      'toast.refreshed':        'تم التحديث',
+      'toast.undoFailed':       'فشل التراجع',
+      'toast.reverted':         'تم الرجوع إلى',
+      'toast.updatedByOther':   'تم التحديث بواسطة مشغل آخر — جاري التحديث',
+      'toast.delayApplied':     'تم تطبيق التأخير',
+      'toast.sessionsShifted':  'جلسات تم إزاحتها',
+      'toast.delayRetry':       'يتم تطبيق تأخير آخر — حاول مجدداً',
+      'toast.invalidCode':      'أدخل رمز ربط صالح من 6 أحرف',
+      'toast.noEvent':          'لم يتم اختيار حدث',
+      'toast.invalidPairing':   'رمز ربط غير صالح',
+      'toast.codeExpired':      'انتهت صلاحية رمز الربط',
+      'toast.codeUsed':         'الرمز مستخدم بالفعل',
+      'toast.displayPaired':    'تم ربط الشاشة بنجاح!',
+      'toast.autoStartEnabled': 'تم تفعيل البدء التلقائي',
+      'toast.autoStartDisabled':'تم تعطيل البدء التلقائي',
+      'toast.autoStarted':      'بدء تلقائي',
+      'toast.logEmpty':         'السجل فارغ',
+      'toast.selectEvent':      'اختر حدثاً أولاً',
+      'toast.csvEmpty':         'ملف CSV فارغ',
+      'toast.csvNeeds':         'يحتاج CSV أعمدة: العنوان، البداية، النهاية',
+      'toast.noValidRows':      'لم يتم العثور على صفوف صالحة',
+      'toast.importFailed':     'فشل الاستيراد',
+      'toast.imported':         'تم استيراد',
+      'toast.sessions':         'جلسات',
+      'toast.nudgeApplied':     'تم تطبيق التعديل',
+      'toast.noStageTimer':     'لم يتم تكوين شاشة مؤقت المسرح',
+
+      'delay.running':        'جاري التشغيل',
+      'delay.sessionsAffected':'جلسات متأثرة',
+      'delay.nextAnchor':     'المرساة التالية',
+      'delay.resetDelays':    'إعادة تعيين التأخيرات',
+      'delay.confirmReset':   'تأكيد إعادة التعيين؟',
+
+      'batch.selected':       'محدد',
+      'batch.setReady':       'تجهيز الكل',
+      'batch.endAll':         'إنهاء الكل',
+      'batch.cancelAll':      'إلغاء الكل',
+      'batch.clickAgain':     'اضغط مجدداً للتأكيد',
+
+      'undo.undo':            'تراجع',
+      'undo.ended':           'منتهية',
+      'undo.cancelled':       'ملغاة',
+
+      'event.new':            'حدث جديد',
+      'event.edit':           'تعديل الحدث',
+      'event.name':           'اسم الحدث',
+      'event.date':           'التاريخ',
+      'event.timezone':       'المنطقة الزمنية',
+      'event.venue':          'المكان',
+      'event.startTime':      'وقت البدء',
+      'event.endTime':        'وقت الانتهاء',
+
+      'users.title':          'المشغلون',
+      'users.invite':         'دعوة مشغل',
+      'users.pending':        'قيد الانتظار',
+      'users.active':         'نشط',
+      'users.suspended':      'معلّق',
+      'users.noOperators':    'لا يوجد مشغلون',
+
+      'feedback.title':       'إرسال ملاحظات',
+      'feedback.rate':        'كيف تقيّم تجربتك؟',
+      'feedback.category':    'الفئة',
+      'feedback.general':     'عام',
+      'feedback.bug':         'تقرير خطأ',
+      'feedback.feature':     'طلب ميزة',
+      'feedback.praise':      'إشادة',
+      'feedback.message':     'رسالتك',
+      'feedback.send':        'إرسال الملاحظات',
+
+      'help.shortcuts':       'اختصارات لوحة المفاتيح',
+      'help.quickRef':        'مرجع سريع',
+      'help.whatsNew':        'ما الجديد',
+      'help.docs':            'الوثائق',
+      'help.feedback':        'إرسال ملاحظات',
+      'help.contact':         'تواصل مع الدعم',
+      'help.about':           'حول CueDeck',
+
+      'profile.plan':         'الخطة',
+      'profile.billing':      'الفوترة',
+      'profile.signOut':      'تسجيل الخروج',
+
+      'auth.login':           'تسجيل الدخول',
+      'auth.register':        'إنشاء حساب',
+      'auth.email':           'البريد الإلكتروني',
+      'auth.password':        'كلمة المرور',
+      'auth.name':            'الاسم الكامل',
+      'auth.organization':    'المؤسسة',
+      'auth.forgotPassword':  'نسيت كلمة المرور؟',
+      'auth.noAccount':       'ليس لديك حساب؟',
+      'auth.hasAccount':      'لديك حساب بالفعل؟',
+
+      'confirm.areYouSure':   'هل أنت متأكد؟',
+      'confirm.confirm':      'تأكيد؟',
+      'confirm.confirmCancel':'تأكيد الإلغاء',
+      'confirm.confirmEnd':   'تأكيد الإنهاء',
+      'confirm.confirmClear': 'تأكيد المسح',
+      'confirm.confirmReset': 'تأكيد إعادة التعيين؟',
+
+      'onboard.welcome':      'مرحباً بك في CueDeck',
+      'onboard.step1':        'أنشئ أول حدث',
+      'onboard.step2':        'أضف جلسات إلى الجدول',
+      'onboard.step3':        'إعداد شاشة عرض',
+      'onboard.step4':        'دعوة أول مشغل',
+      'onboard.skip':         'تخطي الآن',
+      'onboard.next':         'التالي',
+      'onboard.finish':       'إنهاء',
+
+      'diag.database':        'قاعدة البيانات',
+      'diag.realtime':        'الوقت الحقيقي',
+      'diag.clockSync':       'مزامنة الساعة',
+      'diag.edgeFunctions':   'الوظائف',
+
+      'csv.import':           'استيراد جلسات (CSV)',
+      'csv.dragDrop':         'اسحب وأفلت ملف CSV أو اضغط للتصفح',
+
       'role.director':  'مدير',
       'role.stage':     'مسرح',
       'role.av':        'صوتيات',
@@ -219,6 +526,11 @@ const CueDeckI18n = (() => {
       'misc.online':      'عاد الاتصال — جاري المزامنة...',
       'misc.saved':       'تم الحفظ',
       'misc.loading':     'جاري التحميل...',
+      'misc.noEvents':    'لا توجد فعاليات',
+      'misc.createFirst': 'أنشئ أول فعالية للبدء',
+      'misc.version':     'الإصدار',
+      'misc.copy':        'نسخ',
+      'misc.copied':      'تم النسخ!',
     },
 
     pl: {
@@ -375,6 +687,76 @@ const CueDeckI18n = (() => {
       if (text.includes('timeline')) pill.childNodes[pill.childNodes.length - 1].textContent = ' ' + t('filter.timeline');
       if (text.includes('list')) pill.childNodes[pill.childNodes.length - 1].textContent = ' ' + t('filter.list');
     });
+
+    // Help dropdown menu
+    const helpItems = {
+      'Keyboard Shortcuts': 'help.shortcuts',
+      'Quick Reference':    'help.quickRef',
+      'What\'s New':        'help.whatsNew',
+      'Documentation':      'help.docs',
+      'Send Feedback':      'help.feedback',
+      'Contact Support':    'help.contact',
+      'About CueDeck':      'help.about',
+    };
+    document.querySelectorAll('#help-dropdown button').forEach(btn => {
+      const orig = btn.textContent.replace(/^[^\w]*/, '').trim(); // strip emoji
+      if (helpItems[orig]) {
+        const emoji = btn.textContent.match(/^([^\w]*)/)?.[1] || '';
+        btn.textContent = emoji + t(helpItems[orig]);
+      }
+    });
+
+    // Diagnostic bar pills
+    const diagMap = { 'database': 'diag.database', 'realtime': 'diag.realtime', 'clock sync': 'diag.clockSync', 'edge functions': 'diag.edgeFunctions' };
+    document.querySelectorAll('#diag-bar .di-lbl').forEach(lbl => {
+      const key = diagMap[lbl.textContent.trim().toLowerCase()];
+      if (key) lbl.textContent = t(key);
+    });
+
+    // Auth forms
+    const authMap = {
+      'Sign In': 'auth.login', 'Register': 'auth.register',
+      'Email': 'auth.email', 'Password': 'auth.password',
+      'Full Name': 'auth.name', 'Organization': 'auth.organization',
+      'Forgot password?': 'auth.forgotPassword',
+    };
+    document.querySelectorAll('label, button, a').forEach(el => {
+      const txt = el.childNodes[0]?.textContent?.trim();
+      if (txt && authMap[txt]) el.childNodes[0].textContent = t(authMap[txt]);
+    });
+
+    // Broadcast presets
+    document.querySelectorAll('.bc-preset-btn').forEach(btn => {
+      const presetMap = {
+        'Hold': 'btn.hold', 'Phones': 'bc.phones', 'Delay': 'delay.running',
+        'Seats': 'bc.seats', 'Break': 'disp.break',
+      };
+      const key = presetMap[btn.textContent.replace(/[^\w\s]/g, '').trim()];
+      if (key) {
+        const emoji = btn.textContent.match(/^([^\w]*)/)?.[1] || '';
+        btn.textContent = emoji + t(key);
+      }
+    });
+
+    // Batch bar buttons
+    const batchBar = document.getElementById('batch-bar');
+    if (batchBar) {
+      batchBar.querySelectorAll('.abtn').forEach(btn => {
+        const map = { 'SET READY': 'batch.setReady', 'END ALL': 'batch.endAll', 'CANCEL ALL': 'batch.cancelAll' };
+        const key = map[btn.textContent.trim()];
+        if (key) btn.textContent = t(key);
+      });
+      const clearBtn = batchBar.querySelector('[onclick*="clearBatchSelection"]');
+      if (clearBtn) clearBtn.textContent = t('filter.clearAll');
+    }
+
+    // Undo bar
+    const undoBtn = document.getElementById('undo-btn');
+    if (undoBtn) undoBtn.textContent = t('undo.undo');
+
+    // Logout button title
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.title = t('profile.signOut');
   }
 
   function getAvailableLocales() {
