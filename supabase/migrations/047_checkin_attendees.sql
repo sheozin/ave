@@ -44,3 +44,29 @@ DROP POLICY IF EXISTS checkin_att_delete ON leod_checkin_attendees;
 CREATE POLICY checkin_att_delete ON leod_checkin_attendees
   FOR DELETE TO authenticated
   USING (checkin_role_for_event(event_id) = 'organizer');
+
+-- checkin_att_update has no WITH CHECK, so it defaults to reusing
+-- USING — which only constrains which ROWS are updatable, not which
+-- COLUMNS change. That lets 'crew' reassign a row's event_id to any
+-- other event they also hold a role on (moving an attendee out of
+-- event A's roster entirely), or swap its qr_token. RLS can't compare
+-- OLD vs NEW columns declaratively, so lock both down with a trigger,
+-- matching the pattern in validate_event_log_role() (migration 039).
+CREATE OR REPLACE FUNCTION checkin_lock_attendee_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF checkin_role_for_event(OLD.event_id) != 'organizer' THEN
+    NEW.event_id := OLD.event_id;
+    NEW.qr_token := OLD.qr_token;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_checkin_lock_attendee_identity ON leod_checkin_attendees;
+CREATE TRIGGER trg_checkin_lock_attendee_identity
+  BEFORE UPDATE ON leod_checkin_attendees
+  FOR EACH ROW EXECUTE FUNCTION checkin_lock_attendee_identity();
