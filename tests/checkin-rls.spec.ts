@@ -13,6 +13,10 @@
 // Part B models the four BEFORE-trigger functions that close gaps RLS
 // alone can't express (RLS can filter rows, but can't compare OLD vs
 // NEW columns, or check foreign rows in another table declaratively).
+// checkin_auto_grant_organizer() (migration 045, AFTER INSERT ON
+// leod_events) is intentionally NOT modeled here — it's a single
+// NULL-guard on a different table's trigger, not a leod_checkin_*
+// cross-tenant check like the four below.
 
 import { describe, it, expect } from 'vitest';
 
