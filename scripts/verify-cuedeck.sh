@@ -153,6 +153,25 @@ for mig in "${migrations[@]}"; do
   fi
 done
 
+# ── 8b. Check-in module migrations ────────────
+info "Check-in Module Migrations"
+checkin_migrations=(
+  "044_checkin_organizations.sql"
+  "045_checkin_operators.sql"
+  "046_checkin_entitlements.sql"
+  "047_checkin_attendees.sql"
+  "048_checkin_scan_points_devices.sql"
+  "049_checkin_scan_events_print_jobs.sql"
+)
+for mig in "${checkin_migrations[@]}"; do
+  if [ -f "$PROJ/$mig" ]; then
+    green "Migration $mig present"
+    PASS=$((PASS+1))
+  else
+    red "Migration $mig MISSING"
+  fi
+done
+
 # ── 9. No hardcoded secrets ───────────────────
 info "Secrets"
 AUTH=$(cat "$(dirname "$0")/../auth-setup.sql" 2>/dev/null)
