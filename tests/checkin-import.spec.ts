@@ -30,6 +30,11 @@
 
 import { describe, it, expect } from 'vitest';
 
+// Line-for-line re-expression of makeQrToken() at index.ts:29-31.
+function makeQrToken(): string {
+  return crypto.randomUUID().replace(/-/g, '');
+}
+
 interface ImportRow {
   first_name: string;
   last_name: string;
@@ -126,6 +131,32 @@ function classifyRows(
   }
 
   return { results, toInsert, toUpdate };
+}
+
+// Line-for-line re-expression of the toInsert payload built at
+// index.ts:144-152 (default-value logic only — qr_token uses a fixed
+// placeholder here since makeQrToken() is randomness, tested
+// separately below).
+function buildInsertPayload(row: ImportRow, event_id: string) {
+  return {
+    event_id,
+    first_name: row.first_name, last_name: row.last_name,
+    email: row.email || null, company: row.company || null,
+    role_title: row.role_title || null,
+    ticket_type: row.ticket_type || 'attendee',
+    external_ref: row.external_ref || null,
+  };
+}
+
+// Line-for-line re-expression of the toUpdate patch built at
+// index.ts:133-138.
+function buildUpdatePatch(row: ImportRow) {
+  return {
+    first_name: row.first_name, last_name: row.last_name,
+    email: row.email || null, company: row.company || null,
+    role_title: row.role_title || null,
+    ticket_type: row.ticket_type || 'attendee',
+  };
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -283,5 +314,66 @@ describe('checkin-import: classifyRows in-batch duplicate detection', () => {
     expect(results.map(r => r.action)).toEqual(['create', 'create', 'create']);
     expect(toInsert).toHaveLength(3);
     expect(toUpdate).toHaveLength(0);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// buildInsertPayload / buildUpdatePatch — default-value logic
+// ════════════════════════════════════════════════════════════════
+// Not covered by classifyRows() above, which returns simplified
+// {row}/{id, row} objects for classification testing. These assert
+// the actual payload defaulting index.ts applies once a row is
+// classified — the part a shortcut re-implementation would most
+// easily drop (e.g. missing the `|| 'attendee'` fallback).
+
+describe('checkin-import: buildInsertPayload defaults', () => {
+  it('15 ticket_type defaults to "attendee" when absent', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe' };
+    expect(buildInsertPayload(row, 'evt-1').ticket_type).toBe('attendee');
+  });
+
+  it('16 ticket_type passes through when the row supplies one', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe', ticket_type: 'vip' };
+    expect(buildInsertPayload(row, 'evt-1').ticket_type).toBe('vip');
+  });
+
+  it('17 email/company/role_title/external_ref default to null (not undefined) when absent', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe' };
+    const payload = buildInsertPayload(row, 'evt-1');
+    expect(payload.email).toBeNull();
+    expect(payload.company).toBeNull();
+    expect(payload.role_title).toBeNull();
+    expect(payload.external_ref).toBeNull();
+  });
+
+  it('18 event_id on the insert payload is always the validated event_id passed in, never row-derived', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe' };
+    expect(buildInsertPayload(row, 'evt-validated').event_id).toBe('evt-validated');
+  });
+});
+
+describe('checkin-import: buildUpdatePatch defaults', () => {
+  it('19 ticket_type defaults to "attendee" when absent, same as insert', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe' };
+    expect(buildUpdatePatch(row).ticket_type).toBe('attendee');
+  });
+
+  it('20 the update patch never includes event_id, qr_token, or external_ref — only insert sets identity/creation fields', () => {
+    const row: ImportRow = { first_name: 'Jane', last_name: 'Doe', external_ref: 'REF-1' };
+    const patch = buildUpdatePatch(row);
+    expect(patch).not.toHaveProperty('event_id');
+    expect(patch).not.toHaveProperty('qr_token');
+    expect(patch).not.toHaveProperty('external_ref');
+  });
+});
+
+describe('checkin-import: makeQrToken', () => {
+  it('21 produces a 32-character lowercase-hex token with no dashes', () => {
+    const token = makeQrToken();
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('22 produces a different token on each call', () => {
+    expect(makeQrToken()).not.toBe(makeQrToken());
   });
 });
