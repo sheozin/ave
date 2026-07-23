@@ -86,9 +86,10 @@ Deno.serve(async (req) => {
   // NOT NULL user_id, matching the guard pattern in migration 045's
   // checkin_auto_grant_organizer() trigger.
   if (event.created_by) {
-    await sb.from('leod_checkin_operators')
+    const { error: grantErr } = await sb.from('leod_checkin_operators')
       .upsert({ event_id, user_id: event.created_by, role: 'organizer' },
         { onConflict: 'event_id,user_id' })
+    if (grantErr) console.error('checkin-enable-event: organizer grant failed:', grantErr.message)
   }
 
   return new Response(JSON.stringify({ ok: true, event_id }), {

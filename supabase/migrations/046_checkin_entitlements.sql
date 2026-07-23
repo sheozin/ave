@@ -24,8 +24,12 @@ CREATE POLICY checkin_ent_read ON leod_checkin_entitlements
   FOR SELECT TO authenticated
   USING (checkin_role_for_event(event_id) IS NOT NULL);
 
+-- Deliberately no client-side write policy. These flags are a billing/
+-- entitlement gate — every event owner is auto-granted 'organizer' on
+-- their own event (migration 045's trigger), so a write policy scoped
+-- to 'organizer' would let any owner self-grant every paid feature
+-- flag directly, bypassing checkin-enable-event's authorization and
+-- hardcoded checkin_core value entirely. Writes go through that
+-- Edge Function's service-role client only, which enforces caller ==
+-- event creator or admin before upserting.
 DROP POLICY IF EXISTS checkin_ent_write ON leod_checkin_entitlements;
-CREATE POLICY checkin_ent_write ON leod_checkin_entitlements
-  FOR ALL TO authenticated
-  USING (checkin_role_for_event(event_id) = 'organizer')
-  WITH CHECK (checkin_role_for_event(event_id) = 'organizer');
