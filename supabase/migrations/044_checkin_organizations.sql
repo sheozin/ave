@@ -23,6 +23,7 @@ ALTER TABLE leod_users ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES leod_orga
 
 ALTER TABLE leod_organizations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS member_read_org ON leod_organizations;
 CREATE POLICY member_read_org ON leod_organizations
   FOR SELECT TO authenticated
   USING (
