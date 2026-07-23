@@ -18,6 +18,10 @@ CREATE INDEX IF NOT EXISTS idx_checkin_scan_points_event ON leod_checkin_scan_po
 
 ALTER TABLE leod_checkin_scan_points ENABLE ROW LEVEL SECURITY;
 
+-- NOTE: trg_checkin_validate_device_scan_point (below, on
+-- leod_checkin_devices) relies on this policy staying scoped to the
+-- caller's own event(s) — broadening it would weaken that trigger's
+-- fail-closed guarantee for authenticated callers.
 DROP POLICY IF EXISTS checkin_sp_read ON leod_checkin_scan_points;
 CREATE POLICY checkin_sp_read ON leod_checkin_scan_points
   FOR SELECT TO authenticated
@@ -35,6 +39,12 @@ CREATE TABLE IF NOT EXISTS leod_checkin_devices (
   event_id      UUID        NOT NULL REFERENCES leod_events(id) ON DELETE CASCADE,
   label         TEXT        NOT NULL,
   kind          TEXT        NOT NULL CHECK (kind IN ('checkin_station', 'scanner')),
+  -- ON DELETE SET NULL is implemented as an UPDATE, so it's still
+  -- subject to the CHECK below — deleting a scan point still
+  -- referenced by a scanner-kind device fails the delete (by design,
+  -- fails closed) rather than silently leaving an invalid scanner
+  -- row. A future "delete scan point" admin flow must catch that and
+  -- prompt to reassign/remove its devices first.
   scan_point_id UUID        REFERENCES leod_checkin_scan_points(id) ON DELETE SET NULL,
   api_key_hash  TEXT        NOT NULL,
   last_seen_at  TIMESTAMPTZ,
@@ -42,7 +52,8 @@ CREATE TABLE IF NOT EXISTS leod_checkin_devices (
   CHECK (kind != 'scanner' OR scan_point_id IS NOT NULL)
 );
 
-CREATE INDEX IF NOT EXISTS idx_checkin_devices_event   ON leod_checkin_devices (event_id);
+CREATE INDEX IF NOT EXISTS idx_checkin_devices_event       ON leod_checkin_devices (event_id);
+CREATE INDEX IF NOT EXISTS idx_checkin_devices_scan_point  ON leod_checkin_devices (scan_point_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_devices_api_key ON leod_checkin_devices (api_key_hash);
 
 ALTER TABLE leod_checkin_devices ENABLE ROW LEVEL SECURITY;
