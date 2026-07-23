@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS leod_organizations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE leod_users ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES leod_organizations(id);
+
 ALTER TABLE leod_organizations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY member_read_org ON leod_organizations
@@ -26,8 +28,6 @@ CREATE POLICY member_read_org ON leod_organizations
   USING (
     id IN (SELECT org_id FROM leod_users WHERE id = auth.uid())
   );
-
-ALTER TABLE leod_users ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES leod_organizations(id);
 
 -- Backfill: one org per existing invite-chain root, propagated to
 -- everyone they invited.
