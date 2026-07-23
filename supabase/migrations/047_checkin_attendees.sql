@@ -58,7 +58,13 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF checkin_role_for_event(OLD.event_id) != 'organizer' THEN
+  -- Moving a row to a different event requires organizer on BOTH
+  -- sides: organizer-of-A alone would otherwise let someone plant/move
+  -- an attendee into event B's roster while holding only 'crew' there,
+  -- bypassing checkin_att_write's organizer-only restriction on B.
+  IF checkin_role_for_event(OLD.event_id) != 'organizer'
+     OR (NEW.event_id IS DISTINCT FROM OLD.event_id
+         AND checkin_role_for_event(NEW.event_id) != 'organizer') THEN
     NEW.event_id := OLD.event_id;
     NEW.qr_token := OLD.qr_token;
   END IF;
