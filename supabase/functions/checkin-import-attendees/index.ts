@@ -150,11 +150,23 @@ Deno.serve(async (req) => {
       })
     }
   }
+  // Track per-row failures rather than discarding them: silently
+  // swallowing an update error here would make summary.to_update
+  // overcount successes and mislead the organizer about whether
+  // their re-import actually applied.
+  const updateErrors: { id: string; error: string }[] = []
   for (const u of toUpdate) {
-    await sb.from('leod_checkin_attendees').update(u.patch).eq('id', u.id)
+    const { error } = await sb.from('leod_checkin_attendees').update(u.patch).eq('id', u.id)
+    if (error) {
+      console.error('checkin-import-attendees: update failed for attendee', u.id, error.message)
+      updateErrors.push({ id: u.id, error: error.message })
+    }
   }
 
-  return new Response(JSON.stringify({ ok: true, dry_run: false, summary }), {
+  return new Response(JSON.stringify({
+    ok: true, dry_run: false, summary,
+    ...(updateErrors.length ? { update_errors: updateErrors } : {}),
+  }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })
