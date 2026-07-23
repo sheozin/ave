@@ -52,19 +52,23 @@ async function main() {
   ok('Entitlements enabled');
 
   log('Ensuring organizer grant…');
-  await sb.from('leod_checkin_operators')
+  const { error: opErr } = await sb.from('leod_checkin_operators')
     .upsert({ event_id: event.id, user_id: director.id, role: 'organizer' }, { onConflict: 'event_id,user_id' });
+  if (opErr) { err(opErr.message); process.exit(1); }
   ok('Organizer grant confirmed');
 
   log('Seeding entrance scan point…');
-  const { data: entrance } = await sb.from('leod_checkin_scan_points')
+  const { data: entrance, error: spErr } = await sb.from('leod_checkin_scan_points')
     .upsert({ event_id: event.id, name: 'Main Entrance', code: 'ENTRANCE', kind: 'entrance', sort_order: 0 },
       { onConflict: 'event_id,code' })
     .select('id').single();
+  if (spErr) { err(spErr.message); process.exit(1); }
   ok(`Entrance scan point: ${entrance?.id}`);
 
   log('Clearing old test attendees…');
-  await sb.from('leod_checkin_attendees').delete().eq('event_id', event.id).like('external_ref', 'SEED-%');
+  const { error: delErr } = await sb.from('leod_checkin_attendees')
+    .delete().eq('event_id', event.id).like('external_ref', 'SEED-%');
+  if (delErr) { err(delErr.message); process.exit(1); }
 
   log('Seeding 5 test attendees…');
   const attendees = [
