@@ -97,12 +97,34 @@ Deno.serve(async (req) => {
   const toInsert: Record<string, unknown>[] = []
   const toUpdate: { id: string; patch: Record<string, unknown> }[] = []
 
+  // Tracks keys claimed by a 'create' row earlier in THIS batch, kept
+  // separate from byExternalRef/byEmail (which only reflect existing
+  // DB rows) — a row matching a not-yet-inserted create has no real
+  // attendee id to update against, so it must be skipped, not merged.
+  const claimedExternalRefs = new Set<string>()
+  const claimedEmails = new Set<string>()
+
   for (const row of rows) {
     const invalid = validateRow(row)
     if (invalid) { results.push({ row, action: 'skip', reason: invalid }); continue }
 
+    const normalizedEmail = row.email?.toLowerCase()
     const match = (row.external_ref && byExternalRef.get(row.external_ref))
-      || (row.email && byEmail.get(row.email.toLowerCase()))
+      || (normalizedEmail && byEmail.get(normalizedEmail))
+
+    // One registrant listed twice in the same CSV (e.g. under
+    // different ticket categories) would otherwise both classify as
+    // 'create' with two separate inserts, silently producing two
+    // attendee records for one person. First occurrence wins; later
+    // ones are skipped.
+    if (!match) {
+      const dupInBatch = (row.external_ref && claimedExternalRefs.has(row.external_ref))
+        || (normalizedEmail && claimedEmails.has(normalizedEmail))
+      if (dupInBatch) {
+        results.push({ row, action: 'skip', reason: 'Duplicate of another row in this import' })
+        continue
+      }
+    }
 
     if (match) {
       results.push({ row, action: 'update' })
@@ -116,6 +138,8 @@ Deno.serve(async (req) => {
         },
       })
     } else {
+      if (row.external_ref) claimedExternalRefs.add(row.external_ref)
+      if (normalizedEmail) claimedEmails.add(normalizedEmail)
       results.push({ row, action: 'create' })
       toInsert.push({
         event_id,
@@ -154,12 +178,15 @@ Deno.serve(async (req) => {
   // swallowing an update error here would make summary.to_update
   // overcount successes and mislead the organizer about whether
   // their re-import actually applied.
-  const updateErrors: { id: string; error: string }[] = []
+  const updateErrors: { id: string; first_name: unknown; last_name: unknown; email: unknown; error: string }[] = []
   for (const u of toUpdate) {
     const { error } = await sb.from('leod_checkin_attendees').update(u.patch).eq('id', u.id)
     if (error) {
       console.error('checkin-import-attendees: update failed for attendee', u.id, error.message)
-      updateErrors.push({ id: u.id, error: error.message })
+      updateErrors.push({
+        id: u.id, first_name: u.patch.first_name, last_name: u.patch.last_name, email: u.patch.email,
+        error: error.message,
+      })
     }
   }
 
