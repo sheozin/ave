@@ -68,6 +68,13 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- created_by is nullable (service-role / no-JWT inserts) — skip
+  -- rather than fail the leod_events insert, matching the guard
+  -- pattern in validate_event_log_role() (migration 039).
+  IF NEW.created_by IS NULL THEN
+    RETURN NEW;
+  END IF;
+
   INSERT INTO leod_checkin_operators (event_id, user_id, role)
   VALUES (NEW.id, NEW.created_by, 'organizer')
   ON CONFLICT (event_id, user_id) DO NOTHING;
