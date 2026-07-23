@@ -135,6 +135,17 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- attendee_id is an identity anchor like attendees.event_id/qr_token
+  -- (047) — a print job is created FOR one attendee's badge and has no
+  -- legitimate reason to be reassigned. Unlike device_id (which may
+  -- legitimately change, e.g. retrying on a different printer), lock
+  -- it on UPDATE. This also closes the common case the device_id
+  -- check alone misses: a freshly queued job has device_id IS NULL,
+  -- so that check never runs until a device is assigned later.
+  IF TG_OP = 'UPDATE' AND NEW.attendee_id IS DISTINCT FROM OLD.attendee_id THEN
+    RAISE EXCEPTION 'attendee_id cannot be changed after a print job is created';
+  END IF;
+
   IF NEW.device_id IS NOT NULL AND NOT EXISTS (
     SELECT 1
     FROM leod_checkin_attendees a
