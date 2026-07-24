@@ -91,3 +91,35 @@ CREATE POLICY checkin_pj_read ON leod_checkin_print_jobs
 -- checkin_se_read (leod_checkin_scan_events) is UNCHANGED — this is
 -- api_consumer's one legitimate target, per migration 045's own
 -- documented role definitions.
+
+-- ── Fix a NULL-safety gap this migration's own change exposes ──────
+-- checkin_lock_attendee_identity() (047) compares
+-- checkin_role_for_event() to 'organizer' with `!=`. Now that the
+-- function can return NULL far more often (whenever entitlements are
+-- missing, not just when no operator row exists), `NULL != 'organizer'`
+-- evaluates to NULL, and plpgsql's IF treats a NULL condition as
+-- false — i.e. it would NOT revert event_id/qr_token for a NULL role.
+-- Not exploitable today (RLS's own USING clause on checkin_att_update
+-- already blocks any authenticated caller from reaching a NULL-role
+-- state on OLD.event_id before this trigger ever runs), but a future
+-- "disable check-in" admin flow that sets checkin_core = false on an
+-- event with existing attendee rows would land exactly here. Switch
+-- to IS DISTINCT FROM, which treats NULL as "not organizer" (the safe
+-- outcome) instead of propagating it — identical behavior to != for
+-- every non-NULL case, so no functional change for any reachable path
+-- today.
+CREATE OR REPLACE FUNCTION checkin_lock_attendee_identity()
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF checkin_role_for_event(OLD.event_id) IS DISTINCT FROM 'organizer'
+     OR (NEW.event_id IS DISTINCT FROM OLD.event_id
+         AND checkin_role_for_event(NEW.event_id) IS DISTINCT FROM 'organizer') THEN
+    NEW.event_id := OLD.event_id;
+    NEW.qr_token := OLD.qr_token;
+  END IF;
+  RETURN NEW;
+END;
+$$;

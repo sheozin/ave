@@ -310,14 +310,26 @@ describe('Checkin RLS: leod_checkin_entitlements has ZERO write access for any r
 // writing). If a test case here disagrees with the real SQL, the
 // simulation is wrong — not the test.
 
-// ── 1. checkin_lock_attendee_identity() — migration 047 ──────────
+// ── 1. checkin_lock_attendee_identity() — migration 047, patched by 051 ──
 // Real SQL:
-//   IF checkin_role_for_event(OLD.event_id) != 'organizer'
+//   IF checkin_role_for_event(OLD.event_id) IS DISTINCT FROM 'organizer'
 //      OR (NEW.event_id IS DISTINCT FROM OLD.event_id
-//          AND checkin_role_for_event(NEW.event_id) != 'organizer') THEN
+//          AND checkin_role_for_event(NEW.event_id) IS DISTINCT FROM 'organizer') THEN
 //     NEW.event_id := OLD.event_id;
 //     NEW.qr_token := OLD.qr_token;
 //   END IF;
+//
+// Originally used `!=` instead of `IS DISTINCT FROM`. Migration 051's
+// entitlement gate made checkin_role_for_event() return real SQL NULL
+// far more often (whenever entitlements are missing, not just when no
+// operator row exists) — and `NULL != 'organizer'` evaluates to NULL,
+// which plpgsql's IF treats as false, meaning the revert would NOT
+// fire for a NULL role. `IS DISTINCT FROM` treats NULL as "not
+// organizer" (the safe outcome) instead of propagating it, with
+// identical behavior to `!=` for every non-NULL case. The JS
+// simulation below was never affected by this bug (it models "no
+// role" as the string 'none', and JS !== has no NULL-propagation
+// semantics), but test 24b makes the now-fixed real-NULL case explicit.
 
 interface AttendeeIdentityRow {
   event_id: string;
@@ -358,6 +370,25 @@ describe('Trigger: checkin_lock_attendee_identity (migration 047)', () => {
     const roleForEvent = (eventId: string): CheckinRole => (eventId === 'A' ? 'organizer' : 'crew');
     const oldRow: AttendeeIdentityRow = { event_id: 'A', qr_token: 'tok-1' };
     const attemptedNew: AttendeeIdentityRow = { event_id: 'B', qr_token: 'tok-2' };
+
+    const result = simulateLockAttendeeIdentity(oldRow, attemptedNew, roleForEvent);
+
+    expect(result.event_id).toBe('A');
+    expect(result.qr_token).toBe('tok-1');
+  });
+
+  it('24b role resolving to NULL on OLD.event_id (e.g. entitlements revoked/missing) still reverts — regression test for the IS DISTINCT FROM fix', () => {
+    // 'none' here stands in for real SQL NULL. Before migration 051's
+    // IS DISTINCT FROM fix, the equivalent real-SQL case (`!=` against
+    // a genuine NULL) would NOT have reverted, because
+    // `NULL != 'organizer'` is NULL, and plpgsql's IF treats NULL as
+    // false. This test's own JS `!==` never had that bug (comparing
+    // against the string 'none' isn't NULL-propagating) — it exists to
+    // document the invariant explicitly, verified against the live
+    // trigger directly (not just this JS model) during migration 051.
+    const roleForEvent = (): CheckinRole => 'none';
+    const oldRow: AttendeeIdentityRow = { event_id: 'A', qr_token: 'tok-1' };
+    const attemptedNew: AttendeeIdentityRow = { event_id: 'B', qr_token: 'hijacked' };
 
     const result = simulateLockAttendeeIdentity(oldRow, attemptedNew, roleForEvent);
 

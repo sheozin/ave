@@ -162,6 +162,8 @@ checkin_migrations=(
   "047_checkin_attendees.sql"
   "048_checkin_scan_points_devices.sql"
   "049_checkin_scan_events_print_jobs.sql"
+  "050_checkin_attendee_dedup_constraints.sql"
+  "051_checkin_entitlement_gating_and_api_consumer_scope.sql"
 )
 for mig in "${checkin_migrations[@]}"; do
   if [ -f "$PROJ/$mig" ]; then
