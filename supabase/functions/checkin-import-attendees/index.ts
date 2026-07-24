@@ -86,6 +86,20 @@ Deno.serve(async (req) => {
     })
   }
 
+  // This client uses the service-role key, which bypasses RLS
+  // entirely — checkin_role_for_event()'s entitlement gate (migration
+  // 051) is never consulted here, so the same check has to be made
+  // explicitly. Without it, an organizer role alone (auto-granted to
+  // every event's creator regardless of purchase) would let attendees
+  // be imported into an event that never enabled check-in.
+  const { data: entRow } = await sb.from('leod_checkin_entitlements')
+    .select('checkin_core').eq('event_id', event_id).single()
+  if (!entRow?.checkin_core) {
+    return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
   const { data: existing } = await sb.from('leod_checkin_attendees')
     .select('id, external_ref, email')
     .eq('event_id', event_id)
