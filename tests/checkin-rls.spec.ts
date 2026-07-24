@@ -1,15 +1,17 @@
 // tests/checkin-rls.spec.ts
 // Check-in module security tests — validates policy assumptions and
-// trigger behavior for all leod_checkin_* tables (migrations 044-049).
+// trigger behavior for all leod_checkin_* tables (migrations 044-051).
 // These tests run without a live DB, following this repo's convention
 // (see tests/rls.spec.ts): RLS policies and Postgres triggers aren't
 // importable into vitest, so the SQL logic is re-expressed as plain
 // JS/TS and asserted against here. This IS the specification, kept in
 // sync by a human/reviewer diffing it against the real migration SQL
 // in supabase/migrations/044_checkin_organizations.sql through
-// 049_checkin_scan_events_print_jobs.sql.
+// 051_checkin_entitlement_gating_and_api_consumer_scope.sql.
 //
-// Part A (below) models the RLS policy grants themselves.
+// Part A (below) models the RLS policy grants themselves, as amended
+// by migration 051: api_consumer's read access was restricted to
+// leod_checkin_scan_events only (previously granted on every table).
 // Part B models the four BEFORE-trigger functions that close gaps RLS
 // alone can't express (RLS can filter rows, but can't compare OLD vs
 // NEW columns, or check foreign rows in another table declaratively).
@@ -17,6 +19,12 @@
 // leod_events) is intentionally NOT modeled here — it's a single
 // NULL-guard on a different table's trigger, not a leod_checkin_*
 // cross-tenant check like the four below.
+// Part C models checkin_role_for_event()'s entitlement gate (migration
+// 051): the function now returns NULL unless a live
+// leod_checkin_entitlements row with checkin_core = true exists for
+// the event, regardless of role — closing the gap where every event's
+// auto-granted organizer had full check-in access whether or not the
+// module was ever enabled.
 
 import { describe, it, expect } from 'vitest';
 
@@ -49,49 +57,54 @@ const POLICIES: Policy[] = [
   { table: 'leod_organizations', role: 'none',   ops: [] },
 
   // ── leod_checkin_operators (045) ──
-  // checkin_op_read: SELECT, any operator
+  // checkin_op_read: SELECT, organizer/crew only (051 removed api_consumer)
   // checkin_op_write / checkin_op_update / checkin_op_delete: organizer only
   { table: 'leod_checkin_operators', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
   { table: 'leod_checkin_operators', role: 'crew',         ops: ['SELECT'] },
-  { table: 'leod_checkin_operators', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_operators', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_operators', role: 'none',         ops: [] },
 
-  // ── leod_checkin_entitlements (046) ──
-  // checkin_ent_read: SELECT, any operator. NO write policy exists for
-  // ANY role — writes only via checkin-enable-event's service-role client.
+  // ── leod_checkin_entitlements (046, read policy narrowed by 051) ──
+  // checkin_ent_read: SELECT, organizer/crew only. NO write policy
+  // exists for ANY role — writes only via checkin-enable-event's
+  // service-role client.
   { table: 'leod_checkin_entitlements', role: 'organizer',    ops: ['SELECT'] },
   { table: 'leod_checkin_entitlements', role: 'crew',         ops: ['SELECT'] },
-  { table: 'leod_checkin_entitlements', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_entitlements', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_entitlements', role: 'none',         ops: [] },
 
-  // ── leod_checkin_attendees (047) ──
-  // checkin_att_read: SELECT any operator
+  // ── leod_checkin_attendees (047, read policy narrowed by 051) ──
+  // checkin_att_read: SELECT organizer/crew only (051 removed
+  // api_consumer — this table carries attendee PII)
   // checkin_att_write: INSERT organizer only
   // checkin_att_update: UPDATE organizer OR crew
   // checkin_att_delete: DELETE organizer only
   { table: 'leod_checkin_attendees', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
   { table: 'leod_checkin_attendees', role: 'crew',         ops: ['SELECT', 'UPDATE'] },
-  { table: 'leod_checkin_attendees', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_attendees', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_attendees', role: 'none',         ops: [] },
 
-  // ── leod_checkin_scan_points (048) ──
-  // checkin_sp_read: SELECT any operator
+  // ── leod_checkin_scan_points (048, read policy narrowed by 051) ──
+  // checkin_sp_read: SELECT organizer/crew only
   // checkin_sp_write: ALL (SELECT/INSERT/UPDATE/DELETE), organizer only
   { table: 'leod_checkin_scan_points', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
   { table: 'leod_checkin_scan_points', role: 'crew',         ops: ['SELECT'] },
-  { table: 'leod_checkin_scan_points', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_scan_points', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_scan_points', role: 'none',         ops: [] },
 
-  // ── leod_checkin_devices (048) ──
-  // checkin_dev_read: SELECT any operator
+  // ── leod_checkin_devices (048, read policy narrowed by 051) ──
+  // checkin_dev_read: SELECT organizer/crew only (051 removed
+  // api_consumer — this table carries api_key_hash, a device secret)
   // checkin_dev_write: ALL, organizer only
   { table: 'leod_checkin_devices', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
   { table: 'leod_checkin_devices', role: 'crew',         ops: ['SELECT'] },
-  { table: 'leod_checkin_devices', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_devices', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_devices', role: 'none',         ops: [] },
 
-  // ── leod_checkin_scan_events (049) ──
-  // checkin_se_read: SELECT any operator
+  // ── leod_checkin_scan_events (049) — UNCHANGED by 051 ──
+  // checkin_se_read: SELECT any operator, INCLUDING api_consumer —
+  // this is api_consumer's one legitimate target, per its own
+  // definition in migration 045 ("read-only scan events").
   // checkin_se_write: INSERT only, organizer OR crew
   // No UPDATE/DELETE policy exists for ANY role — append-only log.
   { table: 'leod_checkin_scan_events', role: 'organizer',    ops: ['SELECT', 'INSERT'] },
@@ -99,12 +112,12 @@ const POLICIES: Policy[] = [
   { table: 'leod_checkin_scan_events', role: 'api_consumer', ops: ['SELECT'] },
   { table: 'leod_checkin_scan_events', role: 'none',         ops: [] },
 
-  // ── leod_checkin_print_jobs (049) ──
-  // checkin_pj_read: SELECT any operator (via attendee's event)
+  // ── leod_checkin_print_jobs (049, read policy narrowed by 051) ──
+  // checkin_pj_read: SELECT organizer/crew only (via attendee's event)
   // checkin_pj_write: ALL, organizer OR crew (via attendee's event)
   { table: 'leod_checkin_print_jobs', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
   { table: 'leod_checkin_print_jobs', role: 'crew',         ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
-  { table: 'leod_checkin_print_jobs', role: 'api_consumer', ops: ['SELECT'] },
+  { table: 'leod_checkin_print_jobs', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_print_jobs', role: 'none',         ops: [] },
 ];
 
@@ -235,15 +248,35 @@ describe('Checkin RLS: crew has a narrower scope than organizer', () => {
   });
 });
 
-describe('Checkin RLS: api_consumer is read-only everywhere', () => {
-  it('19 api_consumer can SELECT every checkin table but cannot INSERT/UPDATE/DELETE any of them', () => {
-    const checkinTables = ALL_TABLES.filter(t => t !== 'leod_organizations');
-    for (const table of checkinTables) {
-      expect(canDo('api_consumer', table, 'SELECT')).toBe(true);
-      expect(canDo('api_consumer', table, 'INSERT')).toBe(false);
-      expect(canDo('api_consumer', table, 'UPDATE')).toBe(false);
-      expect(canDo('api_consumer', table, 'DELETE')).toBe(false);
+describe('Checkin RLS: api_consumer is scoped to scan_events only (migration 051 regression test)', () => {
+  // The original spec states the integration API returns
+  // "id, external_ref, ticket_type only" and gates PII behind a
+  // per-event pii_in_api flag. Before migration 051, every read
+  // policy granted api_consumer the same blanket access as
+  // organizer/crew — full attendee PII, leod_checkin_devices'
+  // api_key_hash (a device auth secret), the operator roster, etc.
+  // If a future migration re-broadens any of these policies back to
+  // "any operator", these tests must fail.
+  it('19 api_consumer can SELECT leod_checkin_scan_events (its one legitimate target) but nothing else, and cannot write even that', () => {
+    expect(canDo('api_consumer', 'leod_checkin_scan_events', 'SELECT')).toBe(true);
+    expect(canDo('api_consumer', 'leod_checkin_scan_events', 'INSERT')).toBe(false);
+
+    const restrictedTables = ALL_TABLES.filter(
+      t => t !== 'leod_organizations' && t !== 'leod_checkin_scan_events',
+    );
+    for (const table of restrictedTables) {
+      for (const op of ALL_OPS) {
+        expect(canDo('api_consumer', table, op)).toBe(false);
+      }
     }
+  });
+
+  it('19b specifically: api_consumer cannot read attendee PII (email/name) via leod_checkin_attendees', () => {
+    expect(canDo('api_consumer', 'leod_checkin_attendees', 'SELECT')).toBe(false);
+  });
+
+  it('19c specifically: api_consumer cannot read leod_checkin_devices (would expose api_key_hash, a device auth secret)', () => {
+    expect(canDo('api_consumer', 'leod_checkin_devices', 'SELECT')).toBe(false);
   });
 });
 
@@ -544,5 +577,94 @@ describe('Trigger: checkin_validate_print_job_device (migration 049)', () => {
     const newRow: PrintJobRow = { attendee_id: 'att-other', device_id: 'dev-a', status: 'printing' };
     const result = simulateValidatePrintJobDevice('UPDATE', oldRow, newRow, attendees, devices);
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('attendee_id cannot be changed') });
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// PART C — checkin_role_for_event() entitlement gate (migration 051)
+// ════════════════════════════════════════════════════════════════
+// Real SQL:
+//   SELECT o.role
+//   FROM leod_checkin_operators o
+//   WHERE o.event_id = p_event_id AND o.user_id = auth.uid()
+//     AND EXISTS (
+//       SELECT 1 FROM leod_checkin_entitlements e
+//       WHERE e.event_id = p_event_id AND e.checkin_core = true
+//     )
+//
+// Before 051, this function returned a role as soon as a
+// leod_checkin_operators row existed — regardless of whether the
+// event had ever enabled check-in. Since migration 045's auto-grant
+// trigger creates an 'organizer' row for EVERY new event
+// unconditionally, every event owner already had full check-in
+// access the moment their event was created, whether or not they ever
+// called checkin-enable-event. "No entitlements row = module inert"
+// was a UI/Edge-Function convention only, never enforced here.
+//
+// Both Edge Functions (checkin-enable-event, checkin-import-attendees)
+// use the service-role client and bypass RLS entirely, so this gate
+// only protects DIRECT client-side table access — which is exactly
+// the gap it closes (a co-organizer, or the event owner themself,
+// reading/writing check-in tables straight from a Supabase client
+// session without ever going through the paid-feature Edge Function).
+
+interface OperatorGrant { event_id: string; user_id: string; role: CheckinRole; }
+interface EntitlementRow { event_id: string; checkin_core: boolean; }
+
+function simulateCheckinRoleForEvent(
+  eventId: string,
+  userId: string,
+  operators: OperatorGrant[],
+  entitlements: EntitlementRow[],
+): CheckinRole {
+  const grant = operators.find(o => o.event_id === eventId && o.user_id === userId);
+  if (!grant) return 'none';
+  const entitled = entitlements.some(e => e.event_id === eventId && e.checkin_core === true);
+  return entitled ? grant.role : 'none';
+}
+
+describe('checkin_role_for_event: entitlement gate (migration 051)', () => {
+  it('40 organizer on an event with NO entitlements row at all: role resolves to none (module never enabled)', () => {
+    const operators: OperatorGrant[] = [{ event_id: 'A', user_id: 'u1', role: 'organizer' }];
+    const entitlements: EntitlementRow[] = [];
+    expect(simulateCheckinRoleForEvent('A', 'u1', operators, entitlements)).toBe('none');
+  });
+
+  it('41 organizer on an event with an entitlements row but checkin_core = false: role resolves to none', () => {
+    const operators: OperatorGrant[] = [{ event_id: 'A', user_id: 'u1', role: 'organizer' }];
+    const entitlements: EntitlementRow[] = [{ event_id: 'A', checkin_core: false }];
+    expect(simulateCheckinRoleForEvent('A', 'u1', operators, entitlements)).toBe('none');
+  });
+
+  it('42 organizer on an event with checkin_core = true: role resolves to organizer', () => {
+    const operators: OperatorGrant[] = [{ event_id: 'A', user_id: 'u1', role: 'organizer' }];
+    const entitlements: EntitlementRow[] = [{ event_id: 'A', checkin_core: true }];
+    expect(simulateCheckinRoleForEvent('A', 'u1', operators, entitlements)).toBe('organizer');
+  });
+
+  it('43 crew/api_consumer grants are equally blocked by a missing entitlement — this is role-agnostic, not organizer-specific', () => {
+    const operators: OperatorGrant[] = [
+      { event_id: 'A', user_id: 'u-crew', role: 'crew' },
+      { event_id: 'A', user_id: 'u-api', role: 'api_consumer' },
+    ];
+    const entitlements: EntitlementRow[] = [];
+    expect(simulateCheckinRoleForEvent('A', 'u-crew', operators, entitlements)).toBe('none');
+    expect(simulateCheckinRoleForEvent('A', 'u-api', operators, entitlements)).toBe('none');
+  });
+
+  it('44 entitlements enabled for event B does not leak role resolution to event A for the same user', () => {
+    const operators: OperatorGrant[] = [
+      { event_id: 'A', user_id: 'u1', role: 'organizer' },
+      { event_id: 'B', user_id: 'u1', role: 'organizer' },
+    ];
+    const entitlements: EntitlementRow[] = [{ event_id: 'B', checkin_core: true }];
+    expect(simulateCheckinRoleForEvent('A', 'u1', operators, entitlements)).toBe('none');
+    expect(simulateCheckinRoleForEvent('B', 'u1', operators, entitlements)).toBe('organizer');
+  });
+
+  it('45 a user with no operator grant at all resolves to none regardless of entitlement state', () => {
+    const operators: OperatorGrant[] = [];
+    const entitlements: EntitlementRow[] = [{ event_id: 'A', checkin_core: true }];
+    expect(simulateCheckinRoleForEvent('A', 'u-stranger', operators, entitlements)).toBe('none');
   });
 });
