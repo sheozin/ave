@@ -3,7 +3,15 @@
 // entitlements row (idempotent via upsert) and makes sure the event's
 // creator holds an organizer grant (covers events created before
 // migration 045's auto-grant trigger existed). Caller must be the
-// event's creator or a CueDeck admin.
+// event's creator, a CueDeck admin, or already an 'organizer' in
+// leod_checkin_operators — the last case covers a co-organizer
+// granted by the original owner adjusting entitlements later, since
+// migration 045 defines organizer as "event owner, or anyone they
+// grant" full control. Ownership/admin must stay as separate,
+// independent checks: they're what let this function work at all on
+// an event that has never had check-in enabled, where no operator row
+// satisfying that condition exists yet (this function IS the thing
+// that creates the first one).
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
@@ -57,9 +65,13 @@ Deno.serve(async (req) => {
 
   const { data: callerRow } = await sb.from('leod_users')
     .select('role').eq('id', user.id).single()
+  const { data: opRow } = await sb.from('leod_checkin_operators')
+    .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
+
   const isOwner = event.created_by === user.id
   const isAdmin = callerRow?.role === 'admin'
-  if (!isOwner && !isAdmin) {
+  const isOrganizer = opRow?.role === 'organizer'
+  if (!isOwner && !isAdmin && !isOrganizer) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
