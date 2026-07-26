@@ -29,6 +29,15 @@ export interface QrEmailResult {
   error?: string
 }
 
+// event.name/venue are organizer-controlled; attendee.first_name comes
+// from CSV import, which can carry adversarial input from an external
+// registration list. None of it is escaped by default in a template
+// literal, so without this, a first_name like `<a href="...">click</a>`
+// would inject arbitrary markup/links into a genuine check-in email.
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function formatEventDate(isoDate: string): string {
   const d = new Date(isoDate + 'T00:00:00Z')
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -42,24 +51,26 @@ function generateQrDataUrl(token: string): string {
 }
 
 function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string): string {
-  const venueLine = event.venue ? ` &middot; ${event.venue}` : ''
+  const safeName = escapeHtml(event.name)
+  const safeFirstName = escapeHtml(attendee.first_name)
+  const venueLine = event.venue ? ` &middot; ${escapeHtml(event.venue)}` : ''
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${event.name}</title>
+  <title>${safeName}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
   <div style="width:100%;background-color:#f4f4f5;padding:40px 20px;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
       <div style="background:#fff;padding:28px 24px;text-align:center;border-bottom:1px solid #eee;">
-        <div style="font-size:22px;font-weight:700;color:#1a1a2e;">${event.name}</div>
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;">${safeName}</div>
         <div style="color:#6b7280;font-size:12px;margin-top:6px;">${formatEventDate(event.date)}${venueLine}</div>
       </div>
       <div style="padding:28px 24px;color:#374151;">
-        <p style="margin:0 0 8px;font-size:15px;">Hi ${attendee.first_name},</p>
+        <p style="margin:0 0 8px;font-size:15px;">Hi ${safeFirstName},</p>
         <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">Show this QR code at the entrance to check in — no need to print anything, your phone screen works fine.</p>
         <div style="text-align:center;margin:0 0 20px;">
           <img src="${qrDataUrl}" width="160" height="160" alt="Your check-in QR code" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
