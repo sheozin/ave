@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
   // checkin-enable-event's organizer-grant upsert. Only fires for
   // newly-CREATED attendees — re-imports/updates never trigger a send.
   if (entRow.auto_send_qr_email && insertedAttendees.length) {
-    const { data: event } = await sb.from('leod_events')
+    const { data: event, error: eventErr } = await sb.from('leod_events')
       .select('name, date, venue').eq('id', event_id).single()
     if (event) {
       const sendResults = await sendQrEmailsForAttendees(sb, event, insertedAttendees)
@@ -222,6 +222,8 @@ Deno.serve(async (req) => {
       if (failed.length) {
         console.error('checkin-import-attendees: auto-send QR email failures:', failed)
       }
+    } else {
+      console.error('checkin-import-attendees: auto-send skipped, event fetch failed for', event_id, eventErr?.message)
     }
   }
 
