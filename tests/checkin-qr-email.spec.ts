@@ -5,6 +5,12 @@
 // supabase/functions/_shared/qr-email.ts,
 // supabase/functions/checkin-send-qr-emails/index.ts, and the
 // auto-send addition in supabase/functions/checkin-import-attendees/index.ts.
+//
+// These functions ARE the specification, kept in sync by a human diffing
+// them against the real deployed code. If a test case here disagrees with
+// the real Edge Function, the simulation is wrong — not the test. If the
+// auto-send block in checkin-import-attendees/index.ts changes shape again,
+// shouldAutoSend below is what needs to change.
 
 import { describe, it, expect } from 'vitest';
 
