@@ -87,6 +87,15 @@ Deno.serve(async (req) => {
     })
   }
 
+  // Defense in depth for ordering. The client sorts its outbox by
+  // scanned_at before flushing, but the server must not depend on a
+  // client behaving correctly — a checkin and its later undo arriving
+  // in the wrong array order would otherwise apply in the wrong
+  // sequence. Compared as strings: scanned_at is canonical UTC ISO
+  // from Date#toISOString(), so lexical order is chronological.
+  const ordered = [...items].sort((a, b) =>
+    a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0)
+
   // This client uses the service-role key, which bypasses RLS entirely.
   // checkin_role_for_event() cannot be used here: it is SECURITY
   // DEFINER over auth.uid(), which is NULL on a service-role
@@ -130,7 +139,7 @@ Deno.serve(async (req) => {
   const results: Record<string, string> = {}
   const errors: ItemError[] = []
 
-  for (const it of items) {
+  for (const it of ordered) {
     if (!it?.client_id || !it.attendee_id || !it.scanned_at) {
       errors.push({
         client_id: it?.client_id ?? null, stage: 'validate',
