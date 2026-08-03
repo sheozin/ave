@@ -22,6 +22,7 @@
   --ac:#0071E3; --acsf:#EAF3FE;
   --gn:#1D8348; --gnsf:#E8F6EE; --gnbd:#B7E4C9;
   --am:#9A5B00; --amsf:#FEF6E7; --ambd:#F5D9A8;
+  --rd:#B3261E; --rdsf:#FDECEA; --rdbd:#F5C3BD;
   --radius:16px; --radius-lg:22px;
   --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
 }
@@ -125,6 +126,79 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-panel-title{font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
 .ck-panel-text{font-size:14px;color:var(--t2)}
 
+/* ── SCAN / SEARCH FIELD ──────────────────────────
+   One field for both inputs: a USB scanner types the token and sends
+   Enter, a person types a name. Big type because it is read across a
+   desk, not from a chair.                                          */
+.ck-scan{font-size:19px;padding:16px 18px;margin-bottom:0}
+.ck-scan-hint{font-size:13px;color:var(--t2);margin-top:9px}
+
+/* ── NAME SEARCH RESULTS ── */
+.ck-res{display:flex;flex-direction:column;gap:8px;margin-top:18px}
+.ck-res-btn{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:var(--wm);border:1px solid var(--bd);border-radius:12px;
+  padding:12px 15px;cursor:pointer;transition:border-color .14s, background .14s;
+}
+.ck-res-btn:hover{border-color:var(--ac);background:var(--sf)}
+.ck-res-main{flex:1;min-width:0}
+.ck-res-name{font-weight:600;overflow-wrap:anywhere}
+.ck-res-meta{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
+.ck-res-note{font-size:13px;color:var(--t2);margin-top:14px}
+
+/* ── VERDICT ──────────────────────────────────────
+   Three states, each carrying its own instruction. Amber is not an
+   error: a second scan of the same code is normal at a busy desk.  */
+.ck-vd{border:1px solid;border-radius:var(--radius);padding:18px 20px;margin-top:20px}
+.ck-vd-h{font-size:17px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-vd-t{font-size:14px;margin-top:6px}
+.ck-vd-ok{background:var(--gnsf);border-color:var(--gnbd)}
+.ck-vd-ok .ck-vd-h{color:var(--gn)}
+.ck-vd-ok .ck-vd-t{color:var(--gn)}
+.ck-vd-dup{background:var(--amsf);border-color:var(--ambd)}
+.ck-vd-dup .ck-vd-h{color:var(--am)}
+.ck-vd-dup .ck-vd-t{color:var(--am)}
+.ck-vd-bad{background:var(--rdsf);border-color:var(--rdbd)}
+.ck-vd-bad .ck-vd-h{color:var(--rd)}
+.ck-vd-bad .ck-vd-t{color:var(--rd)}
+.ck-vd .ck-quiet{margin-top:8px}
+
+/* ── PARTY CARD ───────────────────────────────────
+   The unit of work is an arrival, not a scan: one to five people from
+   one company, checked in together. A lone attendee is a party of one
+   and gets the same card.                                          */
+.ck-party{margin-top:20px;border:1px solid var(--bd);border-radius:var(--radius);overflow:hidden}
+.ck-party-hd{background:var(--wm);border-bottom:1px solid var(--bd);padding:15px 18px}
+.ck-party-co{font-size:16px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-party-sub{font-size:13px;color:var(--t2);margin-top:2px}
+.prow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--bd)}
+.prow:last-child{border-bottom:none}
+.prow>div{flex:1;min-width:0}
+.tick{
+  flex:none;width:36px;height:36px;border-radius:10px;padding:0;
+  border:2px solid var(--bd2);background:var(--sf);cursor:pointer;
+  font-size:18px;font-weight:700;line-height:1;
+  transition:background .14s, border-color .14s;
+}
+.tick:hover{border-color:var(--ac)}
+.tick.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.tick.done{background:var(--gn);border-color:var(--gn);color:#fff;cursor:default}
+.tick.done:hover{border-color:var(--gn)}
+.pn{font-weight:600;overflow-wrap:anywhere}
+.pm{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
+.pill-in,.pill-un{
+  flex:none;font-size:12px;font-weight:600;border-radius:999px;
+  padding:5px 11px;white-space:nowrap;
+}
+.pill-in{background:var(--gnsf);color:var(--gn);border:1px solid var(--gnbd)}
+.pill-un{background:var(--wm);color:var(--t2);border:1px solid var(--bd2)}
+
+/* ── DESK ACTIONS ── */
+.ck-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.ck-actions .ck-btn{flex:1 1 220px}
+.ck-btn.ghost{background:var(--sf);color:var(--t1);border:1px solid var(--bd2)}
+.ck-btn.ghost:hover{opacity:1;border-color:var(--t3)}
+
 /* ── LOADING ── */
 #loading{
   position:fixed;inset:0;background:var(--pg);display:none;
@@ -181,8 +255,18 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
   </header>
   <div class="ck-body">
     <div class="ck-panel">
-      <div class="ck-panel-title">Roster ready</div>
-      <div class="ck-panel-text" id="st-status"></div>
+      <label class="ck-lbl" for="scan">Scan a QR code, or type a name</label>
+      <input class="ck-input ck-scan" id="scan" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Scan a badge, or start typing a name">
+      <div class="ck-scan-hint">Point the scanner at the QR code, or type two or more letters of a name, company or email.</div>
+      <div id="results"></div>
+      <div id="verdict"></div>
+      <div id="party"></div>
+      <div class="ck-actions" id="actions" style="display:none">
+        <button class="ck-btn" type="button" id="primary"></button>
+        <button class="ck-btn ghost" type="button" id="secondary">Check in only</button>
+      </div>
+      <div class="ck-panel-text" id="st-status" style="margin-top:24px"></div>
     </div>
   </div>
 </div>
@@ -201,7 +285,9 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 // STATE
 // ═══════════════════════════════════════════════════
 let sb = null;
-var S = { user: null, event: null, role: null, roster: [] };  // var → window.S for E2E tests
+// S.party is the arrival currently at the desk: the people the card is
+// showing, plus the ids ticked as present. Null when the desk is idle.
+var S = { user: null, event: null, role: null, roster: [], party: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
@@ -336,7 +422,7 @@ async function handleSignIn(e) {
 
 async function signOut() {
   await sb.auth.signOut();
-  S.user = null; S.event = null; S.role = null; S.roster = [];
+  S.user = null; S.event = null; S.role = null; S.roster = []; S.party = null;
   showScreen('signin');
 }
 
@@ -452,6 +538,7 @@ async function openEvent(eventId, ev, role) {
 // ═══════════════════════════════════════════════════
 function renderStation() {
   document.getElementById('st-event').textContent = (S.event && S.event.name) ? S.event.name : 'Untitled event';
+  resetDesk();
   renderCount();
 }
 
@@ -461,6 +548,339 @@ function renderCount() {
   document.getElementById('st-count').textContent = arrived + ' of ' + total;
   document.getElementById('st-status').textContent =
     total + ' attendees cached on this device. The desk keeps working if the venue network drops.';
+}
+
+// ═══════════════════════════════════════════════════
+// SCAN RESOLUTION
+// Mirrors supabase/functions/_shared/checkin-scan.ts, which is covered
+// by tests/checkin-scan.spec.ts. No build step here, so the three pure
+// functions are duplicated by hand — keep them character-identical, or
+// the desk and the server will disagree about what a token means.
+// ═══════════════════════════════════════════════════
+function resolveToken(token, roster) {
+  const t = token.trim();
+  const found = roster.find(a => a.qr_token === t);
+  if (!found) return { kind: 'unknown_token' };
+  if (found.checked_in_at) return { kind: 'duplicate', attendee: found, since: found.checked_in_at };
+  return { kind: 'ok', attendee: found };
+}
+
+function searchByName(query, roster) {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  return roster.filter(a =>
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(q) ||
+    (a.email ?? '').toLowerCase().includes(q) ||
+    (a.company ?? '').toLowerCase().includes(q)
+  );
+}
+
+// An arrival is one to five people from one company standing at the desk
+// together, so a scan resolves to a group, not a person. A lone attendee
+// is a party of one and takes the same path.
+function assembleParty(anchor, roster) {
+  if (!anchor.company) return [anchor];
+  const mates = roster.filter(a =>
+    a.id !== anchor.id && a.company !== null &&
+    a.company.toLowerCase() === anchor.company.toLowerCase()
+  );
+  return [anchor, ...mates];
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — SCAN FIELD
+// A USB barcode scanner is a keyboard: it types the token then sends
+// Enter. So Enter is the scan path and typing is the search path, and
+// one field serves both. Focus is held on it permanently so the common
+// path needs no mouse.
+// ═══════════════════════════════════════════════════
+const scanInput = document.getElementById('scan');
+
+function holdFocus() {
+  if (document.getElementById('station').style.display === 'none') return;
+  const el = document.activeElement;
+  if (el === scanInput) return;
+  // Only reclaim focus from nothing. Stealing it out of another field
+  // would eat the operator's keystrokes — Task 9 edits names inline.
+  if (el && el !== document.body && el !== document.documentElement) return;
+  scanInput.focus();
+}
+document.addEventListener('click', holdFocus);
+setInterval(holdFocus, 400);
+
+scanInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const raw = scanInput.value;
+  scanInput.value = '';
+  handleScan(raw);
+});
+
+scanInput.addEventListener('input', () => {
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  else clearResults();
+});
+
+document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
+document.getElementById('secondary').addEventListener('click', () => commitTicked({ print: false }));
+
+// Task 7 — the outbox write, the optimistic roster update and the sync
+// land here. Deliberately empty: nothing on this page persists a
+// check-in yet, so the desk cannot lie about who has arrived.
+function commitParty(attendees, opts) {}
+
+function commitTicked(opts) {
+  if (!S.party) return;
+  const picked = S.party.members.filter(m => S.party.ticked.has(m.id));
+  commitParty(picked, opts);
+  scanInput.focus();
+}
+
+function resetDesk() {
+  scanInput.value = '';
+  clearResults();
+  clearVerdict();
+  S.party = null;
+  renderParty();
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — VERDICTS
+// Every state names what the operator should do next. No error codes:
+// a volunteer briefed five minutes ago cannot act on one.
+// Attendee names, companies and emails are user-supplied, so every node
+// below is createElement + textContent. Assigning markup is banned on
+// this page: Task 12 lets a stranger type into the same roster.
+// ═══════════════════════════════════════════════════
+function fullName(a) { return a.first_name + ' ' + a.last_name; }
+
+function atTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function clearVerdict() { document.getElementById('verdict').replaceChildren(); }
+
+function showVerdict(tone, heading, guidance) {
+  const box = document.createElement('div');
+  box.className = 'ck-vd ck-vd-' + tone;
+  const h = document.createElement('div');
+  h.className = 'ck-vd-h';
+  h.textContent = heading;
+  const t = document.createElement('div');
+  t.className = 'ck-vd-t';
+  t.textContent = guidance;
+  box.append(h, t);
+  document.getElementById('verdict').replaceChildren(box);
+  return box;
+}
+
+function handleScan(raw) {
+  clearResults();
+  const res = resolveToken(raw, S.roster);
+
+  if (res.kind === 'unknown_token') {
+    S.party = null;
+    renderParty();
+    const box = showVerdict('bad', "That code isn't for this event.",
+      'It may be from a different event or a previous year.');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-quiet';
+    btn.textContent = 'Search their name instead';
+    btn.addEventListener('click', () => { scanInput.value = ''; scanInput.focus(); });
+    box.appendChild(btn);
+    renderCount();
+    return;
+  }
+
+  if (res.kind === 'duplicate') {
+    // Amber, not red. A second scan of the same code is routine.
+    S.party = null;
+    renderParty();
+    showVerdict('dup', fullName(res.attendee) + ' already checked in at ' + atTime(res.since),
+      'Let them through — this is a second scan, not a second person.');
+    renderCount();
+    return;
+  }
+
+  showVerdict('ok', fullName(res.attendee) + ' is on the list',
+    'Tick anyone else standing here, then check them in.');
+  showParty(res.attendee);
+  renderCount();
+}
+
+// Name lookup always opens the party card, even when the person picked
+// has already arrived: their colleagues may still be waiting, and a
+// dead end would send the volunteer back to the field for no reason.
+function pickAttendee(a) {
+  scanInput.value = '';
+  clearResults();
+  if (a.checked_in_at) {
+    showVerdict('dup', fullName(a) + ' already checked in at ' + atTime(a.checked_in_at),
+      'Let them through. Tick anyone with them who has not arrived yet.');
+  } else {
+    showVerdict('ok', fullName(a) + ' is on the list',
+      'Tick anyone else standing here, then check them in.');
+  }
+  showParty(a);
+  renderCount();
+  scanInput.focus();
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — NAME SEARCH RESULTS
+// Most people cannot find their QR email, so this is the everyday path,
+// not the fallback.
+// ═══════════════════════════════════════════════════
+const MAX_RESULTS = 8;
+
+function clearResults() { document.getElementById('results').replaceChildren(); }
+
+function renderSearchResults(list) {
+  const host = document.getElementById('results');
+  host.replaceChildren();
+
+  if (!list.length) {
+    const none = document.createElement('div');
+    none.className = 'ck-res-note';
+    none.textContent = 'Nobody matches that. Try fewer letters, or their company name.';
+    host.appendChild(none);
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'ck-res';
+  list.slice(0, MAX_RESULTS).forEach(a => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-res-btn';
+
+    const main = document.createElement('div');
+    main.className = 'ck-res-main';
+    const name = document.createElement('div');
+    name.className = 'ck-res-name';
+    name.textContent = fullName(a);
+    const meta = document.createElement('div');
+    meta.className = 'ck-res-meta';
+    meta.textContent = [a.company, a.ticket_type].filter(Boolean).join(' · ');
+    main.append(name, meta);
+
+    const pill = document.createElement('span');
+    pill.className = a.checked_in_at ? 'pill-in' : 'pill-un';
+    pill.textContent = a.checked_in_at ? 'arrived ' + atTime(a.checked_in_at) : 'not here yet';
+
+    btn.append(main, pill);
+    btn.addEventListener('click', () => pickAttendee(a));
+    wrap.appendChild(btn);
+  });
+  host.appendChild(wrap);
+
+  if (list.length > MAX_RESULTS) {
+    const note = document.createElement('div');
+    note.className = 'ck-res-note';
+    note.textContent = 'Showing ' + MAX_RESULTS + ' of ' + list.length + '. Keep typing to narrow it down.';
+    host.appendChild(note);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — PARTY CARD
+// The person who scanned is pre-ticked; colleagues start unticked so
+// nobody is checked in who is not standing there. Status is written in
+// words, not colour alone: lobby lighting is bad and some of the crew
+// are colour blind.
+// ═══════════════════════════════════════════════════
+function showParty(anchor) {
+  const members = assembleParty(anchor, S.roster);
+  const ticked = new Set(anchor.checked_in_at ? [] : [anchor.id]);
+  S.party = { members, ticked };
+  renderParty();
+}
+
+function partyRow(attendee, ticked, onToggle) {
+  const row = document.createElement('div');
+  row.className = 'prow';
+
+  const tick = document.createElement('button');
+  tick.className = attendee.checked_in_at ? 'tick done' : (ticked ? 'tick on' : 'tick');
+  tick.textContent = (attendee.checked_in_at || ticked) ? '✓' : '';
+  tick.disabled = !!attendee.checked_in_at;
+  tick.addEventListener('click', () => onToggle(attendee));
+  row.appendChild(tick);
+
+  const who = document.createElement('div');
+  const name = document.createElement('div');
+  name.className = 'pn';
+  name.textContent = `${attendee.first_name} ${attendee.last_name}`;
+  const meta = document.createElement('div');
+  meta.className = 'pm';
+  meta.textContent = attendee.ticket_type;
+  who.append(name, meta);
+  row.appendChild(who);
+
+  const status = document.createElement('span');
+  status.className = attendee.checked_in_at ? 'pill-in' : 'pill-un';
+  status.textContent = attendee.checked_in_at
+    ? `arrived ${new Date(attendee.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : 'not here yet';
+  row.appendChild(status);
+
+  return row;
+}
+
+function renderParty() {
+  const host = document.getElementById('party');
+  host.replaceChildren();
+
+  if (!S.party) {
+    document.getElementById('actions').style.display = 'none';
+    return;
+  }
+
+  const members = S.party.members;
+  const card = document.createElement('div');
+  card.className = 'ck-party';
+
+  const hd = document.createElement('div');
+  hd.className = 'ck-party-hd';
+  const co = document.createElement('div');
+  co.className = 'ck-party-co';
+  co.textContent = members[0].company || fullName(members[0]);
+  const sub = document.createElement('div');
+  sub.className = 'ck-party-sub';
+  const arrived = members.filter(m => m.checked_in_at).length;
+  sub.textContent =
+    (members.length === 1 ? '1 person expected' : members.length + ' people expected') +
+    ' · ' + (arrived === 0 ? 'none here yet' : arrived + ' already arrived');
+  hd.append(co, sub);
+  card.appendChild(hd);
+
+  members.forEach(m => card.appendChild(partyRow(m, S.party.ticked.has(m.id), toggleMember)));
+  host.appendChild(card);
+
+  document.getElementById('actions').style.display = 'flex';
+  renderPrimary(S.party.ticked.size);
+}
+
+// Re-rendering the whole card on every toggle also drops the clicked
+// button out of the DOM, which returns focus to the body so the next
+// scan still lands in the field.
+function toggleMember(attendee) {
+  if (!S.party) return;
+  if (S.party.ticked.has(attendee.id)) S.party.ticked.delete(attendee.id);
+  else S.party.ticked.add(attendee.id);
+  renderParty();
+}
+
+// The label states exactly what the button is about to do, so a
+// volunteer never has to guess how many people they are committing.
+function renderPrimary(count) {
+  const btn = document.getElementById('primary');
+  btn.textContent = count === 1
+    ? 'Check in 1 · Print 1 badge'
+    : `Check in ${count} · Print ${count} badges`;
+  btn.disabled = count === 0;
 }
 </script>
 </body>
