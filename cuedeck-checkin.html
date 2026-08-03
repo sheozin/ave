@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CueDeck Check-in</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#F5F5F7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── DESIGN TOKENS — LIGHT ──────────────────────────
+   The check-in desk lives in a bright hotel lobby, so this page is
+   light while the console/display are dark. Do not port dark tokens
+   in from the other pages.                                        */
+:root {
+  --pg:#F5F5F7; --sf:#FFFFFF; --wm:#FBFBFD;
+  --t1:#1D1D1F; --t2:#6E6E73; --t3:#A1A1A6;
+  --bd:#E8E8ED; --bd2:#D2D2D7;
+  --ac:#0071E3; --acsf:#EAF3FE;
+  --gn:#1D8348; --gnsf:#E8F6EE; --gnbd:#B7E4C9;
+  --am:#9A5B00; --amsf:#FEF6E7; --ambd:#F5D9A8;
+  --radius:16px; --radius-lg:22px;
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+}
+
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;min-height:100%;background:var(--pg)}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;color:var(--t1);
+  font-size:15px;line-height:1.5;
+}
+button,input{font-family:inherit;font-size:inherit;color:inherit}
+
+/* ── CENTRED SCREENS (sign-in, picker) ── */
+.ck-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:32px 20px;
+}
+.ck-card{
+  width:100%;max-width:420px;background:var(--sf);
+  border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:40px 36px;box-shadow:var(--shadow);
+}
+.ck-card.wide{max-width:560px}
+.ck-logo{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:2px}
+.ck-logo span{color:var(--ac)}
+.ck-sub{font-size:12px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:30px}
+.ck-lbl{
+  display:block;font-size:12px;font-weight:600;color:var(--t2);
+  margin-bottom:7px;letter-spacing:.01em;
+}
+.ck-input{
+  width:100%;background:var(--wm);border:1px solid var(--bd2);
+  border-radius:12px;padding:13px 15px;outline:none;margin-bottom:16px;
+  transition:border-color .14s, box-shadow .14s, background .14s;
+}
+.ck-input:focus{border-color:var(--ac);background:var(--sf);box-shadow:0 0 0 4px var(--acsf)}
+.ck-btn{
+  width:100%;padding:14px;background:var(--ac);color:#fff;border:none;
+  border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;
+  transition:opacity .14s, transform .06s;
+}
+.ck-btn:hover{opacity:.9}
+.ck-btn:active{transform:scale(.99)}
+.ck-btn:disabled{opacity:.5;cursor:default;transform:none}
+.ck-err{
+  color:#B3261E;font-size:13px;min-height:19px;margin-bottom:10px;
+}
+.ck-note{
+  background:var(--amsf);border:1px solid var(--ambd);color:var(--am);
+  border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:18px;
+}
+.ck-quiet{
+  background:none;border:none;color:var(--ac);font-size:14px;font-weight:500;
+  cursor:pointer;padding:6px 0;
+}
+.ck-quiet:hover{text-decoration:underline}
+
+/* ── EVENT PICKER LIST ── */
+.ck-ev-list{display:flex;flex-direction:column;gap:10px;margin-bottom:22px}
+.ck-ev{
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  background:var(--wm);border:1px solid var(--bd);border-radius:var(--radius);
+  padding:16px 18px;cursor:pointer;
+  transition:border-color .14s, background .14s, box-shadow .14s;
+}
+.ck-ev:hover{border-color:var(--ac);background:var(--sf);box-shadow:var(--shadow)}
+.ck-ev-main{flex:1;min-width:0}
+.ck-ev-name{font-size:16px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-ev-meta{font-size:13px;color:var(--t2);margin-top:2px}
+.ck-pill{
+  flex:none;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--t2);background:var(--sf);border:1px solid var(--bd2);
+  border-radius:999px;padding:4px 10px;
+}
+.ck-empty{color:var(--t2);font-size:14px;padding:6px 0 20px}
+
+/* ── STATION HEADER ── */
+#station{display:none;min-height:100vh;flex-direction:column}
+.ck-header{
+  position:sticky;top:0;z-index:10;background:var(--sf);
+  border-bottom:1px solid var(--bd);padding:18px 24px;
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+}
+.ck-hd-main{flex:1;min-width:0}
+.ck-hd-eyebrow{font-size:11px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase}
+.ck-hd-name{font-size:20px;font-weight:700;letter-spacing:-.02em;overflow-wrap:anywhere}
+.ck-count{
+  flex:none;text-align:right;background:var(--gnsf);border:1px solid var(--gnbd);
+  border-radius:var(--radius);padding:10px 18px;
+}
+.ck-count-num{font-size:20px;font-weight:700;color:var(--gn);font-variant-numeric:tabular-nums}
+.ck-count-lbl{font-size:11px;color:var(--gn);letter-spacing:.1em;text-transform:uppercase;opacity:.85}
+.ck-hd-actions{flex:none;display:flex;gap:8px}
+.ck-body{flex:1;padding:32px 24px;display:flex;justify-content:center;align-items:flex-start}
+.ck-panel{
+  width:100%;max-width:720px;background:var(--sf);border:1px solid var(--bd);
+  border-radius:var(--radius-lg);padding:32px;box-shadow:var(--shadow);
+}
+.ck-panel-title{font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+.ck-panel-text{font-size:14px;color:var(--t2)}
+
+/* ── LOADING ── */
+#loading{
+  position:fixed;inset:0;background:var(--pg);display:none;
+  align-items:center;justify-content:center;z-index:9998;
+}
+.ck-spin{
+  width:26px;height:26px;border:2px solid var(--bd2);
+  border-top-color:var(--ac);border-radius:50%;animation:ck-rot .8s linear infinite;
+}
+@keyframes ck-rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- ── SIGN IN ─────────────────────────────────── -->
+<div id="signin" class="ck-screen">
+  <form id="signin-form" class="ck-card" autocomplete="on">
+    <div class="ck-logo">Cue<span>Deck</span></div>
+    <div class="ck-sub">Check-in</div>
+    <label class="ck-lbl" for="si-email">Email</label>
+    <input class="ck-input" id="si-email" type="email" autocomplete="username" required>
+    <label class="ck-lbl" for="si-password">Password</label>
+    <input class="ck-input" id="si-password" type="password" autocomplete="current-password" required>
+    <div class="ck-err" id="si-err"></div>
+    <button class="ck-btn" type="submit" id="si-btn">Sign in</button>
+  </form>
+</div>
+
+<!-- ── EVENT PICKER ────────────────────────────── -->
+<div id="picker" class="ck-screen" style="display:none">
+  <div class="ck-card wide">
+    <div class="ck-logo">Cue<span>Deck</span></div>
+    <div class="ck-sub">Choose an event</div>
+    <div class="ck-note" id="pk-note" style="display:none"></div>
+    <div class="ck-ev-list" id="pk-list"></div>
+    <button class="ck-quiet" type="button" id="pk-signout">Sign out</button>
+  </div>
+</div>
+
+<!-- ── STATION ─────────────────────────────────── -->
+<div id="station">
+  <header class="ck-header">
+    <div class="ck-hd-main">
+      <div class="ck-hd-eyebrow">Check-in desk</div>
+      <div class="ck-hd-name" id="st-event"></div>
+    </div>
+    <div class="ck-count">
+      <div class="ck-count-num" id="st-count">0 of 0</div>
+      <div class="ck-count-lbl">Arrived</div>
+    </div>
+    <div class="ck-hd-actions">
+      <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
+    </div>
+  </header>
+  <div class="ck-body">
+    <div class="ck-panel">
+      <div class="ck-panel-title">Roster ready</div>
+      <div class="ck-panel-text" id="st-status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOADING ─────────────────────────────────── -->
+<div id="loading"><div class="ck-spin"></div></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CREDENTIALS (hardcoded — same project as console/display)
+// ═══════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let sb = null;
+var S = { user: null, event: null, role: null, roster: [] };  // var → window.S for E2E tests
+
+// ═══════════════════════════════════════════════════
+// OFFLINE CACHE (IndexedDB)
+// The desk must keep resolving scans when venue wifi dies, so the
+// roster is mirrored locally. STORE_OUTBOX is created here but not
+// written to yet — the scan queue lands in a later task.
+// ═══════════════════════════════════════════════════
+const DB_NAME = 'cuedeck-checkin';
+const STORE_ROSTER = 'roster';
+const STORE_OUTBOX = 'outbox';
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_ROSTER)) db.createObjectStore(STORE_ROSTER, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: 'client_id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutAll(store, rows) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    rows.forEach(r => tx.objectStore(store).put(r));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetAll(store) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// ROSTER
+// ═══════════════════════════════════════════════════
+async function loadRoster(eventId) {
+  const { data, error } = await sb
+    .from('leod_checkin_attendees')
+    .select('id,event_id,first_name,last_name,email,company,ticket_type,qr_token,checked_in_at,badge_printed_at')
+    .eq('event_id', eventId);
+  if (error) { S.roster = await idbGetAll(STORE_ROSTER); return; }
+  S.roster = data;
+  await idbPutAll(STORE_ROSTER, data);
+}
+
+// ═══════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  document.getElementById('signin-form').addEventListener('submit', handleSignIn);
+  document.getElementById('pk-signout').addEventListener('click', signOut);
+  document.getElementById('st-switch').addEventListener('click', showPicker);
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    S.user = session.user;
+    await showPicker();
+  } else {
+    showScreen('signin');
+    document.getElementById('si-email').focus();
+  }
+});
+
+function showScreen(name) {
+  document.getElementById('signin').style.display  = name === 'signin'  ? 'flex' : 'none';
+  document.getElementById('picker').style.display  = name === 'picker'  ? 'flex' : 'none';
+  document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
+  document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
+}
+
+// ═══════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════
+async function handleSignIn(e) {
+  e.preventDefault();
+  const email    = document.getElementById('si-email').value.trim();
+  const password = document.getElementById('si-password').value;
+  const btn      = document.getElementById('si-btn');
+  const errEl    = document.getElementById('si-err');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  errEl.textContent = '';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  btn.textContent = 'Sign in';
+  if (error) { errEl.textContent = error.message; return; }
+
+  S.user = data.user;
+  document.getElementById('si-password').value = '';
+  await showPicker();
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  S.user = null; S.event = null; S.role = null; S.roster = [];
+  showScreen('signin');
+}
+
+// ═══════════════════════════════════════════════════
+// EVENT PICKER
+// Every node below is built with createElement + textContent:
+// event names are operator-supplied text and must never be parsed
+// as markup.
+// ═══════════════════════════════════════════════════
+async function showPicker() {
+  showScreen('loading');
+  const note = document.getElementById('pk-note');
+  const list = document.getElementById('pk-list');
+  note.style.display = 'none';
+  note.textContent = '';
+  list.replaceChildren();
+
+  // RLS on leod_checkin_operators exposes every operator row of an
+  // event you belong to, so filter to this user explicitly.
+  const { data: grants, error } = await sb
+    .from('leod_checkin_operators')
+    .select('event_id,role')
+    .eq('user_id', S.user.id);
+
+  if (error) {
+    note.textContent = 'Could not load your events: ' + error.message;
+    note.style.display = 'block';
+    showScreen('picker');
+    return;
+  }
+
+  const ids = (grants || []).map(g => g.event_id);
+  if (!ids.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ck-empty';
+    empty.textContent = 'You have no check-in events yet.';
+    list.appendChild(empty);
+    showScreen('picker');
+    return;
+  }
+
+  // Event rows may be unreadable to a crew operator (leod_events RLS
+  // is owner-scoped), so a missing name is expected, not an error.
+  const { data: events } = await sb
+    .from('leod_events')
+    .select('id,name,date')
+    .in('id', ids);
+  const byId = new Map((events || []).map(ev => [ev.id, ev]));
+
+  grants.forEach(g => {
+    const ev = byId.get(g.event_id);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-ev';
+
+    const main = document.createElement('div');
+    main.className = 'ck-ev-main';
+    const name = document.createElement('div');
+    name.className = 'ck-ev-name';
+    name.textContent = (ev && ev.name) ? ev.name : 'Untitled event';
+    const meta = document.createElement('div');
+    meta.className = 'ck-ev-meta';
+    meta.textContent = (ev && ev.date) ? ev.date : g.event_id;
+    main.appendChild(name);
+    main.appendChild(meta);
+
+    const pill = document.createElement('span');
+    pill.className = 'ck-pill';
+    pill.textContent = g.role;
+
+    btn.appendChild(main);
+    btn.appendChild(pill);
+    btn.addEventListener('click', () => openEvent(g.event_id, ev || null, g.role));
+    list.appendChild(btn);
+  });
+
+  showScreen('picker');
+}
+
+// ═══════════════════════════════════════════════════
+// OPEN EVENT
+// ═══════════════════════════════════════════════════
+async function openEvent(eventId, ev, role) {
+  showScreen('loading');
+
+  // Entitlement gate. A missing row counts as not enabled: RLS hides
+  // the entitlements row entirely when checkin_core is false.
+  const { data: ent } = await sb
+    .from('leod_checkin_entitlements')
+    .select('checkin_core')
+    .eq('event_id', eventId)
+    .maybeSingle();
+
+  if (!ent || ent.checkin_core !== true) {
+    const note = document.getElementById('pk-note');
+    note.textContent = 'Check-in is not enabled for this event';
+    note.style.display = 'block';
+    showScreen('picker');
+    return;
+  }
+
+  S.event = ev ? { id: eventId, name: ev.name, date: ev.date } : { id: eventId, name: null, date: null };
+  S.role  = role;
+
+  await loadRoster(eventId);
+  renderStation();
+  showScreen('station');
+}
+
+// ═══════════════════════════════════════════════════
+// STATION HEADER
+// ═══════════════════════════════════════════════════
+function renderStation() {
+  document.getElementById('st-event').textContent = (S.event && S.event.name) ? S.event.name : 'Untitled event';
+  renderCount();
+}
+
+function renderCount() {
+  const total   = S.roster.length;
+  const arrived = S.roster.filter(a => a.checked_in_at).length;
+  document.getElementById('st-count').textContent = arrived + ' of ' + total;
+  document.getElementById('st-status').textContent =
+    total + ' attendees cached on this device. The desk keeps working if the venue network drops.';
+}
+</script>
+</body>
+</html>
