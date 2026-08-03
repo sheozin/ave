@@ -58,3 +58,6 @@ archive/
 *-debug.log
 firebase-debug.log
 cuedeck-marketing/
+
+# Microsoft Office lock files
+~$*

@@ -11,7 +11,7 @@ No build system, no framework — pure HTML/CSS/JS with Supabase backend.
 - **Dev server:** `python3 -m http.server 7230` then open `http://127.0.0.1:7230/cuedeck-console.html`
 - **Live URL:** https://app.cuedeck.io (Vercel auto-deploy from `cuedeck` remote)
 - **Display page:** https://app.cuedeck.io/display
-- **Tests:** `npm test` (vitest, 119 specs) | `npm run test:e2e` (Playwright, 169 specs)
+- **Tests:** `npm test` (vitest, 135 specs) | `npm run test:e2e` (Playwright, 202 specs)
 - **Verify:** `bash scripts/verify-cuedeck.sh 7230`
 
 ## Architecture
@@ -26,16 +26,21 @@ No build system, no framework — pure HTML/CSS/JS with Supabase backend.
 ### Primary Files
 | File | Purpose |
 |------|---------|
-| `cuedeck-console.html` | Main console (~6400+ lines) |
-| `cuedeck-display.html` | Digital signage display (11 modes) |
+| `cuedeck-console.html` | Main console (~7800 lines) |
+| `cuedeck-admin.html` | Admin dashboard (~2970 lines) |
+| `cuedeck-display.html` | Digital signage display (11 modes, ~1800 lines) |
+| `cuedeck-theme-preview.html` | Theme preview tool |
 | `cuedeck-agent-*.js` | AI agent modules (3 files) |
-| `supabase/functions/` | 10 Edge Functions |
+| `supabase/functions/` | 27 Edge Functions + `_shared/` |
 | `scripts/deploy-functions.sh` | Edge Function deployer |
+| `cuedeck-marketing/` | Next.js 16 marketing site (has its own CLAUDE.md) |
 
 ### Database Tables
 - **Core:** `leod_events`, `leod_sessions`, `leod_broadcast`, `leod_clock`, `leod_event_log`
 - **Auth:** `leod_users`, `leod_config` (signup_code='CUEDECK2026')
-- **Signage:** `leod_signage_displays`, `leod_signage_sponsors`
+- **Billing:** `leod_subscriptions`, `leod_invoices`, `leod_promo_codes`
+- **Signage:** `leod_signage_displays`, `leod_signage_pairing`, `leod_signage_sponsors`
+- **Admin:** `leod_admin_audit`, `leod_feedback`
 - **Infra:** `leod_commands` (idempotency)
 
 ### Supabase
@@ -53,9 +58,30 @@ CANCELLED  HOLD   (back)   OVERRUN → ENDED
 All transitions go through Edge Functions in `supabase/functions/`.
 Shared logic in `supabase/functions/_shared/transition.ts`.
 
-## Edge Functions (10 total)
+## Edge Functions (27 total)
+
+**Session transitions:**
 `go-live`, `end-session`, `set-ready`, `hold-stage`, `call-speaker`,
-`cancel-session`, `reinstate`, `apply-delay`, `set-overrun`, `invite-operator`
+`cancel-session`, `reinstate`, `apply-delay`, `set-overrun`
+
+**Operators:**
+`invite-operator`, `manage-operator`
+
+**Billing & Payments (Stripe):**
+`create-checkout-session`, `customer-portal`, `stripe-webhook`,
+`generate-invoice`, `send-invoice-email`, `update-billing-details`,
+`redeem-code`, `admin-manage-promo`, `admin-manage-subscription`
+
+**Admin:**
+`admin-manage-user`, `admin-promote`
+
+**Email (Resend):**
+`process-email-queue`, `process-welcome-triggers`, `send-welcome-email`, `resend-webhook`
+
+**AI:**
+`ai-proxy`
+
+**Shared helpers:** `_shared/` — `cors.ts`, `client.ts`, `transition.ts`, `stripe.ts`, `resend.ts`, `email-templates.ts`, `invoice-email-template.ts`, `invoice-pdf.ts`
 
 Deploy all: `bash scripts/deploy-functions.sh`
 Deploy one: `bash scripts/deploy-functions.sh go-live`
@@ -68,6 +94,26 @@ Deploy one: `bash scripts/deploy-functions.sh go-live`
 ## Git Remotes
 - `origin` → sheozin/ave.git (primary)
 - `cuedeck` → sheozin/cuedeck-console.git (Vercel deploy)
+
+## Scripts
+| Script | Purpose |
+|--------|---------|
+| `scripts/deploy-functions.sh` | Deploy Supabase Edge Functions |
+| `scripts/verify-cuedeck.sh` | Smoke-test local dev server |
+| `scripts/seed-test-account.mjs` | Seed test account data |
+| `scripts/demo-reset.sql` | Reset demo event data |
+| `scripts/add-operators.sql` | Seed operator records |
+| `scripts/generate-social-images.mjs` | Generate OG/social images |
+| `scripts/sync-blog-posts.mjs` | Sync blog posts to marketing site |
+| `scripts/youtube-pipeline/` | YouTube content pipeline |
+| `scripts/youtube-scripts/` | YouTube automation scripts |
+
+## Marketing Site
+The `cuedeck-marketing/` directory is a separate Next.js 16 (App Router, Turbopack) project with its own `CLAUDE.md`. Key details:
+- **Live:** cuedeck.io (Vercel)
+- **Stack:** Next.js 16, Tailwind CSS v4, Keystatic CMS, TypeScript strict
+- **Dev:** `cd cuedeck-marketing && npm run dev`
+- **Important:** All layout uses inline styles only (intentional). Mobile CSS overrides live in `<style>` tag in `layout.tsx` to bypass Tailwind v4 purge.
 
 ## Coding Rules
 1. **Single-file architecture** — all console code lives in `cuedeck-console.html`
