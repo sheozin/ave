@@ -326,14 +326,12 @@ git commit -m "feat(checkin): scan resolution and party assembly logic"
 import { describe, it, expect } from 'vitest';
 
 type Pending = {
-  client_id: string;
-  attendee_id: string;
+  client_id: string; attendee_id: string;
   // scanned_at MUST be canonical UTC ISO-8601 from Date#toISOString()
   // (always 'Z', fixed width). Ordering compares these as strings, so a
   // mixed offset like +02:00 would sort wrong.
   scanned_at: string;
-  action: 'checkin' | 'undo';
-  synced: boolean;
+  action: 'checkin' | 'undo'; synced: boolean;
 };
 
 function enqueue(outbox: Pending[], item: Omit<Pending, 'synced'>): Pending[] {
