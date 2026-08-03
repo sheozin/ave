@@ -8,6 +8,8 @@ export interface EmailPayload {
   text?: string
   replyTo?: string
   tags?: { name: string; value: string }[]
+  fromName?: string
+  fromEmail?: string
 }
 
 export interface ResendResponse {
@@ -23,8 +25,8 @@ export async function sendEmail(payload: EmailPayload): Promise<ResendResponse> 
     return { error: 'Email service not configured' }
   }
 
-  const fromEmail = Deno.env.get('FROM_EMAIL') || 'sheriff@cuedeck.io'
-  const fromName = Deno.env.get('FROM_NAME') || 'Sheriff from CueDeck'
+  const fromEmail = payload.fromEmail || Deno.env.get('FROM_EMAIL') || 'sheriff@cuedeck.io'
+  const fromName = payload.fromName || Deno.env.get('FROM_NAME') || 'Sheriff from CueDeck'
 
   try {
     const response = await fetch('https://api.resend.com/emails', {

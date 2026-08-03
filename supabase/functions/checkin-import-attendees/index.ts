@@ -9,6 +9,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 
 interface ImportRow {
   first_name: string
@@ -93,7 +94,7 @@ Deno.serve(async (req) => {
   // every event's creator regardless of purchase) would let attendees
   // be imported into an event that never enabled check-in.
   const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core').eq('event_id', event_id).single()
+    .select('checkin_core, auto_send_qr_email').eq('event_id', event_id).single()
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -180,13 +181,17 @@ Deno.serve(async (req) => {
     })
   }
 
+  let insertedAttendees: { id: string; first_name: string; email: string | null; qr_token: string }[] = []
   if (toInsert.length) {
-    const { error } = await sb.from('leod_checkin_attendees').insert(toInsert)
+    const { data: inserted, error } = await sb.from('leod_checkin_attendees')
+      .insert(toInsert)
+      .select('id, first_name, email, qr_token')
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
+    insertedAttendees = inserted || []
   }
   // Track per-row failures rather than discarding them: silently
   // swallowing an update error here would make summary.to_update
@@ -201,6 +206,24 @@ Deno.serve(async (req) => {
         id: u.id, first_name: u.patch.first_name, last_name: u.patch.last_name, email: u.patch.email,
         error: error.message,
       })
+    }
+  }
+
+  // Auto-send is best-effort: the import itself already succeeded
+  // regardless of email delivery, matching the precedent set by
+  // checkin-enable-event's organizer-grant upsert. Only fires for
+  // newly-CREATED attendees — re-imports/updates never trigger a send.
+  if (entRow.auto_send_qr_email && insertedAttendees.length) {
+    const { data: event, error: eventErr } = await sb.from('leod_events')
+      .select('name, date, venue').eq('id', event_id).single()
+    if (event) {
+      const sendResults = await sendQrEmailsForAttendees(sb, event, insertedAttendees)
+      const failed = sendResults.filter(r => r.status === 'error')
+      if (failed.length) {
+        console.error('checkin-import-attendees: auto-send QR email failures:', failed)
+      }
+    } else {
+      console.error('checkin-import-attendees: auto-send skipped, event fetch failed for', event_id, eventErr?.message)
     }
   }
 
