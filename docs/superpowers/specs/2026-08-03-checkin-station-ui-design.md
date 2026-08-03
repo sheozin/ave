@@ -8,7 +8,8 @@ there is nothing to scan it with. This spec covers the **registration desk UI** 
 the **self-registration kiosk** that feeds it.
 
 It does **not** cover the door scanner (`scanner`-kind devices bound to a scan point),
-the print agent itself, or the organizer dashboard — separate specs.
+or the organizer dashboard — separate specs. Badge printing, previously scoped as a
+separate "print agent" sub-project, is folded into this build (see below).
 
 ## Why this shape
 
@@ -31,7 +32,7 @@ rejected for this reason.
 
 | Decision | Choice | Why |
 |---|---|---|
-| Which device first | `checkin_station` (desk) | Badge printing happens here; the print agent attaches to it |
+| Which device first | `checkin_station` (desk) | Badge printing happens here, and it prints directly from this page |
 | Connectivity | Offline-capable, local queue | Venue wifi fails at 9am when 300 people arrive |
 | Duplicate scans | Effect de-duplicated, record kept | First scan wins on `checked_in_at`; duplicate row retained for audit |
 | Location | New `cuedeck-checkin.html` | Desk staff must not reach *go live* / *hold stage* / *cancel session* |
@@ -152,11 +153,40 @@ no live DB:
 - party assembly (grouping an attendee's company colleagues)
 - kiosk field validation and the already-registered collision path
 
+## Badge printing — no print agent needed
+
+The original build order listed a "print agent" as a separate sub-project. It is not
+required. A badge is an HTML element with a `@page` rule; Chrome launched with
+`--kiosk-printing` sends `window.print()` straight to the default printer with **no
+dialog and no preview**. This is the standard approach for kiosk receipt and ticket
+printing.
+
+So badge printing is **in scope for this build**:
+
+- A hidden badge template in `cuedeck-checkin.html`, styled with `@page { size: ... }`
+  to the venue's badge stock
+- `window.print()` fired after a successful check-in
+- Printing a party prints each badge in sequence
+- `badge_printed_at` on the attendee is stamped on success — the column already exists
+  in migration 047
+
+**Setup, not code.** Each desk machine needs Chrome launched once with:
+
+```
+chrome --kiosk --kiosk-printing "http://<host>/cuedeck-checkin.html"
+```
+
+and its default printer set to the badge printer. This belongs in the operator runbook,
+not the application.
+
+**Honest limits.** Driver- or OS-level prompts can still interrupt "silent" printing —
+paper size selection, tray choice, secure-release PIN, accounting codes. These are printer
+configuration issues, not application ones, but they must be tested against the actual
+badge printer before an event. The `Check in only` button exists precisely for when
+printing misbehaves mid-event.
+
 ## Out of scope
 
-- The print agent itself. **This is load-bearing:** badge printing is central to the desk
-  design, so the print button is wired to a stub until the agent exists. The desk ships
-  useful without it (check-in and name correction work); the kiosk is far less useful.
 - The door scanner (`scanner` devices, camera scanning)
 - The organizer dashboard and the duplicate-attempts report
 - Device registration and API keys — `device_id` stays null
