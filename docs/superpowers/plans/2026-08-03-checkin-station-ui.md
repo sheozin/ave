@@ -62,6 +62,15 @@
 --    config lives in this table already (personalization_station).
 --    Both default FALSE: a kiosk that lets anyone issue themselves a
 --    badge must be switched on deliberately, never inherited.
+--
+-- 4. client_id on scan_events, with a unique index. The station queues
+--    actions locally and retries on reconnect, so if a flush response
+--    is lost the same item is sent again. The unique index makes that
+--    at-most-once at the DATABASE, which is the only place it can be
+--    guaranteed: the client's own dedup is in-memory and cannot
+--    survive the outbox pruning that a multi-day event requires.
+--    Nullable with a partial index because rows written by other paths
+--    (CSV import, the future door scanner) carry no client_id.
 -- ============================================================
 
 ALTER TABLE leod_checkin_scan_events
@@ -82,6 +91,12 @@ ALTER TABLE leod_checkin_entitlements
 
 ALTER TABLE leod_checkin_entitlements
   ADD COLUMN IF NOT EXISTS kiosk_self_print BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE leod_checkin_scan_events
+  ADD COLUMN IF NOT EXISTS client_id UUID;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_scan_events_client_id_unique
+  ON leod_checkin_scan_events (client_id) WHERE client_id IS NOT NULL;
 ```
 
 - [ ] **Step 2: Apply it**
@@ -477,6 +492,16 @@ Deno.serve(async (req: Request) => {
     const results: Record<string, string> = {};
 
     for (const it of items) {
+      // At-most-once. The station retries on reconnect, so a flush whose
+      // response was lost re-sends this item. If we already recorded it,
+      // return the original verdict and touch nothing.
+      const { data: prior } = await supabase
+        .from("leod_checkin_scan_events")
+        .select("result")
+        .eq("client_id", it.client_id)
+        .maybeSingle();
+      if (prior) { results[it.client_id] = prior.result; continue; }
+
       const { data: att } = await supabase
         .from("leod_checkin_attendees")
         .select("id, event_id, checked_in_at")
@@ -506,16 +531,29 @@ Deno.serve(async (req: Request) => {
         result = updated && updated.length > 0 ? "ok" : "duplicate";
       }
 
-      await supabase.from("leod_checkin_scan_events").insert({
-        id: crypto.randomUUID(),
-        event_id,
-        attendee_id: it.attendee_id,
-        scan_point_id: scan_point_id ?? null,
-        device_id: null,
-        operator_id: operator_id ?? null,
-        scanned_at: it.scanned_at,
-        result,
-      });
+      const { error: insErr } = await supabase
+        .from("leod_checkin_scan_events").insert({
+          id: crypto.randomUUID(),
+          event_id,
+          client_id: it.client_id,
+          attendee_id: it.attendee_id,
+          scan_point_id: scan_point_id ?? null,
+          device_id: null,
+          operator_id: operator_id ?? null,
+          scanned_at: it.scanned_at,
+          result,
+        });
+
+      // 23505 = unique violation on client_id: a concurrent flush of the
+      // same item won the race. Its row is authoritative, so read it back
+      // rather than reporting our own verdict.
+      if (insErr?.code === "23505") {
+        const { data: raced } = await supabase
+          .from("leod_checkin_scan_events")
+          .select("result").eq("client_id", it.client_id).maybeSingle();
+        results[it.client_id] = raced?.result ?? result;
+        continue;
+      }
 
       results[it.client_id] = result;
     }
