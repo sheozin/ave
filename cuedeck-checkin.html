@@ -176,6 +176,36 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-undo:disabled{opacity:.5;cursor:default}
 .ck-vd .ck-undo{display:block;margin-top:10px}
 
+/* ── FIX A NAME ───────────────────────────────────
+   Quieter still than undo — text only, no outline. A misspelled badge
+   is permanent, so the correction has to be reachable here at the desk
+   in the seconds before printing; but it is a rare path and must sit
+   below undo in the eye's order, not beside the primary button.     */
+.ck-fix{
+  flex:none;background:none;border:none;color:var(--t3);
+  padding:5px 2px;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+.ck-fix:hover{color:var(--ac);text-decoration:underline}
+.ck-fix:disabled{cursor:default;text-decoration:none}
+
+/* The editor takes its own full line under the row it belongs to: two
+   name fields squeezed in beside a tick, a pill and an undo would be
+   unusable on the tablet this desk actually runs on. The child rule
+   beats .prow>div, which would otherwise stretch it into the row.   */
+.prow>.pedit{flex:0 0 100%;width:100%;margin-top:11px;padding-top:12px;border-top:1px dashed var(--bd)}
+.pedit-fields{display:flex;gap:10px;flex-wrap:wrap}
+.pedit-f{flex:1 1 180px;min-width:0}
+.pedit .ck-input{margin-bottom:0;font-size:15px;padding:10px 12px}
+.pedit-acts{display:flex;align-items:center;gap:14px;margin-top:11px}
+.pedit-save{
+  flex:none;background:var(--ac);color:#fff;border:none;border-radius:10px;
+  padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;
+}
+.pedit-save:disabled{opacity:.5;cursor:default}
+.pedit-err{font-size:13px;color:var(--rd);margin-top:9px;overflow-wrap:anywhere}
+.pedit-note{font-size:12px;color:var(--t2);margin-top:9px}
+
 /* ── VERDICT ──────────────────────────────────────
    Three states, each carrying its own instruction. Amber is not an
    error: a second scan of the same code is normal at a busy desk.  */
@@ -201,7 +231,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-party-hd{background:var(--wm);border-bottom:1px solid var(--bd);padding:15px 18px}
 .ck-party-co{font-size:16px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
 .ck-party-sub{font-size:13px;color:var(--t2);margin-top:2px}
-.prow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--bd)}
+.prow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--bd);flex-wrap:wrap}
 .prow:last-child{border-bottom:none}
 .prow>div{flex:1;min-width:0}
 .tick{
@@ -319,7 +349,12 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 let sb = null;
 // S.party is the arrival currently at the desk: the people the card is
 // showing, plus the ids ticked as present. Null when the desk is idle.
-var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null };  // var → window.S for E2E tests
+// S.editing is the open name correction: the attendee id, the text typed
+// so far and where the caret sits. The DRAFT lives here rather than only
+// in the two inputs because renderParty() replaces every row — a flush
+// reconcile, a tick on a colleague or an undo would otherwise wipe a
+// half-typed name with nobody having touched the editor.
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
@@ -638,6 +673,11 @@ let refreshTimer = null;
 async function refreshRosterIfIdle() {
   if (!stationVisible() || document.hidden) return;
   if (!navigator.onLine || !S.event) return;
+  // A name correction in progress is not an idle desk. The editor itself
+  // survives a rebuild (the draft is held in S.editing), but there is no
+  // reason to refetch the whole roster and re-render under someone's
+  // fingers while they are typing a badge name.
+  if (S.editing) return;
   if (flushing) return;
   if (pendingCount(await idbGetAll(STORE_OUTBOX))) return;
   await reconcileRoster();
@@ -1143,6 +1183,7 @@ function resetDesk() {
   clearResults();
   clearVerdict();
   S.party = null;
+  S.editing = null;   // the editor only exists on a party row; the card is going
   renderParty();
 }
 
@@ -1389,6 +1430,230 @@ function renderSearchResults(list) {
 }
 
 // ═══════════════════════════════════════════════════
+// DESK — CORRECT A NAME
+// The badge is printed at this desk, seconds from now, and a misspelling
+// is then worn all day by the person standing in front of the operator.
+// So the roster has to be correctable here, in the moment, rather than
+// afterwards in a dashboard nobody at the desk has open.
+//
+// This path REQUIRES connectivity, deliberately. A name change is NOT
+// queued in the outbox and must never be moved into it. Printing from an
+// unsynced edit would put a name on a physical badge that the database
+// does not agree with — and the badge is the artefact the attendee
+// carries all day, that door staff read and that the delegate list is
+// checked against. A check-in can be reconciled later because it is only
+// a timestamp; a wrong badge cannot be reconciled at all once it is
+// laminated. An offline desk is told to reconnect instead: a late badge
+// beats a wrong one.
+// ═══════════════════════════════════════════════════
+const OFFLINE_FIX_MSG = 'Reconnect to fix a name';
+
+async function saveName(attendee, firstName, lastName) {
+  const first = firstName.trim(), last = lastName.trim();
+  if (!first || !last) return { ok: false, error: 'Both names are required' };
+  const { error } = await sb
+    .from('leod_checkin_attendees')
+    .update({ first_name: first, last_name: last })
+    .eq('id', attendee.id);
+  if (error) return { ok: false, error: error.message };
+  attendee.first_name = first;
+  attendee.last_name = last;
+  await idbPutAll(STORE_ROSTER, [attendee]);
+  return { ok: true };
+}
+
+function openNameEditor(attendee) {
+  S.editing = {
+    id: attendee.id,
+    first: attendee.first_name,
+    last: attendee.last_name,
+    error: '',
+    saving: false,
+    focus: 'first',
+    caret: null,
+    autofocus: true,   // consumed by renderParty on the first render only
+  };
+  renderParty();
+}
+
+function closeNameEditor() {
+  S.editing = null;
+  renderParty();
+  scanInput.focus();   // the next scan must land in the field, not nowhere
+}
+
+// Quiet by design: text only, no outline, so it sits below undo in the
+// eye's order. Offline it is disabled and the LABEL carries the reason —
+// a title tooltip is invisible on the tablet this desk actually runs on,
+// and a control that is merely greyed out reads as broken.
+function fixNameButton(attendee) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ck-fix';
+  if (!navigator.onLine) {
+    btn.disabled = true;
+    btn.textContent = OFFLINE_FIX_MSG;
+    btn.setAttribute('aria-label', OFFLINE_FIX_MSG + ': ' + fullName(attendee));
+  } else {
+    btn.textContent = 'Fix a name';
+    btn.setAttribute('aria-label', 'Fix the name for ' + fullName(attendee));
+    btn.addEventListener('click', () => openNameEditor(attendee));
+  }
+  return btn;
+}
+
+// One field. Its value is assigned as a PROPERTY — attendee names are
+// user-supplied and Task 12 lets a stranger type them, so nothing here
+// ever becomes markup on the way in or on the way back out.
+function editField(labelText, key, value) {
+  const wrap = document.createElement('label');
+  wrap.className = 'pedit-f';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'ck-lbl';
+  lbl.textContent = labelText;
+
+  const input = document.createElement('input');
+  input.className = 'ck-input';
+  input.type = 'text';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.dataset.editField = key;
+  input.value = value;
+  // Left enabled while a save is in flight — only the buttons lock. A
+  // field that disables itself for the length of a hotel-wifi round trip
+  // loses the caret and the operator's place for no benefit; the save
+  // already captured the text it is sending.
+
+  // Remember the draft and the caret on every interaction, so a rebuild
+  // triggered by anything else on the desk puts the operator back exactly
+  // where they were instead of throwing away what they typed.
+  const remember = () => {
+    if (!S.editing) return;
+    S.editing[key] = input.value;
+    S.editing.focus = key;
+    S.editing.caret = input.selectionStart;
+  };
+  ['input', 'keyup', 'click'].forEach(ev => input.addEventListener(ev, remember));
+
+  wrap.append(lbl, input);
+  return wrap;
+}
+
+// The editor takes its own line under the row it belongs to. No modal:
+// the operator has to keep reading the row, and the queue behind it,
+// while they type.
+function nameEditor(attendee) {
+  const ed = S.editing;
+  const box = document.createElement('div');
+  box.className = 'pedit';
+
+  const fields = document.createElement('div');
+  fields.className = 'pedit-fields';
+  fields.append(editField('First name', 'first', ed.first), editField('Last name', 'last', ed.last));
+  box.appendChild(fields);
+
+  const acts = document.createElement('div');
+  acts.className = 'pedit-acts';
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'pedit-save';
+  save.textContent = ed.saving ? 'Saving…' : 'Save name';
+  save.disabled = ed.saving;
+  save.addEventListener('click', () => commitNameEdit(attendee.id));
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ck-quiet';
+  cancel.textContent = 'Cancel';
+  cancel.disabled = ed.saving;
+  cancel.addEventListener('click', closeNameEditor);
+  acts.append(save, cancel);
+  box.appendChild(acts);
+
+  // Enter saves and Escape cancels, because the operator's hands are
+  // already on the keys and the queue is not getting shorter.
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')       { e.preventDefault(); commitNameEdit(attendee.id); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeNameEditor(); }
+  });
+
+  if (ed.error) {
+    const err = document.createElement('div');
+    err.className = 'pedit-err';
+    err.textContent = ed.error;
+    box.appendChild(err);
+  } else {
+    const note = document.createElement('div');
+    note.className = 'pedit-note';
+    note.textContent = 'This is the name that will be printed on the badge.';
+    box.appendChild(note);
+  }
+
+  return box;
+}
+
+async function commitNameEdit(id) {
+  const ed = S.editing;
+  if (!ed || ed.id !== id || ed.saving) return;
+
+  // Resolve against the live roster at the moment of use. A reconcile
+  // replaces every roster object, so the attendee this row closed over
+  // may already be a detached copy — writing that copy back would stamp
+  // stale data over the fresh row in the cache.
+  const a = S.roster.find(x => x.id === id);
+  if (!a) {
+    ed.error = 'That person is no longer on this roster. Search for them again.';
+    ed.autofocus = true;
+    renderParty();
+    return;
+  }
+  // Re-checked at the moment of the write, not only when the button was
+  // drawn: the operator can open the editor on hotel wifi and press Save
+  // ten seconds after it drops. Still no outbox — see the note above.
+  if (!navigator.onLine) {
+    ed.error = OFFLINE_FIX_MSG + '. Nothing was changed.';
+    ed.autofocus = true;
+    renderParty();
+    return;
+  }
+
+  ed.saving = true;
+  ed.error = '';
+  renderParty();
+
+  const res = await saveName(a, ed.first, ed.last);
+
+  if (!res.ok) {
+    // Nothing local was touched: saveName mutates the attendee only after
+    // the server has accepted the write. Say so, and leave the editor open
+    // with the operator's text still in it.
+    if (S.editing && S.editing.id === id) {
+      S.editing.saving = false;
+      S.editing.error = res.error;
+      S.editing.autofocus = true;   // the click moved the caret to the button
+      renderParty();
+    }
+    return;
+  }
+
+  S.editing = null;
+  // Re-point the card at the live roster objects, exactly as afterUndo
+  // does, so every surface showing this person moves together.
+  if (S.party) {
+    const byId = new Map(S.roster.map(x => [x.id, x]));
+    S.party.members = S.party.members.map(m => byId.get(m.id) || m);
+  }
+  renderParty();
+  // The verdict above the card still names the old spelling, so replace
+  // it rather than leaving two halves of the screen disagreeing.
+  showVerdict('ok', 'Name corrected to ' + fullName(a),
+    'This is what the badge will print. Nothing else about them changed.');
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  scanInput.focus();
+}
+
+// ═══════════════════════════════════════════════════
 // DESK — PARTY CARD
 // The person who scanned is pre-ticked; colleagues start unticked so
 // nobody is checked in who is not standing there. Status is written in
@@ -1399,6 +1664,7 @@ function showParty(anchor) {
   const members = assembleParty(anchor, S.roster);
   const ticked = new Set(anchor.checked_in_at ? [] : [anchor.id]);
   S.party = { members, ticked };
+  S.editing = null;   // a new arrival is at the desk; the old correction is gone
   renderParty();
 }
 
@@ -1432,7 +1698,11 @@ function partyRow(attendee, ticked, onToggle) {
     status.textContent = `arrived ${new Date(attendee.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   } else if (ticked) {
     status.className = 'pill-go';
-    status.textContent = 'checking in…';
+    // Not "checking in…": nothing has been sent yet, and a volunteer who
+    // reads that as work in progress walks away from a queue believing
+    // this person is done. The tick is intent; this pill says the row is
+    // armed and waiting for the button.
+    status.textContent = 'ready';
   } else {
     status.className = 'pill-un';
     status.textContent = 'not here yet';
@@ -1444,11 +1714,31 @@ function partyRow(attendee, ticked, onToggle) {
   // and the person who made it is looking straight at this card.
   if (attendee.checked_in_at) row.appendChild(undoButton(attendee, 'Undo check-in'));
 
+  // A wrong spelling is worth correcting whether or not they have already
+  // arrived: the badge has not necessarily been printed yet, and the
+  // roster is what the delegate list is built from either way.
+  const editingThis = !!(S.editing && S.editing.id === attendee.id);
+  if (editingThis) row.appendChild(nameEditor(attendee));
+  else row.appendChild(fixNameButton(attendee));
+
   return row;
 }
 
 function renderParty() {
   const host = document.getElementById('party');
+
+  // Captured BEFORE the rebuild below destroys the field under the
+  // operator's hands. Restored only if the caret was already theirs: a
+  // background reconcile must never pull focus out of the scan field and
+  // into an editor nobody is currently using, or the next scanned badge
+  // would type itself into somebody's surname.
+  let refocus = null;
+  if (S.editing) {
+    const ae = document.activeElement;
+    if (ae && ae.dataset && ae.dataset.editField) refocus = ae.dataset.editField;
+    else if (S.editing.autofocus) refocus = S.editing.focus || 'first';
+  }
+
   host.replaceChildren();
 
   if (!S.party) {
@@ -1469,9 +1759,12 @@ function renderParty() {
   const sub = document.createElement('div');
   sub.className = 'ck-party-sub';
   const arrived = members.filter(m => m.checked_in_at).length;
-  sub.textContent =
-    (members.length === 1 ? '1 person expected' : members.length + ' people expected') +
-    ' · ' + (arrived === 0 ? 'none here yet' : arrived + ' already arrived');
+  // A party of one gets its own wording. "1 person expected · none here
+  // yet" is counting language, and counting one person reads as a form,
+  // not as a sentence about the human at the desk.
+  sub.textContent = members.length === 1
+    ? (arrived ? 'One person expected · already here' : 'One person expected · not here yet')
+    : members.length + ' people expected · ' + (arrived === 0 ? 'none here yet' : arrived + ' already arrived');
   hd.append(co, sub);
   card.appendChild(hd);
 
@@ -1484,6 +1777,19 @@ function renderParty() {
   // no longer exists and focus has fallen back to the body. Reclaim it
   // now rather than waiting for a timer.
   holdFocus();
+
+  // holdFocus() has just put the caret in the scan field, which is right
+  // for every case except this one: the operator was mid-name. Put it
+  // back, at the character they were on.
+  if (refocus && S.editing) {
+    const el = host.querySelector('[data-edit-field="' + refocus + '"]');
+    if (el && !el.disabled) {
+      el.focus();
+      const caret = S.editing.caret == null ? el.value.length : S.editing.caret;
+      el.setSelectionRange(caret, caret);
+    }
+    S.editing.autofocus = false;
+  }
 }
 
 // Re-rendering the whole card on every toggle also drops the clicked
