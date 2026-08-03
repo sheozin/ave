@@ -125,13 +125,21 @@ The `cuedeck-marketing/` directory is a separate Next.js 16 (App Router, Turbopa
 7. **Test before reporting done** — verify in browser, not just visually
 
 ## Edge Function Template
+`corsHeaders` is a FUNCTION of the request, not an object — it reads the
+`Origin` header to decide what to allow. Call it once and spread the
+result. Spreading `corsHeaders` itself yields `{}`, which silently
+strips every CORS header: browser calls then fail preflight while
+`curl` and the deployer's ping still pass, because those send no
+`Origin`.
+
 ```typescript
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: cors });
   }
   try {
     const supabase = createClient(
@@ -140,16 +148,21 @@ Deno.serve(async (req: Request) => {
     );
     // ... logic here
     return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   }
 });
 ```
+
+Functions using the service-role key bypass RLS entirely, so any
+`checkin_role_for_event()` / RLS gate must be re-checked explicitly in
+the function body. See `checkin-import-attendees` for the reference
+JWT + role + entitlement sequence.
 
 ## Content Writing Rules
 - **Avoid dashes in titles, headings, and copy** — only use `—` or `-` when genuinely necessary (e.g. a range, or a strong pause no other punctuation can replace)
