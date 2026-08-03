@@ -156,6 +156,25 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-res-name{font-weight:600;overflow-wrap:anywhere}
 .ck-res-meta{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
 .ck-res-note{font-size:13px;color:var(--t2);margin-top:14px}
+/* The pick target and the undo sit side by side, so the result cannot be
+   a single <button> any more: a button inside a button is invalid and
+   the inner click never fires reliably.                              */
+.ck-res-row{display:flex;align-items:center;gap:8px}
+.ck-res-row .ck-res-btn{flex:1;min-width:0}
+
+/* ── UNDO CONTROL ─────────────────────────────────
+   A correction, not a main path, so it is quiet: outline only, muted
+   until hovered. It must never compete with the primary check-in
+   button for a volunteer's eye at a busy desk.                      */
+.ck-undo{
+  flex:none;background:none;border:1px solid var(--bd2);color:var(--t2);
+  border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+  transition:border-color .14s, color .14s, background .14s;
+}
+.ck-undo:hover{border-color:var(--rdbd);color:var(--rd);background:var(--rdsf)}
+.ck-undo:disabled{opacity:.5;cursor:default}
+.ck-vd .ck-undo{display:block;margin-top:10px}
 
 /* ── VERDICT ──────────────────────────────────────
    Three states, each carrying its own instruction. Amber is not an
@@ -983,7 +1002,7 @@ async function commitParty(attendees, opts) {
       // Carried on every item because the server requires it on an undo:
       // it clears checked_in_at only if the stored value still matches,
       // so a stale undo cannot wipe a later check-in from another desk.
-      // Always null for a check-in. Task 8 sets it on the undo path.
+      // Always null for a check-in; undoCheckin() is what sets it.
       prev_checked_in_at: null,
       synced: false,
     };
@@ -997,6 +1016,48 @@ async function commitParty(attendees, opts) {
   flushOutbox();   // not awaited: the desk must not wait on the network
 }
 
+// A correction is RECORDED, never erased. Undo clears checked_in_at and
+// queues a new scan event with action 'undo'; the server writes a row
+// with result 'undo' and the timeline still reads forward. A redo is
+// simply another check-in. Nothing on this page ever deletes.
+//
+// prev_checked_in_at is the whole point of the item. The server clears
+// the column only when its stored value still equals this one, so an
+// undo queued at 09:02 and flushed at 10:15 cannot revoke the 09:30
+// check-in another desk made in the meantime — it is recorded as a
+// no-op instead.
+//
+// Same write ordering as commitParty: outbox first, roster second. A
+// crash between the two leaves a queued item with no local state, which
+// the next load replays back on. The other order would leave the desk
+// showing a correction the server is never told about.
+async function undoCheckin(attendee) {
+  // Resolve against the live roster rather than trusting the object the
+  // clicked button closed over. A reconcile replaces every roster object,
+  // so a button rendered before the last flush holds a stale copy — and
+  // writing that copy back would undo the wrong timestamp and stamp old
+  // data over the fresh row in the cache.
+  const a = S.roster.find(x => x.id === attendee.id) || attendee;
+  const prev = a.checked_in_at;
+  if (!prev) return false;                 // nothing to undo
+  const item = {
+    client_id: crypto.randomUUID(),
+    attendee_id: a.id,
+    event_id: S.event.id,
+    scanned_at: new Date().toISOString(),
+    action: 'undo',
+    prev_checked_in_at: prev,
+    synced: false,
+  };
+  await idbPutAll(STORE_OUTBOX, [item]);
+  a.checked_in_at = null;                  // optimistic local state
+  await idbPutAll(STORE_ROSTER, [a]);
+  await renderPendingCount();
+  renderCount();
+  flushOutbox();   // not awaited: the desk must not wait on the network
+  return true;
+}
+
 async function commitTicked(opts) {
   if (!S.party) return;
   const picked = S.party.members.filter(m => S.party.ticked.has(m.id));
@@ -1006,6 +1067,10 @@ async function commitTicked(opts) {
   // people who are already in.
   if (S.party) picked.forEach(m => S.party.ticked.delete(m.id));
   renderParty();
+  // The most common correction is instant — "wrong person, sorry" while
+  // they are still standing there — so the undo is on the confirmation
+  // itself, not somewhere the volunteer has to go looking for it.
+  showCheckedIn(picked);
   scanInput.focus();
 }
 
@@ -1045,6 +1110,55 @@ function showVerdict(tone, heading, guidance) {
   box.append(h, t);
   document.getElementById('verdict').replaceChildren(box);
   return box;
+}
+
+// "Undo" alone is ambiguous on a row that carries a name, a tick and a
+// pill — undo what, and for whom? The label always says what is being
+// undone, and the accessible name always carries the person, so a
+// volunteer reading the row aloud to a queue cannot pick the wrong one.
+function undoButton(attendee, label) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ck-undo';
+  btn.textContent = label;
+  btn.setAttribute('aria-label', 'Undo check-in for ' + fullName(attendee));
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;                   // a double click must not queue two undos
+    const done = await undoCheckin(attendee);
+    if (done) afterUndo(attendee);
+    else btn.disabled = false;
+  });
+  return btn;
+}
+
+function showCheckedIn(people) {
+  if (!people.length) return;
+  const box = showVerdict('ok',
+    people.length === 1
+      ? fullName(people[0]) + ' is checked in'
+      : people.length + ' people are checked in',
+    'Wrong person? Undo it here. The correction is recorded, nothing is deleted.');
+  // One button per person: with three colleagues committed together, a
+  // single "Undo" would either be a guess or undo all three.
+  people.forEach(p => box.appendChild(undoButton(p,
+    people.length === 1 ? 'Undo check-in' : 'Undo check-in · ' + fullName(p))));
+}
+
+// Every surface that could be showing this person has to move together,
+// or the desk contradicts itself: the header count says 4, the party row
+// still says arrived, the search result behind it still offers undo.
+function afterUndo(attendee) {
+  const a = S.roster.find(x => x.id === attendee.id) || attendee;
+  if (S.party) {
+    S.party.members = S.party.members.map(m => (m.id === a.id ? a : m));
+    S.party.ticked.delete(a.id);
+  }
+  renderParty();
+  showVerdict('dup', fullName(a) + ' is no longer checked in',
+    'Recorded as a correction. Check them in again if they are here.');
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  scanInput.focus();
 }
 
 function handleScan(raw) {
@@ -1126,6 +1240,9 @@ function renderSearchResults(list) {
   const wrap = document.createElement('div');
   wrap.className = 'ck-res';
   list.slice(0, MAX_RESULTS).forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'ck-res-row';
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'ck-res-btn';
@@ -1146,7 +1263,15 @@ function renderSearchResults(list) {
 
     btn.append(main, pill);
     btn.addEventListener('click', () => pickAttendee(a));
-    wrap.appendChild(btn);
+    row.appendChild(btn);
+
+    // Reachable minutes later without rescanning. The correction a desk
+    // actually needs is rarely the last one it made: the operator notices
+    // at 09:40 that the wrong Kowalski was ticked at 09:12, and search is
+    // the only way back to that person.
+    if (a.checked_in_at) row.appendChild(undoButton(a, 'Undo check-in'));
+
+    wrap.appendChild(row);
   });
   host.appendChild(wrap);
 
@@ -1209,6 +1334,11 @@ function partyRow(attendee, ticked, onToggle) {
     status.textContent = 'not here yet';
   }
   row.appendChild(status);
+
+  // Every already-arrived row carries its own undo. Ticking the wrong
+  // colleague in a party is the single most likely mistake at this desk,
+  // and the person who made it is looking straight at this card.
+  if (attendee.checked_in_at) row.appendChild(undoButton(attendee, 'Undo check-in'));
 
   return row;
 }
