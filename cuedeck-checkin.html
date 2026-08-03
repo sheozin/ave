@@ -117,6 +117,17 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 .ck-count-num{font-size:20px;font-weight:700;color:var(--gn);font-variant-numeric:tabular-nums}
 .ck-count-lbl{font-size:11px;color:var(--gn);letter-spacing:.1em;text-transform:uppercase;opacity:.85}
+
+/* ── SYNC PILL ────────────────────────────────────
+   Amber whenever work is queued or the desk is offline, green only
+   when everything has reached the server. Amber is not an alarm here:
+   a desk running offline is the normal case this module exists for. */
+.ck-sync{
+  flex:none;border:1px solid;border-radius:999px;padding:8px 14px;
+  font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
+}
+.ck-sync.clear{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
+.ck-sync.wait{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
 .ck-hd-actions{flex:none;display:flex;gap:8px}
 .ck-body{flex:1;padding:32px 24px;display:flex;justify-content:center;align-items:flex-start}
 .ck-panel{
@@ -246,6 +257,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
       <div class="ck-hd-eyebrow">Check-in desk</div>
       <div class="ck-hd-name" id="st-event"></div>
     </div>
+    <div class="ck-sync clear" id="st-sync">All synced</div>
     <div class="ck-count">
       <div class="ck-count-num" id="st-count">0 of 0</div>
       <div class="ck-count-lbl">Arrived</div>
@@ -288,13 +300,13 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 let sb = null;
 // S.party is the arrival currently at the desk: the people the card is
 // showing, plus the ids ticked as present. Null when the desk is idle.
-var S = { user: null, event: null, role: null, roster: [], party: null };  // var → window.S for E2E tests
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
 // The desk must keep resolving scans when venue wifi dies, so the
-// roster is mirrored locally. STORE_OUTBOX is created here but not
-// written to yet — the scan queue lands in a later task.
+// roster is mirrored locally and every action is queued in STORE_OUTBOX
+// until the server acknowledges it. Both survive a page reload.
 // ═══════════════════════════════════════════════════
 const DB_NAME = 'cuedeck-checkin';
 const STORE_ROSTER = 'roster';
@@ -369,7 +381,163 @@ async function loadRoster(eventId) {
   }
   S.roster = data;
   await idbPutAll(STORE_ROSTER, data);
+  await overlayPending();
 }
+
+// The server copy knows nothing about actions still sitting in the
+// outbox, so a fresh fetch would show people the desk has already
+// accepted as not arrived — after a reload, or after a flush that
+// settled only part of the queue. Re-apply the queue on top. Applied in
+// scanned_at order so a checkin and its later undo net out, exactly as
+// the server will replay them. The offline branch above skips this: the
+// cached rows already carry these writes.
+async function overlayPending() {
+  const pending = replayOrder(await idbGetAll(STORE_OUTBOX));
+  const touched = [];
+  for (const p of pending) {
+    const a = S.roster.find(x => x.id === p.attendee_id);
+    if (!a) continue;
+    if (p.action === 'checkin' && !a.checked_in_at) a.checked_in_at = p.scanned_at;
+    else if (p.action === 'undo' && a.checked_in_at === p.prev_checked_in_at) a.checked_in_at = null;
+    else continue;
+    touched.push(a);
+  }
+  if (touched.length) await idbPutAll(STORE_ROSTER, touched);
+}
+
+// ═══════════════════════════════════════════════════
+// OUTBOX
+// Every action is written here before anything else happens, so a desk
+// that loses power mid-morning comes back with its check-ins intact.
+// These two helpers are mirrored in tests/checkin-outbox.spec.ts — keep
+// them character-identical.
+//
+// The spec's enqueue() and markSynced() are expressed through the store
+// itself: STORE_OUTBOX has keyPath 'client_id', so a put is the dedup,
+// and marking synced is a put of the same item with synced:true.
+//
+// There is deliberately NO client-side collapsing of a checkin and its
+// undo. The server applies items in order and nets out correctly; an
+// earlier collapse() caused a corrected mistake to be re-applied on the
+// next flush.
+// ═══════════════════════════════════════════════════
+function pendingCount(outbox) { return outbox.filter(p => !p.synced).length; }
+
+function replayOrder(outbox) {
+  return outbox.filter(p => !p.synced).slice()
+    .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0));
+}
+
+// Synced items are kept for a day so a desk can still account for what
+// it sent, then dropped so the store does not grow all event. Unsynced
+// items are NEVER pruned: they are the check-ins.
+// Pruning closes the local dedup window — once a client_id is gone from
+// here this device could in principle re-send it. That is acceptable
+// because the local store was never the real guard: the unique index on
+// leod_checkin_scan_events.client_id is, and the server replays the
+// original verdict instead of applying the item twice.
+async function pruneOutbox() {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const rows = await idbGetAll(STORE_OUTBOX);
+  const stale = rows.filter(p => p.synced && p.scanned_at < cutoff).map(p => p.client_id);
+  if (!stale.length) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_OUTBOX, 'readwrite');
+    stale.forEach(id => tx.objectStore(STORE_OUTBOX).delete(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// The server rejects a batch larger than this with a 400. A desk offline
+// through a keynote can queue hundreds of scans, and sending them as one
+// request would be rejected every time — the outbox would never drain,
+// and the livelock would get worse the longer the desk had been offline.
+const MAX_BATCH = 200;
+
+let flushing = false;
+
+async function flushOutbox() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  try {
+    const pending = replayOrder(await idbGetAll(STORE_OUTBOX));
+    if (!pending.length) return;
+
+    // Items carry the event they were scanned at. The outbox deliberately
+    // survives an event switch, so flushing everything under whichever
+    // event happens to be open would hand yesterday's attendees to
+    // today's event: the server answers 'wrong_event', the client_id is
+    // spent, and that check-in is lost for good. Group instead, so each
+    // batch is sent under its own event_id.
+    const byEvent = new Map();
+    for (const p of pending) {
+      if (!byEvent.has(p.event_id)) byEvent.set(p.event_id, []);
+      byEvent.get(p.event_id).push(p);
+    }
+    const chunks = [];
+    for (const [eventId, items] of byEvent) {
+      for (let i = 0; i < items.length; i += MAX_BATCH) {
+        chunks.push({ eventId, items: items.slice(i, i + MAX_BATCH) });
+      }
+    }
+
+    let settledAny = false;
+    for (const chunk of chunks) {
+      const { data, error } = await sb.functions.invoke('checkin-record-scans', {
+        // operator_id is not sent: the server derives it from the JWT and
+        // ignores the body.
+        body: {
+          event_id: chunk.eventId,
+          scan_point_id: S.scanPointId ?? null,
+          items: chunk.items.map(({ client_id, attendee_id, scanned_at, action, prev_checked_in_at }) =>
+            ({ client_id, attendee_id, scanned_at, action, prev_checked_in_at })),
+        },
+      });
+      // Transport failure or a response we cannot read: stop the run and
+      // leave everything unsynced. The next flush re-sends, and the
+      // server dedups on client_id, so nothing is applied twice.
+      if (error || !data || !data.results) break;
+
+      // results[client_id] is either a real verdict (ok, duplicate,
+      // unknown_token, wrong_event, undo) or the literal string 'error',
+      // which means that item FAILED. Marking an 'error' synced would
+      // silently drop a check-in, so only genuine verdicts settle.
+      const settled = chunk.items
+        .filter(p => data.results[p.client_id] && data.results[p.client_id] !== 'error')
+        .map(p => ({ ...p, synced: true }));
+      if (settled.length) {
+        await idbPutAll(STORE_OUTBOX, settled);
+        settledAny = true;
+      }
+    }
+
+    await renderPendingCount();
+
+    // The server is the authority on verdicts. The desk showed an
+    // optimistic 'ok'; the server may have answered 'duplicate' because
+    // another desk got there first. Pull the roster back so the card and
+    // the head count stop disagreeing with it.
+    if (settledAny && navigator.onLine && S.event) {
+      await loadRoster(S.event.id);
+      if (S.party) {
+        const byId = new Map(S.roster.map(a => [a.id, a]));
+        S.party.members = S.party.members.map(m => byId.get(m.id) || m);
+      }
+      renderParty();
+      renderCount();
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
+// The guard above is what keeps the timer and the 'online' event from
+// sending the same batch twice.
+window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); });
+window.addEventListener('offline', () => { renderPendingCount(); });
+setInterval(flushOutbox, 15000);
 
 // ═══════════════════════════════════════════════════
 // BOOT
@@ -531,6 +699,7 @@ async function openEvent(eventId, ev, role) {
   S.role  = role;
 
   await idbClearOtherEvents(eventId);
+  await pruneOutbox();
   await loadRoster(eventId);
   renderStation();
   showScreen('station');
@@ -543,6 +712,21 @@ function renderStation() {
   document.getElementById('st-event').textContent = (S.event && S.event.name) ? S.event.name : 'Untitled event';
   resetDesk();
   renderCount();
+  renderPendingCount();
+  flushOutbox();
+}
+
+// Online/offline state and the size of the queue, in words rather than
+// an icon: a volunteer needs to know at a glance whether the desk still
+// owes the server anything before they walk away from it.
+async function renderPendingCount() {
+  const n = pendingCount(await idbGetAll(STORE_OUTBOX));
+  const offline = !navigator.onLine;
+  const el = document.getElementById('st-sync');
+  el.className = 'ck-sync ' + (n || offline ? 'wait' : 'clear');
+  el.textContent = n
+    ? (offline ? 'Offline · ' : '') + n + ' waiting to sync'
+    : (offline ? 'Offline' : 'All synced');
 }
 
 function renderCount() {
@@ -694,15 +878,52 @@ scanInput.addEventListener('input', () => {
 document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
 document.getElementById('secondary').addEventListener('click', () => commitTicked({ print: false }));
 
-// Task 7 — the outbox write, the optimistic roster update and the sync
-// land here. Deliberately empty: nothing on this page persists a
-// check-in yet, so the desk cannot lie about who has arrived.
-function commitParty(attendees, opts) {}
+// Task 10 owns badge printing. Stubbed so the commit path is complete.
+async function printBadges(attendees) {}
 
-function commitTicked(opts) {
+// A check-in is durable the moment it is queued, not when the server
+// hears about it. The outbox write comes first: crashing between the two
+// writes leaves a queued item with no local state, which the next load
+// replays back onto the roster. The other order would leave the desk
+// showing an arrival the server is never told about.
+//
+// The optimistic roster write is what lets a second scan of the same
+// badge answer 'already checked in' instantly with no network at all.
+async function commitParty(attendees, opts) {
+  const now = new Date().toISOString();   // canonical UTC — replay order compares these as strings
+  for (const a of attendees) {
+    const item = {
+      client_id: crypto.randomUUID(),
+      event_id: S.event.id,
+      attendee_id: a.id,
+      scanned_at: now,
+      action: 'checkin',
+      // Carried on every item because the server requires it on an undo:
+      // it clears checked_in_at only if the stored value still matches,
+      // so a stale undo cannot wipe a later check-in from another desk.
+      // Always null for a check-in. Task 8 sets it on the undo path.
+      prev_checked_in_at: null,
+      synced: false,
+    };
+    await idbPutAll(STORE_OUTBOX, [item]);
+    a.checked_in_at = now;
+    await idbPutAll(STORE_ROSTER, [a]);
+  }
+  await renderPendingCount();
+  renderCount();
+  if (opts.print) await printBadges(attendees);
+  flushOutbox();   // not awaited: the desk must not wait on the network
+}
+
+async function commitTicked(opts) {
   if (!S.party) return;
   const picked = S.party.members.filter(m => S.party.ticked.has(m.id));
-  commitParty(picked, opts);
+  await commitParty(picked, opts);
+  // The rows now read as arrived, so drop the ticks: leaving them set
+  // would keep the primary button armed and invite a second commit of
+  // people who are already in.
+  if (S.party) picked.forEach(m => S.party.ticked.delete(m.id));
+  renderParty();
   scanInput.focus();
 }
 
