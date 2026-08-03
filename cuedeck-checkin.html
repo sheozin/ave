@@ -246,6 +246,23 @@ async function idbGetAll(store) {
   });
 }
 
+// Roster rows are keyed on attendee id with no per-event partition, so a
+// tablet worked at two events in one day would keep both rosters. Drop the
+// other event's rows on switch. STORE_OUTBOX is deliberately untouched:
+// unsynced scans from another event are real check-ins and must survive.
+async function idbClearOtherEvents(eventId) {
+  const db = await openDb();
+  const rows = await idbGetAll(STORE_ROSTER);
+  const stale = rows.filter(r => r.event_id !== eventId).map(r => r.id);
+  if (!stale.length) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ROSTER, 'readwrite');
+    stale.forEach(id => tx.objectStore(STORE_ROSTER).delete(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // ═══════════════════════════════════════════════════
 // ROSTER
 // ═══════════════════════════════════════════════════
@@ -254,7 +271,15 @@ async function loadRoster(eventId) {
     .from('leod_checkin_attendees')
     .select('id,event_id,first_name,last_name,email,company,ticket_type,qr_token,checked_in_at,badge_printed_at')
     .eq('event_id', eventId);
-  if (error) { S.roster = await idbGetAll(STORE_ROSTER); return; }
+  if (error) {
+    // Offline or fetch failed: fall back to the cached copy, scoped to
+    // THIS event. The store is keyed on attendee id and can hold rows
+    // from a previous event if this device worked two events in a day,
+    // so an unfiltered read would mix rosters.
+    const cached = await idbGetAll(STORE_ROSTER);
+    S.roster = cached.filter(a => a.event_id === eventId);
+    return;
+  }
   S.roster = data;
   await idbPutAll(STORE_ROSTER, data);
 }
@@ -416,6 +441,7 @@ async function openEvent(eventId, ev, role) {
   S.event = ev ? { id: eventId, name: ev.name, date: ev.date } : { id: eventId, name: null, date: null };
   S.role  = role;
 
+  await idbClearOtherEvents(eventId);
   await loadRoster(eventId);
   renderStation();
   showScreen('station');
