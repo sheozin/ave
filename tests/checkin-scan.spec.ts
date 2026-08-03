@@ -35,13 +35,29 @@ function searchByName(query: string, roster: Attendee[]): Attendee[] {
   );
 }
 
+const GENERIC_COMPANY = new Set([
+  'freelance', 'freelancer', 'self employed', 'selfemployed', 'self',
+  'n/a', 'na', 'none', 'nil', 'student', 'private', 'individual',
+  'unemployed', 'retired', 'me', 'myself', 'guest', 'visitor', 'other',
+]);
+
+function normalizeCompany(raw: string | null): string | null {
+  if (!raw) return null;
+  let n = raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+             .toLowerCase().trim().replace(/\s+/g, ' ');
+  n = n.replace(/\b(sp\.?\s?z\s?o\.?\s?o\.?|s\.?a\.?|ltd|limited|llc|inc|gmbh|b\.?v\.?|oy|ab|a\/s|srl|sarl|plc|co)\b/g, '');
+  n = n.replace(/[.,\-–—\s]+$/, '').replace(/\s+/g, ' ').trim();
+  if (!n || GENERIC_COMPANY.has(n)) return null;
+  return n;
+}
+
+const MAX_PARTY = 8;
+
 function assembleParty(anchor: Attendee, roster: Attendee[]): Attendee[] {
-  if (!anchor.company) return [anchor];
-  const mates = roster.filter(a =>
-    a.id !== anchor.id &&
-    a.company !== null &&
-    a.company.toLowerCase() === anchor.company!.toLowerCase()
-  );
+  const key = normalizeCompany(anchor.company);
+  if (!key) return [anchor];
+  const mates = roster.filter(a => a.id !== anchor.id && normalizeCompany(a.company) === key);
+  if (mates.length + 1 > MAX_PARTY) return [anchor];
   return [anchor, ...mates];
 }
 
@@ -109,5 +125,79 @@ describe('checkin-scan: assembleParty', () => {
 
   it('returns a party of one when the attendee has no company', () => {
     expect(assembleParty(roster[3], roster).map(a => a.id)).toEqual(['4']);
+  });
+});
+
+describe('checkin-scan: normalizeCompany', () => {
+  it('collapses the legal-form spellings of one firm onto one key', () => {
+    const key = normalizeCompany('Acme');
+    expect(normalizeCompany('Acme Sp. z o.o.')).toBe(key);
+    expect(normalizeCompany('ACME Ltd')).toBe(key);
+    expect(normalizeCompany('  acme   ')).toBe(key);
+    expect(normalizeCompany('Acme S.A.')).toBe(key);
+  });
+
+  it('strips diacritics so one firm is not split by keyboard layout', () => {
+    expect(normalizeCompany('Żabka')).toBe(normalizeCompany('Zabka'));
+  });
+
+  it('treats generic free-text answers as no company at all', () => {
+    expect(normalizeCompany('Freelance')).toBeNull();
+    expect(normalizeCompany('self employed')).toBeNull();
+    expect(normalizeCompany('N/A')).toBeNull();
+    expect(normalizeCompany('Student')).toBeNull();
+  });
+
+  it('returns null for a value that normalises away to nothing', () => {
+    expect(normalizeCompany('Ltd')).toBeNull();
+    expect(normalizeCompany('---')).toBeNull();
+    expect(normalizeCompany('   ')).toBeNull();
+  });
+
+  it('keeps two genuinely different firms apart', () => {
+    expect(normalizeCompany('Orange')).not.toBe(normalizeCompany('Orange Events'));
+  });
+});
+
+describe('checkin-scan: assembleParty normalisation and safety cap', () => {
+  it('groups a firm written three different ways into one party', () => {
+    const roster = [
+      mk({ id: '1', company: 'Acme' }),
+      mk({ id: '2', company: 'Acme Sp. z o.o.' }),
+      mk({ id: '3', company: 'ACME Ltd' }),
+      mk({ id: '4', company: 'Rivo' }),
+    ];
+    expect(assembleParty(roster[0], roster).map(a => a.id)).toEqual(['1', '2', '3']);
+  });
+
+  // The dangerous direction: without the blocklist every freelancer at
+  // the event would assemble into one party of strangers, each of them a
+  // single tick away from being checked in.
+  it('never assembles a party out of people who typed a generic company', () => {
+    const roster = [
+      mk({ id: '1', company: 'Freelance' }),
+      mk({ id: '2', company: 'freelance' }),
+      mk({ id: '3', company: 'Self employed' }),
+      mk({ id: '4', company: 'n/a' }),
+    ];
+    expect(assembleParty(roster[0], roster).map(a => a.id)).toEqual(['1']);
+    expect(assembleParty(roster[2], roster).map(a => a.id)).toEqual(['3']);
+  });
+
+  it('returns a party of one when the company normalises to empty', () => {
+    const roster = [mk({ id: '1', company: 'Ltd' }), mk({ id: '2', company: 'Ltd' })];
+    expect(assembleParty(roster[0], roster).map(a => a.id)).toEqual(['1']);
+  });
+
+  it('falls back to the anchor alone when the group exceeds MAX_PARTY', () => {
+    const roster = Array.from({ length: MAX_PARTY + 1 }, (_, i) =>
+      mk({ id: String(i + 1), company: 'Bigcorp' }));
+    expect(assembleParty(roster[0], roster).map(a => a.id)).toEqual(['1']);
+  });
+
+  it('still assembles a group sitting exactly on MAX_PARTY', () => {
+    const roster = Array.from({ length: MAX_PARTY }, (_, i) =>
+      mk({ id: String(i + 1), company: 'Bigcorp' }));
+    expect(assembleParty(roster[0], roster)).toHaveLength(MAX_PARTY);
   });
 });

@@ -186,12 +186,13 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .tick.done:hover{border-color:var(--gn)}
 .pn{font-weight:600;overflow-wrap:anywhere}
 .pm{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
-.pill-in,.pill-un{
+.pill-in,.pill-un,.pill-go{
   flex:none;font-size:12px;font-weight:600;border-radius:999px;
   padding:5px 11px;white-space:nowrap;
 }
 .pill-in{background:var(--gnsf);color:var(--gn);border:1px solid var(--gnbd)}
 .pill-un{background:var(--wm);color:var(--t2);border:1px solid var(--bd2)}
+.pill-go{background:var(--acsf);color:var(--ac);border:1px solid var(--ac)}
 
 /* ── DESK ACTIONS ── */
 .ck-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
@@ -264,7 +265,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
       <div id="party"></div>
       <div class="ck-actions" id="actions" style="display:none">
         <button class="ck-btn" type="button" id="primary"></button>
-        <button class="ck-btn ghost" type="button" id="secondary">Check in only</button>
+        <button class="ck-btn ghost" type="button" id="secondary">Check in without printing</button>
       </div>
       <div class="ck-panel-text" id="st-status" style="margin-top:24px"></div>
     </div>
@@ -395,6 +396,8 @@ function showScreen(name) {
   document.getElementById('picker').style.display  = name === 'picker'  ? 'flex' : 'none';
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
+  if (name === 'station') { startFocusBackstop(); holdFocus(); }
+  else stopFocusBackstop();
 }
 
 // ═══════════════════════════════════════════════════
@@ -575,15 +578,41 @@ function searchByName(query, roster) {
   );
 }
 
+const GENERIC_COMPANY = new Set([
+  'freelance', 'freelancer', 'self employed', 'selfemployed', 'self',
+  'n/a', 'na', 'none', 'nil', 'student', 'private', 'individual',
+  'unemployed', 'retired', 'me', 'myself', 'guest', 'visitor', 'other',
+]);
+
+// Company is free text typed by a dozen different people, so exact
+// matching splits one firm into several parties ("Acme" vs "Acme Sp. z
+// o.o."). Normalising fixes that. The generic blocklist guards the
+// opposite and more dangerous failure: everyone who typed "Freelance"
+// would otherwise assemble into one party of strangers, each a single
+// tick from being checked in.
+function normalizeCompany(raw) {
+  if (!raw) return null;
+  let n = raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+             .toLowerCase().trim().replace(/\s+/g, ' ');
+  n = n.replace(/\b(sp\.?\s?z\s?o\.?\s?o\.?|s\.?a\.?|ltd|limited|llc|inc|gmbh|b\.?v\.?|oy|ab|a\/s|srl|sarl|plc|co)\b/g, '');
+  n = n.replace(/[.,\-–—\s]+$/, '').replace(/\s+/g, ' ').trim();
+  if (!n || GENERIC_COMPANY.has(n)) return null;
+  return n;
+}
+
+const MAX_PARTY = 8;
+
 // An arrival is one to five people from one company standing at the desk
 // together, so a scan resolves to a group, not a person. A lone attendee
 // is a party of one and takes the same path.
 function assembleParty(anchor, roster) {
-  if (!anchor.company) return [anchor];
-  const mates = roster.filter(a =>
-    a.id !== anchor.id && a.company !== null &&
-    a.company.toLowerCase() === anchor.company.toLowerCase()
-  );
+  const key = normalizeCompany(anchor.company);
+  if (!key) return [anchor];
+  const mates = roster.filter(a => a.id !== anchor.id && normalizeCompany(a.company) === key);
+  // A party larger than a desk can handle is almost certainly a data
+  // artefact, not eight colleagues standing there. Fall back to the
+  // anchor alone rather than presenting a mass check-in.
+  if (mates.length + 1 > MAX_PARTY) return [anchor];
   return [anchor, ...mates];
 }
 
@@ -596,17 +625,57 @@ function assembleParty(anchor, roster) {
 // ═══════════════════════════════════════════════════
 const scanInput = document.getElementById('scan');
 
-function holdFocus() {
-  if (document.getElementById('station').style.display === 'none') return;
+function stationVisible() {
+  return document.getElementById('station').style.display !== 'none';
+}
+
+// True only when focus is sitting on nothing. Reclaiming it from another
+// field would eat the operator's keystrokes — Task 9 edits names inline.
+function focusIsIdle() {
   const el = document.activeElement;
-  if (el === scanInput) return;
-  // Only reclaim focus from nothing. Stealing it out of another field
-  // would eat the operator's keystrokes — Task 9 edits names inline.
-  if (el && el !== document.body && el !== document.documentElement) return;
+  if (el === scanInput) return false;
+  return !el || el === document.body || el === document.documentElement;
+}
+
+function holdFocus() {
+  if (!stationVisible()) return;
+  if (document.activeElement === scanInput) return;
+  if (!focusIsIdle()) return;
   scanInput.focus();
 }
-document.addEventListener('click', holdFocus);
-setInterval(holdFocus, 400);
+
+// A scanner fires its token as fast keystrokes. Any character that lands
+// while the field is unfocused is lost, and a truncated token resolves to
+// unknown_token — a valid badge reported to a volunteer as a bad one.
+// Capture phase runs before anything else can see the key, and the event
+// is NOT consumed: the character still reaches the field we just focused,
+// so no polling window exists in which input can be dropped.
+document.addEventListener('keydown', (e) => {
+  if (!stationVisible()) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length !== 1) return;   // printable single characters only
+  if (!focusIsIdle()) return;
+  scanInput.focus();
+}, true);
+
+// Focus is only ever lost by an event, so react to those rather than
+// polling. Deferred one tick: at focusout time the incoming element has
+// not been focused yet, so activeElement still reads as body.
+document.addEventListener('focusout', () => setTimeout(holdFocus, 0));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) holdFocus(); });
+window.addEventListener('focus', holdFocus);
+
+// Backstop only, for anything the events above miss. Runs at 5s and only
+// while the desk is on screen, so it never fires after sign-out or in a
+// backgrounded tab where timers are throttled anyway.
+let focusBackstop = null;
+function startFocusBackstop() {
+  if (!focusBackstop) focusBackstop = setInterval(holdFocus, 5000);
+}
+function stopFocusBackstop() {
+  clearInterval(focusBackstop);
+  focusBackstop = null;
+}
 
 scanInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
@@ -696,10 +765,12 @@ function handleScan(raw) {
 
   if (res.kind === 'duplicate') {
     // Amber, not red. A second scan of the same code is routine.
-    S.party = null;
-    renderParty();
     showVerdict('dup', fullName(res.attendee) + ' already checked in at ' + atTime(res.since),
       'Let them through — this is a second scan, not a second person.');
+    // The party card stays. This event runs several desks, so the first
+    // colleague being scanned at another station is a normal morning:
+    // stranding the other three here would be the real failure.
+    showParty(res.attendee);
     renderCount();
     return;
   }
@@ -782,6 +853,7 @@ function renderSearchResults(list) {
     note.textContent = 'Showing ' + MAX_RESULTS + ' of ' + list.length + '. Keep typing to narrow it down.';
     host.appendChild(note);
   }
+  holdFocus();   // this render dropped the previous result buttons
 }
 
 // ═══════════════════════════════════════════════════
@@ -819,11 +891,20 @@ function partyRow(attendee, ticked, onToggle) {
   who.append(name, meta);
   row.appendChild(who);
 
+  // Three states, never two. A ticked row saying "not here yet" next to a
+  // filled tick reads as a contradiction to someone briefed five minutes
+  // ago: the tick is intent, the pill is what the system has recorded.
   const status = document.createElement('span');
-  status.className = attendee.checked_in_at ? 'pill-in' : 'pill-un';
-  status.textContent = attendee.checked_in_at
-    ? `arrived ${new Date(attendee.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    : 'not here yet';
+  if (attendee.checked_in_at) {
+    status.className = 'pill-in';
+    status.textContent = `arrived ${new Date(attendee.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } else if (ticked) {
+    status.className = 'pill-go';
+    status.textContent = 'checking in…';
+  } else {
+    status.className = 'pill-un';
+    status.textContent = 'not here yet';
+  }
   row.appendChild(status);
 
   return row;
@@ -835,6 +916,7 @@ function renderParty() {
 
   if (!S.party) {
     document.getElementById('actions').style.display = 'none';
+    holdFocus();
     return;
   }
 
@@ -861,6 +943,10 @@ function renderParty() {
 
   document.getElementById('actions').style.display = 'flex';
   renderPrimary(S.party.ticked.size);
+  // This render replaced every row, so the tick the operator just clicked
+  // no longer exists and focus has fallen back to the body. Reclaim it
+  // now rather than waiting for a timer.
+  holdFocus();
 }
 
 // Re-rendering the whole card on every toggle also drops the clicked
@@ -874,12 +960,16 @@ function toggleMember(attendee) {
 }
 
 // The label states exactly what the button is about to do, so a
-// volunteer never has to guess how many people they are committing.
+// volunteer never has to guess how many people they are committing. With
+// nothing ticked it names the next action instead of reading "Check in 0
+// · Print 0 badges", which is a dead state that invites hammering.
 function renderPrimary(count) {
   const btn = document.getElementById('primary');
-  btn.textContent = count === 1
-    ? 'Check in 1 · Print 1 badge'
-    : `Check in ${count} · Print ${count} badges`;
+  btn.textContent = count === 0
+    ? 'Tick who is here'
+    : (count === 1
+        ? 'Check in 1 · Print 1 badge'
+        : `Check in ${count} · Print ${count} badges`);
   btn.disabled = count === 0;
 }
 </script>

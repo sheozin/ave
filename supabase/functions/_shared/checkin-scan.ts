@@ -31,12 +31,37 @@ export function searchByName(query: string, roster: Attendee[]): Attendee[] {
   );
 }
 
+const GENERIC_COMPANY = new Set([
+  'freelance', 'freelancer', 'self employed', 'selfemployed', 'self',
+  'n/a', 'na', 'none', 'nil', 'student', 'private', 'individual',
+  'unemployed', 'retired', 'me', 'myself', 'guest', 'visitor', 'other',
+]);
+
+// Company is free text typed by a dozen different people, so exact
+// matching splits one firm into several parties ("Acme" vs "Acme Sp. z
+// o.o."). Normalising fixes that. The generic blocklist guards the
+// opposite and more dangerous failure: everyone who typed "Freelance"
+// would otherwise assemble into one party of strangers, each a single
+// tick from being checked in.
+export function normalizeCompany(raw: string | null): string | null {
+  if (!raw) return null;
+  let n = raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+             .toLowerCase().trim().replace(/\s+/g, ' ');
+  n = n.replace(/\b(sp\.?\s?z\s?o\.?\s?o\.?|s\.?a\.?|ltd|limited|llc|inc|gmbh|b\.?v\.?|oy|ab|a\/s|srl|sarl|plc|co)\b/g, '');
+  n = n.replace(/[.,\-–—\s]+$/, '').replace(/\s+/g, ' ').trim();
+  if (!n || GENERIC_COMPANY.has(n)) return null;
+  return n;
+}
+
+export const MAX_PARTY = 8;
+
 export function assembleParty(anchor: Attendee, roster: Attendee[]): Attendee[] {
-  if (!anchor.company) return [anchor];
-  const mates = roster.filter(a =>
-    a.id !== anchor.id &&
-    a.company !== null &&
-    a.company.toLowerCase() === anchor.company!.toLowerCase()
-  );
+  const key = normalizeCompany(anchor.company);
+  if (!key) return [anchor];
+  const mates = roster.filter(a => a.id !== anchor.id && normalizeCompany(a.company) === key);
+  // A party larger than a desk can handle is almost certainly a data
+  // artefact, not eight colleagues standing there. Fall back to the
+  // anchor alone rather than presenting a mass check-in.
+  if (mates.length + 1 > MAX_PARTY) return [anchor];
   return [anchor, ...mates];
 }
