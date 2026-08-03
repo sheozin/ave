@@ -16,7 +16,7 @@
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/053_checkin_station_support.sql` | Create: `'undo'` result value, `operator_id`, two entitlement flags |
+| `supabase/migrations/053_checkin_station_support.sql` | Create: `'undo'` result value, `operator_id`, `client_id` dedup index, two entitlement flags |
 | `supabase/functions/checkin-record-scans/index.ts` | Create: batch scan ingest, first-scan-wins authority |
 | `supabase/functions/_shared/checkin-scan.ts` | Create: pure resolve/classify logic shared by function and tests |
 | `cuedeck-checkin.html` | Create: the desk + kiosk page (single file, repo convention) |
@@ -44,7 +44,7 @@
 -- ============================================================
 -- CueDeck — Migration 053: Check-in module — station support
 -- ============================================================
--- Three changes supporting the check-in station UI (see
+-- Four changes supporting the check-in station UI (see
 -- docs/superpowers/specs/2026-08-03-checkin-station-ui-design.md):
 --
 -- 1. 'undo' added to leod_checkin_scan_events.result. Undoing a
@@ -122,6 +122,14 @@ SELECT column_name FROM information_schema.columns
 ```
 
 Expected: 2 rows.
+
+```sql
+SELECT indexname FROM pg_indexes
+ WHERE tablename = 'leod_checkin_scan_events'
+   AND indexname = 'idx_checkin_scan_events_client_id_unique';
+```
+
+Expected: 1 row. This index is what makes retried flushes at-most-once.
 
 - [ ] **Step 4: Commit**
 
