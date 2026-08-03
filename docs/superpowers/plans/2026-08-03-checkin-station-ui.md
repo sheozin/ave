@@ -320,11 +320,20 @@ git commit -m "feat(checkin): scan resolution and party assembly logic"
 // tests/checkin-outbox.spec.ts
 // Offline outbox for the check-in station: queueing, ordering, and
 // replay after reconnect. Mirrored in cuedeck-checkin.html.
+// Both are replayed in scanned_at order and the server applies them
+// sequentially, so a checkin followed by an undo nets out correctly
+// without any client-side collapsing.
 import { describe, it, expect } from 'vitest';
 
 type Pending = {
-  client_id: string; attendee_id: string; scanned_at: string;
-  action: 'checkin' | 'undo'; synced: boolean;
+  client_id: string;
+  attendee_id: string;
+  // scanned_at MUST be canonical UTC ISO-8601 from Date#toISOString()
+  // (always 'Z', fixed width). Ordering compares these as strings, so a
+  // mixed offset like +02:00 would sort wrong.
+  scanned_at: string;
+  action: 'checkin' | 'undo';
+  synced: boolean;
 };
 
 function enqueue(outbox: Pending[], item: Omit<Pending, 'synced'>): Pending[] {
@@ -340,18 +349,12 @@ function replayOrder(outbox: Pending[]): Pending[] {
   return outbox
     .filter(p => !p.synced)
     .slice()
-    .sort((a, b) => a.scanned_at.localeCompare(b.scanned_at));
+    .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0));
 }
 
 function markSynced(outbox: Pending[], ids: string[]): Pending[] {
   const s = new Set(ids);
   return outbox.map(p => (s.has(p.client_id) ? { ...p, synced: true } : p));
-}
-
-function collapse(outbox: Pending[]): Pending[] {
-  const last = new Map<string, Pending>();
-  for (const p of replayOrder(outbox)) last.set(p.attendee_id, p);
-  return [...last.values()];
 }
 
 const mk = (o: Partial<Pending> & { client_id: string }): Pending => ({
@@ -387,14 +390,21 @@ describe('checkin-outbox', () => {
     expect(replayOrder(ob).map(p => p.client_id)).toEqual(['c2']);
   });
 
-  it('collapses check-in then undo for one attendee to the undo', () => {
+  it('orders across different attendees, not just one', () => {
     const ob = [
-      mk({ client_id: 'c1', attendee_id: 'a1', action: 'checkin', scanned_at: '2026-08-03T09:00:00Z' }),
-      mk({ client_id: 'c2', attendee_id: 'a1', action: 'undo', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'b', attendee_id: 'a2', scanned_at: '2026-08-03T09:05:00Z' }),
+      mk({ client_id: 'a', attendee_id: 'a1', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'c', attendee_id: 'a3', scanned_at: '2026-08-03T09:09:00Z' }),
     ];
-    const c = collapse(ob);
-    expect(c).toHaveLength(1);
-    expect(c[0].action).toBe('undo');
+    expect(replayOrder(ob).map(p => p.client_id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('keeps a checkin and its later undo in order for replay', () => {
+    const ob = [
+      mk({ client_id: 'c2', action: 'undo', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'c1', action: 'checkin', scanned_at: '2026-08-03T09:00:00Z' }),
+    ];
+    expect(replayOrder(ob).map(p => p.action)).toEqual(['checkin', 'undo']);
   });
 });
 ```
@@ -402,7 +412,7 @@ describe('checkin-outbox', () => {
 - [ ] **Step 2: Run it**
 
 Run: `npx vitest run tests/checkin-outbox.spec.ts`
-Expected: PASS, 5 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 3: Commit**
 
@@ -794,7 +804,8 @@ async function flushOutbox() {
   try {
     const all = await idbGetAll(STORE_OUTBOX);
     const pending = all.filter(p => !p.synced)
-                       .sort((a, b) => a.scanned_at.localeCompare(b.scanned_at));
+                       .sort((a, b) => (a.scanned_at < b.scanned_at ? -1
+                                      : a.scanned_at > b.scanned_at ? 1 : 0));
     if (!pending.length) return;
     const { data, error } = await sb.functions.invoke('checkin-record-scans', {
       body: {
@@ -1291,7 +1302,7 @@ git push origin main
 
 **Spec coverage:** desk UI → Tasks 5–7; arrival/party model → Task 6; offline → Tasks 3, 7; duplicates first-wins → Tasks 2, 4; undo → Tasks 1, 8; name correction → Task 9; badge printing → Task 10; kiosk → Tasks 11, 12; per-event flags → Tasks 1, 12; GDPR consent → Tasks 11, 12; testing → Tasks 2, 3, 11, 13, 14. No spec section is unimplemented.
 
-**Type consistency:** `Attendee`, `ScanResult`, `Pending`, and `KioskForm` are defined once and used identically throughout. Function names (`resolveToken`, `searchByName`, `assembleParty`, `enqueue`, `replayOrder`, `validateKiosk`, `isDuplicateEmail`, `shortCode`, `printBadges`, `flushOutbox`, `commitParty`, `undoCheckin`, `saveName`) are stable across tasks.
+**Type consistency:** `Attendee`, `ScanResult`, `Pending`, and `KioskForm` are defined once and used identically throughout. Function names (`resolveToken`, `searchByName`, `assembleParty`, `enqueue`, `replayOrder`, `markSynced`, `validateKiosk`, `isDuplicateEmail`, `shortCode`, `printBadges`, `flushOutbox`, `commitParty`, `undoCheckin`, `saveName`) are stable across tasks.
 
 **Security:** every DOM path that renders attendee-supplied text uses `createElement` + `textContent` + `replaceChildren`. No `innerHTML` anywhere in the plan. Task 13 includes an e2e test asserting a name containing markup does not execute.
 
