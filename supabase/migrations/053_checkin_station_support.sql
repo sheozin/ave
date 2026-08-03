@@ -1,7 +1,7 @@
 -- ============================================================
 -- CueDeck — Migration 053: Check-in module — station support
 -- ============================================================
--- Three changes supporting the check-in station UI (see
+-- Four changes supporting the check-in station UI (see
 -- docs/superpowers/specs/2026-08-03-checkin-station-ui-design.md):
 --
 -- 1. 'undo' added to leod_checkin_scan_events.result. Undoing a
