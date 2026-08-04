@@ -254,6 +254,12 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .pill-un{background:var(--wm);color:var(--t2);border:1px solid var(--bd2)}
 .pill-go{background:var(--acsf);color:var(--ac);border:1px solid var(--ac)}
 
+/* A printed badge cannot be un-printed, so a name corrected afterwards
+   leaves the attendee wearing the old spelling. Amber and quiet: it
+   sits under the name it contradicts, states the fact, and asks for
+   nothing. There is deliberately no reprint control here.          */
+.pstale{font-size:12px;font-weight:600;color:var(--am);margin-top:3px;overflow-wrap:anywhere}
+
 /* ── DESK ACTIONS ── */
 .ck-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
 .ck-actions .ck-btn{flex:1 1 220px}
@@ -270,6 +276,52 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
   border-top-color:var(--ac);border-radius:50%;animation:ck-rot .8s linear infinite;
 }
 @keyframes ck-rot{to{transform:rotate(360deg)}}
+
+/* ── BADGE PRINTING ───────────────────────────────
+   ★ BADGE STOCK SIZE — 100mm × 70mm ★
+   This is the first thing anyone will need to change for a different
+   venue. Three values must move together: the @page size and the
+   .badge width and height. If they disagree, Chrome scales the page
+   to fit the sheet and every badge prints small and off-centre.
+   Procedure is in docs/checkin-desk-runbook.md.
+
+   #badge-sheet is hidden on screen and is the ONLY thing that prints:
+   everything else on the page is display:none in print. Chrome
+   launched with --kiosk-printing sends window.print() straight to the
+   OS default printer with no dialog and no preview, which is what
+   makes a badge come out of the machine the moment the operator
+   presses the button. There is no print agent and none is needed.  */
+#badge-sheet { display: none; }
+
+@media print {
+  /* The desk page is light grey. Chrome does not print backgrounds by
+     default, but a driver or a profile with "Background graphics" on
+     would flood every label with it. Explicitly white here.        */
+  body { background: #fff; }
+  body > *:not(#badge-sheet) { display: none !important; }
+  #badge-sheet { display: block !important; }
+  @page { size: 100mm 70mm; margin: 0; }
+  .badge {
+    width: 100mm; height: 70mm; page-break-after: always;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center;
+    font-family: -apple-system, system-ui;
+    /* @page has zero margin so the badge can own the full stock. This
+       keeps text off the physical edge, where a label printer's cut
+       tolerance eats a millimetre or two.                          */
+    padding: 0 6mm;
+  }
+  /* Without this the last badge is followed by a forced break and the
+     printer spits one blank label per party. Badge stock is not free
+     and a blank one at the desk reads as a jam.                    */
+  .badge:last-child { page-break-after: auto; }
+  /* Size is set per badge in badgeNamePt() — this is the ceiling that
+     an ordinary name gets. anywhere + auto height let a name that has
+     already hit the floor size wrap instead of running off the card. */
+  .badge .nm { font-size: 30pt; font-weight: 700; letter-spacing: -0.5pt; overflow-wrap: anywhere; max-width: 100%; }
+  .badge .co { font-size: 13pt; margin-top: 3mm; overflow-wrap: anywhere; max-width: 100%; }
+  .badge .tt { font-size: 10pt; text-transform: uppercase; letter-spacing: 1pt; margin-top: 2mm; overflow-wrap: anywhere; max-width: 100%; }
+}
 </style>
 </head>
 <body>
@@ -335,6 +387,13 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 
 <!-- ── LOADING ─────────────────────────────────── -->
 <div id="loading"><div class="ck-spin"></div></div>
+
+<!-- ── BADGE SHEET ─────────────────────────────────
+     Hidden on screen, and the only thing that prints. Must stay a
+     DIRECT child of <body>: the print rule hides body's other children
+     by selector, so nesting this inside one of them would hide it too.
+     Filled by printBadges(); empty at rest.                        -->
+<div id="badge-sheet" aria-hidden="true"></div>
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -1083,8 +1142,126 @@ scanInput.addEventListener('input', () => {
 document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
 document.getElementById('secondary').addEventListener('click', () => commitTicked({ print: false }));
 
-// Task 10 owns badge printing. Stubbed so the commit path is complete.
-async function printBadges(attendees) {}
+// ═══════════════════════════════════════════════════
+// BADGE PRINTING
+// A badge is an HTML element with a @page rule. Chrome launched with
+// --kiosk-printing sends window.print() straight to the OS default
+// printer: no dialog, no preview, no user gesture beyond the button the
+// operator already pressed. That is the whole mechanism — there is no
+// print agent, no daemon and no queue of our own.
+//
+// Every node below is createElement + textContent. That rule holds
+// across this page, but it matters most here: a badge is rendered from
+// attendee text and then printed, and attendee text arrives from a CSV
+// import today and from an unattended kiosk in Task 12.
+// The stock size lives in the <style> block above, marked ★ BADGE
+// STOCK SIZE ★.
+// ═══════════════════════════════════════════════════
+
+// The name is the one field that can be arbitrarily long, and a clipped
+// surname on a badge someone wears all day is worse than slightly
+// smaller type — they cannot fix it, and the door staff reading it
+// cannot either. 30pt on 100mm stock fits roughly 18 characters across;
+// past that the size scales down in proportion. The floor keeps a name
+// legible across a room, and below it the name wraps to a second line
+// rather than shrinking to nothing: .nm carries overflow-wrap:anywhere
+// and the badge is a centred flex column, so extra lines stay centred.
+const BADGE_NAME_PT     = 30;   // matches .badge .nm in the print block
+const BADGE_NAME_FITS   = 18;   // characters that fit at BADGE_NAME_PT
+const BADGE_NAME_MIN_PT = 14;
+
+function badgeNamePt(name) {
+  const n = name.trim().length;
+  if (n <= BADGE_NAME_FITS) return BADGE_NAME_PT;
+  return Math.max(BADGE_NAME_MIN_PT, Math.round(BADGE_NAME_PT * BADGE_NAME_FITS / n));
+}
+
+function badgeNode(attendee) {
+  const badge = document.createElement('div');
+  badge.className = 'badge';
+
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  const name = fullName(attendee);
+  nm.textContent = name;
+  nm.style.fontSize = badgeNamePt(name) + 'pt';
+
+  const co = document.createElement('div');
+  co.className = 'co';
+  co.textContent = attendee.company || '';
+
+  const tt = document.createElement('div');
+  tt.className = 'tt';
+  tt.textContent = attendee.ticket_type || '';
+
+  badge.append(nm, co, tt);
+  return badge;
+}
+
+// Attendees whose badge is already out of the printer and whose name has
+// been corrected since. Held here rather than on the attendee object
+// because a reconcile replaces every roster object and the flag would go
+// with it. Cleared when a badge for that person prints again.
+const badgeStale = new Set();
+
+// badge_printed_at is written straight to the table with the operator's
+// own JWT. No Edge Function writes this column, and migration 054
+// deliberately leaves it unguarded so that crew — the role that works
+// the desk — can stamp it. Do not route this through a function.
+//
+// Best-effort by design. Nothing on screen depends on it, the check-in
+// itself is already durable in the outbox, and there is no action a
+// volunteer at a queue could take about a failed bookkeeping write. So
+// it is logged, not surfaced.
+async function stampBadgePrinted(ids, when) {
+  if (!ids.length) return;
+  // The stamp needs the network; the badge did not. Offline it is
+  // skipped rather than queued: the outbox carries scan events replayed
+  // through checkin-record-scans, and this is a direct table write of a
+  // different shape. The local value below stands until the next
+  // reconcile overwrites it from the server, at which point the record
+  // that this badge printed is lost. That is a known, accepted loss —
+  // see the runbook. A second queue is not worth it for a column
+  // nothing reads back.
+  if (!navigator.onLine) {
+    console.warn('checkin: offline, badge_printed_at not recorded for', ids.length, 'attendee(s)');
+    return;
+  }
+  const { error } = await sb
+    .from('leod_checkin_attendees')
+    .update({ badge_printed_at: when })
+    .in('id', ids);
+  if (error) console.error('checkin: badge_printed_at not recorded', error);
+}
+
+// One party, one print job. Calling print() per attendee would spool a
+// separate job for each person standing at the desk, and under
+// --kiosk-printing those race each other to the same printer.
+//
+// PRINTING NEVER WAITS ON THE NETWORK. print() goes first and the stamp
+// follows, for two reasons. A round trip before print() would put venue
+// wifi between the operator pressing the button and the badge appearing,
+// which is the one moment this desk is judged on. And stamping first
+// would record a badge as printed that a throw between the two calls
+// meant never came out. Printing first can only ever over-record in the
+// other direction — a badge that reached the printer but jammed inside
+// it — and that is a physical failure the operator is looking straight
+// at, not one the database can help with.
+async function printBadges(attendees) {
+  if (!attendees.length) return;
+
+  document.getElementById('badge-sheet').replaceChildren(...attendees.map(badgeNode));
+
+  window.print();
+
+  const now = new Date().toISOString();
+  for (const a of attendees) {
+    a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
+    badgeStale.delete(a.id);       // this badge carries the current spelling
+    await idbPutAll(STORE_ROSTER, [a]);
+  }
+  await stampBadgePrinted(attendees.map(a => a.id), now);
+}
 
 // A check-in is durable the moment it is queued, not when the server
 // hears about it. The outbox write comes first: crashing between the two
@@ -1637,6 +1814,10 @@ async function commitNameEdit(id) {
   }
 
   S.editing = null;
+  // The badge is already out of the printer and says the old spelling.
+  // Correcting the roster does not correct the thing they are wearing,
+  // so record that the two now disagree; partyRow says so on the row.
+  if (a.badge_printed_at) badgeStale.add(a.id);
   // Re-point the card at the live roster objects, exactly as afterUndo
   // does, so every surface showing this person moves together.
   if (S.party) {
@@ -1687,6 +1868,19 @@ function partyRow(attendee, ticked, onToggle) {
   meta.className = 'pm';
   meta.textContent = attendee.ticket_type;
   who.append(name, meta);
+
+  // The name above is now the corrected one, and the badge in this
+  // person's hand is not. Nothing else on screen would say so. Stated
+  // under the name it contradicts, with no control attached: reprinting
+  // is not this task's, and a volunteer who can see the state can hand
+  // the right badge over themselves.
+  if (badgeStale.has(attendee.id)) {
+    const stale = document.createElement('div');
+    stale.className = 'pstale';
+    stale.textContent = 'Badge already printed · reprint needed';
+    who.appendChild(stale);
+  }
+
   row.appendChild(who);
 
   // Three states, never two. A ticked row saying "not here yet" next to a
