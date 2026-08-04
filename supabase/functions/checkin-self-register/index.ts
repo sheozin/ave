@@ -14,7 +14,7 @@
 //
 // Exactly two success bodies exist and nothing may be added to either:
 //
-//   { status: 'registered', code: 'B4K2' }
+//   { status: 'registered', code: 'B4K2C7' }
 //   { status: 'already_registered' }
 //
 // The second one is why this function exists as a function rather than
@@ -121,8 +121,29 @@ function isDuplicateEmail(err: { code?: string; message?: string }): boolean {
 // badge or in a spoken code; a short or letterless token yields a
 // shorter string rather than throwing, since the caller is an
 // unattended screen with nowhere to report an exception.
+//
+// SIX characters, not four. qr_token is a UUID with its dashes
+// stripped, so the surviving alphabet is uppercase hex — 16 symbols.
+// Four of those is 16^4 = 65,536 values, and by the birthday bound a
+// 200-person walk-up queue has a 26% chance of two people being handed
+// the same code. At the desk that is not a rare curiosity, it is one
+// morning in four where two strangers read out the same four letters
+// and the operator picks the wrong record. Six gives 16^6 = 16,777,216
+// and drops the same collision to 0.12% at 200 and 2.9% at 1,000.
+//
+// NO confusable characters are excluded, and that is deliberate. This
+// code is DERIVED from an existing token, not generated — the only
+// available move is to drop characters, which would shrink the
+// alphabet rather than reshape it. Excluding the one genuinely
+// confusable pair in uppercase hex (8 and B) would leave 14 symbols,
+// 14^6 = 7.5M, and make collisions more than twice as likely in
+// exchange for a distinction people rarely mishear. The pairs that
+// actually cause trouble when read aloud — 0/O, 1/I, 5/S — cannot
+// occur here at all, because O, I and S are not hex digits. Contrast
+// checkin-kiosk-pair, which GENERATES its code and therefore does pick
+// an unambiguous alphabet.
 function shortCode(token: string): string {
-  return token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()
+  return token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()
 }
 
 // Trim and lowercase, nothing else — the key migration 050 indexes.

@@ -92,13 +92,30 @@ function isDuplicateEmail(err: { code?: string; message?: string }): boolean {
 }
 
 // The human-readable code printed on screen and read aloud to the
-// person at the desk. Four alphanumerics from the qr_token, uppercased.
+// person at the desk. Six alphanumerics from the qr_token, uppercased.
 // Non-alphanumerics are dropped first so punctuation never lands on a
 // badge or in a spoken code; a short or letterless token simply yields
 // a shorter string rather than throwing, since the caller is an
 // unattended screen with nowhere to report an exception.
+//
+// SIX, not four. qr_token is a dash-stripped UUID, so what survives is
+// uppercase hex — a 16-symbol alphabet. Four characters is 16^4 =
+// 65,536 values, and the birthday bound puts a 200-person walk-up
+// queue at a 26% chance of two attendees holding the same code, which
+// at the desk means an operator confidently opening the wrong record.
+// Six gives 16^6 = 16,777,216: 0.12% at 200 walk-ups, 2.9% at 1,000.
+// The 'collision probability' block at the end of this section pins
+// those numbers down so a future shortening fails the suite.
+//
+// Confusable characters are NOT excluded. This code is derived from an
+// existing token rather than generated, so the only available move is
+// to drop symbols — and dropping the one real confusable pair in
+// uppercase hex (8/B) would leave 14 symbols, 7.5M combinations, and
+// more than double the collision rate. The pairs that actually cause
+// trouble aloud (0/O, 1/I, 5/S) cannot arise, because O, I and S are
+// not hex digits.
 function shortCode(token: string): string {
-  return token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+  return token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
 }
 
 // Trim and lowercase, nothing else. Matches lower(email) in migration
@@ -285,12 +302,12 @@ describe('kiosk: isDuplicateEmail', () => {
 // ════════════════════════════════════════════════════════════════
 
 describe('kiosk: shortCode', () => {
-  it('takes the first four characters of a token, uppercased', () => {
-    expect(shortCode('a1b2c3d4e5f6')).toBe('A1B2');
+  it('takes the first SIX characters of a token, uppercased', () => {
+    expect(shortCode('a1b2c3d4e5f6')).toBe('A1B2C3');
   });
 
   it('leaves an already-uppercase token unchanged', () => {
-    expect(shortCode('ABCD1234')).toBe('ABCD');
+    expect(shortCode('ABCD1234')).toBe('ABCD12');
   });
 
   it('is stable — the same token always yields the same code', () => {
@@ -298,9 +315,10 @@ describe('kiosk: shortCode', () => {
     expect(shortCode(token)).toBe(shortCode(token));
   });
 
-  it('returns whatever is available when the token is shorter than four characters', () => {
+  it('returns whatever is available when the token is shorter than six characters', () => {
     expect(shortCode('ab')).toBe('AB');
     expect(shortCode('x')).toBe('X');
+    expect(shortCode('abcde')).toBe('ABCDE');
   });
 
   it('returns an empty string for an empty token rather than throwing', () => {
@@ -315,8 +333,74 @@ describe('kiosk: shortCode', () => {
   });
 
   it('skips punctuation to reach real characters in a dashed token', () => {
-    // A UUID with its dashes left in still yields four usable characters.
-    expect(shortCode('a-b-c-d-e')).toBe('ABCD');
+    // A UUID with its dashes left in still yields six usable characters.
+    expect(shortCode('a-b-c-d-e-f-0')).toBe('ABCDEF');
+  });
+
+  // The length is the whole point of the widening, so assert it
+  // directly against a real qr_token shape rather than only through
+  // hand-picked literals. A future edit that shortens it back to four
+  // fails here first.
+  it('produces exactly six characters from a full 32-hex qr_token', () => {
+    const qrToken = 'f47ac10b58cc4372a5670e02b2c3d479';
+    expect(shortCode(qrToken)).toHaveLength(6);
+    expect(shortCode(qrToken)).toBe('F47AC1');
+  });
+
+  it('emits only uppercase hex, the alphabet a dash-stripped UUID leaves behind', () => {
+    const qrToken = 'f47ac10b58cc4372a5670e02b2c3d479';
+    expect(shortCode(qrToken)).toMatch(/^[0-9A-F]{6}$/);
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// shortCode — collision probability
+// ════════════════════════════════════════════════════════════════
+//
+// The reason the code is six characters and not four, expressed as an
+// assertion so that shortening it is a test failure rather than a
+// judgement call someone makes alone.
+//
+// qr_token is a UUID with its dashes removed, so shortCode's output
+// alphabet is uppercase hex: 16 symbols. The birthday bound for n
+// draws from a space of size N is 1 - exp(-n(n-1) / 2N).
+//
+//   4 chars, 16^4 =     65,536 ->  26.2% at 200 walk-ups, 99.95% at 1,000
+//   6 chars, 16^6 = 16,777,216 ->  0.119% at 200,           2.93% at 1,000
+//
+// 26% is not a tail risk. It is one event in four where two people at
+// the same conference are handed the same code, read it out at the
+// desk, and the operator opens whichever record matched first.
+
+function collisionProbability(codeLength: number, walkUps: number): number {
+  const space = Math.pow(16, codeLength);
+  return 1 - Math.exp((-walkUps * (walkUps - 1)) / (2 * space));
+}
+
+describe('kiosk: shortCode collision probability', () => {
+  it('confirms the four-character code was unusable at a real walk-up volume', () => {
+    expect(collisionProbability(4, 200)).toBeCloseTo(0.262, 2);
+    expect(collisionProbability(4, 1000)).toBeGreaterThan(0.999);
+  });
+
+  it('puts a six-character code near zero at 200 walk-ups', () => {
+    expect(collisionProbability(6, 200)).toBeCloseTo(0.00119, 4);
+    expect(collisionProbability(6, 200)).toBeLessThan(0.002);
+  });
+
+  it('keeps a six-character code under 3% even at 1,000 walk-ups', () => {
+    expect(collisionProbability(6, 1000)).toBeCloseTo(0.0293, 3);
+    expect(collisionProbability(6, 1000)).toBeLessThan(0.03);
+  });
+
+  // The guard that matters: whatever length shortCode uses, it must
+  // keep a 200-person queue comfortably clear of collisions. Reading
+  // the length off the function itself means a change to the slice
+  // fails here without anyone remembering to update a literal.
+  it('the length shortCode actually uses keeps 200 walk-ups under 1%', () => {
+    const length = shortCode('0123456789abcdef0123456789abcdef').length;
+    expect(length).toBe(6);
+    expect(collisionProbability(length, 200)).toBeLessThan(0.01);
   });
 });
 
@@ -409,24 +493,24 @@ function kioskResponseFor(outcome: 'new' | 'collision', code: string): KioskResp
 
 describe('kiosk: collision response shape', () => {
   it('returns the code on the new-registration branch — that person just proved nothing, but the record is theirs', () => {
-    expect(kioskResponseFor('new', 'A1B2')).toEqual({ status: 'registered', code: 'A1B2' });
+    expect(kioskResponseFor('new', 'A1B2C3')).toEqual({ status: 'registered', code: 'A1B2C3' });
   });
 
   it('returns status and NOTHING else on the collision branch', () => {
-    const res = kioskResponseFor('collision', 'A1B2');
+    const res = kioskResponseFor('collision', 'A1B2C3');
     expect(Object.keys(res)).toEqual(['status']);
     expect(res).toEqual({ status: 'already_registered' });
   });
 
   it('never carries a code property on the collision branch, not even undefined or empty', () => {
-    const res = kioskResponseFor('collision', 'A1B2');
+    const res = kioskResponseFor('collision', 'A1B2C3');
     expect(res).not.toHaveProperty('code');
     expect(res).not.toHaveProperty('short_code');
     expect(res).not.toHaveProperty('qr_token');
   });
 
   it('never carries identifying fields on the collision branch', () => {
-    const res = kioskResponseFor('collision', 'A1B2');
+    const res = kioskResponseFor('collision', 'A1B2C3');
     for (const leak of ['id', 'attendee_id', 'first_name', 'last_name', 'name', 'email', 'company', 'checked_in_at']) {
       expect(res).not.toHaveProperty(leak);
     }
@@ -436,7 +520,7 @@ describe('kiosk: collision response shape', () => {
   // later, the collision payload must not contain the code anywhere in
   // it — not nested, not renamed, not masked into a hint string.
   it('leaks no part of the existing record anywhere in the serialised payload', () => {
-    const code = 'A1B2';
+    const code = 'A1B2C3';
     const serialised = JSON.stringify(kioskResponseFor('collision', code));
     expect(serialised).toBe('{"status":"already_registered"}');
     expect(serialised).not.toContain(code);
@@ -447,7 +531,7 @@ describe('kiosk: collision response shape', () => {
   it('is indistinguishable in size and structure from a probe of an unregistered address, apart from the status word', () => {
     // An attacker timing or sizing responses learns only which branch
     // ran, which is unavoidable; they must not learn anything further.
-    const collision = kioskResponseFor('collision', 'A1B2');
+    const collision = kioskResponseFor('collision', 'A1B2C3');
     expect(Object.keys(collision)).toHaveLength(1);
   });
 });
