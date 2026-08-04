@@ -18,6 +18,8 @@
 |---|---|
 | `supabase/migrations/053_checkin_station_support.sql` | Create: `'undo'` result value, `operator_id`, `client_id` dedup index, two entitlement flags |
 | `supabase/functions/checkin-record-scans/index.ts` | Create: batch scan ingest, first-scan-wins authority |
+| `supabase/functions/checkin-self-register/index.ts` | Create: kiosk walk-up registration, device-key gated |
+| `supabase/migrations/055_checkin_kiosk_support.sql` | Create: `consent_at`, kiosk device key plumbing, rate limiting |
 | `supabase/functions/_shared/checkin-scan.ts` | Create: pure resolve/classify logic shared by function and tests |
 | `cuedeck-checkin.html` | Create: the desk + kiosk page (single file, repo convention) |
 | `tests/checkin-scan.spec.ts` | Create: scan resolution, first-wins, party assembly |
@@ -1102,40 +1104,44 @@ Screen 2 — four fields (first name, last name, company, email) at `font-size: 
 
 Screen 3 — the GDPR consent tick (never pre-checked) with a privacy notice link, then the result panel showing the four-character code via `textContent`.
 
-- [ ] **Step 3: Create the attendee and handle collisions**
+- [ ] **Step 3: Call the Edge Function — never insert directly**
+
+The kiosk gets NO direct table access and NO anon RLS policy. See the spec's
+"Kiosk authentication" section for why: an anon SELECT would leak the roster to anyone
+holding the publishable key, and an anon write path would silently disable migration
+054's column guard.
 
 ```js
 async function kioskRegister(form) {
-  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase();
-  const { data, error } = await sb.from('leod_checkin_attendees').insert({
-    event_id: S.eventId,
-    first_name: form.first_name.trim(),
-    last_name: form.last_name.trim(),
-    company: form.company.trim() || null,
-    email: form.email.trim() || null,
-    ticket_type: 'attendee',
-    qr_token: token,
-  }).select('id, qr_token, first_name, last_name, company, ticket_type').single();
-
-  if (error && isDuplicateEmail(error)) {
-    const { data: existing } = await sb.from('leod_checkin_attendees')
-      .select('id, qr_token, first_name, last_name, company, ticket_type')
-      .eq('event_id', S.eventId).eq('email', form.email.trim()).single();
-    return { alreadyRegistered: true, attendee: existing };
-  }
-  if (error) return { error: error.message };
-
-  if (form.email.trim()) {
-    sb.functions.invoke('checkin-send-qr-emails', {
-      body: { event_id: S.eventId, attendee_ids: [data.id] },
-    });
-  }
-  if (S.kioskSelfPrint) await printBadges([data]);
-  return { attendee: data };
+  const { data, error } = await sb.functions.invoke('checkin-self-register', {
+    body: {
+      event_id: S.event.id,
+      device_key: S.kioskDeviceKey,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      company: form.company.trim() || null,
+      email: form.email.trim() || null,
+      consent: form.consent === true,
+    },
+  });
+  if (error) return { error: 'Something went wrong. Please see the desk.' };
+  return data;   // { status: 'registered', code } | { status: 'already_registered' }
 }
 ```
 
-The email send is deliberately not awaited — the code is already on screen and the attendee should never wait on deliverability.
+The function returns ONE of two shapes and nothing more:
+
+- `{ status: 'registered', code: 'B4K2' }` — a genuinely new attendee
+- `{ status: 'already_registered' }` — **no name, no code, no attendee id**
+
+On `already_registered` the screen says only: *"You're already registered — we've emailed
+your code to the address on file."* The server fires `checkin-send-qr-emails` to the
+STORED address, so the code reaches the real owner rather than whoever is standing at the
+screen. Returning the code here would make the kiosk an email-enumeration oracle: anyone
+knowing a speaker's public address could obtain their QR and check in as them.
+
+Do not add a "was that you?" affordance, a retry hint, or differing response timing
+between the two branches. Any of those re-opens the oracle.
 
 - [ ] **Step 4: Verify**
 
