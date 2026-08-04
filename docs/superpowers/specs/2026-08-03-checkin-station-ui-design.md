@@ -123,13 +123,46 @@ delivery by email is on, which is the default.
 **GDPR consent is mandatory.** A Polish company collecting personal data from EU citizens
 at an unattended screen needs an explicit tick — never pre-checked — with a privacy notice link.
 
-**The already-registered case comes free.** Migration 050's unique index on
-`(event_id, email)` makes the duplicate insert fail; the kiosk catches the collision and
-shows the existing record and its code instead of an error. This is the most common kiosk
-problem at real events and the schema already solves it.
+### Kiosk authentication — Edge Function, never direct table access
 
-On success the kiosk shows a short code **and** triggers the existing
-`checkin-send-qr-emails` function for that attendee — no new sending code.
+The kiosk is an **unattended public screen**. It gets no RLS policy of its own.
+
+It calls a new Edge Function, `checkin-self-register`, with the publishable key plus a
+**kiosk device key** validated against `leod_checkin_devices.api_key_hash` — a column
+migration 048 already provides and nothing has used. The function runs as the service
+role internally.
+
+Three reasons this is not negotiable:
+
+1. **An anon SELECT policy would leak the roster.** The already-registered check needs to
+   read attendees. Granting anon that read hands every name, email and company to anyone
+   holding the publishable key, which is embedded in client-side HTML. That is a GDPR
+   breach, not a design trade-off.
+2. **It would silently disable migration 054.** That guard exempts trusted contexts by
+   role; an anon path through the table turns it off with no error and no diff.
+3. **A device key is revocable per screen.** A kiosk left in a hotel lobby can be cut off
+   without touching the desks.
+
+The kiosk never runs under an operator session. A public touchscreen holding a live crew
+session is one gesture away from exposing undo, name editing and the full roster.
+
+### The already-registered case — reveal nothing
+
+Migration 050's unique index on `(event_id, email)` makes a duplicate insert fail, and the
+function catches that collision. It must **not** return the existing person's code.
+
+Doing so would make the kiosk an email-enumeration oracle: anyone who knows an attendee's
+address — every speaker on a public agenda — could walk up, type it, and be handed that
+person's QR code, then check in as them or collect their badge.
+
+On collision the screen says *"You're already registered — we've emailed your code to the
+address on file"* and shows nothing else. `checkin-send-qr-emails` fires to the **stored**
+address, so the code reaches the real owner rather than whoever is standing there. The
+response body carries no name, no code and no confirmation that the address exists beyond
+that single message.
+
+On a genuinely new registration the kiosk shows a short code **and** triggers
+`checkin-send-qr-emails` — no new sending code.
 
 ### Per-event settings — requires migration 053
 
