@@ -1446,9 +1446,20 @@ function undoButton(attendee, label) {
   btn.setAttribute('aria-label', 'Undo check-in for ' + fullName(attendee));
   btn.addEventListener('click', async () => {
     btn.disabled = true;                   // a double click must not queue two undos
-    const done = await undoCheckin(attendee);
-    if (done) afterUndo(attendee);
-    else btn.disabled = false;
+    try {
+      const done = await undoCheckin(attendee);
+      if (done) afterUndo(attendee);
+      else btn.disabled = false;
+    } catch (err) {
+      // Without this the button stays disabled forever on any throw — an
+      // IndexedDB failure, a quota error, a wedged transaction — leaving
+      // the volunteer a dead control and no explanation. Re-enabling lets
+      // them try again, which is the only useful move at a busy desk.
+      console.error('checkin: undo failed', err);
+      btn.disabled = false;
+      showVerdict('bad', 'That undo did not go through',
+        'Nothing was changed. Try again, or see the desk lead.');
+    }
   });
   return btn;
 }
