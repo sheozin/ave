@@ -16,8 +16,10 @@
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/053_checkin_station_support.sql` | Create: `'undo'` result value, `operator_id`, two entitlement flags |
+| `supabase/migrations/053_checkin_station_support.sql` | Create: `'undo'` result value, `operator_id`, `client_id` dedup index, two entitlement flags |
 | `supabase/functions/checkin-record-scans/index.ts` | Create: batch scan ingest, first-scan-wins authority |
+| `supabase/functions/checkin-self-register/index.ts` | Create: kiosk walk-up registration, device-key gated |
+| `supabase/migrations/055_checkin_kiosk_support.sql` | Create: `consent_at`, kiosk device key plumbing, rate limiting |
 | `supabase/functions/_shared/checkin-scan.ts` | Create: pure resolve/classify logic shared by function and tests |
 | `cuedeck-checkin.html` | Create: the desk + kiosk page (single file, repo convention) |
 | `tests/checkin-scan.spec.ts` | Create: scan resolution, first-wins, party assembly |
@@ -44,7 +46,7 @@
 -- ============================================================
 -- CueDeck — Migration 053: Check-in module — station support
 -- ============================================================
--- Three changes supporting the check-in station UI (see
+-- Four changes supporting the check-in station UI (see
 -- docs/superpowers/specs/2026-08-03-checkin-station-ui-design.md):
 --
 -- 1. 'undo' added to leod_checkin_scan_events.result. Undoing a
@@ -62,6 +64,15 @@
 --    config lives in this table already (personalization_station).
 --    Both default FALSE: a kiosk that lets anyone issue themselves a
 --    badge must be switched on deliberately, never inherited.
+--
+-- 4. client_id on scan_events, with a unique index. The station queues
+--    actions locally and retries on reconnect, so if a flush response
+--    is lost the same item is sent again. The unique index makes that
+--    at-most-once at the DATABASE, which is the only place it can be
+--    guaranteed: the client's own dedup is in-memory and cannot
+--    survive the outbox pruning that a multi-day event requires.
+--    Nullable with a partial index because rows written by other paths
+--    (CSV import, the future door scanner) carry no client_id.
 -- ============================================================
 
 ALTER TABLE leod_checkin_scan_events
@@ -82,6 +93,12 @@ ALTER TABLE leod_checkin_entitlements
 
 ALTER TABLE leod_checkin_entitlements
   ADD COLUMN IF NOT EXISTS kiosk_self_print BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE leod_checkin_scan_events
+  ADD COLUMN IF NOT EXISTS client_id UUID;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_scan_events_client_id_unique
+  ON leod_checkin_scan_events (client_id) WHERE client_id IS NOT NULL;
 ```
 
 - [ ] **Step 2: Apply it**
@@ -107,6 +124,14 @@ SELECT column_name FROM information_schema.columns
 ```
 
 Expected: 2 rows.
+
+```sql
+SELECT indexname FROM pg_indexes
+ WHERE tablename = 'leod_checkin_scan_events'
+   AND indexname = 'idx_checkin_scan_events_client_id_unique';
+```
+
+Expected: 1 row. This index is what makes retried flushes at-most-once.
 
 - [ ] **Step 4: Commit**
 
@@ -320,10 +345,17 @@ git commit -m "feat(checkin): scan resolution and party assembly logic"
 // tests/checkin-outbox.spec.ts
 // Offline outbox for the check-in station: queueing, ordering, and
 // replay after reconnect. Mirrored in cuedeck-checkin.html.
+// Both are replayed in scanned_at order and the server applies them
+// sequentially, so a checkin followed by an undo nets out correctly
+// without any client-side collapsing.
 import { describe, it, expect } from 'vitest';
 
 type Pending = {
-  client_id: string; attendee_id: string; scanned_at: string;
+  client_id: string; attendee_id: string;
+  // scanned_at MUST be canonical UTC ISO-8601 from Date#toISOString()
+  // (always 'Z', fixed width). Ordering compares these as strings, so a
+  // mixed offset like +02:00 would sort wrong.
+  scanned_at: string;
   action: 'checkin' | 'undo'; synced: boolean;
 };
 
@@ -340,18 +372,12 @@ function replayOrder(outbox: Pending[]): Pending[] {
   return outbox
     .filter(p => !p.synced)
     .slice()
-    .sort((a, b) => a.scanned_at.localeCompare(b.scanned_at));
+    .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0));
 }
 
 function markSynced(outbox: Pending[], ids: string[]): Pending[] {
   const s = new Set(ids);
   return outbox.map(p => (s.has(p.client_id) ? { ...p, synced: true } : p));
-}
-
-function collapse(outbox: Pending[]): Pending[] {
-  const last = new Map<string, Pending>();
-  for (const p of replayOrder(outbox)) last.set(p.attendee_id, p);
-  return [...last.values()];
 }
 
 const mk = (o: Partial<Pending> & { client_id: string }): Pending => ({
@@ -387,14 +413,21 @@ describe('checkin-outbox', () => {
     expect(replayOrder(ob).map(p => p.client_id)).toEqual(['c2']);
   });
 
-  it('collapses check-in then undo for one attendee to the undo', () => {
+  it('orders across different attendees, not just one', () => {
     const ob = [
-      mk({ client_id: 'c1', attendee_id: 'a1', action: 'checkin', scanned_at: '2026-08-03T09:00:00Z' }),
-      mk({ client_id: 'c2', attendee_id: 'a1', action: 'undo', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'b', attendee_id: 'a2', scanned_at: '2026-08-03T09:05:00Z' }),
+      mk({ client_id: 'a', attendee_id: 'a1', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'c', attendee_id: 'a3', scanned_at: '2026-08-03T09:09:00Z' }),
     ];
-    const c = collapse(ob);
-    expect(c).toHaveLength(1);
-    expect(c[0].action).toBe('undo');
+    expect(replayOrder(ob).map(p => p.client_id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('keeps a checkin and its later undo in order for replay', () => {
+    const ob = [
+      mk({ client_id: 'c2', action: 'undo', scanned_at: '2026-08-03T09:01:00Z' }),
+      mk({ client_id: 'c1', action: 'checkin', scanned_at: '2026-08-03T09:00:00Z' }),
+    ];
+    expect(replayOrder(ob).map(p => p.action)).toEqual(['checkin', 'undo']);
   });
 });
 ```
@@ -402,7 +435,7 @@ describe('checkin-outbox', () => {
 - [ ] **Step 2: Run it**
 
 Run: `npx vitest run tests/checkin-outbox.spec.ts`
-Expected: PASS, 5 tests.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 3: Commit**
 
@@ -421,108 +454,29 @@ git commit -m "test(checkin): offline outbox queue, ordering, and replay"
 
 - [ ] **Step 1: Write the function**
 
-```ts
-// supabase/functions/checkin-record-scans/index.ts
-// Batch scan ingest for the check-in station. The server is the final
-// authority on checked_in_at: it is set only when currently NULL, so
-// the first scan wins even when two desks sync out of order. A scan
-// that arrives second is recorded as 'duplicate', never dropped.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/cors.ts";
+The implemented function lives at `supabase/functions/checkin-record-scans/index.ts`.
+It was rewritten during implementation after review found six defects in the original
+draft in this plan. Read the file rather than any code that was here — it is the
+source of truth. What it does:
 
-type Item = {
-  client_id: string;
-  attendee_id: string;
-  scanned_at: string;
-  action: "checkin" | "undo";
-};
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const body = await req.json();
-    if (body?._ping) {
-      return new Response(JSON.stringify({ pong: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { event_id, operator_id, scan_point_id, items } = body as {
-      event_id: string; operator_id: string | null;
-      scan_point_id: string | null; items: Item[];
-    };
-
-    if (!event_id || !Array.isArray(items)) {
-      return new Response(JSON.stringify({ error: "event_id and items required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const results: Record<string, string> = {};
-
-    for (const it of items) {
-      const { data: att } = await supabase
-        .from("leod_checkin_attendees")
-        .select("id, event_id, checked_in_at")
-        .eq("id", it.attendee_id)
-        .maybeSingle();
-
-      if (!att) { results[it.client_id] = "unknown_token"; continue; }
-      if (att.event_id !== event_id) { results[it.client_id] = "wrong_event"; continue; }
-
-      let result: string;
-
-      if (it.action === "undo") {
-        await supabase
-          .from("leod_checkin_attendees")
-          .update({ checked_in_at: null })
-          .eq("id", it.attendee_id);
-        result = "undo";
-      } else if (att.checked_in_at) {
-        result = "duplicate";
-      } else {
-        const { data: updated } = await supabase
-          .from("leod_checkin_attendees")
-          .update({ checked_in_at: it.scanned_at })
-          .eq("id", it.attendee_id)
-          .is("checked_in_at", null)
-          .select("id");
-        result = updated && updated.length > 0 ? "ok" : "duplicate";
-      }
-
-      await supabase.from("leod_checkin_scan_events").insert({
-        id: crypto.randomUUID(),
-        event_id,
-        attendee_id: it.attendee_id,
-        scan_point_id: scan_point_id ?? null,
-        device_id: null,
-        operator_id: operator_id ?? null,
-        scanned_at: it.scanned_at,
-        result,
-      });
-
-      results[it.client_id] = result;
-    }
-
-    return new Response(JSON.stringify({ ok: true, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
-```
+- **CORS:** `const cors = corsHeaders(req)` — `corsHeaders` is a FUNCTION in this repo,
+  not an object. Spreading it directly yields `{}` and silently strips every CORS header.
+  `curl` and the deploy ping do not catch this because they send no `Origin`.
+- **Auth:** JWT → `getUser` → 401; operator grant read from `leod_checkin_operators`
+  (not `checkin_role_for_event`, which is SECURITY DEFINER over `auth.uid()` and returns
+  NULL on a service-role connection) → 403; explicit `checkin_core` re-check → 403.
+- **`operator_id` comes from the JWT**, never the request body, or attribution is forgeable.
+- **Undo is a compare-and-set** on `prev_checked_in_at`. A stale undo queued offline must
+  not clear a newer check-in made at another desk; on a 0-row match it records `duplicate`
+  and changes nothing.
+- **Errors are never swallowed.** Both updates and the insert check `error`; failures
+  surface as `results[client_id] = 'error'` plus an `errors[]` array in the response.
+  A failed update must never be reported as `'duplicate'`.
+- **`unknown_token` and `wrong_event` are recorded**, both with `attendee_id: null` —
+  the migration 049 trigger rejects a mismatched attendee/event pair.
+- **Batch capped at 200** items; the client must chunk. Uncapped batches livelock a desk
+  that was offline for hours.
+- **Batch sorted by `scanned_at` server-side** — the server does not trust client ordering.
 
 The `.is("checked_in_at", null)` guard on the update — not the earlier read — is what makes first-wins atomic. Two desks syncing simultaneously cannot both succeed.
 
@@ -794,7 +748,8 @@ async function flushOutbox() {
   try {
     const all = await idbGetAll(STORE_OUTBOX);
     const pending = all.filter(p => !p.synced)
-                       .sort((a, b) => a.scanned_at.localeCompare(b.scanned_at));
+                       .sort((a, b) => (a.scanned_at < b.scanned_at ? -1
+                                      : a.scanned_at > b.scanned_at ? 1 : 0));
     if (!pending.length) return;
     const { data, error } = await sb.functions.invoke('checkin-record-scans', {
       body: {
@@ -819,6 +774,17 @@ async function flushOutbox() {
 window.addEventListener('online', flushOutbox);
 setInterval(flushOutbox, 15000);
 ```
+
+**Three contract requirements from the Edge Function — the flush fails without them:**
+
+1. **Chunk at 200 items.** The server rejects a larger batch with a 400. Slice `pending`
+   into chunks of 200 and invoke once per chunk, or a desk offline through a keynote
+   livelocks: the oversized batch is rejected every time and never drains.
+2. **Send `prev_checked_in_at` on every undo** (see Task 8). The server needs it for the
+   compare-and-set; an undo without it is a validation error.
+3. **Read `errors[]`, not just `results`.** A value of `'error'` in `results` is a
+   FAILURE, not a scan verdict — do not mark those items synced, or the action is lost.
+   Only mark synced the client_ids whose result is a real verdict.
 
 The `flushing` guard prevents the interval and the `online` event from double-sending the same batch.
 
@@ -1138,40 +1104,44 @@ Screen 2 — four fields (first name, last name, company, email) at `font-size: 
 
 Screen 3 — the GDPR consent tick (never pre-checked) with a privacy notice link, then the result panel showing the four-character code via `textContent`.
 
-- [ ] **Step 3: Create the attendee and handle collisions**
+- [ ] **Step 3: Call the Edge Function — never insert directly**
+
+The kiosk gets NO direct table access and NO anon RLS policy. See the spec's
+"Kiosk authentication" section for why: an anon SELECT would leak the roster to anyone
+holding the publishable key, and an anon write path would silently disable migration
+054's column guard.
 
 ```js
 async function kioskRegister(form) {
-  const token = crypto.randomUUID().replace(/-/g, '').slice(0, 16).toUpperCase();
-  const { data, error } = await sb.from('leod_checkin_attendees').insert({
-    event_id: S.eventId,
-    first_name: form.first_name.trim(),
-    last_name: form.last_name.trim(),
-    company: form.company.trim() || null,
-    email: form.email.trim() || null,
-    ticket_type: 'attendee',
-    qr_token: token,
-  }).select('id, qr_token, first_name, last_name, company, ticket_type').single();
-
-  if (error && isDuplicateEmail(error)) {
-    const { data: existing } = await sb.from('leod_checkin_attendees')
-      .select('id, qr_token, first_name, last_name, company, ticket_type')
-      .eq('event_id', S.eventId).eq('email', form.email.trim()).single();
-    return { alreadyRegistered: true, attendee: existing };
-  }
-  if (error) return { error: error.message };
-
-  if (form.email.trim()) {
-    sb.functions.invoke('checkin-send-qr-emails', {
-      body: { event_id: S.eventId, attendee_ids: [data.id] },
-    });
-  }
-  if (S.kioskSelfPrint) await printBadges([data]);
-  return { attendee: data };
+  const { data, error } = await sb.functions.invoke('checkin-self-register', {
+    body: {
+      event_id: S.event.id,
+      device_key: S.kioskDeviceKey,
+      first_name: form.first_name.trim(),
+      last_name: form.last_name.trim(),
+      company: form.company.trim() || null,
+      email: form.email.trim() || null,
+      consent: form.consent === true,
+    },
+  });
+  if (error) return { error: 'Something went wrong. Please see the desk.' };
+  return data;   // { status: 'registered', code } | { status: 'already_registered' }
 }
 ```
 
-The email send is deliberately not awaited — the code is already on screen and the attendee should never wait on deliverability.
+The function returns ONE of two shapes and nothing more:
+
+- `{ status: 'registered', code: 'B4K2' }` — a genuinely new attendee
+- `{ status: 'already_registered' }` — **no name, no code, no attendee id**
+
+On `already_registered` the screen says only: *"You're already registered — we've emailed
+your code to the address on file."* The server fires `checkin-send-qr-emails` to the
+STORED address, so the code reaches the real owner rather than whoever is standing at the
+screen. Returning the code here would make the kiosk an email-enumeration oracle: anyone
+knowing a speaker's public address could obtain their QR and check in as them.
+
+Do not add a "was that you?" affordance, a retry hint, or differing response timing
+between the two branches. Any of those re-opens the oracle.
 
 - [ ] **Step 4: Verify**
 
@@ -1291,7 +1261,7 @@ git push origin main
 
 **Spec coverage:** desk UI → Tasks 5–7; arrival/party model → Task 6; offline → Tasks 3, 7; duplicates first-wins → Tasks 2, 4; undo → Tasks 1, 8; name correction → Task 9; badge printing → Task 10; kiosk → Tasks 11, 12; per-event flags → Tasks 1, 12; GDPR consent → Tasks 11, 12; testing → Tasks 2, 3, 11, 13, 14. No spec section is unimplemented.
 
-**Type consistency:** `Attendee`, `ScanResult`, `Pending`, and `KioskForm` are defined once and used identically throughout. Function names (`resolveToken`, `searchByName`, `assembleParty`, `enqueue`, `replayOrder`, `validateKiosk`, `isDuplicateEmail`, `shortCode`, `printBadges`, `flushOutbox`, `commitParty`, `undoCheckin`, `saveName`) are stable across tasks.
+**Type consistency:** `Attendee`, `ScanResult`, `Pending`, and `KioskForm` are defined once and used identically throughout. Function names (`resolveToken`, `searchByName`, `assembleParty`, `enqueue`, `replayOrder`, `markSynced`, `validateKiosk`, `isDuplicateEmail`, `shortCode`, `printBadges`, `flushOutbox`, `commitParty`, `undoCheckin`, `saveName`) are stable across tasks.
 
 **Security:** every DOM path that renders attendee-supplied text uses `createElement` + `textContent` + `replaceChildren`. No `innerHTML` anywhere in the plan. Task 13 includes an e2e test asserting a name containing markup does not execute.
 
