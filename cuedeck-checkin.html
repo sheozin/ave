@@ -3130,7 +3130,18 @@ async function claimPairingCode() {
   if (error || !data || data.ok !== true ||
       typeof data.device_key !== 'string' || typeof data.event_id !== 'string') {
     console.error('kiosk: pairing rejected, status', kioskErrorStatus(error));
-    err.textContent = 'That code was not accepted. It may have expired or already been used — ask the organizer for a new one.';
+    // RETRY FIRST, and a new code only after that. The commonest way to
+    // land here is a mistyped character, and a mistyped code burns
+    // nothing: checkin_kiosk_claim_pairing() stamps claimed_at only on a
+    // row that actually matched, so the real code is still claimable and
+    // typing it again works. Leading with "ask the organizer for a new
+    // one" sends them across the lobby for a walk that fixes nothing.
+    //
+    // The three real failures — no such code, expired, already claimed —
+    // stay indistinguishable from each other here, exactly as the
+    // function returns them, so a guesser cannot tell a near miss from a
+    // miss. This sentence names none of them.
+    err.textContent = 'That code was not accepted. Check the eight characters and type it again: retrying never uses up a code. If it still will not go through, ask the organizer for a new one.';
     return;
   }
 
