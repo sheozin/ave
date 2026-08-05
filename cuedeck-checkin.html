@@ -373,6 +373,28 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 .ks-dev-state.seen{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
 .ks-dev-state.never{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
+/* A third colour, not a greyed-out version of the other two. A revoked
+   kiosk is not a quieter kind of working — it is a screen that will
+   never come back without being paired again, and it has to read that
+   way at a glance next to a live one. */
+.ks-dev-state.revoked{background:var(--rdsf);border-color:var(--rdbd);color:var(--rd)}
+
+/* The action strip takes the full width of the card rather than sitting
+   beside the pill: the confirmation is a sentence, and a sentence
+   squeezed into a 90px column is a sentence nobody reads before
+   clicking the thing under it. */
+.ks-dev-act{flex:1 1 100%;margin-top:10px}
+.ks-dev-q{font-size:13px;color:var(--t2);line-height:1.5;margin-bottom:9px}
+.ks-dev-err{font-size:13px;color:var(--rd);line-height:1.5;margin-bottom:9px;overflow-wrap:anywhere}
+.ks-dev-note{font-size:12px;color:var(--t3);line-height:1.45}
+.ks-dev-btns{display:flex;gap:8px;flex-wrap:wrap}
+.ks-dev-btn{
+  font-size:13px;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;
+  background:var(--sf);border:1px solid var(--bd2);color:var(--t2);
+}
+.ks-dev-btn:hover{color:var(--t1)}
+.ks-dev-btn.danger{background:var(--rdsf);border-color:var(--rdbd);color:var(--rd)}
+.ks-dev-btn:disabled{opacity:.55;cursor:default}
 
 /* ══ KIOSK ═════════════════════════════════════════
    A different room from the desk. An unattended touch screen in a
@@ -2603,7 +2625,11 @@ function ksAsk(prefill, problem) {
 //
 // api_key_hash is not selected. There is no display for it, and a column
 // that is never fetched cannot be rendered by a later edit.
-const KIOSK_DEV_COLS = 'id, label, kind, last_seen_at, created_at';
+//
+// revoked_at REQUIRES MIGRATION 057. PostgREST rejects a select naming a
+// column it does not know, so this list reports a load failure until the
+// migration is applied. Apply it before this file ships.
+const KIOSK_DEV_COLS = 'id, label, kind, last_seen_at, created_at, revoked_at';
 
 async function ksDevices(host) {
   // Same third door as openKioskSetup(). This function is the only
@@ -2643,6 +2669,10 @@ async function ksDevices(host) {
     // Code only, never the rows. A device label is operator-supplied
     // text and this page does not write those to a log.
     console.error('checkin: kiosk list failed', error && error.code);
+    // replaceChildren first, or the failure reads as "Loading… Could not
+    // load", which is a screen that is both still working and already
+    // broken.
+    list.replaceChildren();
     ksDevNote(list, 'Could not load the kiosks for this event. Creating a code still works.');
     return;
   }
@@ -2690,11 +2720,41 @@ function ksDeviceRow(row) {
   main.appendChild(meta);
   el.appendChild(main);
 
+  const state = document.createElement('div');
+  el.appendChild(state);
+
+  const act = document.createElement('div');
+  act.className = 'ks-dev-act';
+  el.appendChild(act);
+
+  ksDevPaint(row, state, act);
+  return el;
+}
+
+// The row's whole appearance, recomputed from `row` alone. Revoking
+// mutates the local row object and calls this again rather than
+// re-fetching the list: the organizer is looking at the card they just
+// clicked, and a list that reloads underneath them loses their place.
+function ksDevPaint(row, state, act) {
+  act.replaceChildren();
+
+  if (row.revoked_at) {
+    state.className = 'ks-dev-state revoked';
+    state.textContent = 'Revoked ' + ksSince(row.revoked_at);
+    // No Revoke control on an already-revoked row. There is nothing left
+    // to take away, and offering it again invites a click that can only
+    // produce an error.
+    const note = document.createElement('div');
+    note.className = 'ks-dev-note';
+    note.textContent = 'Its key no longer works. This screen has to pair again, with a new code, before it can register anybody.';
+    act.appendChild(note);
+    return;
+  }
+
   // ★ THE ONE THING THIS LIST IS FOR ★
-  // Never seen is not "a bit less recent than seen". It is the state
+  // Never used is not "a bit less recent than used". It is the state
   // where a screen is standing in a lobby doing nothing, and it gets its
   // own colour so it is spotted without reading the row.
-  const state = document.createElement('div');
   if (row.last_seen_at) {
     state.className = 'ks-dev-state seen';
     state.textContent = 'Last used ' + ksSince(row.last_seen_at);
@@ -2702,9 +2762,109 @@ function ksDeviceRow(row) {
     state.className = 'ks-dev-state never';
     state.textContent = 'Never used';
   }
-  el.appendChild(state);
 
-  return el;
+  const btns = document.createElement('div');
+  btns.className = 'ks-dev-btns';
+  const go = document.createElement('button');
+  go.className = 'ks-dev-btn';
+  go.type = 'button';
+  go.textContent = 'Revoke';
+  go.addEventListener('click', () => ksDevConfirm(row, state, act, ''));
+  btns.appendChild(go);
+  act.appendChild(btns);
+}
+
+// ── REVOKE ─────────────────────────────────────────────────────────
+// Destructive, and irreversible from here: migration 057 makes
+// revoked_at one-way, so nothing on this page can put the key back. The
+// tablet has to pair again and gets a different key when it does. That
+// is the whole sentence the confirmation has to say, in front of the
+// button rather than after it.
+//
+// The confirmation is INLINE, in the row, not a second modal. This modal
+// is already a dialog over the desk; stacking another on top of it takes
+// the organizer's eye off which of four rows they were pointing at,
+// which is the one thing that must not become ambiguous.
+function ksDevConfirm(row, state, act, problem) {
+  act.replaceChildren();
+
+  if (problem) {
+    const err = document.createElement('div');
+    err.className = 'ks-dev-err';
+    err.textContent = problem;
+    act.appendChild(err);
+  }
+
+  const q = document.createElement('div');
+  q.className = 'ks-dev-q';
+  q.textContent = 'Revoke this kiosk? It stops working straight away and cannot be switched back on. Pairing the screen again means creating a new code.';
+  act.appendChild(q);
+
+  const btns = document.createElement('div');
+  btns.className = 'ks-dev-btns';
+
+  const yes = document.createElement('button');
+  yes.className = 'ks-dev-btn danger';
+  yes.type = 'button';
+  yes.textContent = 'Yes, revoke';
+  btns.appendChild(yes);
+
+  const no = document.createElement('button');
+  no.className = 'ks-dev-btn';
+  no.type = 'button';
+  no.textContent = 'Cancel';
+  no.addEventListener('click', () => ksDevPaint(row, state, act));
+  btns.appendChild(no);
+
+  yes.addEventListener('click', () => ksDevRevoke(row, state, act, yes, no));
+  act.appendChild(btns);
+}
+
+async function ksDevRevoke(row, state, act, yes, no) {
+  if (yes.disabled) return;
+  // Same reason as minting: this one action cannot be queued. The desk's
+  // outbox exists for check-ins, and a revocation held in a queue is a
+  // key the organizer believes is dead and is not.
+  if (!navigator.onLine) {
+    ksDevConfirm(row, state, act, 'This desk is offline, and revoking has to reach the server. Reconnect, then try again.');
+    return;
+  }
+
+  yes.disabled = true;
+  no.disabled = true;
+  yes.textContent = 'Revoking…';
+
+  let data = null, error = null;
+  try {
+    // event_id as well as id. The row came off the wire and this is a
+    // destructive write, so it is scoped to the event the organizer is
+    // actually signed in to rather than to an id alone.
+    //
+    // .select() is not decoration: RLS denies by returning NO ROWS, not
+    // an error, so an update that matched nothing looks exactly like an
+    // update that succeeded. Requiring the row back is the only way to
+    // tell "revoked" from "silently did nothing".
+    ({ data, error } = await sb.from('leod_checkin_devices')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('event_id', S.event.id)
+      .select('id, revoked_at'));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  const updated = Array.isArray(data) ? data[0] : data;
+  if (error || !updated || !updated.revoked_at) {
+    // Code only. A label is operator-supplied text and never goes to a log.
+    console.error('checkin: kiosk revoke failed', error && error.code);
+    ksDevConfirm(row, state, act, 'Could not revoke this kiosk. Check this desk is online, then try again.');
+    return;
+  }
+
+  // The server's timestamp, not the one sent. They agree in the ordinary
+  // case, and where they do not it is the database that is right.
+  row.revoked_at = updated.revoked_at;
+  ksDevPaint(row, state, act);
 }
 
 // Absolute, for "when was this paired" — a date is what an organizer

@@ -241,16 +241,29 @@ Deno.serve(async (req) => {
   const sb = adminClient()
 
   // ── 1. Device key ───────────────────────────────────────────────
-  // One response for all three failures — no such key, key belongs to
-  // another event, key is a desk device rather than a kiosk. Splitting
-  // them would let someone holding a desk key discover which events it
-  // is good for.
+  // One response for all FOUR failures — no such key, key belongs to
+  // another event, key is a desk device rather than a kiosk, key has
+  // been revoked. Splitting them would let someone holding a desk key
+  // discover which events it is good for, and would tell whoever walked
+  // off with a tablet that the organizer has noticed.
+  //
+  // REVOKED IS ENFORCED HERE AND NOWHERE ELSE. This client holds the
+  // service role and bypasses RLS entirely, so migration 057's column is
+  // inert until this line reads it — the same explicit re-check the
+  // entitlement gate below makes for the same reason. The revocation is
+  // one-way in the database (trg_checkin_guard_device_revocation), so a
+  // key that reaches this branch never comes back; the tablet has to
+  // pair again and gets a different key when it does.
+  //
+  // REQUIRES MIGRATION 057. Selecting a column PostgREST does not know
+  // about fails the query, which lands in `!device` and 401s every
+  // kiosk on the platform. Apply the migration before deploying this.
   const { data: device } = await sb.from('leod_checkin_devices')
-    .select('id, event_id, kind')
+    .select('id, event_id, kind, revoked_at')
     .eq('api_key_hash', await sha256Hex(device_key))
     .maybeSingle()
 
-  if (!device || device.event_id !== event_id || device.kind !== 'kiosk') {
+  if (!device || device.event_id !== event_id || device.kind !== 'kiosk' || device.revoked_at) {
     // No device id to log — by definition we do not have a valid one.
     console.warn('checkin-self-register: device key rejected for event', event_id)
     return json({ error: 'Unauthorized device' }, 401)
