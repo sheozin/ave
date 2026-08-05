@@ -277,6 +277,117 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 @keyframes ck-rot{to{transform:rotate(360deg)}}
 
+/* ══ KIOSK ═════════════════════════════════════════
+   A different room from the desk. An unattended touch screen in a
+   hotel lobby, operated by strangers who have never seen it, some
+   elderly, some in a hurry, standing up, one-handed, often with a
+   suitcase in the other hand. So: bigger type, fewer things per
+   screen, and every target sized for a thumb rather than a cursor.
+
+   ★ 44px is the floor for anything tappable ★ and the buttons below
+   sit well above it. A missed tap on a lobby screen is not a small
+   annoyance — there is nobody standing there to explain what went
+   wrong, so the person gives up and joins the queue they came here
+   to avoid.                                                       */
+#kiosk{display:none;min-height:100vh;flex-direction:column;background:var(--pg)}
+.kk-header{
+  background:var(--sf);border-bottom:1px solid var(--bd);
+  padding:16px 22px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+}
+.kk-brand{font-size:19px;font-weight:700;letter-spacing:-.02em}
+.kk-brand span{color:var(--ac)}
+.kk-place{font-size:13px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;overflow-wrap:anywhere}
+.kk-main{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:26px 18px 60px}
+.kk-step{
+  width:100%;max-width:600px;background:var(--sf);
+  border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:34px 30px;box-shadow:var(--shadow);
+}
+.kk-eyebrow{font-size:12px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px}
+.kk-h{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.2;overflow-wrap:anywhere}
+.kk-p{font-size:17px;color:var(--t2);line-height:1.45;margin-top:10px}
+.kk-doors{display:flex;flex-direction:column;gap:14px;margin-top:26px}
+
+/* Two doors, never one. Merging "I never registered" with "I registered
+   but cannot find my email" is exactly what produces duplicate records
+   at a real event: the person who cannot find their email is offered a
+   registration form, fills it in, and the roster grows a second copy of
+   somebody who was already on it. Both doors reach the same form and
+   the same endpoint — the server's collision check is what actually
+   de-duplicates — but the second door SAYS so first, so a collision
+   reads as the expected answer rather than a rejection.            */
+.kk-door{
+  display:block;width:100%;text-align:left;min-height:76px;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:var(--radius);
+  padding:18px 20px;cursor:pointer;
+  transition:border-color .14s, background .14s, box-shadow .14s;
+}
+.kk-door:hover{border-color:var(--ac);background:var(--sf);box-shadow:var(--shadow)}
+.kk-door-t{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.kk-door-s{font-size:15px;color:var(--t2);margin-top:4px;line-height:1.35}
+
+.kk-field{margin-top:20px}
+.kk-lbl{display:block;font-size:14px;font-weight:600;color:var(--t2);margin-bottom:7px}
+/* ★ 17px MINIMUM ★ — iOS Safari zooms the viewport on focus for any
+   input under 16px, and on a screen bolted to a stand nobody can pinch
+   it back out. The layout never recovers for the rest of the event. */
+.kk-input{
+  width:100%;font-size:17px;min-height:56px;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:12px;
+  padding:15px 16px;outline:none;
+  transition:border-color .14s, box-shadow .14s, background .14s;
+}
+.kk-input:focus{border-color:var(--ac);background:var(--sf);box-shadow:0 0 0 4px var(--acsf)}
+.kk-input.bad{border-color:var(--rdbd);background:var(--rdsf)}
+.kk-hint{font-size:14px;color:var(--t3);margin-top:6px}
+.kk-err{color:var(--rd);font-size:15px;line-height:1.45;margin-top:18px}
+.kk-err div{margin-top:4px}
+
+/* Two targets, both over the floor. The whole row is a <label>, so a
+   thumb landing anywhere on the sentence ticks it — and the box itself
+   is a full 44px for anyone who aims at the box, which is what people
+   who are unsure of a screen actually do. Chunky on a laptop; correct
+   on the tablet this runs on.                                      */
+.kk-consent{
+  display:flex;gap:14px;align-items:flex-start;min-height:56px;
+  margin-top:24px;padding:16px 18px;cursor:pointer;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:var(--radius);
+}
+.kk-check{flex:none;width:44px;height:44px;margin:0;cursor:pointer}
+.kk-consent span{font-size:16px;line-height:1.4}
+.kk-legal{font-size:15px;margin-top:12px}
+.kk-legal a{color:var(--ac)}
+
+.kk-btn{
+  display:block;width:100%;min-height:58px;margin-top:22px;
+  background:var(--ac);color:#fff;border:none;border-radius:14px;
+  padding:16px;font-size:18px;font-weight:600;cursor:pointer;
+  transition:opacity .14s, transform .06s;
+}
+.kk-btn:hover{opacity:.9}
+.kk-btn:active{transform:scale(.995)}
+.kk-btn:disabled{opacity:.5;cursor:default;transform:none}
+.kk-btn.ghost{background:var(--sf);color:var(--t1);border:1px solid var(--bd2)}
+.kk-btn.ghost:hover{opacity:1;border-color:var(--t3)}
+
+/* Read at arm's length by someone who is about to walk three metres to
+   a desk and say it out loud. Tabular figures so 11 and 88 occupy the
+   same width and the code cannot be misread as a different length. */
+.kk-code{
+  font-size:54px;font-weight:700;letter-spacing:.16em;
+  font-variant-numeric:tabular-nums;line-height:1.1;
+  margin:22px 0 6px;color:var(--gn);overflow-wrap:anywhere;
+}
+/* Shown word for word on BOTH outcomes. Identical everywhere it
+   appears, so it discloses nothing about which branch ran, and it
+   turns the dead end — a code that never arrives — into a short walk
+   instead of a person standing at a screen with no next move.      */
+.kk-fallback{
+  font-size:15px;color:var(--t2);margin-top:20px;
+  padding-top:16px;border-top:1px solid var(--bd);
+}
+.kk-count{font-size:14px;color:var(--t3);margin-top:14px;text-align:center}
+
 /* ── BADGE PRINTING ───────────────────────────────
    ★ BADGE STOCK SIZE — 100mm × 70mm ★
    This is the first thing anyone will need to change for a different
@@ -385,6 +496,141 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
   </div>
 </div>
 
+<!-- ── KIOSK ───────────────────────────────────────
+     Reached only through ?mode=kiosk, and never signed in. This screen
+     has no operator, no roster and no RLS access of its own: its only
+     credential is a device key in localStorage, and everything it can
+     do is one call to checkin-self-register.
+
+     Every node under #kk-result-body is built in JS with createElement
+     + textContent. The sections below are the fixed chrome; the two
+     outcomes are the one place a stranger's input could come back at
+     us, so nothing there is written as markup.                    -->
+<div id="kiosk">
+  <header class="kk-header">
+    <div class="kk-brand">Cue<span>Deck</span></div>
+    <!-- The device label the organizer typed when they minted the
+         pairing code. Operator-supplied text, so textContent only. -->
+    <div class="kk-place" id="kk-place"></div>
+  </header>
+  <main class="kk-main">
+
+    <!-- PAIRING — first run, or after localStorage is cleared -->
+    <section class="kk-step" id="kk-pair" style="display:none">
+      <div class="kk-eyebrow">Set up this screen</div>
+      <div class="kk-h">Enter the pairing code</div>
+      <div class="kk-p">Ask the event organizer for a pairing code, then type the eight characters here. You only do this once.</div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-code">Pairing code</label>
+        <!-- maxlength is deliberately loose. A code is eight characters
+             and the input handler caps it at eight, but it counts them
+             AFTER stripping spaces and dashes. A tight maxlength here
+             would truncate "AB CD EF GH" to nine raw characters before
+             the strip ever ran, leaving six real ones — defeating
+             exactly the spacing this screen exists to forgive. -->
+        <input class="kk-input" id="kk-code" type="text" inputmode="text"
+               autocomplete="off" autocapitalize="characters" spellcheck="false"
+               maxlength="24" placeholder="ABCD-EFGH">
+        <div class="kk-hint">Letters and numbers only. Upper or lower case, with or without the dash.</div>
+      </div>
+      <div class="kk-err" id="kk-pair-err"></div>
+      <button class="kk-btn" type="button" id="kk-pair-btn">Pair this screen</button>
+    </section>
+
+    <!-- OFFLINE — the kiosk cannot work without the server, by design -->
+    <section class="kk-step" id="kk-offline" style="display:none">
+      <div class="kk-eyebrow">Self registration</div>
+      <div class="kk-h">This screen is offline — please see the desk.</div>
+      <div class="kk-p">It will come back on its own once the connection returns. The registration desk can sign you in straight away.</div>
+    </section>
+
+    <!-- SCREEN 1 — ARRIVE. Two doors. -->
+    <section class="kk-step" id="kk-arrive" style="display:none">
+      <div class="kk-eyebrow">Step 1 of 3</div>
+      <div class="kk-h">Welcome</div>
+      <div class="kk-p">Which of these is you?</div>
+      <div class="kk-doors">
+        <button class="kk-door" type="button" id="kk-door-new">
+          <div class="kk-door-t">I didn't register</div>
+          <div class="kk-door-s">You are here without a booking, and you need a badge.</div>
+        </button>
+        <button class="kk-door" type="button" id="kk-door-lost">
+          <div class="kk-door-t">I can't find my email</div>
+          <div class="kk-door-s">You registered already, but you cannot find the code we sent you.</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- SCREEN 2 — DETAILS -->
+    <section class="kk-step" id="kk-details" style="display:none">
+      <div class="kk-eyebrow">Step 2 of 3</div>
+      <div class="kk-h" id="kk-details-h">Your details</div>
+      <div class="kk-p" id="kk-details-p"></div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-first">First name</label>
+        <input class="kk-input" id="kk-first" type="text" maxlength="80"
+               autocomplete="given-name" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-last">Last name</label>
+        <input class="kk-input" id="kk-last" type="text" maxlength="80"
+               autocomplete="family-name" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-company">Company <span style="font-weight:400">(optional)</span></label>
+        <input class="kk-input" id="kk-company" type="text" maxlength="80"
+               autocomplete="organization" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-email">Email</label>
+        <!-- REQUIRED. checkin-self-register enforces this unconditionally:
+             with no email there is no collision key, so the
+             already-registered branch could never fire. maxlength 254 is
+             the server's own bound (RFC 5321), set here so the two never
+             disagree in front of a real attendee. -->
+        <input class="kk-input" id="kk-email" type="email" maxlength="254"
+               autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email">
+        <div class="kk-hint" id="kk-email-hint"></div>
+      </div>
+      <div class="kk-err" id="kk-details-err"></div>
+      <button class="kk-btn" type="button" id="kk-details-next">Continue</button>
+      <button class="kk-btn ghost" type="button" id="kk-details-back">Back</button>
+    </section>
+
+    <!-- SCREEN 3 — CONSENT, then the result below -->
+    <section class="kk-step" id="kk-consent-step" style="display:none">
+      <div class="kk-eyebrow">Step 3 of 3</div>
+      <div class="kk-h">One last thing</div>
+      <div class="kk-p">We need your permission before we can register you.</div>
+      <!-- NEVER pre-checked. A pre-ticked box is not consent under GDPR,
+           and this screen collects personal data from strangers with no
+           member of staff present to explain anything. -->
+      <label class="kk-consent" for="kk-consent">
+        <input class="kk-check" id="kk-consent" type="checkbox">
+        <span>I agree to CueDeck and the event organizer using my details to register me for this event, issue my badge and send me my entry code.</span>
+      </label>
+      <!-- Outside the label on purpose: a link inside it would toggle the
+           tick every time somebody tried to read the notice. -->
+      <div class="kk-legal"><a href="https://www.cuedeck.io/privacy" target="_blank" rel="noopener noreferrer">Read the privacy notice</a></div>
+      <div class="kk-err" id="kk-consent-err"></div>
+      <button class="kk-btn" type="button" id="kk-submit">Register me</button>
+      <button class="kk-btn ghost" type="button" id="kk-consent-back">Back</button>
+    </section>
+
+    <!-- SCREEN 3, SECOND HALF — THE RESULT
+         The two outcomes share this section, these classes and this
+         padding. Nothing but #kk-result-body differs between them, and
+         the reset countdown below is identical by construction rather
+         than by two code paths agreeing. -->
+    <section class="kk-step" id="kk-result" style="display:none">
+      <div id="kk-result-body"></div>
+      <button class="kk-btn ghost" type="button" id="kk-done">Done</button>
+      <div class="kk-count" id="kk-count"></div>
+    </section>
+
+  </main>
+</div>
+
 <!-- ── LOADING ─────────────────────────────────── -->
 <div id="loading"><div class="ck-spin"></div></div>
 
@@ -401,6 +647,16 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 // ═══════════════════════════════════════════════════
 const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+
+// ═══════════════════════════════════════════════════
+// MODE
+// One file, two rooms. ?mode=kiosk is an unattended public screen with
+// no operator, no sign-in and no roster; anything else is the staffed
+// desk. Read once, at parse time, so every guard below is a constant
+// rather than a URL re-parsed at some later moment when the answer
+// could differ.
+// ═══════════════════════════════════════════════════
+const KIOSK = new URLSearchParams(location.search).get('mode') === 'kiosk';
 
 // ═══════════════════════════════════════════════════
 // STATE
@@ -771,13 +1027,22 @@ function scheduleFlush() {
     scheduleFlush();
   }, syncFailures >= BACKOFF_AFTER ? FLUSH_EVERY_SLOW : FLUSH_EVERY);
 }
-scheduleFlush();
+// The kiosk has no outbox and never will: it holds no roster, queues
+// nothing, and has no operator JWT to flush under. Not started there,
+// rather than started and left spinning against an empty store.
+if (!KIOSK) scheduleFlush();
 
 // ═══════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // The kiosk must NOT ask for a session, and must not be reachable by
+  // signing in either — a public touchscreen holding a live crew session
+  // is one gesture away from the roster, undo and name editing. It
+  // returns before any of the desk's wiring is attached.
+  if (KIOSK) { bootKiosk(); return; }
 
   document.getElementById('signin-form').addEventListener('submit', handleSignIn);
   document.getElementById('pk-signout').addEventListener('click', signOut);
@@ -1066,7 +1331,14 @@ function assembleParty(anchor, roster) {
 // ═══════════════════════════════════════════════════
 const scanInput = document.getElementById('scan');
 
+// Every piece of the desk's keyboard machinery — the capture-phase
+// scanner backstop, the focus hold, the roster refresh — is gated on
+// this. The kiosk clause makes "the kiosk never runs desk machinery"
+// true by construction rather than by relying on #station happening to
+// carry the right inline style at the right moment. Desk behaviour is
+// unchanged: KIOSK is false there.
 function stationVisible() {
+  if (KIOSK) return false;
   return document.getElementById('station').style.display !== 'none';
 }
 
@@ -2019,6 +2291,633 @@ function renderPrimary(count) {
         ? 'Check in 1 · Print 1 badge'
         : `Check in ${count} · Print ${count} badges`);
   btn.disabled = count === 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+//   KIOSK — SELF REGISTRATION
+//
+//   Everything below runs only under ?mode=kiosk. Nothing above it
+//   calls anything below it.
+//
+//   THE THREAT MODEL IS DIFFERENT FROM THE DESK'S. The desk is a
+//   staffed machine and its input arrives from a scanner and a
+//   briefed volunteer. This is an unattended screen in a hotel lobby
+//   and every character it handles is typed by a stranger who owes us
+//   nothing. Two rules follow and neither has an exception:
+//
+//     1. NO MARKUP SINKS ANYWHERE ON THIS PAGE. createElement +
+//        textContent + replaceChildren only, including for the
+//        strings that came back from the server. Grepping this file
+//        for the four assign-markup APIs must return nothing.
+//
+//     2. NO PII LEAVES THE SCREEN IT WAS TYPED ON. It is never
+//        logged, never put in localStorage, never held in a variable
+//        past the request it was typed for. The inputs themselves are
+//        the only copy, and they are cleared the moment the result
+//        renders, the moment the screen goes idle, and the moment it
+//        goes offline.
+// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+
+// var → window.K, same reason as window.S above: reachable from tests.
+var K = { device: null, door: null, step: null, busy: false };
+
+// ── DEVICE KEY ─────────────────────────────────────────────────────
+// The kiosk's ONLY credential. It authenticates against
+// leod_checkin_devices.api_key_hash and is what lets an anonymous
+// screen reach checkin-self-register at all. There is deliberately no
+// anon RLS policy behind it: an anon SELECT on the attendees table
+// would hand every name, email and company at the event to anyone
+// holding the publishable key, which is sitting in plain sight at the
+// top of this file.
+const KIOSK_STORE_KEY = 'cuedeck-kiosk-device';
+
+function readKioskDevice() {
+  try {
+    const raw = localStorage.getItem(KIOSK_STORE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d.device_key !== 'string' || typeof d.event_id !== 'string') return null;
+    if (!d.device_key || !d.event_id) return null;
+    return d;
+  } catch (err) {
+    // A corrupt or unreadable store is the same situation as no store:
+    // this screen is not paired. Never log the value — it is a
+    // credential.
+    console.error('kiosk: stored device key unreadable');
+    return null;
+  }
+}
+
+// Returns whether the key is provably on disk, by reading it back.
+// setItem can succeed and still not persist (Safari private browsing
+// used to throw, a locked-down kiosk profile can silently drop), and
+// the difference matters more here than almost anywhere else: see
+// claimPairingCode() for what is lost if this is wrong.
+function writeKioskDevice(dev) {
+  try {
+    localStorage.setItem(KIOSK_STORE_KEY, JSON.stringify(dev));
+    const back = readKioskDevice();
+    return !!(back && back.device_key === dev.device_key);
+  } catch (err) {
+    console.error('kiosk: could not store the device key');
+    return false;
+  }
+}
+
+// ── VALIDATION ─────────────────────────────────────────────────────
+// Mirrored from tests/checkin-kiosk.spec.ts, which is the validation
+// specification, and re-expressed identically in
+// supabase/functions/checkin-self-register/index.ts. Keep all three
+// character-identical. This copy is COURTESY for the person typing —
+// the server re-runs every one of these checks, because anything a
+// kiosk sends is attacker-controlled.
+const MAX_NAME = 80;
+
+// At least one LETTER in any script. \p{L} with /u covers Latin,
+// Latin-with-diacritics, Arabic and Cyrillic in one check; a naive
+// /[a-z]/i would turn away محمد and Иванов at a Polish conference.
+const HAS_LETTER = /\p{L}/u;
+
+// Deliberately loose: something@something.something with no spaces.
+// Deliverability is proven by the code email arriving, not by a regex,
+// and there is nobody at an unattended screen to argue with about it.
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// No length bound here, exactly as in the spec file. The bound lives on
+// the input as maxlength="254" — the server's own RFC 5321 limit — so a
+// 10 kB address cannot be typed in the first place and the client and
+// server never disagree in front of a real attendee.
+function validateKiosk(f, emailRequired) {
+  const errors = [];
+
+  const first = f.first_name.trim();
+  const last = f.last_name.trim();
+
+  if (!first) errors.push('first_name');
+  else if (first.length > MAX_NAME) errors.push('first_name_too_long');
+  else if (!HAS_LETTER.test(first)) errors.push('first_name_invalid');
+
+  if (!last) errors.push('last_name');
+  else if (last.length > MAX_NAME) errors.push('last_name_too_long');
+  else if (!HAS_LETTER.test(last)) errors.push('last_name_invalid');
+
+  const email = f.email.trim();
+  if (!email) {
+    if (emailRequired) errors.push('email');
+  } else if (!EMAIL_SHAPE.test(email)) {
+    errors.push('email_format');
+  }
+
+  // GDPR. Always required, and the checkbox is never pre-checked — a
+  // pre-ticked box is not consent.
+  if (!f.consent) errors.push('consent');
+
+  return errors;
+}
+
+// Written for someone standing up, in a hurry, who has never seen this
+// screen. Each one names the field and says what to do, and they are
+// shown all at once so a second tap does not surface a second problem.
+const KIOSK_FIELD_MSG = {
+  first_name:          'Type your first name.',
+  first_name_too_long: 'That first name is too long. 80 characters at most.',
+  first_name_invalid:  'Your first name needs at least one letter.',
+  last_name:           'Type your last name.',
+  last_name_too_long:  'That last name is too long. 80 characters at most.',
+  last_name_invalid:   'Your last name needs at least one letter.',
+  email:               'We need your email so we can send you your code.',
+  email_format:        "That email doesn't look right. Check it and try again.",
+  consent:             'Please tick the box so we can register you.',
+};
+
+const KIOSK_FIELD_INPUT = {
+  first_name: 'kk-first', first_name_too_long: 'kk-first', first_name_invalid: 'kk-first',
+  last_name: 'kk-last',   last_name_too_long: 'kk-last',   last_name_invalid: 'kk-last',
+  email: 'kk-email',      email_format: 'kk-email',
+};
+
+function kioskShowErrors(hostId, errors) {
+  const host = document.getElementById(hostId);
+  host.replaceChildren();
+  ['kk-first', 'kk-last', 'kk-email'].forEach(id => document.getElementById(id).classList.remove('bad'));
+  errors.forEach(code => {
+    const line = document.createElement('div');
+    line.textContent = KIOSK_FIELD_MSG[code] || 'Please check that field.';
+    host.appendChild(line);
+    const input = KIOSK_FIELD_INPUT[code];
+    if (input) document.getElementById(input).classList.add('bad');
+  });
+}
+
+function kioskClearErrors() {
+  document.getElementById('kk-details-err').replaceChildren();
+  document.getElementById('kk-consent-err').replaceChildren();
+  document.getElementById('kk-pair-err').replaceChildren();
+  ['kk-first', 'kk-last', 'kk-email'].forEach(id => document.getElementById(id).classList.remove('bad'));
+}
+
+// ── FORM ───────────────────────────────────────────────────────────
+// The inputs ARE the storage. Nothing copies what a stranger typed
+// into a variable that outlives the request, and nothing writes it to
+// disk. This is also why the read below happens at submit time rather
+// than on every keystroke.
+function kioskReadForm() {
+  return {
+    first_name: document.getElementById('kk-first').value,
+    last_name:  document.getElementById('kk-last').value,
+    company:    document.getElementById('kk-company').value,
+    email:      document.getElementById('kk-email').value,
+    consent:    document.getElementById('kk-consent').checked === true,
+  };
+}
+
+function kioskClearForm() {
+  ['kk-first', 'kk-last', 'kk-company', 'kk-email'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  // Explicitly, every time. A browser restoring form state from bfcache
+  // or a reload would otherwise hand the next person a pre-ticked
+  // consent box, which is not consent.
+  document.getElementById('kk-consent').checked = false;
+  kioskClearErrors();
+}
+
+// ── SCREENS ────────────────────────────────────────────────────────
+const KIOSK_STEPS = ['kk-pair', 'kk-offline', 'kk-arrive', 'kk-details', 'kk-consent-step', 'kk-result'];
+
+function kioskShow(step) {
+  // The desk's three screens are hidden by hand rather than through
+  // showScreen(), which would also start the desk's focus backstop and
+  // roster refresh — neither of which belongs on a public screen.
+  document.getElementById('signin').style.display  = 'none';
+  document.getElementById('picker').style.display  = 'none';
+  document.getElementById('station').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('kiosk').style.display   = 'flex';
+  KIOSK_STEPS.forEach(id => {
+    document.getElementById(id).style.display = (id === step) ? 'block' : 'none';
+  });
+  K.step = step;
+  kioskArmIdle();
+}
+
+// The one place that decides which screen is correct right now, so the
+// offline check cannot be forgotten on a path that was added later.
+//
+// OFFLINE IS A DEAD END HERE, AND THAT IS THE DESIGN. The desk queues
+// work offline because it holds the roster and the answer is local.
+// The kiosk holds nothing: the already-registered check is a server
+// query, the code is derived from a token the server mints, and the
+// rate limit only means anything server-side. Queueing a registration
+// would mean promising a stranger a code we cannot produce, from a
+// duplicate check we cannot run, against a limiter we cannot enforce.
+// So it says so plainly and points at the one thing that does work.
+function kioskRoute() {
+  if (!navigator.onLine) { kioskClearForm(); kioskShow('kk-offline'); return; }
+  if (!K.device) { kioskShow('kk-pair'); return; }
+  kioskShow('kk-arrive');
+}
+
+// ── AUTO-RESET ─────────────────────────────────────────────────────
+// Two timers, because there are two ways a stranger's details end up
+// sitting on a public screen.
+//
+// RESULT: 25 seconds. Short enough that the next person in a lobby
+// queue — inter-arrival at a busy desk is well under half a minute —
+// does not walk up to the previous person's outcome. Long enough to
+// read six characters, find a phone, photograph them or write them
+// down, at the speed of someone in their seventies putting their
+// glasses on first. Ten seconds loses people their code and they have
+// to start again; a minute leaves a name and an outcome facing the
+// room. The countdown is visible so nobody is surprised by it, and
+// Done clears it immediately for anyone who has finished — which is
+// what actually keeps the average exposure well under 25s.
+//
+// It is IDENTICAL on both outcomes, deliberately. A shorter or longer
+// wait on the already-registered branch would re-open through timing
+// exactly the oracle the response body closes.
+const KIOSK_RESULT_MS = 25000;
+
+// IDLE: 90 seconds of no interaction on the two data-entry screens.
+// The result reset does nothing for the commonest abandonment — a
+// person who types their name, is called away or gives up, and leaves
+// the form filled in. 90s is past any plausible pause for someone
+// hunting through their phone for the spelling of their company name,
+// and well inside the time it takes a queue to move somebody else into
+// that spot.
+const KIOSK_IDLE_MS = 90000;
+
+let kioskResultTimer = null;
+let kioskCountTimer  = null;
+let kioskIdleTimer   = null;
+
+function kioskStopTimers() {
+  clearTimeout(kioskResultTimer);  kioskResultTimer = null;
+  clearInterval(kioskCountTimer);  kioskCountTimer  = null;
+  clearTimeout(kioskIdleTimer);    kioskIdleTimer   = null;
+}
+
+function kioskArmIdle() {
+  clearTimeout(kioskIdleTimer);
+  kioskIdleTimer = null;
+  if (K.step !== 'kk-details' && K.step !== 'kk-consent-step') return;
+  kioskIdleTimer = setTimeout(kioskReset, KIOSK_IDLE_MS);
+}
+
+// Back to the start, with nothing of the last person left behind.
+function kioskReset() {
+  kioskStopTimers();
+  K.door = null;
+  K.busy = false;
+  kioskClearForm();
+  kioskRoute();
+}
+
+function kioskStartResultReset() {
+  let left = Math.round(KIOSK_RESULT_MS / 1000);
+  const el = document.getElementById('kk-count');
+  const tick = () => {
+    el.textContent = left <= 0
+      ? 'Starting again…'
+      : 'This screen clears in ' + left + ' second' + (left === 1 ? '' : 's');
+    left--;
+  };
+  tick();
+  kioskCountTimer  = setInterval(tick, 1000);
+  kioskResultTimer = setTimeout(kioskReset, KIOSK_RESULT_MS);
+}
+
+// ── PAIRING ────────────────────────────────────────────────────────
+// The organizer mints a code in their console and reads it across a
+// lobby; somebody types it here. The alphabet behind it excludes I, O,
+// 0 and 1 precisely because it is read aloud, so the only things that
+// can defeat a correct hearing are case and spacing — both of which
+// this fixes silently. Confusable characters are NOT remapped: O is
+// never in a real code, so guessing that somebody meant 0 would widen
+// the accepted space around every valid code.
+function kioskNormalizeCode(raw) {
+  return raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function kioskFormatCode(bare) {
+  return bare.length > 4 ? bare.slice(0, 4) + '-' + bare.slice(4) : bare;
+}
+
+async function claimPairingCode() {
+  const input = document.getElementById('kk-code');
+  const btn   = document.getElementById('kk-pair-btn');
+  const err   = document.getElementById('kk-pair-err');
+  if (K.busy) return;
+
+  const code = kioskNormalizeCode(input.value).slice(0, 8);
+  err.replaceChildren();
+  if (code.length !== 8) {
+    err.textContent = 'A pairing code is eight letters and numbers. Check it with the organizer.';
+    return;
+  }
+  if (!navigator.onLine) { kioskRoute(); return; }
+
+  K.busy = true;
+  btn.disabled = true;
+  btn.textContent = 'Pairing…';
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
+      body: { action: 'claim', code },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  K.busy = false;
+  btn.disabled = false;
+  btn.textContent = 'Pair this screen';
+
+  if (error || !data || data.ok !== true ||
+      typeof data.device_key !== 'string' || typeof data.event_id !== 'string') {
+    console.error('kiosk: pairing rejected, status', kioskErrorStatus(error));
+    err.textContent = 'That code was not accepted. It may have expired or already been used — ask the organizer for a new one.';
+    return;
+  }
+
+  // ── THE ORDER HERE IS THE WHOLE POINT ──────────────────────────
+  // THE RAW DEVICE KEY EXISTS EXACTLY ONCE, in the response we are
+  // holding. The server stored only its SHA-256, and
+  // checkin-kiosk-pair burned the pairing code atomically BEFORE the
+  // device row was created, so there is no second delivery, no
+  // replay and no recovery path. Store-then-claim is not available:
+  // there is nothing to store until the claim has already succeeded.
+  //
+  // What IS ours to decide is what happens when the store fails —
+  // private browsing, a full quota, a locked-down kiosk profile.
+  // writeKioskDevice() reads the value back, so we only proceed on
+  // proof that the key survived. If it did not, the key is gone: say
+  // so and send them for a new pairing code.
+  //
+  // We deliberately do NOT fall back to holding the key in memory.
+  // That kiosk works beautifully until the first reload, then drops a
+  // queue of strangers onto a pairing screen with nobody standing
+  // there who knows a code — a failure that arrives hours later, in
+  // the middle of the event, instead of now, in front of the person
+  // who can fix it in one click.
+  const dev = {
+    event_id:   data.event_id,
+    device_id:  typeof data.device_id === 'string' ? data.device_id : null,
+    label:      typeof data.label === 'string' ? data.label : '',
+    device_key: data.device_key,
+  };
+  if (!writeKioskDevice(dev)) {
+    err.textContent = 'This screen could not save its key, so the pairing was lost. Ask the organizer for a new pairing code, and check this browser is not in private mode.';
+    return;
+  }
+
+  input.value = '';
+  K.device = dev;
+  document.getElementById('kk-place').textContent = dev.label;
+  kioskRoute();
+}
+
+// ── REGISTRATION ───────────────────────────────────────────────────
+// supabase-js reports a non-2xx as an error object carrying the raw
+// Response. Only the STATUS is read: the body is not, and is never
+// logged, because the reasons a submission fails are the caller's own
+// input reflected back and there is nothing on this screen that can
+// act on them beyond the sentences below.
+function kioskErrorStatus(error) {
+  try {
+    if (error && error.context && typeof error.context.status === 'number') return error.context.status;
+  } catch (ignored) { /* a shape we do not recognise is a 0 */ }
+  return 0;
+}
+
+// One sentence per situation, each ending at the desk, because that is
+// the only thing a person standing here can actually do about any of
+// them. No error codes: nobody at a lobby screen can act on one.
+function kioskFailureMessage(status) {
+  if (status === 429) return 'Too many registrations from this screen just now. Please see the registration desk.';
+  if (status === 401) return 'This screen is not set up for this event. Please see the registration desk.';
+  if (status === 403) return 'Self-registration is not available here. Please see the registration desk.';
+  return 'Something went wrong and you are not registered. Please see the registration desk.';
+}
+
+async function kioskSubmit() {
+  const btn = document.getElementById('kk-submit');
+  if (K.busy) return;
+
+  const form = kioskReadForm();
+
+  // Re-validated in full at the moment of the write, not only when
+  // Continue was pressed: the details screen is still behind this one
+  // and its values can have changed since.
+  const errors = validateKiosk(form, true);
+  if (errors.length) {
+    const fieldErrors = errors.filter(e => e !== 'consent');
+    kioskShowErrors('kk-consent-err', errors.filter(e => e === 'consent'));
+    if (fieldErrors.length) {
+      kioskShowErrors('kk-details-err', fieldErrors);
+      kioskShow('kk-details');
+    }
+    return;
+  }
+
+  // Zero network calls when the screen knows it is offline. Checked
+  // here as well as on entry because the connection can drop while
+  // somebody is typing.
+  if (!navigator.onLine) { kioskRoute(); return; }
+
+  K.busy = true;
+  btn.disabled = true;
+  btn.textContent = 'Registering…';
+  clearTimeout(kioskIdleTimer);
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-self-register', {
+      body: {
+        event_id:   K.device.event_id,
+        device_key: K.device.device_key,
+        first_name: form.first_name.trim(),
+        last_name:  form.last_name.trim(),
+        company:    form.company.trim(),
+        email:      form.email.trim(),
+        // Compared to true on the server too, so a truthy string from a
+        // hand-rolled client is not consent.
+        consent:    form.consent === true,
+      },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  K.busy = false;
+  btn.disabled = false;
+  btn.textContent = 'Register me';
+
+  if (error || !data || (data.status !== 'registered' && data.status !== 'already_registered')) {
+    const status = kioskErrorStatus(error);
+    // Status only. The submitted fields are never written to a log.
+    console.error('kiosk: registration failed, status', status);
+    document.getElementById('kk-consent-err').textContent = kioskFailureMessage(status);
+    kioskArmIdle();
+    return;
+  }
+
+  kioskResult(data.status, typeof data.code === 'string' ? data.code : '');
+}
+
+// ── THE TWO OUTCOMES ───────────────────────────────────────────────
+// This function is the security surface of the whole screen.
+//
+// On 'already_registered' it renders NO name, NO code and NO
+// confirmation that the address exists beyond one sentence. Anyone who
+// knows a speaker's public conference address could otherwise walk up,
+// type it, be handed that speaker's code, and check in as them or
+// collect their badge. The server already refuses to send any of it —
+// this is the half of that decision that lives on the screen, and the
+// two halves must not drift.
+//
+// Specifically NOT here, and not to be added later:
+//   · a "was that you?" or "not you?" affordance
+//   · a retry hint, a masked address, a partial name
+//   · any difference in tone, colour, layout, padding or timing
+//     between the two branches
+// Each of those re-opens the oracle through a side channel. The
+// container, the classes and the 25-second reset are shared by
+// construction rather than by two code paths agreeing.
+//
+// The one thing that does differ is the sentence itself, and that is
+// accepted by the design: the two response bodies name their own
+// branch, so an attacker who can read a response already knows which
+// one ran. The control against enumeration is the server's rate limit,
+// not secrecy about the branch.
+function kioskResult(status, code) {
+  // PII is cleared BEFORE the outcome is drawn. From this line on,
+  // nothing the person typed is on the screen, in this page's storage,
+  // or in any variable that outlives this call.
+  kioskClearForm();
+
+  const body = document.getElementById('kk-result-body');
+  body.replaceChildren();
+
+  const h = document.createElement('div');
+  h.className = 'kk-h';
+
+  if (status === 'registered') {
+    h.textContent = "You're registered";
+    body.appendChild(h);
+
+    const codeEl = document.createElement('div');
+    codeEl.className = 'kk-code';
+    codeEl.textContent = code;
+    body.appendChild(codeEl);
+
+    const p = document.createElement('div');
+    p.className = 'kk-p';
+    p.textContent = 'Show this code at the registration desk to collect your badge. We have emailed you a copy as well.';
+    body.appendChild(p);
+  } else {
+    h.textContent = "You're already registered.";
+    body.appendChild(h);
+
+    const p = document.createElement('div');
+    p.className = 'kk-p';
+    // Word for word, and nothing further. No name, no code, no hint.
+    p.textContent = "We've emailed your code to the address on file.";
+    body.appendChild(p);
+  }
+
+  // Identical on both branches. Shown the same way, it discloses
+  // nothing, and it converts the dead end — a code that never arrives —
+  // into a short walk rather than a person standing at a screen with no
+  // next move.
+  const fb = document.createElement('div');
+  fb.className = 'kk-fallback';
+  fb.textContent = 'Nothing arrives in a minute? See the registration desk.';
+  body.appendChild(fb);
+
+  kioskShow('kk-result');
+  kioskStartResultReset();
+}
+
+// ── DOORS ──────────────────────────────────────────────────────────
+// Both doors reach this same form and the same endpoint — the server's
+// collision check is what actually de-duplicates, and it cannot run
+// until an email has been typed. What the doors buy is the FRAMING: the
+// person who came through "I can't find my email" has been told, before
+// they type anything, that being already on the list is the answer they
+// are hoping for. Without that, the collision message reads as a
+// rejection and they fill the form in again with a second address,
+// which is the duplicate this screen exists to avoid.
+//
+// The OUTCOME does not vary by door. kioskResult() never sees K.door.
+function kioskOpenDoor(door) {
+  K.door = door;
+  kioskClearForm();   // a new person is at the screen
+  document.getElementById('kk-details-p').textContent = door === 'lost'
+    ? 'Type the email you registered with. If you are already on the list we will email your code straight to that address.'
+    : 'Four quick fields. We will show you a code for the desk and email you a copy.';
+  document.getElementById('kk-email-hint').textContent = door === 'lost'
+    ? 'The address you used when you registered.'
+    : 'We send your entry code here, so check the spelling.';
+  kioskShow('kk-details');
+  document.getElementById('kk-first').focus();
+}
+
+function kioskDetailsNext() {
+  // Consent is forced true for this check so the tick — which lives on
+  // the NEXT screen and cannot possibly have been given yet — is not
+  // reported as a problem with the details in front of them.
+  const form = kioskReadForm();
+  const errors = validateKiosk({ ...form, consent: true }, true);
+  if (errors.length) { kioskShowErrors('kk-details-err', errors); return; }
+  kioskClearErrors();
+  kioskShow('kk-consent-step');
+}
+
+// ── BOOT ───────────────────────────────────────────────────────────
+function bootKiosk() {
+  document.getElementById('kk-door-new').addEventListener('click',  () => kioskOpenDoor('new'));
+  document.getElementById('kk-door-lost').addEventListener('click', () => kioskOpenDoor('lost'));
+  document.getElementById('kk-details-next').addEventListener('click', kioskDetailsNext);
+  document.getElementById('kk-details-back').addEventListener('click', kioskReset);
+  document.getElementById('kk-consent-back').addEventListener('click', () => kioskShow('kk-details'));
+  document.getElementById('kk-submit').addEventListener('click', kioskSubmit);
+  document.getElementById('kk-done').addEventListener('click', kioskReset);
+  document.getElementById('kk-pair-btn').addEventListener('click', claimPairingCode);
+
+  // Case and spacing fixed as they type, so somebody repeating what
+  // they heard across a lobby is not defeated by either. The dash is
+  // re-inserted for readability; the server normalises it away again.
+  const codeInput = document.getElementById('kk-code');
+  codeInput.addEventListener('input', () => {
+    codeInput.value = kioskFormatCode(kioskNormalizeCode(codeInput.value).slice(0, 8));
+  });
+  codeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); claimPairingCode(); }
+  });
+
+  // Any interaction on a data-entry screen pushes the idle reset back.
+  // Bound on the kiosk container rather than the document so it cannot
+  // be kept alive by something outside it.
+  const kiosk = document.getElementById('kiosk');
+  ['input', 'pointerdown', 'keydown'].forEach(ev =>
+    kiosk.addEventListener(ev, kioskArmIdle, true));
+
+  // A connection that drops mid-form must not leave a stranger tapping
+  // Register on a screen that cannot register anybody, and one that
+  // returns must not resume somebody else's half-filled form.
+  window.addEventListener('online',  kioskReset);
+  window.addEventListener('offline', kioskReset);
+
+  K.device = readKioskDevice();
+  document.getElementById('kk-place').textContent = K.device ? K.device.label : 'Self registration';
+  kioskClearForm();
+  kioskRoute();
+
+  if (K.step === 'kk-pair') document.getElementById('kk-code').focus();
 }
 </script>
 </body>
