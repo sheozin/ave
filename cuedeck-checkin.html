@@ -277,6 +277,75 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 @keyframes ck-rot{to{transform:rotate(360deg)}}
 
+/* ── KIOSK SETUP (organizer) ───────────────────────
+   A modal over the desk rather than a panel inside it. The desk's one
+   job is scanning: a setup action used once per event must not push
+   the scan field down the page, and dismissing it has to put the
+   operator back exactly where they were. The pairing code also needs
+   the whole screen's attention — it is read aloud across a lobby —
+   which a strip wedged under the scan field cannot give it.        */
+.ck-modal{
+  position:fixed;inset:0;z-index:9997;background:rgba(29,29,31,.38);
+  display:flex;align-items:center;justify-content:center;padding:24px 18px;
+}
+.ck-modal-card{
+  width:100%;max-width:540px;max-height:calc(100vh - 48px);overflow-y:auto;
+  background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:28px 30px 26px;box-shadow:0 20px 60px rgba(0,0,0,.22);
+}
+.ks-top{display:flex;align-items:flex-start;gap:16px;margin-bottom:10px}
+.ks-top-main{flex:1;min-width:0}
+.ks-eyebrow{font-size:11px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase}
+.ks-x{
+  flex:none;background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:24px;line-height:1;padding:0 6px;
+}
+.ks-x:hover{color:var(--t1)}
+.ks-h{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:2px;overflow-wrap:anywhere}
+.ks-p{font-size:14px;color:var(--t2);line-height:1.5}
+.ks-lbl{display:block;font-size:12px;font-weight:600;color:var(--t2);margin:22px 0 7px}
+.ks-hint{font-size:13px;color:var(--t2);margin-top:-6px}
+
+/* ★ READ FROM ACROSS A ROOM ★
+   Two groups of four with a real gap, never a hyphen: the eye holds a
+   four-character chunk and loses its place across eight, and the
+   organizer is reading this out to somebody three metres away. Tabular
+   figures so 11 and 88 occupy the same width and the code cannot be
+   misread as a different length. clamp() rather than a fixed size —
+   this desk runs on a tablet as often as a laptop, and a code that
+   wraps is worse than a slightly smaller one.                      */
+.ks-code{
+  /* The gap has to beat the letter-spacing inside a group by a clear
+     margin, or eight characters read as eight characters again and the
+     chunking buys nothing. flex-wrap so a narrow tablet stacks the two
+     groups rather than shrinking them below reading size. */
+  display:flex;justify-content:center;gap:.55em;flex-wrap:wrap;
+  margin:24px 0 10px;color:var(--gn);
+  font-size:clamp(40px,13vw,68px);font-weight:700;line-height:1.05;
+  letter-spacing:.1em;font-variant-numeric:tabular-nums;
+}
+/* letter-spacing leaves a trailing gap after each group's last glyph,
+   which pushes the pair off centre. Pull it back so the two sit
+   symmetrically about the middle of the card. */
+.ks-grp{margin-right:-.1em}
+.ks-timer{
+  text-align:center;font-size:15px;font-weight:600;color:var(--t2);
+  font-variant-numeric:tabular-nums;
+}
+.ks-timer.low{color:var(--am)}
+.ks-facts{margin-top:24px;padding-top:18px;border-top:1px solid var(--bd)}
+.ks-fact{font-size:14px;color:var(--t2);line-height:1.5;margin-top:10px}
+.ks-fact:first-child{margin-top:0}
+.ks-fact b{color:var(--t1);font-weight:600}
+.ks-url{
+  margin-top:7px;font-size:13px;color:var(--t1);
+  background:var(--wm);border:1px solid var(--bd);border-radius:10px;
+  padding:9px 11px;overflow-wrap:anywhere;
+}
+.ks-acts{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}
+.ks-acts .ck-btn{flex:1 1 190px;width:auto}
+.ks-err{color:var(--rd);font-size:14px;line-height:1.5;margin-top:16px;overflow-wrap:anywhere}
+
 /* ══ KIOSK ═════════════════════════════════════════
    A different room from the desk. An unattended touch screen in a
    hotel lobby, operated by strangers who have never seen it, some
@@ -475,6 +544,12 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
       <div class="ck-count-lbl">Arrived</div>
     </div>
     <div class="ck-hd-actions">
+      <!-- Organizer only, and hidden until renderStation() says otherwise.
+           checkin-kiosk-pair enforces the role server-side regardless, but
+           a control that always returns 403 for crew is worse than one
+           that is not there: it reads as a broken product rather than as
+           a permission they do not have. -->
+      <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Set up a kiosk</button>
       <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
     </div>
   </header>
@@ -629,6 +704,28 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
     </section>
 
   </main>
+</div>
+
+<!-- ── KIOSK SETUP (organizer) ──────────────────────
+     Everything inside #ks-body is built in JS with createElement +
+     textContent. Two strings pass through it and neither is ever
+     written as markup: the pairing code, and the label the organizer
+     typed — which is the same text that comes back from the server in
+     the kiosk's claim response, so it is untrusted in both directions.
+
+     The code lives in this subtree and nowhere else. No storage, no
+     module variable, gone the moment #ks-body is replaced.        -->
+<div id="kiosk-setup" class="ck-modal" style="display:none">
+  <div class="ck-modal-card" role="dialog" aria-modal="true" aria-labelledby="ks-title">
+    <div class="ks-top">
+      <div class="ks-top-main">
+        <div class="ks-eyebrow">Kiosk</div>
+        <div class="ks-h" id="ks-title">Set up a kiosk</div>
+      </div>
+      <button class="ks-x" type="button" id="ks-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="ks-body"></div>
+  </div>
 </div>
 
 <!-- ── LOADING ─────────────────────────────────── -->
@@ -1048,6 +1145,21 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('pk-signout').addEventListener('click', signOut);
   document.getElementById('st-switch').addEventListener('click', showPicker);
 
+  // Kiosk setup. Bound after the KIOSK early return above, so a public
+  // lobby screen never carries any of it.
+  document.getElementById('st-kiosk').addEventListener('click', openKioskSetup);
+  document.getElementById('ks-close').addEventListener('click', closeKioskSetup);
+  document.getElementById('kiosk-setup').addEventListener('click', (e) => {
+    // Backdrop only. A click that lands on the card, or a drag that
+    // started inside it, must not throw away a code being read aloud.
+    if (e.target === e.currentTarget) closeKioskSetup();
+  });
+  // Escape is free here: the desk's capture-phase scanner backstop only
+  // looks at single printable characters, so it never sees this key.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeKioskSetup();
+  });
+
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     S.user = session.user;
@@ -1064,7 +1176,10 @@ function showScreen(name) {
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
   if (name === 'station') { startFocusBackstop(); startRosterRefresh(); holdFocus(); }
-  else { stopFocusBackstop(); stopRosterRefresh(); }
+  // Leaving the desk takes the kiosk modal with it. Switching event or
+  // signing out must not leave a live pairing code on a screen that is
+  // no longer the desk it was minted from.
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); }
 }
 
 // ═══════════════════════════════════════════════════
@@ -1219,6 +1334,10 @@ async function openEvent(eventId, ev, role) {
 // ═══════════════════════════════════════════════════
 function renderStation() {
   document.getElementById('st-event').textContent = (S.event && S.event.name) ? S.event.name : 'Untitled event';
+  // The role the event picker already fetched, not a second query. It is
+  // the same value checkin-kiosk-pair will re-check server-side, so the
+  // two cannot disagree about who may provision hardware.
+  document.getElementById('st-kiosk').style.display = S.role === 'organizer' ? '' : 'none';
   resetDesk();
   renderCount();
   renderPendingCount();
@@ -1339,6 +1458,12 @@ const scanInput = document.getElementById('scan');
 // unchanged: KIOSK is false there.
 function stationVisible() {
   if (KIOSK) return false;
+  // The kiosk setup modal covers the desk, so the desk's keyboard
+  // machinery stands down while it is open. Without this, a click on the
+  // backdrop leaves focus on <body>, holdFocus() pulls it to the scan
+  // field underneath, and the next thing the organizer types goes into a
+  // search box they cannot see.
+  if (document.getElementById('kiosk-setup').style.display !== 'none') return false;
   return document.getElementById('station').style.display !== 'none';
 }
 
@@ -2291,6 +2416,372 @@ function renderPrimary(count) {
         ? 'Check in 1 · Print 1 badge'
         : `Check in ${count} · Print ${count} badges`);
   btn.disabled = count === 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DESK — KIOSK SETUP (organizer)
+//
+// The one thing standing between checkin-kiosk-pair and a kiosk running
+// at a real event: nothing called `mint`. The Edge Function, the table,
+// the limiter and the kiosk's own claim screen were all live, and a
+// tablet still could not be paired without a terminal and a hand-written
+// curl. This is that missing call.
+//
+// WHY THE DESK AND NOT THE CONSOLE. The person who pairs a kiosk is
+// already signed in here, on this event, holding the organizer role the
+// function requires, in the same room as the tablet. Putting the control
+// in the console would send them to a different product to fetch a code
+// they then carry back across a lobby, against a ten-minute expiry.
+//
+// THE CODE IS A CREDENTIAL FOR TEN MINUTES, and it is returned by one
+// HTTP response and exists nowhere else — migration 056 gives
+// `authenticated` no read on leod_checkin_kiosk_pairing precisely so a
+// table of live claimable codes is not readable by anyone. Three rules
+// follow from that, and none has an exception:
+//
+//   1. NEVER PERSISTED. Not localStorage, not sessionStorage, not a
+//      module variable, not a closure held by the countdown. It arrives
+//      as an argument, lands in a textContent, and ceases to exist when
+//      that subtree is replaced. The countdown works off the deadline
+//      alone, which is why nothing has to keep hold of the code to keep
+//      ticking.
+//   2. NEVER LOGGED. Neither is the label. Status codes only, exactly
+//      as the Edge Function itself does.
+//   3. NO MARKUP SINKS, same as the rest of this page. The label is
+//      operator-supplied text that comes back from the server in the
+//      kiosk's claim response, so it is untrusted on the way out as
+//      well as on the way back.
+// ═══════════════════════════════════════════════════════════════════
+
+// The server's own MAX_LABEL. Set here so the field cannot produce a
+// name that arrives silently truncated in front of the organizer.
+const KIOSK_LABEL_MAX = 60;
+
+// The deadline and the label — never the code. Neither of these is
+// secret: the expiry is in the response body's plain text, and the label
+// is display text the organizer typed and would have to type again if a
+// code lapsed while they walked.
+let ksDeadline = 0;
+let ksLabel = '';
+let ksTimer = null;
+
+function ksStopTimer() { clearInterval(ksTimer); ksTimer = null; }
+
+function openKioskSetup() {
+  // Belt and braces. The button is already hidden for crew and the
+  // function refuses them anyway; this closes the third door.
+  if (S.role !== 'organizer') return;
+  ksAsk('', '');
+  document.getElementById('kiosk-setup').style.display = 'flex';
+  const input = document.getElementById('ks-label');
+  if (input) input.focus();
+}
+
+// Idempotent, and the only way out. Called by the close button, by the
+// backdrop, by Escape, and by showScreen() for anything that is not the
+// desk. Returning focus to the scan field is what puts a volunteer back
+// to scanning without touching anything.
+function closeKioskSetup() {
+  const host = document.getElementById('kiosk-setup');
+  if (host.style.display === 'none') return;
+  ksStopTimer();
+  host.style.display = 'none';
+  // The code and the label cease to exist on this line.
+  document.getElementById('ks-body').replaceChildren();
+  ksLabel = '';
+  ksDeadline = 0;
+  holdFocus();
+}
+
+// ── STATE 1: NAME THE SCREEN ───────────────────────────────────────
+// The label is required by the function, and it is worth asking for
+// rather than defaulting: it is what the kiosk prints across its own
+// header and what tells two tablets apart in a device list at 07:00.
+function ksAsk(prefill, problem) {
+  ksStopTimer();
+  document.getElementById('ks-title').textContent = 'Set up a kiosk';
+
+  const body = document.getElementById('ks-body');
+  body.replaceChildren();
+
+  const p = document.createElement('div');
+  p.className = 'ks-p';
+  p.textContent = 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
+  body.appendChild(p);
+
+  const lbl = document.createElement('label');
+  lbl.className = 'ks-lbl';
+  lbl.setAttribute('for', 'ks-label');
+  lbl.textContent = 'Name this kiosk';
+  body.appendChild(lbl);
+
+  const input = document.createElement('input');
+  input.className = 'ck-input';
+  input.id = 'ks-label';
+  input.type = 'text';
+  input.maxLength = KIOSK_LABEL_MAX;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = 'Lobby left';
+  input.value = prefill;
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); mintPairingCode(); }
+  });
+  body.appendChild(input);
+
+  const hint = document.createElement('div');
+  hint.className = 'ks-hint';
+  hint.textContent = 'This shows across the top of the kiosk screen, so use something you would say out loud. "Main entrance", "Lobby left".';
+  body.appendChild(hint);
+
+  const err = document.createElement('div');
+  err.className = 'ks-err';
+  err.id = 'ks-err';
+  if (problem) err.textContent = problem;
+  body.appendChild(err);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const go = document.createElement('button');
+  go.className = 'ck-btn';
+  go.type = 'button';
+  go.id = 'ks-mint';
+  go.textContent = 'Create a pairing code';
+  go.addEventListener('click', mintPairingCode);
+  acts.appendChild(go);
+  body.appendChild(acts);
+}
+
+// ── MINT ───────────────────────────────────────────────────────────
+async function mintPairingCode() {
+  const input = document.getElementById('ks-label');
+  const btn   = document.getElementById('ks-mint');
+  const err   = document.getElementById('ks-err');
+  if (!input || !btn || btn.disabled) return;
+
+  const label = input.value.trim().slice(0, KIOSK_LABEL_MAX);
+  err.textContent = '';
+  if (!label) {
+    err.textContent = 'Give the kiosk a name first, so you can tell it apart from the next one.';
+    input.focus();
+    return;
+  }
+  // A pairing code can only come from the server, so an offline desk is
+  // told that here rather than after a request that was never going to
+  // land. The desk itself keeps working offline; this one action does not.
+  if (!navigator.onLine) {
+    err.textContent = 'This desk is offline, and a pairing code has to come from the server. Reconnect, then try again.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
+      body: { action: 'mint', event_id: S.event.id, label },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  if (error || !data || data.ok !== true ||
+      typeof data.code !== 'string' || typeof data.expires_at !== 'string') {
+    // Status only in the log, exactly as the Edge Function does. Never
+    // the label, and there is no code to leak on this path anyway.
+    const status = kioskErrorStatus(error);
+    console.error('checkin: kiosk mint failed, status', status);
+    const reason = await ksReason(error);
+    btn.disabled = false;
+    btn.textContent = 'Create a pairing code';
+    err.textContent = ksFailureMessage(status, reason);
+    return;
+  }
+
+  ksCode(data.code, data.expires_at, label);
+}
+
+// supabase-js hands back the raw Response on a non-2xx, unread. The mint
+// branch is the one place on this page where refusals must be told
+// apart: three of the four are settings an organizer can go and change,
+// and the function distinguishes them only by the sentence it returns.
+// That couples this to those strings, so the match below is a loose
+// substring unique to each, and anything unmatched still lands on a
+// message a person can act on rather than on silence.
+async function ksReason(error) {
+  try {
+    if (error && error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      if (body && typeof body.error === 'string') return body.error.toLowerCase();
+    }
+  } catch (ignored) { /* an unreadable body is simply no reason */ }
+  return '';
+}
+
+// One sentence per situation, each naming the thing to go and do. No
+// error codes and no status numbers: the person reading this is standing
+// at a desk at 07:00 and cannot act on either.
+function ksFailureMessage(status, reason) {
+  if (status === 401) {
+    return 'Your sign-in has expired. Sign out, sign back in, then try again.';
+  }
+  // Order matters. "Forbidden — organizers only" carries none of the
+  // other two substrings, so the organizer test can safely run first.
+  if (status === 403 && reason.includes('organizer')) {
+    return 'Only an organizer can set up a kiosk. Ask whoever owns this event to create the code, or to make you an organizer on it.';
+  }
+  if (status === 403 && reason.includes('self-registration')) {
+    return 'Self-registration is switched off for this event, so a kiosk would have nothing to do. Switch it on in the event’s check-in settings, then come back here and try again.';
+  }
+  if (status === 403 && reason.includes('check-in')) {
+    return 'Check-in is not enabled for this event. It has to be switched on for the event itself before any kiosk can be paired to it.';
+  }
+  if (status === 403) {
+    return 'This event is not set up for kiosks yet. Check its check-in settings, then try again.';
+  }
+  // The mint branch has no limiter of its own — this is the platform
+  // gateway in front of it, and waiting is the only response to it.
+  if (status === 429) {
+    return 'Too many requests from here just now. Wait a minute, then try again.';
+  }
+  if (status === 400) {
+    return 'The server would not accept that name. Try a short one, like "Lobby left".';
+  }
+  return 'Could not create a pairing code. Check this desk is online, then try again.';
+}
+
+// ── STATE 2: THE CODE ──────────────────────────────────────────────
+// `code` arrives as an argument and leaves as a textContent. It is not
+// returned, not stored, and not closed over by the countdown.
+function ksCode(code, expiresAt, label) {
+  ksStopTimer();
+  ksLabel = label;
+  document.getElementById('ks-title').textContent = 'Read this code to the kiosk';
+
+  const body = document.getElementById('ks-body');
+  body.replaceChildren();
+
+  const who = document.createElement('div');
+  who.className = 'ks-p';
+  // The organizer's own text, and the same string the kiosk will show
+  // across its header once it pairs. textContent in both directions.
+  who.textContent = 'For the screen you named “' + label + '”.';
+  body.appendChild(who);
+
+  // Split from the bare characters rather than from whatever punctuation
+  // the server printed, so this display survives a format change on the
+  // other side without showing a mangled code to a room.
+  const bare = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const codeEl = document.createElement('div');
+  codeEl.className = 'ks-code';
+  [bare.slice(0, 4), bare.slice(4)].forEach(part => {
+    if (!part) return;
+    const g = document.createElement('span');
+    g.className = 'ks-grp';
+    g.textContent = part;
+    codeEl.appendChild(g);
+  });
+  body.appendChild(codeEl);
+
+  const timer = document.createElement('div');
+  timer.className = 'ks-timer';
+  body.appendChild(timer);
+
+  const facts = document.createElement('div');
+  facts.className = 'ks-facts';
+  ksFact(facts, 'Once only. ',
+    'The first screen that enters it is paired and the code is spent. It will not work on a second tablet.');
+  ksFact(facts, 'Nothing is stuck if you lose it. ',
+    'The code cannot be looked up again by anyone, including us. If it is gone or it runs out, create another and read that one out instead.');
+  ksFact(facts, 'On the tablet: ',
+    'open this address, then type the code into the box.');
+  const url = document.createElement('div');
+  url.className = 'ks-url';
+  url.textContent = location.origin + location.pathname + '?mode=kiosk';
+  facts.appendChild(url);
+  body.appendChild(facts);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const again = document.createElement('button');
+  again.className = 'ck-btn ghost';
+  again.type = 'button';
+  again.textContent = 'Create another code';
+  again.addEventListener('click', () => ksAsk(ksLabel, ''));
+  const done = document.createElement('button');
+  done.className = 'ck-btn';
+  done.type = 'button';
+  done.textContent = 'Done';
+  done.addEventListener('click', closeKioskSetup);
+  acts.append(again, done);
+  body.appendChild(acts);
+
+  ksDeadline = Date.parse(expiresAt);
+  if (!Number.isFinite(ksDeadline)) {
+    // An expiry we cannot read is not a reason to withhold a code that
+    // works. Say what the server's rule is and let them get on with it.
+    timer.textContent = 'This code expires ten minutes after you created it.';
+    return;
+  }
+  ksTick(timer);
+  ksTimer = setInterval(() => ksTick(timer), 1000);
+}
+
+function ksFact(host, lead, rest) {
+  const line = document.createElement('div');
+  line.className = 'ks-fact';
+  const b = document.createElement('b');
+  b.textContent = lead;
+  line.appendChild(b);
+  line.appendChild(document.createTextNode(rest));
+  host.appendChild(line);
+}
+
+// What matters is not the exact second but whether there is time to walk
+// to the tablet, so this is read at a glance and never needs arithmetic.
+// Amber under a minute. Zero is a screen of its own rather than a 0:00
+// sitting under a code that no longer works.
+function ksTick(el) {
+  const left = ksDeadline - Date.now();
+  if (left <= 0) { ksExpired(); return; }
+  // ceil, not round: rounding can put "0:00" on screen for a second
+  // under a code that still works, which reads as broken. This way the
+  // last frame before the expired state is always "0:01".
+  const secs = Math.ceil(left / 1000);
+  el.className = 'ks-timer' + (secs <= 60 ? ' low' : '');
+  el.textContent = 'Expires in ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+}
+
+// ── STATE 3: EXPIRED ───────────────────────────────────────────────
+// Says the plain thing and offers the one move that fixes it. Minting
+// again costs nothing and burns nothing: the lapsed code was never
+// claimable by anyone else either.
+function ksExpired() {
+  ksStopTimer();
+  document.getElementById('ks-title').textContent = 'That code has expired';
+
+  const body = document.getElementById('ks-body');
+  // The code leaves the page on this line and is recoverable from
+  // nowhere: not from storage, not from a variable, not from the server.
+  body.replaceChildren();
+
+  const p = document.createElement('div');
+  p.className = 'ks-p';
+  p.textContent = 'Pairing codes last ten minutes, so one left sitting on a laptop cannot be used later in the day. Nothing is stuck: create another and read that one out instead.';
+  body.appendChild(p);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const again = document.createElement('button');
+  again.className = 'ck-btn';
+  again.type = 'button';
+  again.textContent = 'Create another code';
+  // Prefilled with the name they already typed. Re-typing "Lobby left"
+  // because a walk took eleven minutes is friction for nothing.
+  again.addEventListener('click', () => ksAsk(ksLabel, ''));
+  acts.appendChild(again);
+  body.appendChild(acts);
 }
 
 // ═══════════════════════════════════════════════════════════════════
