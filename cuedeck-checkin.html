@@ -1,0 +1,3768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CueDeck Check-in</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<meta name="theme-color" content="#F5F5F7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ── DESIGN TOKENS — LIGHT ──────────────────────────
+   The check-in desk lives in a bright hotel lobby, so this page is
+   light while the console/display are dark. Do not port dark tokens
+   in from the other pages.                                        */
+:root {
+  --pg:#F5F5F7; --sf:#FFFFFF; --wm:#FBFBFD;
+  --t1:#1D1D1F; --t2:#6E6E73; --t3:#A1A1A6;
+  --bd:#E8E8ED; --bd2:#D2D2D7;
+  --ac:#0071E3; --acsf:#EAF3FE;
+  --gn:#1D8348; --gnsf:#E8F6EE; --gnbd:#B7E4C9;
+  --am:#9A5B00; --amsf:#FEF6E7; --ambd:#F5D9A8;
+  --rd:#B3261E; --rdsf:#FDECEA; --rdbd:#F5C3BD;
+  --radius:16px; --radius-lg:22px;
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+}
+
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;min-height:100%;background:var(--pg)}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;color:var(--t1);
+  font-size:15px;line-height:1.5;
+}
+button,input{font-family:inherit;font-size:inherit;color:inherit}
+
+/* ── CENTRED SCREENS (sign-in, picker) ── */
+.ck-screen{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:32px 20px;
+}
+.ck-card{
+  width:100%;max-width:420px;background:var(--sf);
+  border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:40px 36px;box-shadow:var(--shadow);
+}
+.ck-card.wide{max-width:560px}
+.ck-logo{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:2px}
+.ck-logo span{color:var(--ac)}
+.ck-sub{font-size:12px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:30px}
+.ck-lbl{
+  display:block;font-size:12px;font-weight:600;color:var(--t2);
+  margin-bottom:7px;letter-spacing:.01em;
+}
+.ck-input{
+  width:100%;background:var(--wm);border:1px solid var(--bd2);
+  border-radius:12px;padding:13px 15px;outline:none;margin-bottom:16px;
+  transition:border-color .14s, box-shadow .14s, background .14s;
+}
+.ck-input:focus{border-color:var(--ac);background:var(--sf);box-shadow:0 0 0 4px var(--acsf)}
+.ck-btn{
+  width:100%;padding:14px;background:var(--ac);color:#fff;border:none;
+  border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;
+  transition:opacity .14s, transform .06s;
+}
+.ck-btn:hover{opacity:.9}
+.ck-btn:active{transform:scale(.99)}
+.ck-btn:disabled{opacity:.5;cursor:default;transform:none}
+.ck-err{
+  color:#B3261E;font-size:13px;min-height:19px;margin-bottom:10px;
+}
+.ck-note{
+  background:var(--amsf);border:1px solid var(--ambd);color:var(--am);
+  border-radius:12px;padding:14px 16px;font-size:14px;margin-bottom:18px;
+}
+.ck-quiet{
+  background:none;border:none;color:var(--ac);font-size:14px;font-weight:500;
+  cursor:pointer;padding:6px 0;
+}
+.ck-quiet:hover{text-decoration:underline}
+
+/* ── EVENT PICKER LIST ── */
+.ck-ev-list{display:flex;flex-direction:column;gap:10px;margin-bottom:22px}
+.ck-ev{
+  display:flex;align-items:center;gap:14px;width:100%;text-align:left;
+  background:var(--wm);border:1px solid var(--bd);border-radius:var(--radius);
+  padding:16px 18px;cursor:pointer;
+  transition:border-color .14s, background .14s, box-shadow .14s;
+}
+.ck-ev:hover{border-color:var(--ac);background:var(--sf);box-shadow:var(--shadow)}
+.ck-ev-main{flex:1;min-width:0}
+.ck-ev-name{font-size:16px;font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-ev-meta{font-size:13px;color:var(--t2);margin-top:2px}
+.ck-pill{
+  flex:none;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--t2);background:var(--sf);border:1px solid var(--bd2);
+  border-radius:999px;padding:4px 10px;
+}
+.ck-empty{color:var(--t2);font-size:14px;padding:6px 0 20px}
+
+/* ── STATION HEADER ── */
+#station{display:none;min-height:100vh;flex-direction:column}
+.ck-header{
+  position:sticky;top:0;z-index:10;background:var(--sf);
+  border-bottom:1px solid var(--bd);padding:18px 24px;
+  display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+}
+.ck-hd-main{flex:1;min-width:0}
+.ck-hd-eyebrow{font-size:11px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase}
+.ck-hd-name{font-size:20px;font-weight:700;letter-spacing:-.02em;overflow-wrap:anywhere}
+.ck-count{
+  flex:none;text-align:right;background:var(--gnsf);border:1px solid var(--gnbd);
+  border-radius:var(--radius);padding:10px 18px;
+}
+.ck-count-num{font-size:20px;font-weight:700;color:var(--gn);font-variant-numeric:tabular-nums}
+.ck-count-lbl{font-size:11px;color:var(--gn);letter-spacing:.1em;text-transform:uppercase;opacity:.85}
+
+/* ── SYNC PILL ────────────────────────────────────
+   Amber whenever work is queued or the desk is offline, green only
+   when everything has reached the server. Amber is not an alarm here:
+   a desk running offline is the normal case this module exists for. */
+.ck-sync{
+  flex:none;border:1px solid;border-radius:999px;padding:8px 14px;
+  font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;
+}
+.ck-sync.clear{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
+.ck-sync.wait{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
+.ck-hd-actions{flex:none;display:flex;gap:8px}
+.ck-body{flex:1;padding:32px 24px;display:flex;justify-content:center;align-items:flex-start}
+.ck-panel{
+  width:100%;max-width:720px;background:var(--sf);border:1px solid var(--bd);
+  border-radius:var(--radius-lg);padding:32px;box-shadow:var(--shadow);
+}
+.ck-panel-title{font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
+.ck-panel-text{font-size:14px;color:var(--t2)}
+
+/* ── SCAN / SEARCH FIELD ──────────────────────────
+   One field for both inputs: a USB scanner types the token and sends
+   Enter, a person types a name. Big type because it is read across a
+   desk, not from a chair.                                          */
+.ck-scan{font-size:19px;padding:16px 18px;margin-bottom:0}
+.ck-scan-hint{font-size:13px;color:var(--t2);margin-top:9px}
+
+/* ── NAME SEARCH RESULTS ── */
+.ck-res{display:flex;flex-direction:column;gap:8px;margin-top:18px}
+.ck-res-btn{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:var(--wm);border:1px solid var(--bd);border-radius:12px;
+  padding:12px 15px;cursor:pointer;transition:border-color .14s, background .14s;
+}
+.ck-res-btn:hover{border-color:var(--ac);background:var(--sf)}
+.ck-res-main{flex:1;min-width:0}
+.ck-res-name{font-weight:600;overflow-wrap:anywhere}
+.ck-res-meta{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
+.ck-res-note{font-size:13px;color:var(--t2);margin-top:14px}
+/* The pick target and the undo sit side by side, so the result cannot be
+   a single <button> any more: a button inside a button is invalid and
+   the inner click never fires reliably.                              */
+.ck-res-row{display:flex;align-items:center;gap:8px}
+.ck-res-row .ck-res-btn{flex:1;min-width:0}
+
+/* ── UNDO CONTROL ─────────────────────────────────
+   A correction, not a main path, so it is quiet: outline only, muted
+   until hovered. It must never compete with the primary check-in
+   button for a volunteer's eye at a busy desk.                      */
+.ck-undo{
+  flex:none;background:none;border:1px solid var(--bd2);color:var(--t2);
+  border-radius:999px;padding:5px 11px;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+  transition:border-color .14s, color .14s, background .14s;
+}
+.ck-undo:hover{border-color:var(--rdbd);color:var(--rd);background:var(--rdsf)}
+.ck-undo:disabled{opacity:.5;cursor:default}
+.ck-vd .ck-undo{display:block;margin-top:10px}
+
+/* ── FIX A NAME ───────────────────────────────────
+   Quieter still than undo — text only, no outline. A misspelled badge
+   is permanent, so the correction has to be reachable here at the desk
+   in the seconds before printing; but it is a rare path and must sit
+   below undo in the eye's order, not beside the primary button.     */
+.ck-fix{
+  flex:none;background:none;border:none;color:var(--t3);
+  padding:5px 2px;font-size:12px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+}
+.ck-fix:hover{color:var(--ac);text-decoration:underline}
+.ck-fix:disabled{cursor:default;text-decoration:none}
+
+/* The editor takes its own full line under the row it belongs to: two
+   name fields squeezed in beside a tick, a pill and an undo would be
+   unusable on the tablet this desk actually runs on. The child rule
+   beats .prow>div, which would otherwise stretch it into the row.   */
+.prow>.pedit{flex:0 0 100%;width:100%;margin-top:11px;padding-top:12px;border-top:1px dashed var(--bd)}
+.pedit-fields{display:flex;gap:10px;flex-wrap:wrap}
+.pedit-f{flex:1 1 180px;min-width:0}
+.pedit .ck-input{margin-bottom:0;font-size:15px;padding:10px 12px}
+.pedit-acts{display:flex;align-items:center;gap:14px;margin-top:11px}
+.pedit-save{
+  flex:none;background:var(--ac);color:#fff;border:none;border-radius:10px;
+  padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;
+}
+.pedit-save:disabled{opacity:.5;cursor:default}
+.pedit-err{font-size:13px;color:var(--rd);margin-top:9px;overflow-wrap:anywhere}
+.pedit-note{font-size:12px;color:var(--t2);margin-top:9px}
+
+/* ── VERDICT ──────────────────────────────────────
+   Three states, each carrying its own instruction. Amber is not an
+   error: a second scan of the same code is normal at a busy desk.  */
+.ck-vd{border:1px solid;border-radius:var(--radius);padding:18px 20px;margin-top:20px}
+.ck-vd-h{font-size:17px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-vd-t{font-size:14px;margin-top:6px}
+.ck-vd-ok{background:var(--gnsf);border-color:var(--gnbd)}
+.ck-vd-ok .ck-vd-h{color:var(--gn)}
+.ck-vd-ok .ck-vd-t{color:var(--gn)}
+.ck-vd-dup{background:var(--amsf);border-color:var(--ambd)}
+.ck-vd-dup .ck-vd-h{color:var(--am)}
+.ck-vd-dup .ck-vd-t{color:var(--am)}
+.ck-vd-bad{background:var(--rdsf);border-color:var(--rdbd)}
+.ck-vd-bad .ck-vd-h{color:var(--rd)}
+.ck-vd-bad .ck-vd-t{color:var(--rd)}
+.ck-vd .ck-quiet{margin-top:8px}
+
+/* ── PARTY CARD ───────────────────────────────────
+   The unit of work is an arrival, not a scan: one to five people from
+   one company, checked in together. A lone attendee is a party of one
+   and gets the same card.                                          */
+.ck-party{margin-top:20px;border:1px solid var(--bd);border-radius:var(--radius);overflow:hidden}
+.ck-party-hd{background:var(--wm);border-bottom:1px solid var(--bd);padding:15px 18px}
+.ck-party-co{font-size:16px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ck-party-sub{font-size:13px;color:var(--t2);margin-top:2px}
+.prow{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.prow:last-child{border-bottom:none}
+.prow>div{flex:1;min-width:0}
+.tick{
+  flex:none;width:36px;height:36px;border-radius:10px;padding:0;
+  border:2px solid var(--bd2);background:var(--sf);cursor:pointer;
+  font-size:18px;font-weight:700;line-height:1;
+  transition:background .14s, border-color .14s;
+}
+.tick:hover{border-color:var(--ac)}
+.tick.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.tick.done{background:var(--gn);border-color:var(--gn);color:#fff;cursor:default}
+.tick.done:hover{border-color:var(--gn)}
+.pn{font-weight:600;overflow-wrap:anywhere}
+.pm{font-size:13px;color:var(--t2);overflow-wrap:anywhere}
+.pill-in,.pill-un,.pill-go{
+  flex:none;font-size:12px;font-weight:600;border-radius:999px;
+  padding:5px 11px;white-space:nowrap;
+}
+.pill-in{background:var(--gnsf);color:var(--gn);border:1px solid var(--gnbd)}
+.pill-un{background:var(--wm);color:var(--t2);border:1px solid var(--bd2)}
+.pill-go{background:var(--acsf);color:var(--ac);border:1px solid var(--ac)}
+
+/* A printed badge cannot be un-printed, so a name corrected afterwards
+   leaves the attendee wearing the old spelling. Amber and quiet: it
+   sits under the name it contradicts, states the fact, and asks for
+   nothing. There is deliberately no reprint control here.          */
+.pstale{font-size:12px;font-weight:600;color:var(--am);margin-top:3px;overflow-wrap:anywhere}
+
+/* ── DESK ACTIONS ── */
+.ck-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.ck-actions .ck-btn{flex:1 1 220px}
+.ck-btn.ghost{background:var(--sf);color:var(--t1);border:1px solid var(--bd2)}
+.ck-btn.ghost:hover{opacity:1;border-color:var(--t3)}
+
+/* ── LOADING ── */
+#loading{
+  position:fixed;inset:0;background:var(--pg);display:none;
+  align-items:center;justify-content:center;z-index:9998;
+}
+.ck-spin{
+  width:26px;height:26px;border:2px solid var(--bd2);
+  border-top-color:var(--ac);border-radius:50%;animation:ck-rot .8s linear infinite;
+}
+@keyframes ck-rot{to{transform:rotate(360deg)}}
+
+/* ── KIOSK SETUP (organizer) ───────────────────────
+   A modal over the desk rather than a panel inside it. The desk's one
+   job is scanning: a setup action used once per event must not push
+   the scan field down the page, and dismissing it has to put the
+   operator back exactly where they were. The pairing code also needs
+   the whole screen's attention — it is read aloud across a lobby —
+   which a strip wedged under the scan field cannot give it.        */
+.ck-modal{
+  position:fixed;inset:0;z-index:9997;background:rgba(29,29,31,.38);
+  display:flex;align-items:center;justify-content:center;padding:24px 18px;
+}
+.ck-modal-card{
+  width:100%;max-width:540px;max-height:calc(100vh - 48px);overflow-y:auto;
+  background:var(--sf);border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:28px 30px 26px;box-shadow:0 20px 60px rgba(0,0,0,.22);
+}
+.ks-top{display:flex;align-items:flex-start;gap:16px;margin-bottom:10px}
+.ks-top-main{flex:1;min-width:0}
+.ks-eyebrow{font-size:11px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase}
+.ks-x{
+  flex:none;background:none;border:none;color:var(--t3);cursor:pointer;
+  font-size:24px;line-height:1;padding:0 6px;
+}
+.ks-x:hover{color:var(--t1)}
+.ks-h{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:2px;overflow-wrap:anywhere}
+.ks-p{font-size:14px;color:var(--t2);line-height:1.5}
+.ks-lbl{display:block;font-size:12px;font-weight:600;color:var(--t2);margin:22px 0 7px}
+.ks-hint{font-size:13px;color:var(--t2);margin-top:-6px}
+
+/* ★ READ FROM ACROSS A ROOM ★
+   Two groups of four with a real gap, never a hyphen: the eye holds a
+   four-character chunk and loses its place across eight, and the
+   organizer is reading this out to somebody three metres away. Tabular
+   figures so 11 and 88 occupy the same width and the code cannot be
+   misread as a different length. clamp() rather than a fixed size —
+   this desk runs on a tablet as often as a laptop, and a code that
+   wraps is worse than a slightly smaller one.                      */
+.ks-code{
+  /* The gap has to beat the letter-spacing inside a group by a clear
+     margin, or eight characters read as eight characters again and the
+     chunking buys nothing. flex-wrap so a narrow tablet stacks the two
+     groups rather than shrinking them below reading size. */
+  display:flex;justify-content:center;gap:.55em;flex-wrap:wrap;
+  margin:24px 0 10px;color:var(--gn);
+  font-size:clamp(40px,13vw,68px);font-weight:700;line-height:1.05;
+  letter-spacing:.1em;font-variant-numeric:tabular-nums;
+}
+/* letter-spacing leaves a trailing gap after each group's last glyph,
+   which pushes the pair off centre. Pull it back so the two sit
+   symmetrically about the middle of the card. */
+.ks-grp{margin-right:-.1em}
+.ks-timer{
+  text-align:center;font-size:15px;font-weight:600;color:var(--t2);
+  font-variant-numeric:tabular-nums;
+}
+.ks-timer.low{color:var(--am)}
+.ks-facts{margin-top:24px;padding-top:18px;border-top:1px solid var(--bd)}
+.ks-fact{font-size:14px;color:var(--t2);line-height:1.5;margin-top:10px}
+.ks-fact:first-child{margin-top:0}
+.ks-fact b{color:var(--t1);font-weight:600}
+.ks-url{
+  margin-top:7px;font-size:13px;color:var(--t1);
+  background:var(--wm);border:1px solid var(--bd);border-radius:10px;
+  padding:9px 11px;overflow-wrap:anywhere;
+}
+.ks-acts{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}
+.ks-acts .ck-btn{flex:1 1 190px;width:auto}
+.ks-err{color:var(--rd);font-size:14px;line-height:1.5;margin-top:16px;overflow-wrap:anywhere}
+
+/* ── PAIRED KIOSKS ─────────────────────────────────
+   The list an organizer has never had. A kiosk that paired and then
+   never registered anybody is the silent failure of this whole flow:
+   the tablet shows a form, the pairing "worked", and nobody notices
+   until the walk-up queue is at the desk. So the two states carry
+   COLOUR and not only words — amber for a screen that has never been
+   used, green for one that has. A row scanned at a glance has to make
+   the odd one out obvious without reading a single timestamp.       */
+.ks-devs{margin-top:26px;padding-top:20px;border-top:1px solid var(--bd)}
+.ks-devs-h{font-size:12px;font-weight:600;color:var(--t2);margin-bottom:12px}
+.ks-devs-note{font-size:13px;color:var(--t2);line-height:1.5}
+.ks-dev{
+  display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  background:var(--wm);border:1px solid var(--bd);border-radius:12px;
+  padding:12px 14px;margin-top:8px;
+}
+.ks-dev-main{flex:1 1 190px;min-width:0}
+/* Operator-supplied text. anywhere, so a 60-character run of one word
+   cannot push the state pill off the card. */
+.ks-dev-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.ks-dev-meta{font-size:12px;color:var(--t3);margin-top:3px}
+.ks-dev-state{
+  flex:none;font-size:12px;font-weight:600;border-radius:999px;
+  padding:5px 11px;border:1px solid;
+}
+.ks-dev-state.seen{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
+.ks-dev-state.never{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
+/* A third colour, not a greyed-out version of the other two. A revoked
+   kiosk is not a quieter kind of working — it is a screen that will
+   never come back without being paired again, and it has to read that
+   way at a glance next to a live one. */
+.ks-dev-state.revoked{background:var(--rdsf);border-color:var(--rdbd);color:var(--rd)}
+
+/* The action strip takes the full width of the card rather than sitting
+   beside the pill: the confirmation is a sentence, and a sentence
+   squeezed into a 90px column is a sentence nobody reads before
+   clicking the thing under it. */
+.ks-dev-act{flex:1 1 100%;margin-top:10px}
+.ks-dev-q{font-size:13px;color:var(--t2);line-height:1.5;margin-bottom:9px}
+.ks-dev-err{font-size:13px;color:var(--rd);line-height:1.5;margin-bottom:9px;overflow-wrap:anywhere}
+.ks-dev-note{font-size:12px;color:var(--t3);line-height:1.45}
+.ks-dev-btns{display:flex;gap:8px;flex-wrap:wrap}
+.ks-dev-btn{
+  font-size:13px;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;
+  background:var(--sf);border:1px solid var(--bd2);color:var(--t2);
+}
+.ks-dev-btn:hover{color:var(--t1)}
+.ks-dev-btn.danger{background:var(--rdsf);border-color:var(--rdbd);color:var(--rd)}
+.ks-dev-btn:disabled{opacity:.55;cursor:default}
+
+/* ══ KIOSK ═════════════════════════════════════════
+   A different room from the desk. An unattended touch screen in a
+   hotel lobby, operated by strangers who have never seen it, some
+   elderly, some in a hurry, standing up, one-handed, often with a
+   suitcase in the other hand. So: bigger type, fewer things per
+   screen, and every target sized for a thumb rather than a cursor.
+
+   ★ 44px is the floor for anything tappable ★ and the buttons below
+   sit well above it. A missed tap on a lobby screen is not a small
+   annoyance — there is nobody standing there to explain what went
+   wrong, so the person gives up and joins the queue they came here
+   to avoid.                                                       */
+#kiosk{display:none;min-height:100vh;flex-direction:column;background:var(--pg)}
+.kk-header{
+  background:var(--sf);border-bottom:1px solid var(--bd);
+  padding:16px 22px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+}
+.kk-brand{font-size:19px;font-weight:700;letter-spacing:-.02em}
+.kk-brand span{color:var(--ac)}
+.kk-place{font-size:13px;color:var(--t3);letter-spacing:.12em;text-transform:uppercase;overflow-wrap:anywhere}
+.kk-main{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:26px 18px 60px}
+.kk-step{
+  width:100%;max-width:600px;background:var(--sf);
+  border:1px solid var(--bd);border-radius:var(--radius-lg);
+  padding:34px 30px;box-shadow:var(--shadow);
+}
+.kk-eyebrow{font-size:12px;color:var(--t3);letter-spacing:.14em;text-transform:uppercase;margin-bottom:12px}
+.kk-h{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.2;overflow-wrap:anywhere}
+.kk-p{font-size:17px;color:var(--t2);line-height:1.45;margin-top:10px}
+.kk-doors{display:flex;flex-direction:column;gap:14px;margin-top:26px}
+
+/* Two doors, never one. Merging "I never registered" with "I registered
+   but cannot find my email" is exactly what produces duplicate records
+   at a real event: the person who cannot find their email is offered a
+   registration form, fills it in, and the roster grows a second copy of
+   somebody who was already on it. Both doors reach the same form and
+   the same endpoint — the server's collision check is what actually
+   de-duplicates — but the second door SAYS so first, so a collision
+   reads as the expected answer rather than a rejection.            */
+.kk-door{
+  display:block;width:100%;text-align:left;min-height:76px;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:var(--radius);
+  padding:18px 20px;cursor:pointer;
+  transition:border-color .14s, background .14s, box-shadow .14s;
+}
+.kk-door:hover{border-color:var(--ac);background:var(--sf);box-shadow:var(--shadow)}
+.kk-door-t{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.kk-door-s{font-size:15px;color:var(--t2);margin-top:4px;line-height:1.35}
+
+.kk-field{margin-top:20px}
+.kk-lbl{display:block;font-size:14px;font-weight:600;color:var(--t2);margin-bottom:7px}
+/* ★ 17px MINIMUM ★ — iOS Safari zooms the viewport on focus for any
+   input under 16px, and on a screen bolted to a stand nobody can pinch
+   it back out. The layout never recovers for the rest of the event. */
+.kk-input{
+  width:100%;font-size:17px;min-height:56px;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:12px;
+  padding:15px 16px;outline:none;
+  transition:border-color .14s, box-shadow .14s, background .14s;
+}
+.kk-input:focus{border-color:var(--ac);background:var(--sf);box-shadow:0 0 0 4px var(--acsf)}
+.kk-input.bad{border-color:var(--rdbd);background:var(--rdsf)}
+.kk-hint{font-size:14px;color:var(--t3);margin-top:6px}
+.kk-err{color:var(--rd);font-size:15px;line-height:1.45;margin-top:18px}
+.kk-err div{margin-top:4px}
+
+/* Two targets, both over the floor. The whole row is a <label>, so a
+   thumb landing anywhere on the sentence ticks it — and the box itself
+   is a full 44px for anyone who aims at the box, which is what people
+   who are unsure of a screen actually do. Chunky on a laptop; correct
+   on the tablet this runs on.                                      */
+.kk-consent{
+  display:flex;gap:14px;align-items:flex-start;min-height:56px;
+  margin-top:24px;padding:16px 18px;cursor:pointer;
+  background:var(--wm);border:1px solid var(--bd2);border-radius:var(--radius);
+}
+.kk-check{flex:none;width:44px;height:44px;margin:0;cursor:pointer}
+.kk-consent span{font-size:16px;line-height:1.4}
+.kk-legal{font-size:15px;margin-top:12px}
+.kk-legal a{color:var(--ac)}
+
+.kk-btn{
+  display:block;width:100%;min-height:58px;margin-top:22px;
+  background:var(--ac);color:#fff;border:none;border-radius:14px;
+  padding:16px;font-size:18px;font-weight:600;cursor:pointer;
+  transition:opacity .14s, transform .06s;
+}
+.kk-btn:hover{opacity:.9}
+.kk-btn:active{transform:scale(.995)}
+.kk-btn:disabled{opacity:.5;cursor:default;transform:none}
+.kk-btn.ghost{background:var(--sf);color:var(--t1);border:1px solid var(--bd2)}
+.kk-btn.ghost:hover{opacity:1;border-color:var(--t3)}
+
+/* Read at arm's length by someone who is about to walk three metres to
+   a desk and say it out loud. Tabular figures so 11 and 88 occupy the
+   same width and the code cannot be misread as a different length. */
+.kk-code{
+  font-size:54px;font-weight:700;letter-spacing:.16em;
+  font-variant-numeric:tabular-nums;line-height:1.1;
+  margin:22px 0 6px;color:var(--gn);overflow-wrap:anywhere;
+}
+/* Shown word for word on BOTH outcomes. Identical everywhere it
+   appears, so it discloses nothing about which branch ran, and it
+   turns the dead end — a code that never arrives — into a short walk
+   instead of a person standing at a screen with no next move.      */
+.kk-fallback{
+  font-size:15px;color:var(--t2);margin-top:20px;
+  padding-top:16px;border-top:1px solid var(--bd);
+}
+.kk-count{font-size:14px;color:var(--t3);margin-top:14px;text-align:center}
+
+/* ── BADGE PRINTING ───────────────────────────────
+   ★ BADGE STOCK SIZE — 100mm × 70mm ★
+   This is the first thing anyone will need to change for a different
+   venue. Three values must move together: the @page size and the
+   .badge width and height. If they disagree, Chrome scales the page
+   to fit the sheet and every badge prints small and off-centre.
+   Procedure is in docs/checkin-desk-runbook.md.
+
+   #badge-sheet is hidden on screen and is the ONLY thing that prints:
+   everything else on the page is display:none in print. Chrome
+   launched with --kiosk-printing sends window.print() straight to the
+   OS default printer with no dialog and no preview, which is what
+   makes a badge come out of the machine the moment the operator
+   presses the button. There is no print agent and none is needed.  */
+#badge-sheet { display: none; }
+
+@media print {
+  /* The desk page is light grey. Chrome does not print backgrounds by
+     default, but a driver or a profile with "Background graphics" on
+     would flood every label with it. Explicitly white here.        */
+  body { background: #fff; }
+  body > *:not(#badge-sheet) { display: none !important; }
+  #badge-sheet { display: block !important; }
+  @page { size: 100mm 70mm; margin: 0; }
+  .badge {
+    width: 100mm; height: 70mm; page-break-after: always;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center;
+    font-family: -apple-system, system-ui;
+    /* @page has zero margin so the badge can own the full stock. This
+       keeps text off the physical edge, where a label printer's cut
+       tolerance eats a millimetre or two.                          */
+    padding: 0 6mm;
+  }
+  /* Without this the last badge is followed by a forced break and the
+     printer spits one blank label per party. Badge stock is not free
+     and a blank one at the desk reads as a jam.                    */
+  .badge:last-child { page-break-after: auto; }
+  /* Size is set per badge in badgeNamePt() — this is the ceiling that
+     an ordinary name gets. anywhere + auto height let a name that has
+     already hit the floor size wrap instead of running off the card. */
+  .badge .nm { font-size: 30pt; font-weight: 700; letter-spacing: -0.5pt; overflow-wrap: anywhere; max-width: 100%; }
+  .badge .co { font-size: 13pt; margin-top: 3mm; overflow-wrap: anywhere; max-width: 100%; }
+  .badge .tt { font-size: 10pt; text-transform: uppercase; letter-spacing: 1pt; margin-top: 2mm; overflow-wrap: anywhere; max-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── SIGN IN ─────────────────────────────────── -->
+<div id="signin" class="ck-screen">
+  <form id="signin-form" class="ck-card" autocomplete="on">
+    <div class="ck-logo">Cue<span>Deck</span></div>
+    <div class="ck-sub">Check-in</div>
+    <label class="ck-lbl" for="si-email">Email</label>
+    <input class="ck-input" id="si-email" type="email" autocomplete="username" required>
+    <label class="ck-lbl" for="si-password">Password</label>
+    <input class="ck-input" id="si-password" type="password" autocomplete="current-password" required>
+    <div class="ck-err" id="si-err"></div>
+    <button class="ck-btn" type="submit" id="si-btn">Sign in</button>
+  </form>
+</div>
+
+<!-- ── EVENT PICKER ────────────────────────────── -->
+<div id="picker" class="ck-screen" style="display:none">
+  <div class="ck-card wide">
+    <div class="ck-logo">Cue<span>Deck</span></div>
+    <div class="ck-sub">Choose an event</div>
+    <div class="ck-note" id="pk-note" style="display:none"></div>
+    <div class="ck-ev-list" id="pk-list"></div>
+    <button class="ck-quiet" type="button" id="pk-signout">Sign out</button>
+  </div>
+</div>
+
+<!-- ── STATION ─────────────────────────────────── -->
+<div id="station">
+  <header class="ck-header">
+    <div class="ck-hd-main">
+      <div class="ck-hd-eyebrow">Check-in desk</div>
+      <div class="ck-hd-name" id="st-event"></div>
+    </div>
+    <div class="ck-sync clear" id="st-sync">All synced</div>
+    <div class="ck-count">
+      <div class="ck-count-num" id="st-count">0 of 0</div>
+      <div class="ck-count-lbl">Arrived</div>
+    </div>
+    <div class="ck-hd-actions">
+      <!-- Organizer only, and hidden until renderStation() says otherwise.
+           checkin-kiosk-pair enforces the role server-side regardless, but
+           a control that always returns 403 for crew is worse than one
+           that is not there: it reads as a broken product rather than as
+           a permission they do not have. -->
+      <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Set up a kiosk</button>
+      <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
+    </div>
+  </header>
+  <div class="ck-body">
+    <div class="ck-panel">
+      <label class="ck-lbl" for="scan">Scan a QR code, or type a name</label>
+      <input class="ck-input ck-scan" id="scan" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Scan a badge, or start typing a name">
+      <div class="ck-scan-hint">Point the scanner at the QR code, or type two or more letters of a name, company or email.</div>
+      <div id="results"></div>
+      <div id="verdict"></div>
+      <div id="party"></div>
+      <div class="ck-actions" id="actions" style="display:none">
+        <button class="ck-btn" type="button" id="primary"></button>
+        <button class="ck-btn ghost" type="button" id="secondary">Check in without printing</button>
+      </div>
+      <div class="ck-panel-text" id="st-status" style="margin-top:24px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── KIOSK ───────────────────────────────────────
+     Reached only through ?mode=kiosk, and never signed in. This screen
+     has no operator, no roster and no RLS access of its own: its only
+     credential is a device key in localStorage, and everything it can
+     do is one call to checkin-self-register.
+
+     Every node under #kk-result-body is built in JS with createElement
+     + textContent. The sections below are the fixed chrome; the two
+     outcomes are the one place a stranger's input could come back at
+     us, so nothing there is written as markup.                    -->
+<div id="kiosk">
+  <header class="kk-header">
+    <div class="kk-brand">Cue<span>Deck</span></div>
+    <!-- The device label the organizer typed when they minted the
+         pairing code. Operator-supplied text, so textContent only. -->
+    <div class="kk-place" id="kk-place"></div>
+  </header>
+  <main class="kk-main">
+
+    <!-- PAIRING — first run, or after localStorage is cleared -->
+    <section class="kk-step" id="kk-pair" style="display:none">
+      <div class="kk-eyebrow">Set up this screen</div>
+      <div class="kk-h">Enter the pairing code</div>
+      <div class="kk-p">Ask the event organizer for a pairing code, then type the eight characters here. You only do this once.</div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-code">Pairing code</label>
+        <!-- maxlength is deliberately loose. A code is eight characters
+             and the input handler caps it at eight, but it counts them
+             AFTER stripping spaces and dashes. A tight maxlength here
+             would truncate "AB CD EF GH" to nine raw characters before
+             the strip ever ran, leaving six real ones — defeating
+             exactly the spacing this screen exists to forgive. -->
+        <input class="kk-input" id="kk-code" type="text" inputmode="text"
+               autocomplete="off" autocapitalize="characters" spellcheck="false"
+               maxlength="24" placeholder="ABCD-EFGH">
+        <div class="kk-hint">Letters and numbers only. Upper or lower case, with or without the dash.</div>
+      </div>
+      <div class="kk-err" id="kk-pair-err"></div>
+      <button class="kk-btn" type="button" id="kk-pair-btn">Pair this screen</button>
+    </section>
+
+    <!-- OFFLINE — the kiosk cannot work without the server, by design -->
+    <section class="kk-step" id="kk-offline" style="display:none">
+      <div class="kk-eyebrow">Self registration</div>
+      <div class="kk-h">This screen is offline — please see the desk.</div>
+      <div class="kk-p">It will come back on its own once the connection returns. The registration desk can sign you in straight away.</div>
+    </section>
+
+    <!-- SCREEN 1 — ARRIVE. Two doors. -->
+    <section class="kk-step" id="kk-arrive" style="display:none">
+      <div class="kk-eyebrow">Step 1 of 3</div>
+      <div class="kk-h">Welcome</div>
+      <div class="kk-p">Which of these is you?</div>
+      <div class="kk-doors">
+        <button class="kk-door" type="button" id="kk-door-new">
+          <div class="kk-door-t">I didn't register</div>
+          <div class="kk-door-s">You are here without a booking, and you need a badge.</div>
+        </button>
+        <button class="kk-door" type="button" id="kk-door-lost">
+          <div class="kk-door-t">I can't find my email</div>
+          <div class="kk-door-s">You registered already, but you cannot find the code we sent you.</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- SCREEN 2 — DETAILS -->
+    <section class="kk-step" id="kk-details" style="display:none">
+      <div class="kk-eyebrow">Step 2 of 3</div>
+      <div class="kk-h" id="kk-details-h">Your details</div>
+      <div class="kk-p" id="kk-details-p"></div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-first">First name</label>
+        <input class="kk-input" id="kk-first" type="text" maxlength="80"
+               autocomplete="given-name" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-last">Last name</label>
+        <input class="kk-input" id="kk-last" type="text" maxlength="80"
+               autocomplete="family-name" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-company">Company <span style="font-weight:400">(optional)</span></label>
+        <input class="kk-input" id="kk-company" type="text" maxlength="80"
+               autocomplete="organization" autocapitalize="words" spellcheck="false">
+      </div>
+      <div class="kk-field">
+        <label class="kk-lbl" for="kk-email">Email</label>
+        <!-- REQUIRED. checkin-self-register enforces this unconditionally:
+             with no email there is no collision key, so the
+             already-registered branch could never fire. maxlength 254 is
+             the server's own bound (RFC 5321), set here so the two never
+             disagree in front of a real attendee. -->
+        <input class="kk-input" id="kk-email" type="email" maxlength="254"
+               autocomplete="email" autocapitalize="off" spellcheck="false" inputmode="email">
+        <div class="kk-hint" id="kk-email-hint"></div>
+      </div>
+      <div class="kk-err" id="kk-details-err"></div>
+      <button class="kk-btn" type="button" id="kk-details-next">Continue</button>
+      <button class="kk-btn ghost" type="button" id="kk-details-back">Back</button>
+    </section>
+
+    <!-- SCREEN 3 — CONSENT, then the result below -->
+    <section class="kk-step" id="kk-consent-step" style="display:none">
+      <div class="kk-eyebrow">Step 3 of 3</div>
+      <div class="kk-h">One last thing</div>
+      <div class="kk-p">We need your permission before we can register you.</div>
+      <!-- NEVER pre-checked. A pre-ticked box is not consent under GDPR,
+           and this screen collects personal data from strangers with no
+           member of staff present to explain anything. -->
+      <label class="kk-consent" for="kk-consent">
+        <input class="kk-check" id="kk-consent" type="checkbox">
+        <span>I agree to CueDeck and the event organizer using my details to register me for this event, issue my badge and send me my entry code.</span>
+      </label>
+      <!-- Outside the label on purpose: a link inside it would toggle the
+           tick every time somebody tried to read the notice. -->
+      <div class="kk-legal"><a href="https://www.cuedeck.io/privacy" target="_blank" rel="noopener noreferrer">Read the privacy notice</a></div>
+      <div class="kk-err" id="kk-consent-err"></div>
+      <button class="kk-btn" type="button" id="kk-submit">Register me</button>
+      <button class="kk-btn ghost" type="button" id="kk-consent-back">Back</button>
+    </section>
+
+    <!-- SCREEN 3, SECOND HALF — THE RESULT
+         The two outcomes share this section, these classes and this
+         padding. Nothing but #kk-result-body differs between them, and
+         the reset countdown below is identical by construction rather
+         than by two code paths agreeing. -->
+    <section class="kk-step" id="kk-result" style="display:none">
+      <div id="kk-result-body"></div>
+      <button class="kk-btn ghost" type="button" id="kk-done">Done</button>
+      <div class="kk-count" id="kk-count"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── KIOSK SETUP (organizer) ──────────────────────
+     Everything inside #ks-body is built in JS with createElement +
+     textContent. Two strings pass through it and neither is ever
+     written as markup: the pairing code, and the label the organizer
+     typed — which is the same text that comes back from the server in
+     the kiosk's claim response, so it is untrusted in both directions.
+
+     The code lives in this subtree and nowhere else. No storage, no
+     module variable, gone the moment #ks-body is replaced.        -->
+<div id="kiosk-setup" class="ck-modal" style="display:none">
+  <div class="ck-modal-card" role="dialog" aria-modal="true" aria-labelledby="ks-title">
+    <div class="ks-top">
+      <div class="ks-top-main">
+        <div class="ks-eyebrow">Kiosk</div>
+        <div class="ks-h" id="ks-title">Set up a kiosk</div>
+      </div>
+      <button class="ks-x" type="button" id="ks-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="ks-body"></div>
+  </div>
+</div>
+
+<!-- ── LOADING ─────────────────────────────────── -->
+<div id="loading"><div class="ck-spin"></div></div>
+
+<!-- ── BADGE SHEET ─────────────────────────────────
+     Hidden on screen, and the only thing that prints. Must stay a
+     DIRECT child of <body>: the print rule hides body's other children
+     by selector, so nesting this inside one of them would hide it too.
+     Filled by printBadges(); empty at rest.                        -->
+<div id="badge-sheet" aria-hidden="true"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CREDENTIALS (hardcoded — same project as console/display)
+// ═══════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+
+// ═══════════════════════════════════════════════════
+// MODE
+// One file, two rooms. ?mode=kiosk is an unattended public screen with
+// no operator, no sign-in and no roster; anything else is the staffed
+// desk. Read once, at parse time, so every guard below is a constant
+// rather than a URL re-parsed at some later moment when the answer
+// could differ.
+// ═══════════════════════════════════════════════════
+const KIOSK = new URLSearchParams(location.search).get('mode') === 'kiosk';
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+let sb = null;
+// S.party is the arrival currently at the desk: the people the card is
+// showing, plus the ids ticked as present. Null when the desk is idle.
+// S.editing is the open name correction: the attendee id, the text typed
+// so far and where the caret sits. The DRAFT lives here rather than only
+// in the two inputs because renderParty() replaces every row — a flush
+// reconcile, a tick on a colleague or an undo would otherwise wipe a
+// half-typed name with nobody having touched the editor.
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null };  // var → window.S for E2E tests
+
+// ═══════════════════════════════════════════════════
+// OFFLINE CACHE (IndexedDB)
+// The desk must keep resolving scans when venue wifi dies, so the
+// roster is mirrored locally and every action is queued in STORE_OUTBOX
+// until the server acknowledges it. Both survive a page reload.
+// ═══════════════════════════════════════════════════
+const DB_NAME = 'cuedeck-checkin';
+const STORE_ROSTER = 'roster';
+const STORE_OUTBOX = 'outbox';
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_ROSTER)) db.createObjectStore(STORE_ROSTER, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: 'client_id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutAll(store, rows) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    rows.forEach(r => tx.objectStore(store).put(r));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function idbGetAll(store) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Roster rows are keyed on attendee id with no per-event partition, so a
+// tablet worked at two events in one day would keep both rosters. Drop the
+// other event's rows on switch. STORE_OUTBOX is deliberately untouched:
+// unsynced scans from another event are real check-ins and must survive.
+async function idbClearOtherEvents(eventId) {
+  const db = await openDb();
+  const rows = await idbGetAll(STORE_ROSTER);
+  const stale = rows.filter(r => r.event_id !== eventId).map(r => r.id);
+  if (!stale.length) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_ROSTER, 'readwrite');
+    stale.forEach(id => tx.objectStore(STORE_ROSTER).delete(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// ROSTER
+// ═══════════════════════════════════════════════════
+async function loadRoster(eventId) {
+  const { data, error } = await sb
+    .from('leod_checkin_attendees')
+    .select('id,event_id,first_name,last_name,email,company,ticket_type,qr_token,checked_in_at,badge_printed_at')
+    .eq('event_id', eventId);
+  if (error) {
+    // Offline or fetch failed: fall back to the cached copy, scoped to
+    // THIS event. The store is keyed on attendee id and can hold rows
+    // from a previous event if this device worked two events in a day,
+    // so an unfiltered read would mix rosters.
+    const cached = await idbGetAll(STORE_ROSTER);
+    S.roster = cached.filter(a => a.event_id === eventId);
+    return;
+  }
+  S.roster = data;
+  await idbPutAll(STORE_ROSTER, data);
+  await overlayPending();
+}
+
+// The server copy knows nothing about actions still sitting in the
+// outbox, so a fresh fetch would show people the desk has already
+// accepted as not arrived — after a reload, or after a flush that
+// settled only part of the queue. Re-apply the queue on top. Applied in
+// scanned_at order so a checkin and its later undo net out, exactly as
+// the server will replay them. The offline branch above skips this: the
+// cached rows already carry these writes.
+async function overlayPending() {
+  const pending = replayOrder(await idbGetAll(STORE_OUTBOX));
+  const touched = [];
+  for (const p of pending) {
+    const a = S.roster.find(x => x.id === p.attendee_id);
+    if (!a) continue;
+    if (p.action === 'checkin' && !a.checked_in_at) a.checked_in_at = p.scanned_at;
+    else if (p.action === 'undo' && a.checked_in_at === p.prev_checked_in_at) a.checked_in_at = null;
+    else continue;
+    touched.push(a);
+  }
+  if (touched.length) await idbPutAll(STORE_ROSTER, touched);
+}
+
+// ═══════════════════════════════════════════════════
+// OUTBOX
+// Every action is written here before anything else happens, so a desk
+// that loses power mid-morning comes back with its check-ins intact.
+// These two helpers are mirrored in tests/checkin-outbox.spec.ts — keep
+// them character-identical.
+//
+// The spec's enqueue() and markSynced() are expressed through the store
+// itself: STORE_OUTBOX has keyPath 'client_id', so a put is the dedup,
+// and marking synced is a put of the same item with synced:true.
+//
+// There is deliberately NO client-side collapsing of a checkin and its
+// undo. The server applies items in order and nets out correctly; an
+// earlier collapse() caused a corrected mistake to be re-applied on the
+// next flush.
+// ═══════════════════════════════════════════════════
+function pendingCount(outbox) { return outbox.filter(p => !p.synced).length; }
+
+function replayOrder(outbox) {
+  return outbox.filter(p => !p.synced).slice()
+    .sort((a, b) => (a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0));
+}
+
+// Synced items are kept for a day so a desk can still account for what
+// it sent, then dropped so the store does not grow all event. Unsynced
+// items are NEVER pruned: they are the check-ins.
+// Pruning closes the local dedup window — once a client_id is gone from
+// here this device could in principle re-send it. That is acceptable
+// because the local store was never the real guard: the unique index on
+// leod_checkin_scan_events.client_id is, and the server replays the
+// original verdict instead of applying the item twice.
+async function pruneOutbox() {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const rows = await idbGetAll(STORE_OUTBOX);
+  const stale = rows.filter(p => p.synced && p.scanned_at < cutoff).map(p => p.client_id);
+  if (!stale.length) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_OUTBOX, 'readwrite');
+    stale.forEach(id => tx.objectStore(STORE_OUTBOX).delete(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// The server rejects a batch larger than this with a 400. A desk offline
+// through a keynote can queue hundreds of scans, and sending them as one
+// request would be rejected every time — the outbox would never drain,
+// and the livelock would get worse the longer the desk had been offline.
+// 200 is the server's declared maximum, but it is a guess at its
+// wall-clock budget: each item costs 2-4 sequential round trips, and
+// this has never been measured against production load. If drains start
+// timing out at a real event, this is the first number to lower — the
+// server's client_id dedup makes the re-sent items cheap, so a smaller
+// chunk costs little.
+const MAX_BATCH = 200;
+
+// A hung request is the failure this whole module exists for: a captive
+// portal or a connected-but-dead uplink accepts the socket and never
+// answers. Without a deadline the run holds the flush lock past the
+// retry interval and the queue stops moving entirely. An abort surfaces
+// as a normal { error } from invoke, so it is handled like any other
+// transport failure: break, keep the items, retry next cycle.
+const FLUSH_TIMEOUT_MS = 8000;
+
+// navigator.onLine is only trustworthy in the false direction. These
+// two are what let the desk tell "the network is fine, we are just
+// mid-flush" apart from "the network is lying to us".
+let lastSyncOk = null;    // ms timestamp of the last invoke that answered
+let syncFailures = 0;     // consecutive failed invokes, reset on success
+
+const UNREACHABLE_AFTER = 2;   // failures before the pill says so
+const BACKOFF_AFTER     = 3;   // failures before the retry slows down
+
+let flushing = false;
+
+async function flushOutbox() {
+  if (flushing || !navigator.onLine) return;
+  flushing = true;
+  try {
+    const pending = replayOrder(await idbGetAll(STORE_OUTBOX));
+    if (!pending.length) return;
+
+    // Items carry the event they were scanned at. The outbox deliberately
+    // survives an event switch, so flushing everything under whichever
+    // event happens to be open would hand yesterday's attendees to
+    // today's event: the server answers 'wrong_event', the client_id is
+    // spent, and that check-in is lost for good. Group instead, so each
+    // batch is sent under its own event_id.
+    const byEvent = new Map();
+    for (const p of pending) {
+      if (!byEvent.has(p.event_id)) byEvent.set(p.event_id, []);
+      byEvent.get(p.event_id).push(p);
+    }
+    const chunks = [];
+    for (const [eventId, items] of byEvent) {
+      for (let i = 0; i < items.length; i += MAX_BATCH) {
+        chunks.push({ eventId, items: items.slice(i, i + MAX_BATCH) });
+      }
+    }
+
+    let settledAny = false;
+    // Undos the server refused because its compare-and-set matched no
+    // rows. The desk already cleared the row optimistically, so without
+    // this the reconcile silently puts "arrived HH:MM" back underneath a
+    // verdict still claiming the person is not checked in.
+    const refusedUndos = [];
+    for (const chunk of chunks) {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FLUSH_TIMEOUT_MS);
+      const { data, error } = await sb.functions.invoke('checkin-record-scans', {
+        signal: ctrl.signal,
+        // operator_id is not sent: the server derives it from the JWT and
+        // ignores the body.
+        body: {
+          event_id: chunk.eventId,
+          scan_point_id: S.scanPointId ?? null,
+          items: chunk.items.map(({ client_id, attendee_id, scanned_at, action, prev_checked_in_at }) =>
+            ({ client_id, attendee_id, scanned_at, action, prev_checked_in_at })),
+        },
+      });
+      clearTimeout(timer);
+
+      // Timeout, transport failure, or a response we cannot read: stop the
+      // run and leave everything unsynced. The next flush re-sends, and
+      // the server dedups on client_id, so nothing is applied twice.
+      if (error || !data || !data.results) {
+        syncFailures++;
+        break;
+      }
+      lastSyncOk = Date.now();
+      syncFailures = 0;
+
+      // Per-item failures the server explained. Nothing on screen can act
+      // on them, but without this the reason an item is stuck is invisible
+      // at the one moment it matters — a desk misbehaving during an event.
+      if (Array.isArray(data.errors) && data.errors.length) {
+        console.error('checkin flush: server rejected items', data.errors);
+      }
+
+      // results[client_id] is either a real verdict (ok, duplicate,
+      // unknown_token, wrong_event, undo) or the literal string 'error',
+      // which means that item FAILED. Marking an 'error' synced would
+      // silently drop a check-in, so only genuine verdicts settle.
+      // The verdict is kept on the item, not discarded: an undo the
+      // server refused is only distinguishable from one it applied by
+      // this value, and the reconcile below has to tell the operator
+      // which of the two happened.
+      const settled = chunk.items
+        .filter(p => data.results[p.client_id] && data.results[p.client_id] !== 'error')
+        .map(p => ({ ...p, synced: true, result: data.results[p.client_id] }));
+      if (settled.length) {
+        await idbPutAll(STORE_OUTBOX, settled);
+        settledAny = true;
+      }
+      settled.forEach(p => { if (p.action === 'undo' && p.result === 'duplicate') refusedUndos.push(p); });
+    }
+
+    await renderPendingCount();
+
+    // The server is the authority on verdicts. The desk showed an
+    // optimistic 'ok'; the server may have answered 'duplicate' because
+    // another desk got there first. Pull the roster back so the card and
+    // the head count stop disagreeing with it.
+    // Deliberately outside the chunk loop: a desk draining 800 scans
+    // sends four batches, and refetching a 5,000-row roster after each
+    // one would put the heaviest read of the morning on the venue wifi
+    // four times over. One refetch per drain, not one per batch.
+    if (settledAny && navigator.onLine && S.event) {
+      await reconcileRoster();
+      // Only meaningful once the roster carries the server's answer:
+      // the note quotes the checked_in_at the undo lost to.
+      if (refusedUndos.length) showRefusedUndo(refusedUndos);
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
+// Pull the server's copy back and re-point everything on screen at it.
+// The party card holds its own references into the old roster array, so
+// without the remap the card would keep rendering pre-fetch objects while
+// the head count read the new ones.
+// One function, deliberately: the flush and the idle refresh below must
+// not grow separate fetch paths, or one of them will end up skipping the
+// overlayPending() inside loadRoster and show already-queued work as not
+// yet arrived.
+async function reconcileRoster() {
+  await loadRoster(S.event.id);
+  if (S.party) {
+    const byId = new Map(S.roster.map(a => [a.id, a]));
+    S.party.members = S.party.members.map(m => byId.get(m.id) || m);
+  }
+  renderParty();
+  renderCount();
+}
+
+// The reconcile above only runs after a flush that settled something, so
+// a desk holding an empty outbox never refetches at all. This event runs
+// several desks and there is no realtime subscription on this page, so
+// checked_in_at changes under an idle desk constantly — another desk
+// checks someone in, or undoes a check-in — and the screen would keep
+// showing yesterday's answer until the operator happened to scan
+// something. Ask on a timer instead.
+//
+// Skipped whenever a flush is in flight or the outbox still owes the
+// server work: that flush ends in a reconcile of its own, and running
+// both would fetch the whole roster twice over venue wifi.
+const REFRESH_EVERY = 60000;
+let refreshTimer = null;
+
+async function refreshRosterIfIdle() {
+  if (!stationVisible() || document.hidden) return;
+  if (!navigator.onLine || !S.event) return;
+  // A name correction in progress is not an idle desk. The editor itself
+  // survives a rebuild (the draft is held in S.editing), but there is no
+  // reason to refetch the whole roster and re-render under someone's
+  // fingers while they are typing a badge name.
+  if (S.editing) return;
+  if (flushing) return;
+  if (pendingCount(await idbGetAll(STORE_OUTBOX))) return;
+  await reconcileRoster();
+}
+
+// Bound to the station screen exactly like the focus backstop, so it
+// never fires after sign-out or on the picker.
+function startRosterRefresh() {
+  if (!refreshTimer) refreshTimer = setInterval(refreshRosterIfIdle, REFRESH_EVERY);
+}
+function stopRosterRefresh() {
+  clearInterval(refreshTimer);
+  refreshTimer = null;
+}
+
+// The guard above is what keeps the timer and the 'online' event from
+// sending the same batch twice.
+window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); });
+window.addEventListener('offline', () => { renderPendingCount(); });
+
+// Self-scheduling rather than setInterval so a slow drain cannot stack
+// up behind itself, and so the cadence can back off. A network that has
+// failed three times running is down, not busy, and retrying it every
+// 15s for the rest of the morning costs battery and log noise for
+// nothing. The 'online' event still flushes immediately, so a desk that
+// genuinely recovers does not wait out the long interval.
+const FLUSH_EVERY      = 15000;
+const FLUSH_EVERY_SLOW = 60000;
+function scheduleFlush() {
+  setTimeout(async () => {
+    await flushOutbox();
+    scheduleFlush();
+  }, syncFailures >= BACKOFF_AFTER ? FLUSH_EVERY_SLOW : FLUSH_EVERY);
+}
+// The kiosk has no outbox and never will: it holds no roster, queues
+// nothing, and has no operator JWT to flush under. Not started there,
+// rather than started and left spinning against an empty store.
+if (!KIOSK) scheduleFlush();
+
+// ═══════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // The kiosk must NOT ask for a session, and must not be reachable by
+  // signing in either — a public touchscreen holding a live crew session
+  // is one gesture away from the roster, undo and name editing. It
+  // returns before any of the desk's wiring is attached.
+  if (KIOSK) { bootKiosk(); return; }
+
+  document.getElementById('signin-form').addEventListener('submit', handleSignIn);
+  document.getElementById('pk-signout').addEventListener('click', signOut);
+  document.getElementById('st-switch').addEventListener('click', showPicker);
+
+  // Kiosk setup. Bound after the KIOSK early return above, so a public
+  // lobby screen never carries any of it.
+  document.getElementById('st-kiosk').addEventListener('click', openKioskSetup);
+  document.getElementById('ks-close').addEventListener('click', closeKioskSetup);
+  document.getElementById('kiosk-setup').addEventListener('click', (e) => {
+    // Backdrop only. A click that lands on the card, or a drag that
+    // started inside it, must not throw away a code being read aloud.
+    if (e.target === e.currentTarget) closeKioskSetup();
+  });
+  // Escape is free here: the desk's capture-phase scanner backstop only
+  // looks at single printable characters, so it never sees this key.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeKioskSetup();
+  });
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    S.user = session.user;
+    await showPicker();
+  } else {
+    showScreen('signin');
+    document.getElementById('si-email').focus();
+  }
+});
+
+function showScreen(name) {
+  document.getElementById('signin').style.display  = name === 'signin'  ? 'flex' : 'none';
+  document.getElementById('picker').style.display  = name === 'picker'  ? 'flex' : 'none';
+  document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
+  document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
+  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); holdFocus(); }
+  // Leaving the desk takes the kiosk modal with it. Switching event or
+  // signing out must not leave a live pairing code on a screen that is
+  // no longer the desk it was minted from.
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); }
+}
+
+// ═══════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════
+async function handleSignIn(e) {
+  e.preventDefault();
+  const email    = document.getElementById('si-email').value.trim();
+  const password = document.getElementById('si-password').value;
+  const btn      = document.getElementById('si-btn');
+  const errEl    = document.getElementById('si-err');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  errEl.textContent = '';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  btn.disabled = false;
+  btn.textContent = 'Sign in';
+  if (error) { errEl.textContent = error.message; return; }
+
+  S.user = data.user;
+  document.getElementById('si-password').value = '';
+  await showPicker();
+}
+
+async function signOut() {
+  await sb.auth.signOut();
+  S.user = null; S.event = null; S.role = null; S.roster = []; S.party = null;
+  showScreen('signin');
+}
+
+// ═══════════════════════════════════════════════════
+// EVENT PICKER
+// Every node below is built with createElement + textContent:
+// event names are operator-supplied text and must never be parsed
+// as markup.
+// ═══════════════════════════════════════════════════
+async function showPicker() {
+  showScreen('loading');
+  const note = document.getElementById('pk-note');
+  const list = document.getElementById('pk-list');
+  note.style.display = 'none';
+  note.textContent = '';
+  list.replaceChildren();
+
+  // RLS on leod_checkin_operators exposes every operator row of an
+  // event you belong to, so filter to this user explicitly.
+  const { data: grants, error } = await sb
+    .from('leod_checkin_operators')
+    .select('event_id,role')
+    .eq('user_id', S.user.id);
+
+  if (error) {
+    note.textContent = 'Could not load your events: ' + error.message;
+    note.style.display = 'block';
+    showScreen('picker');
+    return;
+  }
+
+  const ids = (grants || []).map(g => g.event_id);
+  if (!ids.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ck-empty';
+    empty.textContent = 'You have no check-in events yet.';
+    list.appendChild(empty);
+    showScreen('picker');
+    return;
+  }
+
+  // Event rows may be unreadable to a crew operator (leod_events RLS
+  // is owner-scoped), so a missing name is expected, not an error.
+  const { data: events } = await sb
+    .from('leod_events')
+    .select('id,name,date')
+    .in('id', ids);
+  const byId = new Map((events || []).map(ev => [ev.id, ev]));
+
+  grants.forEach(g => {
+    const ev = byId.get(g.event_id);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-ev';
+
+    const main = document.createElement('div');
+    main.className = 'ck-ev-main';
+    const name = document.createElement('div');
+    name.className = 'ck-ev-name';
+    name.textContent = (ev && ev.name) ? ev.name : 'Untitled event';
+    const meta = document.createElement('div');
+    meta.className = 'ck-ev-meta';
+    meta.textContent = (ev && ev.date) ? ev.date : g.event_id;
+    main.appendChild(name);
+    main.appendChild(meta);
+
+    const pill = document.createElement('span');
+    pill.className = 'ck-pill';
+    pill.textContent = g.role;
+
+    btn.appendChild(main);
+    btn.appendChild(pill);
+    btn.addEventListener('click', () => openEvent(g.event_id, ev || null, g.role));
+    list.appendChild(btn);
+  });
+
+  showScreen('picker');
+}
+
+// ═══════════════════════════════════════════════════
+// OPEN EVENT
+// ═══════════════════════════════════════════════════
+async function openEvent(eventId, ev, role) {
+  showScreen('loading');
+
+  // Entitlement gate. A missing row counts as not enabled: RLS hides
+  // the entitlements row entirely when checkin_core is false.
+  const { data: ent } = await sb
+    .from('leod_checkin_entitlements')
+    .select('checkin_core')
+    .eq('event_id', eventId)
+    .maybeSingle();
+
+  if (!ent || ent.checkin_core !== true) {
+    const note = document.getElementById('pk-note');
+    note.textContent = 'Check-in is not enabled for this event';
+    note.style.display = 'block';
+    showScreen('picker');
+    return;
+  }
+
+  S.event = ev ? { id: eventId, name: ev.name, date: ev.date } : { id: eventId, name: null, date: null };
+  S.role  = role;
+
+  // Every durable thing on this page lives in IndexedDB, which a browser
+  // is free to evict — iPadOS does it under storage pressure and after a
+  // week idle, and a desk tablet is exactly the device that sits in a
+  // cupboard between events. Ask for a persistent bucket. A refusal is
+  // not fatal and must not block opening the desk; it only means the
+  // queue carries more risk, so record the answer.
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().then(ok => console.log('checkin: persistent storage granted =', ok));
+  }
+
+  await idbClearOtherEvents(eventId);
+  await pruneOutbox();
+  await loadRoster(eventId);
+  renderStation();
+  showScreen('station');
+}
+
+// ═══════════════════════════════════════════════════
+// STATION HEADER
+// ═══════════════════════════════════════════════════
+function renderStation() {
+  document.getElementById('st-event').textContent = (S.event && S.event.name) ? S.event.name : 'Untitled event';
+  // The role the event picker already fetched, not a second query. It is
+  // the same value checkin-kiosk-pair will re-check server-side, so the
+  // two cannot disagree about who may provision hardware.
+  document.getElementById('st-kiosk').style.display = S.role === 'organizer' ? '' : 'none';
+  resetDesk();
+  renderCount();
+  renderPendingCount();
+  flushOutbox();
+}
+
+// Online/offline state and the size of the queue, in words rather than
+// an icon: a volunteer needs to know at a glance whether the desk still
+// owes the server anything before they walk away from it.
+//
+// Three states, because "N waiting to sync" alone is a half-truth. It
+// reads the same whether the network is fine and the queue is about to
+// move, or the desk is sitting on a captive portal where the queue will
+// never move. navigator.onLine cannot tell those apart — it reports true
+// on a portal and on dead venue wifi — so a run of failed invokes is
+// what stands in for "connected but going nowhere".
+async function renderPendingCount() {
+  const n = pendingCount(await idbGetAll(STORE_OUTBOX));
+  const offline     = !navigator.onLine;
+  const unreachable = !offline && syncFailures >= UNREACHABLE_AFTER;
+  const el = document.getElementById('st-sync');
+
+  el.className = 'ck-sync ' + (n || offline || unreachable ? 'wait' : 'clear');
+  if (offline)          el.textContent = n ? 'Offline · ' + n + ' waiting' : 'Offline';
+  else if (unreachable) el.textContent = n ? "Can't reach the server · " + n + ' waiting' : "Can't reach the server";
+  else                  el.textContent = n ? n + ' waiting to sync' : 'All synced';
+
+  el.title = lastSyncOk
+    ? 'Last synced ' + new Date(lastSyncOk).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : 'Nothing has synced from this desk yet';
+}
+
+function renderCount() {
+  const total   = S.roster.length;
+  const arrived = S.roster.filter(a => a.checked_in_at).length;
+  document.getElementById('st-count').textContent = arrived + ' of ' + total;
+  document.getElementById('st-status').textContent =
+    total + ' attendees cached on this device. The desk keeps working if the venue network drops.';
+}
+
+// ═══════════════════════════════════════════════════
+// SCAN RESOLUTION
+// Mirrors supabase/functions/_shared/checkin-scan.ts, which is covered
+// by tests/checkin-scan.spec.ts. No build step here, so the three pure
+// functions are duplicated by hand — keep them character-identical, or
+// the desk and the server will disagree about what a token means.
+// ═══════════════════════════════════════════════════
+function resolveToken(token, roster) {
+  const t = token.trim();
+  const found = roster.find(a => a.qr_token === t);
+  if (!found) return { kind: 'unknown_token' };
+  if (found.checked_in_at) return { kind: 'duplicate', attendee: found, since: found.checked_in_at };
+  return { kind: 'ok', attendee: found };
+}
+
+function searchByName(query, roster) {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  return roster.filter(a =>
+    `${a.first_name} ${a.last_name}`.toLowerCase().includes(q) ||
+    (a.email ?? '').toLowerCase().includes(q) ||
+    (a.company ?? '').toLowerCase().includes(q)
+  );
+}
+
+const GENERIC_COMPANY = new Set([
+  'freelance', 'freelancer', 'self employed', 'selfemployed', 'self',
+  'n/a', 'na', 'none', 'nil', 'student', 'private', 'individual',
+  'unemployed', 'retired', 'me', 'myself', 'guest', 'visitor', 'other',
+]);
+
+// Company is free text typed by a dozen different people, so exact
+// matching splits one firm into several parties ("Acme" vs "Acme Sp. z
+// o.o."). Normalising fixes that. The generic blocklist guards the
+// opposite and more dangerous failure: everyone who typed "Freelance"
+// would otherwise assemble into one party of strangers, each a single
+// tick from being checked in.
+function normalizeCompany(raw) {
+  if (!raw) return null;
+  let n = raw.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+             .toLowerCase().trim().replace(/\s+/g, ' ');
+  n = n.replace(/\b(sp\.?\s?z\s?o\.?\s?o\.?|s\.?a\.?|ltd|limited|llc|inc|gmbh|b\.?v\.?|oy|ab|a\/s|srl|sarl|plc|co)\b/g, '');
+  n = n.replace(/[.,\-–—\s]+$/, '').replace(/\s+/g, ' ').trim();
+  if (!n || GENERIC_COMPANY.has(n)) return null;
+  return n;
+}
+
+const MAX_PARTY = 8;
+
+// An arrival is one to five people from one company standing at the desk
+// together, so a scan resolves to a group, not a person. A lone attendee
+// is a party of one and takes the same path.
+function assembleParty(anchor, roster) {
+  const key = normalizeCompany(anchor.company);
+  if (!key) return [anchor];
+  const mates = roster.filter(a => a.id !== anchor.id && normalizeCompany(a.company) === key);
+  // A party larger than a desk can handle is almost certainly a data
+  // artefact, not eight colleagues standing there. Fall back to the
+  // anchor alone rather than presenting a mass check-in.
+  if (mates.length + 1 > MAX_PARTY) return [anchor];
+  return [anchor, ...mates];
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — SCAN FIELD
+// A USB barcode scanner is a keyboard: it types the token then sends
+// Enter. So Enter is the scan path and typing is the search path, and
+// one field serves both. Focus is held on it permanently so the common
+// path needs no mouse.
+// ═══════════════════════════════════════════════════
+const scanInput = document.getElementById('scan');
+
+// Every piece of the desk's keyboard machinery — the capture-phase
+// scanner backstop, the focus hold, the roster refresh — is gated on
+// this. The kiosk clause makes "the kiosk never runs desk machinery"
+// true by construction rather than by relying on #station happening to
+// carry the right inline style at the right moment. Desk behaviour is
+// unchanged: KIOSK is false there.
+function stationVisible() {
+  if (KIOSK) return false;
+  // The kiosk setup modal covers the desk, so the desk's keyboard
+  // machinery stands down while it is open. Without this, a click on the
+  // backdrop leaves focus on <body>, holdFocus() pulls it to the scan
+  // field underneath, and the next thing the organizer types goes into a
+  // search box they cannot see.
+  if (document.getElementById('kiosk-setup').style.display !== 'none') return false;
+  return document.getElementById('station').style.display !== 'none';
+}
+
+// True only when focus is sitting on nothing. Reclaiming it from another
+// field would eat the operator's keystrokes — Task 9 edits names inline.
+function focusIsIdle() {
+  const el = document.activeElement;
+  if (el === scanInput) return false;
+  return !el || el === document.body || el === document.documentElement;
+}
+
+function holdFocus() {
+  if (!stationVisible()) return;
+  if (document.activeElement === scanInput) return;
+  if (!focusIsIdle()) return;
+  scanInput.focus();
+}
+
+// A scanner fires its token as fast keystrokes. Any character that lands
+// while the field is unfocused is lost, and a truncated token resolves to
+// unknown_token — a valid badge reported to a volunteer as a bad one.
+// Capture phase runs before anything else can see the key, and the event
+// is NOT consumed: the character still reaches the field we just focused,
+// so no polling window exists in which input can be dropped.
+document.addEventListener('keydown', (e) => {
+  if (!stationVisible()) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length !== 1) return;   // printable single characters only
+  if (!focusIsIdle()) return;
+  scanInput.focus();
+}, true);
+
+// Focus is only ever lost by an event, so react to those rather than
+// polling. Deferred one tick: at focusout time the incoming element has
+// not been focused yet, so activeElement still reads as body.
+document.addEventListener('focusout', () => setTimeout(holdFocus, 0));
+// Also the moment to refresh: a backgrounded tab has its timers throttled
+// to near-nothing, so a tablet coming back from sleep would otherwise
+// show a roster as old as the nap.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  holdFocus();
+  refreshRosterIfIdle();
+});
+window.addEventListener('focus', holdFocus);
+
+// Backstop only, for anything the events above miss. Runs at 5s and only
+// while the desk is on screen, so it never fires after sign-out or in a
+// backgrounded tab where timers are throttled anyway.
+let focusBackstop = null;
+function startFocusBackstop() {
+  if (!focusBackstop) focusBackstop = setInterval(holdFocus, 5000);
+}
+function stopFocusBackstop() {
+  clearInterval(focusBackstop);
+  focusBackstop = null;
+}
+
+scanInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const raw = scanInput.value;
+  scanInput.value = '';
+  handleScan(raw);
+});
+
+scanInput.addEventListener('input', () => {
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  else clearResults();
+});
+
+document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
+document.getElementById('secondary').addEventListener('click', () => commitTicked({ print: false }));
+
+// ═══════════════════════════════════════════════════
+// BADGE PRINTING
+// A badge is an HTML element with a @page rule. Chrome launched with
+// --kiosk-printing sends window.print() straight to the OS default
+// printer: no dialog, no preview, no user gesture beyond the button the
+// operator already pressed. That is the whole mechanism — there is no
+// print agent, no daemon and no queue of our own.
+//
+// Every node below is createElement + textContent. That rule holds
+// across this page, but it matters most here: a badge is rendered from
+// attendee text and then printed, and attendee text arrives from a CSV
+// import today and from an unattended kiosk in Task 12.
+// The stock size lives in the <style> block above, marked ★ BADGE
+// STOCK SIZE ★.
+// ═══════════════════════════════════════════════════
+
+// The name is the one field that can be arbitrarily long, and a clipped
+// surname on a badge someone wears all day is worse than slightly
+// smaller type — they cannot fix it, and the door staff reading it
+// cannot either. 30pt on 100mm stock fits roughly 18 characters across;
+// past that the size scales down in proportion. The floor keeps a name
+// legible across a room, and below it the name wraps to a second line
+// rather than shrinking to nothing: .nm carries overflow-wrap:anywhere
+// and the badge is a centred flex column, so extra lines stay centred.
+const BADGE_NAME_PT     = 30;   // matches .badge .nm in the print block
+const BADGE_NAME_FITS   = 18;   // characters that fit at BADGE_NAME_PT
+const BADGE_NAME_MIN_PT = 14;
+
+function badgeNamePt(name) {
+  const n = name.trim().length;
+  if (n <= BADGE_NAME_FITS) return BADGE_NAME_PT;
+  return Math.max(BADGE_NAME_MIN_PT, Math.round(BADGE_NAME_PT * BADGE_NAME_FITS / n));
+}
+
+function badgeNode(attendee) {
+  const badge = document.createElement('div');
+  badge.className = 'badge';
+
+  const nm = document.createElement('div');
+  nm.className = 'nm';
+  const name = fullName(attendee);
+  nm.textContent = name;
+  nm.style.fontSize = badgeNamePt(name) + 'pt';
+
+  const co = document.createElement('div');
+  co.className = 'co';
+  co.textContent = attendee.company || '';
+
+  const tt = document.createElement('div');
+  tt.className = 'tt';
+  tt.textContent = attendee.ticket_type || '';
+
+  badge.append(nm, co, tt);
+  return badge;
+}
+
+// Attendees whose badge is already out of the printer and whose name has
+// been corrected since. Held here rather than on the attendee object
+// because a reconcile replaces every roster object and the flag would go
+// with it. Cleared when a badge for that person prints again.
+const badgeStale = new Set();
+
+// badge_printed_at is written straight to the table with the operator's
+// own JWT. No Edge Function writes this column, and migration 054
+// deliberately leaves it unguarded so that crew — the role that works
+// the desk — can stamp it. Do not route this through a function.
+//
+// Best-effort by design. Nothing on screen depends on it, the check-in
+// itself is already durable in the outbox, and there is no action a
+// volunteer at a queue could take about a failed bookkeeping write. So
+// it is logged, not surfaced.
+async function stampBadgePrinted(ids, when) {
+  if (!ids.length) return;
+  // The stamp needs the network; the badge did not. Offline it is
+  // skipped rather than queued: the outbox carries scan events replayed
+  // through checkin-record-scans, and this is a direct table write of a
+  // different shape. The local value below stands until the next
+  // reconcile overwrites it from the server, at which point the record
+  // that this badge printed is lost. That is a known, accepted loss —
+  // see the runbook. A second queue is not worth it for a column
+  // nothing reads back.
+  if (!navigator.onLine) {
+    console.warn('checkin: offline, badge_printed_at not recorded for', ids.length, 'attendee(s)');
+    return;
+  }
+  const { error } = await sb
+    .from('leod_checkin_attendees')
+    .update({ badge_printed_at: when })
+    .in('id', ids);
+  if (error) console.error('checkin: badge_printed_at not recorded', error);
+}
+
+// One party, one print job. Calling print() per attendee would spool a
+// separate job for each person standing at the desk, and under
+// --kiosk-printing those race each other to the same printer.
+//
+// PRINTING NEVER WAITS ON THE NETWORK. print() goes first and the stamp
+// follows, for two reasons. A round trip before print() would put venue
+// wifi between the operator pressing the button and the badge appearing,
+// which is the one moment this desk is judged on. And stamping first
+// would record a badge as printed that a throw between the two calls
+// meant never came out. Printing first can only ever over-record in the
+// other direction — a badge that reached the printer but jammed inside
+// it — and that is a physical failure the operator is looking straight
+// at, not one the database can help with.
+async function printBadges(attendees) {
+  if (!attendees.length) return;
+
+  document.getElementById('badge-sheet').replaceChildren(...attendees.map(badgeNode));
+
+  window.print();
+
+  const now = new Date().toISOString();
+  for (const a of attendees) {
+    a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
+    badgeStale.delete(a.id);       // this badge carries the current spelling
+    await idbPutAll(STORE_ROSTER, [a]);
+  }
+  await stampBadgePrinted(attendees.map(a => a.id), now);
+}
+
+// A check-in is durable the moment it is queued, not when the server
+// hears about it. The outbox write comes first: crashing between the two
+// writes leaves a queued item with no local state, which the next load
+// replays back onto the roster. The other order would leave the desk
+// showing an arrival the server is never told about.
+//
+// The optimistic roster write is what lets a second scan of the same
+// badge answer 'already checked in' instantly with no network at all.
+async function commitParty(attendees, opts) {
+  const now = new Date().toISOString();   // canonical UTC — replay order compares these as strings
+  for (const a of attendees) {
+    const item = {
+      client_id: crypto.randomUUID(),
+      event_id: S.event.id,
+      attendee_id: a.id,
+      scanned_at: now,
+      action: 'checkin',
+      // Carried on every item because the server requires it on an undo:
+      // it clears checked_in_at only if the stored value still matches,
+      // so a stale undo cannot wipe a later check-in from another desk.
+      // Always null for a check-in; undoCheckin() is what sets it.
+      prev_checked_in_at: null,
+      synced: false,
+    };
+    await idbPutAll(STORE_OUTBOX, [item]);
+    a.checked_in_at = now;
+    await idbPutAll(STORE_ROSTER, [a]);
+  }
+  await renderPendingCount();
+  renderCount();
+  if (opts.print) await printBadges(attendees);
+  flushOutbox();   // not awaited: the desk must not wait on the network
+}
+
+// A correction is RECORDED, never erased. Undo clears checked_in_at and
+// queues a new scan event with action 'undo'; the server writes a row
+// with result 'undo' and the timeline still reads forward. A redo is
+// simply another check-in. Nothing on this page ever deletes.
+//
+// prev_checked_in_at is the whole point of the item. The server clears
+// the column only when its stored value still equals this one, so an
+// undo queued at 09:02 and flushed at 10:15 cannot revoke the 09:30
+// check-in another desk made in the meantime — it is recorded as a
+// no-op instead.
+//
+// Same write ordering as commitParty: outbox first, roster second. A
+// crash between the two leaves a queued item with no local state, which
+// the next load replays back on. The other order would leave the desk
+// showing a correction the server is never told about.
+async function undoCheckin(attendee) {
+  // Resolve against the live roster rather than trusting the object the
+  // clicked button closed over. A reconcile replaces every roster object,
+  // so a button rendered before the last flush holds a stale copy — and
+  // writing that copy back would undo the wrong timestamp and stamp old
+  // data over the fresh row in the cache.
+  const a = S.roster.find(x => x.id === attendee.id) || attendee;
+  const prev = a.checked_in_at;
+  if (!prev) return false;                 // nothing to undo
+  const item = {
+    client_id: crypto.randomUUID(),
+    attendee_id: a.id,
+    event_id: S.event.id,
+    scanned_at: new Date().toISOString(),
+    action: 'undo',
+    prev_checked_in_at: prev,
+    synced: false,
+  };
+  await idbPutAll(STORE_OUTBOX, [item]);
+  a.checked_in_at = null;                  // optimistic local state
+  await idbPutAll(STORE_ROSTER, [a]);
+  await renderPendingCount();
+  renderCount();
+  flushOutbox();   // not awaited: the desk must not wait on the network
+  return true;
+}
+
+async function commitTicked(opts) {
+  if (!S.party) return;
+  const picked = S.party.members.filter(m => S.party.ticked.has(m.id));
+  await commitParty(picked, opts);
+  // The rows now read as arrived, so drop the ticks: leaving them set
+  // would keep the primary button armed and invite a second commit of
+  // people who are already in.
+  if (S.party) picked.forEach(m => S.party.ticked.delete(m.id));
+  renderParty();
+  // The most common correction is instant — "wrong person, sorry" while
+  // they are still standing there — so the undo is on the confirmation
+  // itself, not somewhere the volunteer has to go looking for it.
+  showCheckedIn(picked);
+  scanInput.focus();
+}
+
+function resetDesk() {
+  scanInput.value = '';
+  clearResults();
+  clearVerdict();
+  S.party = null;
+  S.editing = null;   // the editor only exists on a party row; the card is going
+  renderParty();
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — VERDICTS
+// Every state names what the operator should do next. No error codes:
+// a volunteer briefed five minutes ago cannot act on one.
+// Attendee names, companies and emails are user-supplied, so every node
+// below is createElement + textContent. Assigning markup is banned on
+// this page: Task 12 lets a stranger type into the same roster.
+// ═══════════════════════════════════════════════════
+function fullName(a) { return a.first_name + ' ' + a.last_name; }
+
+function atTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function clearVerdict() { document.getElementById('verdict').replaceChildren(); }
+
+function showVerdict(tone, heading, guidance) {
+  const box = document.createElement('div');
+  box.className = 'ck-vd ck-vd-' + tone;
+  const h = document.createElement('div');
+  h.className = 'ck-vd-h';
+  h.textContent = heading;
+  const t = document.createElement('div');
+  t.className = 'ck-vd-t';
+  t.textContent = guidance;
+  box.append(h, t);
+  document.getElementById('verdict').replaceChildren(box);
+  return box;
+}
+
+// The desk cleared the row the moment undo was pressed, but the server
+// refused: its compare-and-set found a newer check-in, so the reconcile
+// has just put "arrived HH:MM" back on the row underneath a verdict still
+// reading "no longer checked in". Two halves of one screen contradicting
+// each other is worse than either being wrong on its own — the operator
+// cannot tell which to believe. Say plainly what happened, in the words a
+// volunteer would use, and replace the stale verdict rather than stacking
+// a second box beneath it.
+//
+// Amber, not red: another desk checking that person in is the system
+// working, not a fault. Nobody needs to do anything.
+function showRefusedUndo(items) {
+  // Anyone the server ended up leaving un-checked-in needs no note: the
+  // undo effectively landed and the screen already agrees with itself.
+  // This is also what keeps a double-tap from claiming another desk
+  // checked someone in when nothing of the sort happened.
+  const stillIn = items
+    .map(p => S.roster.find(x => x.id === p.attendee_id))
+    .filter(a => a && a.checked_in_at);
+  if (!stillIn.length) return;
+
+  const box = document.createElement('div');
+  box.className = 'ck-vd ck-vd-dup';
+  const h = document.createElement('div');
+  h.className = 'ck-vd-h';
+  h.textContent = stillIn.length === 1
+    ? 'That undo was not applied'
+    : stillIn.length + ' undos were not applied';
+  box.appendChild(h);
+
+  stillIn.forEach(a => {
+    const t = document.createElement('div');
+    t.className = 'ck-vd-t';
+    t.textContent = fullName(a) + ' was checked in again at another desk at ' + atTime(a.checked_in_at) + '.';
+    box.appendChild(t);
+  });
+
+  document.getElementById('verdict').replaceChildren(box);
+}
+
+// "Undo" alone is ambiguous on a row that carries a name, a tick and a
+// pill — undo what, and for whom? The label always says what is being
+// undone, and the accessible name always carries the person, so a
+// volunteer reading the row aloud to a queue cannot pick the wrong one.
+function undoButton(attendee, label) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ck-undo';
+  btn.textContent = label;
+  btn.setAttribute('aria-label', 'Undo check-in for ' + fullName(attendee));
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;                   // a double click must not queue two undos
+    try {
+      const done = await undoCheckin(attendee);
+      if (done) afterUndo(attendee);
+      else btn.disabled = false;
+    } catch (err) {
+      // Without this the button stays disabled forever on any throw — an
+      // IndexedDB failure, a quota error, a wedged transaction — leaving
+      // the volunteer a dead control and no explanation. Re-enabling lets
+      // them try again, which is the only useful move at a busy desk.
+      console.error('checkin: undo failed', err);
+      btn.disabled = false;
+      showVerdict('bad', 'That undo did not go through',
+        'Nothing was changed. Try again, or see the desk lead.');
+    }
+  });
+  return btn;
+}
+
+function showCheckedIn(people) {
+  if (!people.length) return;
+  const box = showVerdict('ok',
+    people.length === 1
+      ? fullName(people[0]) + ' is checked in'
+      : people.length + ' people are checked in',
+    'Wrong person? Undo it here. The correction is recorded, nothing is deleted.');
+  // One button per person: with three colleagues committed together, a
+  // single "Undo" would either be a guess or undo all three.
+  people.forEach(p => box.appendChild(undoButton(p,
+    people.length === 1 ? 'Undo check-in' : 'Undo check-in · ' + fullName(p))));
+}
+
+// Every surface that could be showing this person has to move together,
+// or the desk contradicts itself: the header count says 4, the party row
+// still says arrived, the search result behind it still offers undo.
+function afterUndo(attendee) {
+  const a = S.roster.find(x => x.id === attendee.id) || attendee;
+  if (S.party) {
+    S.party.members = S.party.members.map(m => (m.id === a.id ? a : m));
+    S.party.ticked.delete(a.id);
+  }
+  renderParty();
+  showVerdict('dup', fullName(a) + ' is no longer checked in',
+    'Recorded as a correction. Check them in again if they are here.');
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  scanInput.focus();
+}
+
+function handleScan(raw) {
+  clearResults();
+  const res = resolveToken(raw, S.roster);
+
+  if (res.kind === 'unknown_token') {
+    S.party = null;
+    renderParty();
+    const box = showVerdict('bad', "That code isn't for this event.",
+      'It may be from a different event or a previous year.');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-quiet';
+    btn.textContent = 'Search their name instead';
+    btn.addEventListener('click', () => { scanInput.value = ''; scanInput.focus(); });
+    box.appendChild(btn);
+    renderCount();
+    return;
+  }
+
+  if (res.kind === 'duplicate') {
+    // Amber, not red. A second scan of the same code is routine.
+    showVerdict('dup', fullName(res.attendee) + ' already checked in at ' + atTime(res.since),
+      'Let them through — this is a second scan, not a second person.');
+    // The party card stays. This event runs several desks, so the first
+    // colleague being scanned at another station is a normal morning:
+    // stranding the other three here would be the real failure.
+    showParty(res.attendee);
+    renderCount();
+    return;
+  }
+
+  showVerdict('ok', fullName(res.attendee) + ' is on the list',
+    'Tick anyone else standing here, then check them in.');
+  showParty(res.attendee);
+  renderCount();
+}
+
+// Name lookup always opens the party card, even when the person picked
+// has already arrived: their colleagues may still be waiting, and a
+// dead end would send the volunteer back to the field for no reason.
+function pickAttendee(a) {
+  scanInput.value = '';
+  clearResults();
+  if (a.checked_in_at) {
+    showVerdict('dup', fullName(a) + ' already checked in at ' + atTime(a.checked_in_at),
+      'Let them through. Tick anyone with them who has not arrived yet.');
+  } else {
+    showVerdict('ok', fullName(a) + ' is on the list',
+      'Tick anyone else standing here, then check them in.');
+  }
+  showParty(a);
+  renderCount();
+  scanInput.focus();
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — NAME SEARCH RESULTS
+// Most people cannot find their QR email, so this is the everyday path,
+// not the fallback.
+// ═══════════════════════════════════════════════════
+const MAX_RESULTS = 8;
+
+function clearResults() { document.getElementById('results').replaceChildren(); }
+
+function renderSearchResults(list) {
+  const host = document.getElementById('results');
+  host.replaceChildren();
+
+  if (!list.length) {
+    const none = document.createElement('div');
+    none.className = 'ck-res-note';
+    none.textContent = 'Nobody matches that. Try fewer letters, or their company name.';
+    host.appendChild(none);
+    return;
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'ck-res';
+  list.slice(0, MAX_RESULTS).forEach(a => {
+    const row = document.createElement('div');
+    row.className = 'ck-res-row';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ck-res-btn';
+
+    const main = document.createElement('div');
+    main.className = 'ck-res-main';
+    const name = document.createElement('div');
+    name.className = 'ck-res-name';
+    name.textContent = fullName(a);
+    const meta = document.createElement('div');
+    meta.className = 'ck-res-meta';
+    meta.textContent = [a.company, a.ticket_type].filter(Boolean).join(' · ');
+    main.append(name, meta);
+
+    const pill = document.createElement('span');
+    pill.className = a.checked_in_at ? 'pill-in' : 'pill-un';
+    pill.textContent = a.checked_in_at ? 'arrived ' + atTime(a.checked_in_at) : 'not here yet';
+
+    btn.append(main, pill);
+    btn.addEventListener('click', () => pickAttendee(a));
+    row.appendChild(btn);
+
+    // Reachable minutes later without rescanning. The correction a desk
+    // actually needs is rarely the last one it made: the operator notices
+    // at 09:40 that the wrong Kowalski was ticked at 09:12, and search is
+    // the only way back to that person.
+    if (a.checked_in_at) row.appendChild(undoButton(a, 'Undo check-in'));
+
+    wrap.appendChild(row);
+  });
+  host.appendChild(wrap);
+
+  if (list.length > MAX_RESULTS) {
+    const note = document.createElement('div');
+    note.className = 'ck-res-note';
+    note.textContent = 'Showing ' + MAX_RESULTS + ' of ' + list.length + '. Keep typing to narrow it down.';
+    host.appendChild(note);
+  }
+  holdFocus();   // this render dropped the previous result buttons
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — CORRECT A NAME
+// The badge is printed at this desk, seconds from now, and a misspelling
+// is then worn all day by the person standing in front of the operator.
+// So the roster has to be correctable here, in the moment, rather than
+// afterwards in a dashboard nobody at the desk has open.
+//
+// This path REQUIRES connectivity, deliberately. A name change is NOT
+// queued in the outbox and must never be moved into it. Printing from an
+// unsynced edit would put a name on a physical badge that the database
+// does not agree with — and the badge is the artefact the attendee
+// carries all day, that door staff read and that the delegate list is
+// checked against. A check-in can be reconciled later because it is only
+// a timestamp; a wrong badge cannot be reconciled at all once it is
+// laminated. An offline desk is told to reconnect instead: a late badge
+// beats a wrong one.
+// ═══════════════════════════════════════════════════
+const OFFLINE_FIX_MSG = 'Reconnect to fix a name';
+
+async function saveName(attendee, firstName, lastName) {
+  const first = firstName.trim(), last = lastName.trim();
+  if (!first || !last) return { ok: false, error: 'Both names are required' };
+  const { error } = await sb
+    .from('leod_checkin_attendees')
+    .update({ first_name: first, last_name: last })
+    .eq('id', attendee.id);
+  if (error) return { ok: false, error: error.message };
+  attendee.first_name = first;
+  attendee.last_name = last;
+  await idbPutAll(STORE_ROSTER, [attendee]);
+  return { ok: true };
+}
+
+function openNameEditor(attendee) {
+  S.editing = {
+    id: attendee.id,
+    first: attendee.first_name,
+    last: attendee.last_name,
+    error: '',
+    saving: false,
+    focus: 'first',
+    caret: null,
+    autofocus: true,   // consumed by renderParty on the first render only
+  };
+  renderParty();
+}
+
+function closeNameEditor() {
+  S.editing = null;
+  renderParty();
+  scanInput.focus();   // the next scan must land in the field, not nowhere
+}
+
+// Quiet by design: text only, no outline, so it sits below undo in the
+// eye's order. Offline it is disabled and the LABEL carries the reason —
+// a title tooltip is invisible on the tablet this desk actually runs on,
+// and a control that is merely greyed out reads as broken.
+function fixNameButton(attendee) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ck-fix';
+  if (!navigator.onLine) {
+    btn.disabled = true;
+    btn.textContent = OFFLINE_FIX_MSG;
+    btn.setAttribute('aria-label', OFFLINE_FIX_MSG + ': ' + fullName(attendee));
+  } else {
+    btn.textContent = 'Fix a name';
+    btn.setAttribute('aria-label', 'Fix the name for ' + fullName(attendee));
+    btn.addEventListener('click', () => openNameEditor(attendee));
+  }
+  return btn;
+}
+
+// One field. Its value is assigned as a PROPERTY — attendee names are
+// user-supplied and Task 12 lets a stranger type them, so nothing here
+// ever becomes markup on the way in or on the way back out.
+function editField(labelText, key, value) {
+  const wrap = document.createElement('label');
+  wrap.className = 'pedit-f';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'ck-lbl';
+  lbl.textContent = labelText;
+
+  const input = document.createElement('input');
+  input.className = 'ck-input';
+  input.type = 'text';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.dataset.editField = key;
+  input.value = value;
+  // Left enabled while a save is in flight — only the buttons lock. A
+  // field that disables itself for the length of a hotel-wifi round trip
+  // loses the caret and the operator's place for no benefit; the save
+  // already captured the text it is sending.
+
+  // Remember the draft and the caret on every interaction, so a rebuild
+  // triggered by anything else on the desk puts the operator back exactly
+  // where they were instead of throwing away what they typed.
+  const remember = () => {
+    if (!S.editing) return;
+    S.editing[key] = input.value;
+    S.editing.focus = key;
+    S.editing.caret = input.selectionStart;
+  };
+  ['input', 'keyup', 'click'].forEach(ev => input.addEventListener(ev, remember));
+
+  wrap.append(lbl, input);
+  return wrap;
+}
+
+// The editor takes its own line under the row it belongs to. No modal:
+// the operator has to keep reading the row, and the queue behind it,
+// while they type.
+function nameEditor(attendee) {
+  const ed = S.editing;
+  const box = document.createElement('div');
+  box.className = 'pedit';
+
+  const fields = document.createElement('div');
+  fields.className = 'pedit-fields';
+  fields.append(editField('First name', 'first', ed.first), editField('Last name', 'last', ed.last));
+  box.appendChild(fields);
+
+  const acts = document.createElement('div');
+  acts.className = 'pedit-acts';
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'pedit-save';
+  save.textContent = ed.saving ? 'Saving…' : 'Save name';
+  save.disabled = ed.saving;
+  save.addEventListener('click', () => commitNameEdit(attendee.id));
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ck-quiet';
+  cancel.textContent = 'Cancel';
+  cancel.disabled = ed.saving;
+  cancel.addEventListener('click', closeNameEditor);
+  acts.append(save, cancel);
+  box.appendChild(acts);
+
+  // Enter saves and Escape cancels, because the operator's hands are
+  // already on the keys and the queue is not getting shorter.
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')       { e.preventDefault(); commitNameEdit(attendee.id); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeNameEditor(); }
+  });
+
+  if (ed.error) {
+    const err = document.createElement('div');
+    err.className = 'pedit-err';
+    err.textContent = ed.error;
+    box.appendChild(err);
+  } else {
+    const note = document.createElement('div');
+    note.className = 'pedit-note';
+    note.textContent = 'This is the name that will be printed on the badge.';
+    box.appendChild(note);
+  }
+
+  return box;
+}
+
+async function commitNameEdit(id) {
+  const ed = S.editing;
+  if (!ed || ed.id !== id || ed.saving) return;
+
+  // Resolve against the live roster at the moment of use. A reconcile
+  // replaces every roster object, so the attendee this row closed over
+  // may already be a detached copy — writing that copy back would stamp
+  // stale data over the fresh row in the cache.
+  const a = S.roster.find(x => x.id === id);
+  if (!a) {
+    ed.error = 'That person is no longer on this roster. Search for them again.';
+    ed.autofocus = true;
+    renderParty();
+    return;
+  }
+  // Re-checked at the moment of the write, not only when the button was
+  // drawn: the operator can open the editor on hotel wifi and press Save
+  // ten seconds after it drops. Still no outbox — see the note above.
+  if (!navigator.onLine) {
+    ed.error = OFFLINE_FIX_MSG + '. Nothing was changed.';
+    ed.autofocus = true;
+    renderParty();
+    return;
+  }
+
+  ed.saving = true;
+  ed.error = '';
+  renderParty();
+
+  const res = await saveName(a, ed.first, ed.last);
+
+  if (!res.ok) {
+    // Nothing local was touched: saveName mutates the attendee only after
+    // the server has accepted the write. Say so, and leave the editor open
+    // with the operator's text still in it.
+    if (S.editing && S.editing.id === id) {
+      S.editing.saving = false;
+      S.editing.error = res.error;
+      S.editing.autofocus = true;   // the click moved the caret to the button
+      renderParty();
+    }
+    return;
+  }
+
+  S.editing = null;
+  // The badge is already out of the printer and says the old spelling.
+  // Correcting the roster does not correct the thing they are wearing,
+  // so record that the two now disagree; partyRow says so on the row.
+  if (a.badge_printed_at) badgeStale.add(a.id);
+  // Re-point the card at the live roster objects, exactly as afterUndo
+  // does, so every surface showing this person moves together.
+  if (S.party) {
+    const byId = new Map(S.roster.map(x => [x.id, x]));
+    S.party.members = S.party.members.map(m => byId.get(m.id) || m);
+  }
+  renderParty();
+  // The verdict above the card still names the old spelling, so replace
+  // it rather than leaving two halves of the screen disagreeing.
+  showVerdict('ok', 'Name corrected to ' + fullName(a),
+    'This is what the badge will print. Nothing else about them changed.');
+  const q = scanInput.value;
+  if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+  scanInput.focus();
+}
+
+// ═══════════════════════════════════════════════════
+// DESK — PARTY CARD
+// The person who scanned is pre-ticked; colleagues start unticked so
+// nobody is checked in who is not standing there. Status is written in
+// words, not colour alone: lobby lighting is bad and some of the crew
+// are colour blind.
+// ═══════════════════════════════════════════════════
+function showParty(anchor) {
+  const members = assembleParty(anchor, S.roster);
+  const ticked = new Set(anchor.checked_in_at ? [] : [anchor.id]);
+  S.party = { members, ticked };
+  S.editing = null;   // a new arrival is at the desk; the old correction is gone
+  renderParty();
+}
+
+function partyRow(attendee, ticked, onToggle) {
+  const row = document.createElement('div');
+  row.className = 'prow';
+
+  const tick = document.createElement('button');
+  tick.className = attendee.checked_in_at ? 'tick done' : (ticked ? 'tick on' : 'tick');
+  tick.textContent = (attendee.checked_in_at || ticked) ? '✓' : '';
+  tick.disabled = !!attendee.checked_in_at;
+  tick.addEventListener('click', () => onToggle(attendee));
+  row.appendChild(tick);
+
+  const who = document.createElement('div');
+  const name = document.createElement('div');
+  name.className = 'pn';
+  name.textContent = `${attendee.first_name} ${attendee.last_name}`;
+  const meta = document.createElement('div');
+  meta.className = 'pm';
+  meta.textContent = attendee.ticket_type;
+  who.append(name, meta);
+
+  // The name above is now the corrected one, and the badge in this
+  // person's hand is not. Nothing else on screen would say so. Stated
+  // under the name it contradicts, with no control attached: reprinting
+  // is not this task's, and a volunteer who can see the state can hand
+  // the right badge over themselves.
+  if (badgeStale.has(attendee.id)) {
+    const stale = document.createElement('div');
+    stale.className = 'pstale';
+    stale.textContent = 'Badge already printed · reprint needed';
+    who.appendChild(stale);
+  }
+
+  row.appendChild(who);
+
+  // Three states, never two. A ticked row saying "not here yet" next to a
+  // filled tick reads as a contradiction to someone briefed five minutes
+  // ago: the tick is intent, the pill is what the system has recorded.
+  const status = document.createElement('span');
+  if (attendee.checked_in_at) {
+    status.className = 'pill-in';
+    status.textContent = `arrived ${new Date(attendee.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } else if (ticked) {
+    status.className = 'pill-go';
+    // Not "checking in…": nothing has been sent yet, and a volunteer who
+    // reads that as work in progress walks away from a queue believing
+    // this person is done. The tick is intent; this pill says the row is
+    // armed and waiting for the button.
+    status.textContent = 'ready';
+  } else {
+    status.className = 'pill-un';
+    status.textContent = 'not here yet';
+  }
+  row.appendChild(status);
+
+  // Every already-arrived row carries its own undo. Ticking the wrong
+  // colleague in a party is the single most likely mistake at this desk,
+  // and the person who made it is looking straight at this card.
+  if (attendee.checked_in_at) row.appendChild(undoButton(attendee, 'Undo check-in'));
+
+  // A wrong spelling is worth correcting whether or not they have already
+  // arrived: the badge has not necessarily been printed yet, and the
+  // roster is what the delegate list is built from either way.
+  const editingThis = !!(S.editing && S.editing.id === attendee.id);
+  if (editingThis) row.appendChild(nameEditor(attendee));
+  else row.appendChild(fixNameButton(attendee));
+
+  return row;
+}
+
+function renderParty() {
+  const host = document.getElementById('party');
+
+  // Captured BEFORE the rebuild below destroys the field under the
+  // operator's hands. Restored only if the caret was already theirs: a
+  // background reconcile must never pull focus out of the scan field and
+  // into an editor nobody is currently using, or the next scanned badge
+  // would type itself into somebody's surname.
+  let refocus = null;
+  if (S.editing) {
+    const ae = document.activeElement;
+    if (ae && ae.dataset && ae.dataset.editField) refocus = ae.dataset.editField;
+    else if (S.editing.autofocus) refocus = S.editing.focus || 'first';
+  }
+
+  host.replaceChildren();
+
+  if (!S.party) {
+    document.getElementById('actions').style.display = 'none';
+    holdFocus();
+    return;
+  }
+
+  const members = S.party.members;
+  const card = document.createElement('div');
+  card.className = 'ck-party';
+
+  const hd = document.createElement('div');
+  hd.className = 'ck-party-hd';
+  const co = document.createElement('div');
+  co.className = 'ck-party-co';
+  co.textContent = members[0].company || fullName(members[0]);
+  const sub = document.createElement('div');
+  sub.className = 'ck-party-sub';
+  const arrived = members.filter(m => m.checked_in_at).length;
+  // A party of one gets its own wording. "1 person expected · none here
+  // yet" is counting language, and counting one person reads as a form,
+  // not as a sentence about the human at the desk.
+  sub.textContent = members.length === 1
+    ? (arrived ? 'One person expected · already here' : 'One person expected · not here yet')
+    : members.length + ' people expected · ' + (arrived === 0 ? 'none here yet' : arrived + ' already arrived');
+  hd.append(co, sub);
+  card.appendChild(hd);
+
+  members.forEach(m => card.appendChild(partyRow(m, S.party.ticked.has(m.id), toggleMember)));
+  host.appendChild(card);
+
+  document.getElementById('actions').style.display = 'flex';
+  renderPrimary(S.party.ticked.size);
+  // This render replaced every row, so the tick the operator just clicked
+  // no longer exists and focus has fallen back to the body. Reclaim it
+  // now rather than waiting for a timer.
+  holdFocus();
+
+  // holdFocus() has just put the caret in the scan field, which is right
+  // for every case except this one: the operator was mid-name. Put it
+  // back, at the character they were on.
+  if (refocus && S.editing) {
+    const el = host.querySelector('[data-edit-field="' + refocus + '"]');
+    if (el && !el.disabled) {
+      el.focus();
+      const caret = S.editing.caret == null ? el.value.length : S.editing.caret;
+      el.setSelectionRange(caret, caret);
+    }
+    S.editing.autofocus = false;
+  }
+}
+
+// Re-rendering the whole card on every toggle also drops the clicked
+// button out of the DOM, which returns focus to the body so the next
+// scan still lands in the field.
+function toggleMember(attendee) {
+  if (!S.party) return;
+  if (S.party.ticked.has(attendee.id)) S.party.ticked.delete(attendee.id);
+  else S.party.ticked.add(attendee.id);
+  renderParty();
+}
+
+// The label states exactly what the button is about to do, so a
+// volunteer never has to guess how many people they are committing. With
+// nothing ticked it names the next action instead of reading "Check in 0
+// · Print 0 badges", which is a dead state that invites hammering.
+function renderPrimary(count) {
+  const btn = document.getElementById('primary');
+  btn.textContent = count === 0
+    ? 'Tick who is here'
+    : (count === 1
+        ? 'Check in 1 · Print 1 badge'
+        : `Check in ${count} · Print ${count} badges`);
+  btn.disabled = count === 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DESK — KIOSK SETUP (organizer)
+//
+// The one thing standing between checkin-kiosk-pair and a kiosk running
+// at a real event: nothing called `mint`. The Edge Function, the table,
+// the limiter and the kiosk's own claim screen were all live, and a
+// tablet still could not be paired without a terminal and a hand-written
+// curl. This is that missing call.
+//
+// WHY THE DESK AND NOT THE CONSOLE. The person who pairs a kiosk is
+// already signed in here, on this event, holding the organizer role the
+// function requires, in the same room as the tablet. Putting the control
+// in the console would send them to a different product to fetch a code
+// they then carry back across a lobby, against a ten-minute expiry.
+//
+// THE CODE IS A CREDENTIAL FOR TEN MINUTES, and it is returned by one
+// HTTP response and exists nowhere else — migration 056 gives
+// `authenticated` no read on leod_checkin_kiosk_pairing precisely so a
+// table of live claimable codes is not readable by anyone. Three rules
+// follow from that, and none has an exception:
+//
+//   1. NEVER PERSISTED. Not localStorage, not sessionStorage, not a
+//      module variable, not a closure held by the countdown. It arrives
+//      as an argument, lands in a textContent, and ceases to exist when
+//      that subtree is replaced. The countdown works off the deadline
+//      alone, which is why nothing has to keep hold of the code to keep
+//      ticking.
+//   2. NEVER LOGGED. Neither is the label. Status codes only, exactly
+//      as the Edge Function itself does.
+//   3. NO MARKUP SINKS, same as the rest of this page. The label is
+//      operator-supplied text that comes back from the server in the
+//      kiosk's claim response, so it is untrusted on the way out as
+//      well as on the way back.
+// ═══════════════════════════════════════════════════════════════════
+
+// The server's own MAX_LABEL. Set here so the field cannot produce a
+// name that arrives silently truncated in front of the organizer.
+const KIOSK_LABEL_MAX = 60;
+
+// The deadline and the label — never the code. Neither of these is
+// secret: the expiry is in the response body's plain text, and the label
+// is display text the organizer typed and would have to type again if a
+// code lapsed while they walked.
+let ksDeadline = 0;
+let ksLabel = '';
+let ksTimer = null;
+
+function ksStopTimer() { clearInterval(ksTimer); ksTimer = null; }
+
+function openKioskSetup() {
+  // Belt and braces. The button is already hidden for crew and the
+  // function refuses them anyway; this closes the third door.
+  if (S.role !== 'organizer') return;
+  ksAsk('', '');
+  document.getElementById('kiosk-setup').style.display = 'flex';
+  const input = document.getElementById('ks-label');
+  if (input) input.focus();
+}
+
+// Idempotent, and the only way out. Called by the close button, by the
+// backdrop, by Escape, and by showScreen() for anything that is not the
+// desk. Returning focus to the scan field is what puts a volunteer back
+// to scanning without touching anything.
+function closeKioskSetup() {
+  const host = document.getElementById('kiosk-setup');
+  if (host.style.display === 'none') return;
+  ksStopTimer();
+  host.style.display = 'none';
+  // The code and the label cease to exist on this line.
+  document.getElementById('ks-body').replaceChildren();
+  ksLabel = '';
+  ksDeadline = 0;
+  holdFocus();
+}
+
+// ── STATE 1: NAME THE SCREEN ───────────────────────────────────────
+// The label is required by the function, and it is worth asking for
+// rather than defaulting: it is what the kiosk prints across its own
+// header and what tells two tablets apart in a device list at 07:00.
+function ksAsk(prefill, problem) {
+  ksStopTimer();
+  document.getElementById('ks-title').textContent = 'Set up a kiosk';
+
+  const body = document.getElementById('ks-body');
+  body.replaceChildren();
+
+  const p = document.createElement('div');
+  p.className = 'ks-p';
+  p.textContent = 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
+  body.appendChild(p);
+
+  const lbl = document.createElement('label');
+  lbl.className = 'ks-lbl';
+  lbl.setAttribute('for', 'ks-label');
+  lbl.textContent = 'Name this kiosk';
+  body.appendChild(lbl);
+
+  const input = document.createElement('input');
+  input.className = 'ck-input';
+  input.id = 'ks-label';
+  input.type = 'text';
+  input.maxLength = KIOSK_LABEL_MAX;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = 'Lobby left';
+  input.value = prefill;
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); mintPairingCode(); }
+  });
+  body.appendChild(input);
+
+  const hint = document.createElement('div');
+  hint.className = 'ks-hint';
+  hint.textContent = 'This shows across the top of the kiosk screen, so use something you would say out loud. "Main entrance", "Lobby left".';
+  body.appendChild(hint);
+
+  const err = document.createElement('div');
+  err.className = 'ks-err';
+  err.id = 'ks-err';
+  if (problem) err.textContent = problem;
+  body.appendChild(err);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const go = document.createElement('button');
+  go.className = 'ck-btn';
+  go.type = 'button';
+  go.id = 'ks-mint';
+  go.textContent = 'Create a pairing code';
+  go.addEventListener('click', mintPairingCode);
+  acts.appendChild(go);
+  body.appendChild(acts);
+
+  ksDevices(body);
+}
+
+// ── THE PAIRED KIOSKS ──────────────────────────────────────────────
+// Until now an organizer could mint a code and had no way on earth to
+// find out whether the tablet across the lobby ever used it. That is
+// the silent failure of this flow: pairing succeeds, the screen shows a
+// form, and the first evidence that it never worked is a walk-up queue
+// at the desk two hours later. last_seen_at is stamped by
+// checkin-self-register on every accepted registration, so "paired but
+// never seen" is exactly the condition that needs to be visible.
+//
+// A CLIENT-SIDE QUERY AND NOTHING ELSE. checkin_dev_read from migration
+// 048 already lets an organizer SELECT their own event's device rows, so
+// this needs no migration, no RPC and no Edge Function.
+//
+// leod_checkin_kiosk_pairing IS NOT READ HERE, and must never be. It
+// carries live claimable codes and migration 056 gives `authenticated`
+// no policy on it precisely so a crew member cannot claim a code minted
+// for a kiosk and walk off with a device key. Everything this list shows
+// comes from the device row, which exists only AFTER a code was spent.
+//
+// api_key_hash is not selected. There is no display for it, and a column
+// that is never fetched cannot be rendered by a later edit.
+//
+// revoked_at REQUIRES MIGRATION 057. PostgREST rejects a select naming a
+// column it does not know, so this list reports a load failure until the
+// migration is applied. Apply it before this file ships.
+const KIOSK_DEV_COLS = 'id, label, kind, last_seen_at, created_at, revoked_at';
+
+async function ksDevices(host) {
+  // Same third door as openKioskSetup(). This function is the only
+  // reader of the device table on this page, so the role test lives here
+  // as well as on the modal that opens it.
+  if (S.role !== 'organizer' || !S.event) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'ks-devs';
+  const h = document.createElement('div');
+  h.className = 'ks-devs-h';
+  h.textContent = 'Kiosks paired to this event';
+  wrap.appendChild(h);
+  const list = document.createElement('div');
+  list.id = 'ks-dev-list';
+  ksDevNote(list, 'Loading…');
+  wrap.appendChild(list);
+  host.appendChild(wrap);
+
+  let rows = null, error = null;
+  try {
+    ({ data: rows, error } = await sb.from('leod_checkin_devices')
+      .select(KIOSK_DEV_COLS)
+      .eq('event_id', S.event.id)
+      .eq('kind', 'kiosk')
+      .order('created_at', { ascending: false }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  // The modal can be closed, or walked on to the code screen, while this
+  // is in flight. Both replace #ks-body, so the node is gone and there is
+  // nothing to fill in.
+  if (!list.isConnected) return;
+
+  if (error || !Array.isArray(rows)) {
+    // Code only, never the rows. A device label is operator-supplied
+    // text and this page does not write those to a log.
+    console.error('checkin: kiosk list failed', error && error.code);
+    // replaceChildren first, or the failure reads as "Loading… Could not
+    // load", which is a screen that is both still working and already
+    // broken.
+    list.replaceChildren();
+    ksDevNote(list, 'Could not load the kiosks for this event. Creating a code still works.');
+    return;
+  }
+
+  ksRenderDevices(list, rows);
+}
+
+function ksRenderDevices(list, rows) {
+  list.replaceChildren();
+
+  if (!rows.length) {
+    ksDevNote(list, 'None yet. Create a code above, then type it into the tablet.');
+    return;
+  }
+
+  rows.forEach(row => list.appendChild(ksDeviceRow(row)));
+}
+
+function ksDevNote(host, text) {
+  const note = document.createElement('div');
+  note.className = 'ks-devs-note';
+  note.textContent = text;
+  host.appendChild(note);
+}
+
+// One row. Every string here is operator-supplied or server-supplied and
+// every one of them lands in a textContent.
+function ksDeviceRow(row) {
+  const el = document.createElement('div');
+  el.className = 'ks-dev';
+
+  const main = document.createElement('div');
+  main.className = 'ks-dev-main';
+  const name = document.createElement('div');
+  name.className = 'ks-dev-name';
+  // A label is NOT NULL in the table, but this row came off the wire and
+  // an empty string would render as a nameless card the organizer cannot
+  // tell from the next one.
+  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : 'Unnamed kiosk';
+  main.appendChild(name);
+
+  const meta = document.createElement('div');
+  meta.className = 'ks-dev-meta';
+  meta.textContent = 'Paired ' + ksWhen(row.created_at);
+  main.appendChild(meta);
+  el.appendChild(main);
+
+  const state = document.createElement('div');
+  el.appendChild(state);
+
+  const act = document.createElement('div');
+  act.className = 'ks-dev-act';
+  el.appendChild(act);
+
+  ksDevPaint(row, state, act);
+  return el;
+}
+
+// The row's whole appearance, recomputed from `row` alone. Revoking
+// mutates the local row object and calls this again rather than
+// re-fetching the list: the organizer is looking at the card they just
+// clicked, and a list that reloads underneath them loses their place.
+function ksDevPaint(row, state, act) {
+  act.replaceChildren();
+
+  if (row.revoked_at) {
+    state.className = 'ks-dev-state revoked';
+    state.textContent = 'Revoked ' + ksSince(row.revoked_at);
+    // No Revoke control on an already-revoked row. There is nothing left
+    // to take away, and offering it again invites a click that can only
+    // produce an error.
+    const note = document.createElement('div');
+    note.className = 'ks-dev-note';
+    note.textContent = 'Its key no longer works. This screen has to pair again, with a new code, before it can register anybody.';
+    act.appendChild(note);
+    return;
+  }
+
+  // ★ THE ONE THING THIS LIST IS FOR ★
+  // Never used is not "a bit less recent than used". It is the state
+  // where a screen is standing in a lobby doing nothing, and it gets its
+  // own colour so it is spotted without reading the row.
+  if (row.last_seen_at) {
+    state.className = 'ks-dev-state seen';
+    state.textContent = 'Last used ' + ksSince(row.last_seen_at);
+  } else {
+    state.className = 'ks-dev-state never';
+    state.textContent = 'Never used';
+  }
+
+  const btns = document.createElement('div');
+  btns.className = 'ks-dev-btns';
+  const go = document.createElement('button');
+  go.className = 'ks-dev-btn';
+  go.type = 'button';
+  go.textContent = 'Revoke';
+  go.addEventListener('click', () => ksDevConfirm(row, state, act, ''));
+  btns.appendChild(go);
+  act.appendChild(btns);
+}
+
+// ── REVOKE ─────────────────────────────────────────────────────────
+// Destructive, and irreversible from here: migration 057 makes
+// revoked_at one-way, so nothing on this page can put the key back. The
+// tablet has to pair again and gets a different key when it does. That
+// is the whole sentence the confirmation has to say, in front of the
+// button rather than after it.
+//
+// The confirmation is INLINE, in the row, not a second modal. This modal
+// is already a dialog over the desk; stacking another on top of it takes
+// the organizer's eye off which of four rows they were pointing at,
+// which is the one thing that must not become ambiguous.
+function ksDevConfirm(row, state, act, problem) {
+  act.replaceChildren();
+
+  if (problem) {
+    const err = document.createElement('div');
+    err.className = 'ks-dev-err';
+    err.textContent = problem;
+    act.appendChild(err);
+  }
+
+  const q = document.createElement('div');
+  q.className = 'ks-dev-q';
+  q.textContent = 'Revoke this kiosk? It stops working straight away and cannot be switched back on. Pairing the screen again means creating a new code.';
+  act.appendChild(q);
+
+  const btns = document.createElement('div');
+  btns.className = 'ks-dev-btns';
+
+  const yes = document.createElement('button');
+  yes.className = 'ks-dev-btn danger';
+  yes.type = 'button';
+  yes.textContent = 'Yes, revoke';
+  btns.appendChild(yes);
+
+  const no = document.createElement('button');
+  no.className = 'ks-dev-btn';
+  no.type = 'button';
+  no.textContent = 'Cancel';
+  no.addEventListener('click', () => ksDevPaint(row, state, act));
+  btns.appendChild(no);
+
+  yes.addEventListener('click', () => ksDevRevoke(row, state, act, yes, no));
+  act.appendChild(btns);
+}
+
+async function ksDevRevoke(row, state, act, yes, no) {
+  if (yes.disabled) return;
+  // Same reason as minting: this one action cannot be queued. The desk's
+  // outbox exists for check-ins, and a revocation held in a queue is a
+  // key the organizer believes is dead and is not.
+  if (!navigator.onLine) {
+    ksDevConfirm(row, state, act, 'This desk is offline, and revoking has to reach the server. Reconnect, then try again.');
+    return;
+  }
+
+  yes.disabled = true;
+  no.disabled = true;
+  yes.textContent = 'Revoking…';
+
+  let data = null, error = null;
+  try {
+    // event_id as well as id. The row came off the wire and this is a
+    // destructive write, so it is scoped to the event the organizer is
+    // actually signed in to rather than to an id alone.
+    //
+    // .select() is not decoration: RLS denies by returning NO ROWS, not
+    // an error, so an update that matched nothing looks exactly like an
+    // update that succeeded. Requiring the row back is the only way to
+    // tell "revoked" from "silently did nothing".
+    ({ data, error } = await sb.from('leod_checkin_devices')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .eq('event_id', S.event.id)
+      .select('id, revoked_at'));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  const updated = Array.isArray(data) ? data[0] : data;
+  if (error || !updated || !updated.revoked_at) {
+    // Code only. A label is operator-supplied text and never goes to a log.
+    console.error('checkin: kiosk revoke failed', error && error.code);
+    ksDevConfirm(row, state, act, 'Could not revoke this kiosk. Check this desk is online, then try again.');
+    return;
+  }
+
+  // The server's timestamp, not the one sent. They agree in the ordinary
+  // case, and where they do not it is the database that is right.
+  row.revoked_at = updated.revoked_at;
+  ksDevPaint(row, state, act);
+}
+
+// Absolute, for "when was this paired" — a date is what an organizer
+// matches against their own morning.
+function ksWhen(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'at an unknown time';
+  return new Date(t).toLocaleString([], {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// Relative, for "is it alive" — the only question being asked of
+// last_seen_at is how long ago, and an elapsed time answers it without
+// the reader doing arithmetic against the wall clock. Coarse on purpose:
+// the difference between 40 and 50 minutes changes nothing, the
+// difference between minutes and days changes everything.
+function ksSince(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'at an unknown time';
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins === 1 ? '1 minute ago' : mins + ' minutes ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : hours + ' hours ago';
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : days + ' days ago';
+}
+
+// ── MINT ───────────────────────────────────────────────────────────
+async function mintPairingCode() {
+  const input = document.getElementById('ks-label');
+  const btn   = document.getElementById('ks-mint');
+  const err   = document.getElementById('ks-err');
+  if (!input || !btn || btn.disabled) return;
+
+  const label = input.value.trim().slice(0, KIOSK_LABEL_MAX);
+  err.textContent = '';
+  if (!label) {
+    err.textContent = 'Give the kiosk a name first, so you can tell it apart from the next one.';
+    input.focus();
+    return;
+  }
+  // A pairing code can only come from the server, so an offline desk is
+  // told that here rather than after a request that was never going to
+  // land. The desk itself keeps working offline; this one action does not.
+  if (!navigator.onLine) {
+    err.textContent = 'This desk is offline, and a pairing code has to come from the server. Reconnect, then try again.';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
+      body: { action: 'mint', event_id: S.event.id, label },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  if (error || !data || data.ok !== true ||
+      typeof data.code !== 'string' || typeof data.expires_at !== 'string') {
+    // Status only in the log, exactly as the Edge Function does. Never
+    // the label, and there is no code to leak on this path anyway.
+    const status = kioskErrorStatus(error);
+    console.error('checkin: kiosk mint failed, status', status);
+    const reason = await ksReason(error);
+    btn.disabled = false;
+    btn.textContent = 'Create a pairing code';
+    err.textContent = ksFailureMessage(status, reason);
+    return;
+  }
+
+  ksCode(data.code, data.expires_at, label);
+}
+
+// supabase-js hands back the raw Response on a non-2xx, unread. The mint
+// branch is the one place on this page where refusals must be told
+// apart: three of the four are settings an organizer can go and change,
+// and the function distinguishes them only by the sentence it returns.
+// That couples this to those strings, so the match below is a loose
+// substring unique to each, and anything unmatched still lands on a
+// message a person can act on rather than on silence.
+async function ksReason(error) {
+  try {
+    if (error && error.context && typeof error.context.json === 'function') {
+      const body = await error.context.json();
+      if (body && typeof body.error === 'string') return body.error.toLowerCase();
+    }
+  } catch (ignored) { /* an unreadable body is simply no reason */ }
+  return '';
+}
+
+// One sentence per situation, each naming the thing to go and do. No
+// error codes and no status numbers: the person reading this is standing
+// at a desk at 07:00 and cannot act on either.
+function ksFailureMessage(status, reason) {
+  if (status === 401) {
+    return 'Your sign-in has expired. Sign out, sign back in, then try again.';
+  }
+  // Order matters. "Forbidden — organizers only" carries none of the
+  // other two substrings, so the organizer test can safely run first.
+  if (status === 403 && reason.includes('organizer')) {
+    return 'Only an organizer can set up a kiosk. Ask whoever owns this event to create the code, or to make you an organizer on it.';
+  }
+  if (status === 403 && reason.includes('self-registration')) {
+    return 'Self-registration is switched off for this event, so a kiosk would have nothing to do. Switch it on in the event’s check-in settings, then come back here and try again.';
+  }
+  if (status === 403 && reason.includes('check-in')) {
+    return 'Check-in is not enabled for this event. It has to be switched on for the event itself before any kiosk can be paired to it.';
+  }
+  if (status === 403) {
+    return 'This event is not set up for kiosks yet. Check its check-in settings, then try again.';
+  }
+  // The mint branch has no limiter of its own — this is the platform
+  // gateway in front of it, and waiting is the only response to it.
+  if (status === 429) {
+    return 'Too many requests from here just now. Wait a minute, then try again.';
+  }
+  if (status === 400) {
+    return 'The server would not accept that name. Try a short one, like "Lobby left".';
+  }
+  return 'Could not create a pairing code. Check this desk is online, then try again.';
+}
+
+// ── STATE 2: THE CODE ──────────────────────────────────────────────
+// `code` arrives as an argument and leaves as a textContent. It is not
+// returned, not stored, and not closed over by the countdown.
+function ksCode(code, expiresAt, label) {
+  ksStopTimer();
+  ksLabel = label;
+  document.getElementById('ks-title').textContent = 'Read this code to the kiosk';
+
+  const body = document.getElementById('ks-body');
+  body.replaceChildren();
+
+  const who = document.createElement('div');
+  who.className = 'ks-p';
+  // The organizer's own text, and the same string the kiosk will show
+  // across its header once it pairs. textContent in both directions.
+  who.textContent = 'For the screen you named “' + label + '”.';
+  body.appendChild(who);
+
+  // Split from the bare characters rather than from whatever punctuation
+  // the server printed, so this display survives a format change on the
+  // other side without showing a mangled code to a room.
+  const bare = code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const codeEl = document.createElement('div');
+  codeEl.className = 'ks-code';
+  [bare.slice(0, 4), bare.slice(4)].forEach(part => {
+    if (!part) return;
+    const g = document.createElement('span');
+    g.className = 'ks-grp';
+    g.textContent = part;
+    codeEl.appendChild(g);
+  });
+  body.appendChild(codeEl);
+
+  const timer = document.createElement('div');
+  timer.className = 'ks-timer';
+  body.appendChild(timer);
+
+  const facts = document.createElement('div');
+  facts.className = 'ks-facts';
+  ksFact(facts, 'Once only. ',
+    'The first screen that enters it is paired and the code is spent. It will not work on a second tablet.');
+  ksFact(facts, 'Nothing is stuck if you lose it. ',
+    'The code cannot be looked up again by anyone, including us. If it is gone or it runs out, create another and read that one out instead.');
+  ksFact(facts, 'On the tablet: ',
+    'open this address, then type the code into the box.');
+  const url = document.createElement('div');
+  url.className = 'ks-url';
+  url.textContent = location.origin + location.pathname + '?mode=kiosk';
+  facts.appendChild(url);
+  body.appendChild(facts);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const again = document.createElement('button');
+  again.className = 'ck-btn ghost';
+  again.type = 'button';
+  again.textContent = 'Create another code';
+  again.addEventListener('click', () => ksAsk(ksLabel, ''));
+  const done = document.createElement('button');
+  done.className = 'ck-btn';
+  done.type = 'button';
+  done.textContent = 'Done';
+  done.addEventListener('click', closeKioskSetup);
+  acts.append(again, done);
+  body.appendChild(acts);
+
+  ksDeadline = Date.parse(expiresAt);
+  if (!Number.isFinite(ksDeadline)) {
+    // An expiry we cannot read is not a reason to withhold a code that
+    // works. Say what the server's rule is and let them get on with it.
+    timer.textContent = 'This code expires ten minutes after you created it.';
+    return;
+  }
+  ksTick(timer);
+  ksTimer = setInterval(() => ksTick(timer), 1000);
+}
+
+function ksFact(host, lead, rest) {
+  const line = document.createElement('div');
+  line.className = 'ks-fact';
+  const b = document.createElement('b');
+  b.textContent = lead;
+  line.appendChild(b);
+  line.appendChild(document.createTextNode(rest));
+  host.appendChild(line);
+}
+
+// What matters is not the exact second but whether there is time to walk
+// to the tablet, so this is read at a glance and never needs arithmetic.
+// Amber under a minute. Zero is a screen of its own rather than a 0:00
+// sitting under a code that no longer works.
+function ksTick(el) {
+  const left = ksDeadline - Date.now();
+  if (left <= 0) { ksExpired(); return; }
+  // ceil, not round: rounding can put "0:00" on screen for a second
+  // under a code that still works, which reads as broken. This way the
+  // last frame before the expired state is always "0:01".
+  const secs = Math.ceil(left / 1000);
+  el.className = 'ks-timer' + (secs <= 60 ? ' low' : '');
+  el.textContent = 'Expires in ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+}
+
+// ── STATE 3: EXPIRED ───────────────────────────────────────────────
+// Says the plain thing and offers the one move that fixes it. Minting
+// again costs nothing and burns nothing: the lapsed code was never
+// claimable by anyone else either.
+function ksExpired() {
+  ksStopTimer();
+  document.getElementById('ks-title').textContent = 'That code has expired';
+
+  const body = document.getElementById('ks-body');
+  // The code leaves the page on this line and is recoverable from
+  // nowhere: not from storage, not from a variable, not from the server.
+  body.replaceChildren();
+
+  const p = document.createElement('div');
+  p.className = 'ks-p';
+  p.textContent = 'Pairing codes last ten minutes, so one left sitting on a laptop cannot be used later in the day. Nothing is stuck: create another and read that one out instead.';
+  body.appendChild(p);
+
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const again = document.createElement('button');
+  again.className = 'ck-btn';
+  again.type = 'button';
+  again.textContent = 'Create another code';
+  // Prefilled with the name they already typed. Re-typing "Lobby left"
+  // because a walk took eleven minutes is friction for nothing.
+  again.addEventListener('click', () => ksAsk(ksLabel, ''));
+  acts.appendChild(again);
+  body.appendChild(acts);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+//   KIOSK — SELF REGISTRATION
+//
+//   Everything below runs only under ?mode=kiosk. Nothing above it
+//   calls anything below it.
+//
+//   THE THREAT MODEL IS DIFFERENT FROM THE DESK'S. The desk is a
+//   staffed machine and its input arrives from a scanner and a
+//   briefed volunteer. This is an unattended screen in a hotel lobby
+//   and every character it handles is typed by a stranger who owes us
+//   nothing. Two rules follow and neither has an exception:
+//
+//     1. NO MARKUP SINKS ANYWHERE ON THIS PAGE. createElement +
+//        textContent + replaceChildren only, including for the
+//        strings that came back from the server. Grepping this file
+//        for the four assign-markup APIs must return nothing.
+//
+//     2. NO PII LEAVES THE SCREEN IT WAS TYPED ON. It is never
+//        logged, never put in localStorage, never held in a variable
+//        past the request it was typed for. The inputs themselves are
+//        the only copy, and they are cleared the moment the result
+//        renders, the moment the screen goes idle, and the moment it
+//        goes offline.
+// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+
+// var → window.K, same reason as window.S above: reachable from tests.
+var K = { device: null, door: null, step: null, busy: false };
+
+// ── DEVICE KEY ─────────────────────────────────────────────────────
+// The kiosk's ONLY credential. It authenticates against
+// leod_checkin_devices.api_key_hash and is what lets an anonymous
+// screen reach checkin-self-register at all. There is deliberately no
+// anon RLS policy behind it: an anon SELECT on the attendees table
+// would hand every name, email and company at the event to anyone
+// holding the publishable key, which is sitting in plain sight at the
+// top of this file.
+const KIOSK_STORE_KEY = 'cuedeck-kiosk-device';
+
+function readKioskDevice() {
+  try {
+    const raw = localStorage.getItem(KIOSK_STORE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d.device_key !== 'string' || typeof d.event_id !== 'string') return null;
+    if (!d.device_key || !d.event_id) return null;
+    return d;
+  } catch (err) {
+    // A corrupt or unreadable store is the same situation as no store:
+    // this screen is not paired. Never log the value — it is a
+    // credential.
+    console.error('kiosk: stored device key unreadable');
+    return null;
+  }
+}
+
+// Returns whether the key is provably on disk, by reading it back.
+// setItem can succeed and still not persist (Safari private browsing
+// used to throw, a locked-down kiosk profile can silently drop), and
+// the difference matters more here than almost anywhere else: see
+// claimPairingCode() for what is lost if this is wrong.
+function writeKioskDevice(dev) {
+  try {
+    localStorage.setItem(KIOSK_STORE_KEY, JSON.stringify(dev));
+    const back = readKioskDevice();
+    return !!(back && back.device_key === dev.device_key);
+  } catch (err) {
+    console.error('kiosk: could not store the device key');
+    return false;
+  }
+}
+
+// ── VALIDATION ─────────────────────────────────────────────────────
+// Mirrored from tests/checkin-kiosk.spec.ts, which is the validation
+// specification, and re-expressed identically in
+// supabase/functions/checkin-self-register/index.ts. Keep all three
+// character-identical. This copy is COURTESY for the person typing —
+// the server re-runs every one of these checks, because anything a
+// kiosk sends is attacker-controlled.
+const MAX_NAME = 80;
+
+// At least one LETTER in any script. \p{L} with /u covers Latin,
+// Latin-with-diacritics, Arabic and Cyrillic in one check; a naive
+// /[a-z]/i would turn away محمد and Иванов at a Polish conference.
+const HAS_LETTER = /\p{L}/u;
+
+// Deliberately loose: something@something.something with no spaces.
+// Deliverability is proven by the code email arriving, not by a regex,
+// and there is nobody at an unattended screen to argue with about it.
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// No length bound here, exactly as in the spec file. The bound lives on
+// the input as maxlength="254" — the server's own RFC 5321 limit — so a
+// 10 kB address cannot be typed in the first place and the client and
+// server never disagree in front of a real attendee.
+function validateKiosk(f, emailRequired) {
+  const errors = [];
+
+  const first = f.first_name.trim();
+  const last = f.last_name.trim();
+
+  if (!first) errors.push('first_name');
+  else if (first.length > MAX_NAME) errors.push('first_name_too_long');
+  else if (!HAS_LETTER.test(first)) errors.push('first_name_invalid');
+
+  if (!last) errors.push('last_name');
+  else if (last.length > MAX_NAME) errors.push('last_name_too_long');
+  else if (!HAS_LETTER.test(last)) errors.push('last_name_invalid');
+
+  const email = f.email.trim();
+  if (!email) {
+    if (emailRequired) errors.push('email');
+  } else if (!EMAIL_SHAPE.test(email)) {
+    errors.push('email_format');
+  }
+
+  // GDPR. Always required, and the checkbox is never pre-checked — a
+  // pre-ticked box is not consent.
+  if (!f.consent) errors.push('consent');
+
+  return errors;
+}
+
+// Written for someone standing up, in a hurry, who has never seen this
+// screen. Each one names the field and says what to do, and they are
+// shown all at once so a second tap does not surface a second problem.
+const KIOSK_FIELD_MSG = {
+  first_name:          'Type your first name.',
+  first_name_too_long: 'That first name is too long. 80 characters at most.',
+  first_name_invalid:  'Your first name needs at least one letter.',
+  last_name:           'Type your last name.',
+  last_name_too_long:  'That last name is too long. 80 characters at most.',
+  last_name_invalid:   'Your last name needs at least one letter.',
+  email:               'We need your email so we can send you your code.',
+  email_format:        "That email doesn't look right. Check it and try again.",
+  consent:             'Please tick the box so we can register you.',
+};
+
+const KIOSK_FIELD_INPUT = {
+  first_name: 'kk-first', first_name_too_long: 'kk-first', first_name_invalid: 'kk-first',
+  last_name: 'kk-last',   last_name_too_long: 'kk-last',   last_name_invalid: 'kk-last',
+  email: 'kk-email',      email_format: 'kk-email',
+};
+
+function kioskShowErrors(hostId, errors) {
+  const host = document.getElementById(hostId);
+  host.replaceChildren();
+  ['kk-first', 'kk-last', 'kk-email'].forEach(id => document.getElementById(id).classList.remove('bad'));
+  errors.forEach(code => {
+    const line = document.createElement('div');
+    line.textContent = KIOSK_FIELD_MSG[code] || 'Please check that field.';
+    host.appendChild(line);
+    const input = KIOSK_FIELD_INPUT[code];
+    if (input) document.getElementById(input).classList.add('bad');
+  });
+}
+
+function kioskClearErrors() {
+  document.getElementById('kk-details-err').replaceChildren();
+  document.getElementById('kk-consent-err').replaceChildren();
+  document.getElementById('kk-pair-err').replaceChildren();
+  ['kk-first', 'kk-last', 'kk-email'].forEach(id => document.getElementById(id).classList.remove('bad'));
+}
+
+// ── FORM ───────────────────────────────────────────────────────────
+// The inputs ARE the storage. Nothing copies what a stranger typed
+// into a variable that outlives the request, and nothing writes it to
+// disk. This is also why the read below happens at submit time rather
+// than on every keystroke.
+function kioskReadForm() {
+  return {
+    first_name: document.getElementById('kk-first').value,
+    last_name:  document.getElementById('kk-last').value,
+    company:    document.getElementById('kk-company').value,
+    email:      document.getElementById('kk-email').value,
+    consent:    document.getElementById('kk-consent').checked === true,
+  };
+}
+
+function kioskClearForm() {
+  ['kk-first', 'kk-last', 'kk-company', 'kk-email'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  // Explicitly, every time. A browser restoring form state from bfcache
+  // or a reload would otherwise hand the next person a pre-ticked
+  // consent box, which is not consent.
+  document.getElementById('kk-consent').checked = false;
+  kioskClearErrors();
+}
+
+// ── SCREENS ────────────────────────────────────────────────────────
+const KIOSK_STEPS = ['kk-pair', 'kk-offline', 'kk-arrive', 'kk-details', 'kk-consent-step', 'kk-result'];
+
+function kioskShow(step) {
+  // The desk's three screens are hidden by hand rather than through
+  // showScreen(), which would also start the desk's focus backstop and
+  // roster refresh — neither of which belongs on a public screen.
+  document.getElementById('signin').style.display  = 'none';
+  document.getElementById('picker').style.display  = 'none';
+  document.getElementById('station').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('kiosk').style.display   = 'flex';
+  KIOSK_STEPS.forEach(id => {
+    document.getElementById(id).style.display = (id === step) ? 'block' : 'none';
+  });
+  K.step = step;
+  kioskArmIdle();
+}
+
+// The one place that decides which screen is correct right now, so the
+// offline check cannot be forgotten on a path that was added later.
+//
+// OFFLINE IS A DEAD END HERE, AND THAT IS THE DESIGN. The desk queues
+// work offline because it holds the roster and the answer is local.
+// The kiosk holds nothing: the already-registered check is a server
+// query, the code is derived from a token the server mints, and the
+// rate limit only means anything server-side. Queueing a registration
+// would mean promising a stranger a code we cannot produce, from a
+// duplicate check we cannot run, against a limiter we cannot enforce.
+// So it says so plainly and points at the one thing that does work.
+function kioskRoute() {
+  if (!navigator.onLine) { kioskClearForm(); kioskShow('kk-offline'); return; }
+  if (!K.device) { kioskShow('kk-pair'); return; }
+  kioskShow('kk-arrive');
+}
+
+// ── AUTO-RESET ─────────────────────────────────────────────────────
+// Two timers, because there are two ways a stranger's details end up
+// sitting on a public screen.
+//
+// RESULT: 25 seconds. Short enough that the next person in a lobby
+// queue — inter-arrival at a busy desk is well under half a minute —
+// does not walk up to the previous person's outcome. Long enough to
+// read six characters, find a phone, photograph them or write them
+// down, at the speed of someone in their seventies putting their
+// glasses on first. Ten seconds loses people their code and they have
+// to start again; a minute leaves a name and an outcome facing the
+// room. The countdown is visible so nobody is surprised by it, and
+// Done clears it immediately for anyone who has finished — which is
+// what actually keeps the average exposure well under 25s.
+//
+// It is IDENTICAL on both outcomes, deliberately. A shorter or longer
+// wait on the already-registered branch would re-open through timing
+// exactly the oracle the response body closes.
+const KIOSK_RESULT_MS = 25000;
+
+// IDLE: 90 seconds of no interaction on the two data-entry screens.
+// The result reset does nothing for the commonest abandonment — a
+// person who types their name, is called away or gives up, and leaves
+// the form filled in. 90s is past any plausible pause for someone
+// hunting through their phone for the spelling of their company name,
+// and well inside the time it takes a queue to move somebody else into
+// that spot.
+const KIOSK_IDLE_MS = 90000;
+
+let kioskResultTimer = null;
+let kioskCountTimer  = null;
+let kioskIdleTimer   = null;
+
+function kioskStopTimers() {
+  clearTimeout(kioskResultTimer);  kioskResultTimer = null;
+  clearInterval(kioskCountTimer);  kioskCountTimer  = null;
+  clearTimeout(kioskIdleTimer);    kioskIdleTimer   = null;
+}
+
+function kioskArmIdle() {
+  clearTimeout(kioskIdleTimer);
+  kioskIdleTimer = null;
+  if (K.step !== 'kk-details' && K.step !== 'kk-consent-step') return;
+  kioskIdleTimer = setTimeout(kioskReset, KIOSK_IDLE_MS);
+}
+
+// Back to the start, with nothing of the last person left behind.
+function kioskReset() {
+  kioskStopTimers();
+  K.door = null;
+  K.busy = false;
+  kioskClearForm();
+  kioskRoute();
+}
+
+function kioskStartResultReset() {
+  let left = Math.round(KIOSK_RESULT_MS / 1000);
+  const el = document.getElementById('kk-count');
+  const tick = () => {
+    el.textContent = left <= 0
+      ? 'Starting again…'
+      : 'This screen clears in ' + left + ' second' + (left === 1 ? '' : 's');
+    left--;
+  };
+  tick();
+  kioskCountTimer  = setInterval(tick, 1000);
+  kioskResultTimer = setTimeout(kioskReset, KIOSK_RESULT_MS);
+}
+
+// ── PAIRING ────────────────────────────────────────────────────────
+// The organizer mints a code in their console and reads it across a
+// lobby; somebody types it here. The alphabet behind it excludes I, O,
+// 0 and 1 precisely because it is read aloud, so the only things that
+// can defeat a correct hearing are case and spacing — both of which
+// this fixes silently. Confusable characters are NOT remapped: O is
+// never in a real code, so guessing that somebody meant 0 would widen
+// the accepted space around every valid code.
+function kioskNormalizeCode(raw) {
+  return raw.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+function kioskFormatCode(bare) {
+  return bare.length > 4 ? bare.slice(0, 4) + '-' + bare.slice(4) : bare;
+}
+
+async function claimPairingCode() {
+  const input = document.getElementById('kk-code');
+  const btn   = document.getElementById('kk-pair-btn');
+  const err   = document.getElementById('kk-pair-err');
+  if (K.busy) return;
+
+  const code = kioskNormalizeCode(input.value).slice(0, 8);
+  err.replaceChildren();
+  if (code.length !== 8) {
+    err.textContent = 'A pairing code is eight letters and numbers. Check it with the organizer.';
+    return;
+  }
+  if (!navigator.onLine) { kioskRoute(); return; }
+
+  K.busy = true;
+  btn.disabled = true;
+  btn.textContent = 'Pairing…';
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
+      body: { action: 'claim', code },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  K.busy = false;
+  btn.disabled = false;
+  btn.textContent = 'Pair this screen';
+
+  if (error || !data || data.ok !== true ||
+      typeof data.device_key !== 'string' || typeof data.event_id !== 'string') {
+    console.error('kiosk: pairing rejected, status', kioskErrorStatus(error));
+    // RETRY FIRST, and a new code only after that. The commonest way to
+    // land here is a mistyped character, and a mistyped code burns
+    // nothing: checkin_kiosk_claim_pairing() stamps claimed_at only on a
+    // row that actually matched, so the real code is still claimable and
+    // typing it again works. Leading with "ask the organizer for a new
+    // one" sends them across the lobby for a walk that fixes nothing.
+    //
+    // The three real failures — no such code, expired, already claimed —
+    // stay indistinguishable from each other here, exactly as the
+    // function returns them, so a guesser cannot tell a near miss from a
+    // miss. This sentence names none of them.
+    err.textContent = 'That code was not accepted. Check the eight characters and type it again: retrying never uses up a code. If it still will not go through, ask the organizer for a new one.';
+    return;
+  }
+
+  // ── THE ORDER HERE IS THE WHOLE POINT ──────────────────────────
+  // THE RAW DEVICE KEY EXISTS EXACTLY ONCE, in the response we are
+  // holding. The server stored only its SHA-256, and
+  // checkin-kiosk-pair burned the pairing code atomically BEFORE the
+  // device row was created, so there is no second delivery, no
+  // replay and no recovery path. Store-then-claim is not available:
+  // there is nothing to store until the claim has already succeeded.
+  //
+  // What IS ours to decide is what happens when the store fails —
+  // private browsing, a full quota, a locked-down kiosk profile.
+  // writeKioskDevice() reads the value back, so we only proceed on
+  // proof that the key survived. If it did not, the key is gone: say
+  // so and send them for a new pairing code.
+  //
+  // We deliberately do NOT fall back to holding the key in memory.
+  // That kiosk works beautifully until the first reload, then drops a
+  // queue of strangers onto a pairing screen with nobody standing
+  // there who knows a code — a failure that arrives hours later, in
+  // the middle of the event, instead of now, in front of the person
+  // who can fix it in one click.
+  const dev = {
+    event_id:   data.event_id,
+    device_id:  typeof data.device_id === 'string' ? data.device_id : null,
+    label:      typeof data.label === 'string' ? data.label : '',
+    device_key: data.device_key,
+  };
+  if (!writeKioskDevice(dev)) {
+    err.textContent = 'This screen could not save its key, so the pairing was lost. Ask the organizer for a new pairing code, and check this browser is not in private mode.';
+    return;
+  }
+
+  input.value = '';
+  K.device = dev;
+  document.getElementById('kk-place').textContent = dev.label;
+  kioskRoute();
+}
+
+// ── REGISTRATION ───────────────────────────────────────────────────
+// supabase-js reports a non-2xx as an error object carrying the raw
+// Response. Only the STATUS is read: the body is not, and is never
+// logged, because the reasons a submission fails are the caller's own
+// input reflected back and there is nothing on this screen that can
+// act on them beyond the sentences below.
+function kioskErrorStatus(error) {
+  try {
+    if (error && error.context && typeof error.context.status === 'number') return error.context.status;
+  } catch (ignored) { /* a shape we do not recognise is a 0 */ }
+  return 0;
+}
+
+// One sentence per situation, each ending at the desk, because that is
+// the only thing a person standing here can actually do about any of
+// them. No error codes: nobody at a lobby screen can act on one.
+function kioskFailureMessage(status) {
+  if (status === 429) return 'Too many registrations from this screen just now. Please see the registration desk.';
+  if (status === 401) return 'This screen is not set up for this event. Please see the registration desk.';
+  if (status === 403) return 'Self-registration is not available here. Please see the registration desk.';
+  return 'Something went wrong and you are not registered. Please see the registration desk.';
+}
+
+async function kioskSubmit() {
+  const btn = document.getElementById('kk-submit');
+  if (K.busy) return;
+
+  const form = kioskReadForm();
+
+  // Re-validated in full at the moment of the write, not only when
+  // Continue was pressed: the details screen is still behind this one
+  // and its values can have changed since.
+  const errors = validateKiosk(form, true);
+  if (errors.length) {
+    const fieldErrors = errors.filter(e => e !== 'consent');
+    kioskShowErrors('kk-consent-err', errors.filter(e => e === 'consent'));
+    if (fieldErrors.length) {
+      kioskShowErrors('kk-details-err', fieldErrors);
+      kioskShow('kk-details');
+    }
+    return;
+  }
+
+  // Zero network calls when the screen knows it is offline. Checked
+  // here as well as on entry because the connection can drop while
+  // somebody is typing.
+  if (!navigator.onLine) { kioskRoute(); return; }
+
+  K.busy = true;
+  btn.disabled = true;
+  btn.textContent = 'Registering…';
+  clearTimeout(kioskIdleTimer);
+
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-self-register', {
+      body: {
+        event_id:   K.device.event_id,
+        device_key: K.device.device_key,
+        first_name: form.first_name.trim(),
+        last_name:  form.last_name.trim(),
+        company:    form.company.trim(),
+        email:      form.email.trim(),
+        // Compared to true on the server too, so a truthy string from a
+        // hand-rolled client is not consent.
+        consent:    form.consent === true,
+      },
+    }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  K.busy = false;
+  btn.disabled = false;
+  btn.textContent = 'Register me';
+
+  if (error || !data || (data.status !== 'registered' && data.status !== 'already_registered')) {
+    const status = kioskErrorStatus(error);
+    // Status only. The submitted fields are never written to a log.
+    console.error('kiosk: registration failed, status', status);
+    document.getElementById('kk-consent-err').textContent = kioskFailureMessage(status);
+    kioskArmIdle();
+    return;
+  }
+
+  kioskResult(data.status, typeof data.code === 'string' ? data.code : '');
+}
+
+// ── THE TWO OUTCOMES ───────────────────────────────────────────────
+// This function is the security surface of the whole screen.
+//
+// On 'already_registered' it renders NO name, NO code and NO
+// confirmation that the address exists beyond one sentence. Anyone who
+// knows a speaker's public conference address could otherwise walk up,
+// type it, be handed that speaker's code, and check in as them or
+// collect their badge. The server already refuses to send any of it —
+// this is the half of that decision that lives on the screen, and the
+// two halves must not drift.
+//
+// Specifically NOT here, and not to be added later:
+//   · a "was that you?" or "not you?" affordance
+//   · a retry hint, a masked address, a partial name
+//   · any difference in tone, colour, layout, padding or timing
+//     between the two branches
+// Each of those re-opens the oracle through a side channel. The
+// container, the classes and the 25-second reset are shared by
+// construction rather than by two code paths agreeing.
+//
+// The one thing that does differ is the sentence itself, and that is
+// accepted by the design: the two response bodies name their own
+// branch, so an attacker who can read a response already knows which
+// one ran. The control against enumeration is the server's rate limit,
+// not secrecy about the branch.
+function kioskResult(status, code) {
+  // PII is cleared BEFORE the outcome is drawn. From this line on,
+  // nothing the person typed is on the screen, in this page's storage,
+  // or in any variable that outlives this call.
+  kioskClearForm();
+
+  const body = document.getElementById('kk-result-body');
+  body.replaceChildren();
+
+  const h = document.createElement('div');
+  h.className = 'kk-h';
+
+  if (status === 'registered') {
+    h.textContent = "You're registered";
+    body.appendChild(h);
+
+    const codeEl = document.createElement('div');
+    codeEl.className = 'kk-code';
+    codeEl.textContent = code;
+    body.appendChild(codeEl);
+
+    const p = document.createElement('div');
+    p.className = 'kk-p';
+    p.textContent = 'Show this code at the registration desk to collect your badge. We have emailed you a copy as well.';
+    body.appendChild(p);
+  } else {
+    h.textContent = "You're already registered.";
+    body.appendChild(h);
+
+    const p = document.createElement('div');
+    p.className = 'kk-p';
+    // Word for word, and nothing further. No name, no code, no hint.
+    p.textContent = "We've emailed your code to the address on file.";
+    body.appendChild(p);
+  }
+
+  // Identical on both branches. Shown the same way, it discloses
+  // nothing, and it converts the dead end — a code that never arrives —
+  // into a short walk rather than a person standing at a screen with no
+  // next move.
+  const fb = document.createElement('div');
+  fb.className = 'kk-fallback';
+  fb.textContent = 'Nothing arrives in a minute? See the registration desk.';
+  body.appendChild(fb);
+
+  kioskShow('kk-result');
+  kioskStartResultReset();
+}
+
+// ── DOORS ──────────────────────────────────────────────────────────
+// Both doors reach this same form and the same endpoint — the server's
+// collision check is what actually de-duplicates, and it cannot run
+// until an email has been typed. What the doors buy is the FRAMING: the
+// person who came through "I can't find my email" has been told, before
+// they type anything, that being already on the list is the answer they
+// are hoping for. Without that, the collision message reads as a
+// rejection and they fill the form in again with a second address,
+// which is the duplicate this screen exists to avoid.
+//
+// The OUTCOME does not vary by door. kioskResult() never sees K.door.
+function kioskOpenDoor(door) {
+  K.door = door;
+  kioskClearForm();   // a new person is at the screen
+  document.getElementById('kk-details-p').textContent = door === 'lost'
+    ? 'Type the email you registered with. If you are already on the list we will email your code straight to that address.'
+    : 'Four quick fields. We will show you a code for the desk and email you a copy.';
+  document.getElementById('kk-email-hint').textContent = door === 'lost'
+    ? 'The address you used when you registered.'
+    : 'We send your entry code here, so check the spelling.';
+  kioskShow('kk-details');
+  document.getElementById('kk-first').focus();
+}
+
+function kioskDetailsNext() {
+  // Consent is forced true for this check so the tick — which lives on
+  // the NEXT screen and cannot possibly have been given yet — is not
+  // reported as a problem with the details in front of them.
+  const form = kioskReadForm();
+  const errors = validateKiosk({ ...form, consent: true }, true);
+  if (errors.length) { kioskShowErrors('kk-details-err', errors); return; }
+  kioskClearErrors();
+  kioskShow('kk-consent-step');
+}
+
+// ── BOOT ───────────────────────────────────────────────────────────
+function bootKiosk() {
+  document.getElementById('kk-door-new').addEventListener('click',  () => kioskOpenDoor('new'));
+  document.getElementById('kk-door-lost').addEventListener('click', () => kioskOpenDoor('lost'));
+  document.getElementById('kk-details-next').addEventListener('click', kioskDetailsNext);
+  document.getElementById('kk-details-back').addEventListener('click', kioskReset);
+  document.getElementById('kk-consent-back').addEventListener('click', () => kioskShow('kk-details'));
+  document.getElementById('kk-submit').addEventListener('click', kioskSubmit);
+  document.getElementById('kk-done').addEventListener('click', kioskReset);
+  document.getElementById('kk-pair-btn').addEventListener('click', claimPairingCode);
+
+  // Case and spacing fixed as they type, so somebody repeating what
+  // they heard across a lobby is not defeated by either. The dash is
+  // re-inserted for readability; the server normalises it away again.
+  const codeInput = document.getElementById('kk-code');
+  codeInput.addEventListener('input', () => {
+    codeInput.value = kioskFormatCode(kioskNormalizeCode(codeInput.value).slice(0, 8));
+  });
+  codeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); claimPairingCode(); }
+  });
+
+  // Any interaction on a data-entry screen pushes the idle reset back.
+  // Bound on the kiosk container rather than the document so it cannot
+  // be kept alive by something outside it.
+  const kiosk = document.getElementById('kiosk');
+  ['input', 'pointerdown', 'keydown'].forEach(ev =>
+    kiosk.addEventListener(ev, kioskArmIdle, true));
+
+  // A connection that drops mid-form must not leave a stranger tapping
+  // Register on a screen that cannot register anybody, and one that
+  // returns must not resume somebody else's half-filled form.
+  window.addEventListener('online',  kioskReset);
+  window.addEventListener('offline', kioskReset);
+
+  K.device = readKioskDevice();
+  document.getElementById('kk-place').textContent = K.device ? K.device.label : 'Self registration';
+  kioskClearForm();
+  kioskRoute();
+
+  if (K.step === 'kk-pair') document.getElementById('kk-code').focus();
+}
+</script>
+</body>
+</html>
