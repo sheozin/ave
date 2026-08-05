@@ -346,6 +346,34 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ks-acts .ck-btn{flex:1 1 190px;width:auto}
 .ks-err{color:var(--rd);font-size:14px;line-height:1.5;margin-top:16px;overflow-wrap:anywhere}
 
+/* ── PAIRED KIOSKS ─────────────────────────────────
+   The list an organizer has never had. A kiosk that paired and then
+   never registered anybody is the silent failure of this whole flow:
+   the tablet shows a form, the pairing "worked", and nobody notices
+   until the walk-up queue is at the desk. So the two states carry
+   COLOUR and not only words — amber for a screen that has never been
+   used, green for one that has. A row scanned at a glance has to make
+   the odd one out obvious without reading a single timestamp.       */
+.ks-devs{margin-top:26px;padding-top:20px;border-top:1px solid var(--bd)}
+.ks-devs-h{font-size:12px;font-weight:600;color:var(--t2);margin-bottom:12px}
+.ks-devs-note{font-size:13px;color:var(--t2);line-height:1.5}
+.ks-dev{
+  display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;
+  background:var(--wm);border:1px solid var(--bd);border-radius:12px;
+  padding:12px 14px;margin-top:8px;
+}
+.ks-dev-main{flex:1 1 190px;min-width:0}
+/* Operator-supplied text. anywhere, so a 60-character run of one word
+   cannot push the state pill off the card. */
+.ks-dev-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.ks-dev-meta{font-size:12px;color:var(--t3);margin-top:3px}
+.ks-dev-state{
+  flex:none;font-size:12px;font-weight:600;border-radius:999px;
+  padding:5px 11px;border:1px solid;
+}
+.ks-dev-state.seen{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
+.ks-dev-state.never{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
+
 /* ══ KIOSK ═════════════════════════════════════════
    A different room from the desk. An unattended touch screen in a
    hotel lobby, operated by strangers who have never seen it, some
@@ -2550,6 +2578,160 @@ function ksAsk(prefill, problem) {
   go.addEventListener('click', mintPairingCode);
   acts.appendChild(go);
   body.appendChild(acts);
+
+  ksDevices(body);
+}
+
+// ── THE PAIRED KIOSKS ──────────────────────────────────────────────
+// Until now an organizer could mint a code and had no way on earth to
+// find out whether the tablet across the lobby ever used it. That is
+// the silent failure of this flow: pairing succeeds, the screen shows a
+// form, and the first evidence that it never worked is a walk-up queue
+// at the desk two hours later. last_seen_at is stamped by
+// checkin-self-register on every accepted registration, so "paired but
+// never seen" is exactly the condition that needs to be visible.
+//
+// A CLIENT-SIDE QUERY AND NOTHING ELSE. checkin_dev_read from migration
+// 048 already lets an organizer SELECT their own event's device rows, so
+// this needs no migration, no RPC and no Edge Function.
+//
+// leod_checkin_kiosk_pairing IS NOT READ HERE, and must never be. It
+// carries live claimable codes and migration 056 gives `authenticated`
+// no policy on it precisely so a crew member cannot claim a code minted
+// for a kiosk and walk off with a device key. Everything this list shows
+// comes from the device row, which exists only AFTER a code was spent.
+//
+// api_key_hash is not selected. There is no display for it, and a column
+// that is never fetched cannot be rendered by a later edit.
+const KIOSK_DEV_COLS = 'id, label, kind, last_seen_at, created_at';
+
+async function ksDevices(host) {
+  // Same third door as openKioskSetup(). This function is the only
+  // reader of the device table on this page, so the role test lives here
+  // as well as on the modal that opens it.
+  if (S.role !== 'organizer' || !S.event) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'ks-devs';
+  const h = document.createElement('div');
+  h.className = 'ks-devs-h';
+  h.textContent = 'Kiosks paired to this event';
+  wrap.appendChild(h);
+  const list = document.createElement('div');
+  list.id = 'ks-dev-list';
+  ksDevNote(list, 'Loading…');
+  wrap.appendChild(list);
+  host.appendChild(wrap);
+
+  let rows = null, error = null;
+  try {
+    ({ data: rows, error } = await sb.from('leod_checkin_devices')
+      .select(KIOSK_DEV_COLS)
+      .eq('event_id', S.event.id)
+      .eq('kind', 'kiosk')
+      .order('created_at', { ascending: false }));
+  } catch (thrown) {
+    error = thrown;
+  }
+
+  // The modal can be closed, or walked on to the code screen, while this
+  // is in flight. Both replace #ks-body, so the node is gone and there is
+  // nothing to fill in.
+  if (!list.isConnected) return;
+
+  if (error || !Array.isArray(rows)) {
+    // Code only, never the rows. A device label is operator-supplied
+    // text and this page does not write those to a log.
+    console.error('checkin: kiosk list failed', error && error.code);
+    ksDevNote(list, 'Could not load the kiosks for this event. Creating a code still works.');
+    return;
+  }
+
+  ksRenderDevices(list, rows);
+}
+
+function ksRenderDevices(list, rows) {
+  list.replaceChildren();
+
+  if (!rows.length) {
+    ksDevNote(list, 'None yet. Create a code above, then type it into the tablet.');
+    return;
+  }
+
+  rows.forEach(row => list.appendChild(ksDeviceRow(row)));
+}
+
+function ksDevNote(host, text) {
+  const note = document.createElement('div');
+  note.className = 'ks-devs-note';
+  note.textContent = text;
+  host.appendChild(note);
+}
+
+// One row. Every string here is operator-supplied or server-supplied and
+// every one of them lands in a textContent.
+function ksDeviceRow(row) {
+  const el = document.createElement('div');
+  el.className = 'ks-dev';
+
+  const main = document.createElement('div');
+  main.className = 'ks-dev-main';
+  const name = document.createElement('div');
+  name.className = 'ks-dev-name';
+  // A label is NOT NULL in the table, but this row came off the wire and
+  // an empty string would render as a nameless card the organizer cannot
+  // tell from the next one.
+  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : 'Unnamed kiosk';
+  main.appendChild(name);
+
+  const meta = document.createElement('div');
+  meta.className = 'ks-dev-meta';
+  meta.textContent = 'Paired ' + ksWhen(row.created_at);
+  main.appendChild(meta);
+  el.appendChild(main);
+
+  // ★ THE ONE THING THIS LIST IS FOR ★
+  // Never seen is not "a bit less recent than seen". It is the state
+  // where a screen is standing in a lobby doing nothing, and it gets its
+  // own colour so it is spotted without reading the row.
+  const state = document.createElement('div');
+  if (row.last_seen_at) {
+    state.className = 'ks-dev-state seen';
+    state.textContent = 'Last used ' + ksSince(row.last_seen_at);
+  } else {
+    state.className = 'ks-dev-state never';
+    state.textContent = 'Never used';
+  }
+  el.appendChild(state);
+
+  return el;
+}
+
+// Absolute, for "when was this paired" — a date is what an organizer
+// matches against their own morning.
+function ksWhen(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'at an unknown time';
+  return new Date(t).toLocaleString([], {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+// Relative, for "is it alive" — the only question being asked of
+// last_seen_at is how long ago, and an elapsed time answers it without
+// the reader doing arithmetic against the wall clock. Coarse on purpose:
+// the difference between 40 and 50 minutes changes nothing, the
+// difference between minutes and days changes everything.
+function ksSince(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return 'at an unknown time';
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins === 1 ? '1 minute ago' : mins + ' minutes ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours === 1 ? '1 hour ago' : hours + ' hours ago';
+  const days = Math.floor(hours / 24);
+  return days === 1 ? '1 day ago' : days + ' days ago';
 }
 
 // ── MINT ───────────────────────────────────────────────────────────
