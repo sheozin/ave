@@ -9,6 +9,34 @@ import { stripe }        from '../_shared/stripe.ts'
 type SupabaseClient = ReturnType<typeof adminClient>
 type StripeClient = ReturnType<typeof stripe>
 
+// ── Shared-Stripe-account guard ────────────────────────────
+// This Stripe account is shared with CueQuote, which has its own webhook
+// endpoint (rurazinghbfskuoeikwi). Stripe cannot scope an endpoint by product,
+// so CueQuote's subscription events arrive here too.
+//
+// That matters because the handlers below match on stripe_customer_id alone.
+// A CueQuote event for a customer who also uses CueDeck would overwrite their
+// stripe_subscription_id, replace their billing dates and null trial_ends_at —
+// and customer.subscription.deleted would set status='expired', cancelling a
+// live CueDeck subscription.
+//
+// Keyed on product id, NOT on price.metadata.cuedeck_plan: verified 2026-08-06
+// that no price or product on this account carries that key, so requiring it
+// would reject every CueDeck event too. Product ids also survive repricing.
+const CUEDECK_PRODUCTS = new Set([
+  'prod_U7KbPVFt9Ghe3x', // CueDeck Starter
+  'prod_U7KgJwoWMsbmzN', // CueDeck Pro
+  'prod_U7KZqMU9oG4QWD', // CueDeck Pay-per-Event
+])
+
+function isCueDeckSubscription(subscription: Record<string, unknown> | null | undefined): boolean {
+  const items = (subscription?.items as { data?: Record<string, unknown>[] } | undefined)?.data
+  const price = items?.[0]?.price as Record<string, unknown> | undefined
+  const product = price?.product
+  const productId = typeof product === 'string' ? product : (product as { id?: string } | undefined)?.id
+  return !!productId && CUEDECK_PRODUCTS.has(productId)
+}
+
 // ── Invoice Capture Helper ─────────────────────────────────
 // Captures invoice details into our database and triggers email
 async function captureInvoice(
@@ -246,6 +274,14 @@ Deno.serve(async (req) => {
         const subscription = event.data.object
         const customerId = subscription.customer
 
+        // Not ours — belongs to CueQuote on this shared account. Writing here
+        // would clobber this customer's CueDeck subscription id, billing dates
+        // and trial.
+        if (!isCueDeckSubscription(subscription)) {
+          console.log(`Ignoring non-CueDeck subscription ${subscription.id}`)
+          break
+        }
+
         // Resolve plan from price metadata
         const priceId = subscription.items?.data?.[0]?.price?.id
         let plan = subscription.items?.data?.[0]?.price?.metadata?.cuedeck_plan
@@ -303,6 +339,12 @@ Deno.serve(async (req) => {
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object
+
+        // A CueQuote cancellation must not expire this customer's CueDeck plan.
+        if (!isCueDeckSubscription(subscription)) {
+          console.log(`Ignoring non-CueDeck subscription.deleted ${subscription.id}`)
+          break
+        }
         // Get director_id before updating
         const { data: cancelledSub } = await sb.from('leod_subscriptions')
           .select('director_id, plan').eq('stripe_customer_id', subscription.customer).single()
