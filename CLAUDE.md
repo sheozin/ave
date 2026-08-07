@@ -1,5 +1,7 @@
 # CueDeck Production Console — Agent Operating System
 
+> See also `deploy.md` (deployment facts) and `team-rules.md` (cross-session working rules) in this repo root.
+
 ## What This Is
 CueDeck is a single-file HTML production console for managing live conference events.
 No build system, no framework — pure HTML/CSS/JS with Supabase backend.
