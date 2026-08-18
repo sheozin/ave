@@ -56,6 +56,45 @@ face. The alternative — caching names — puts the attendee list on a device t
 roams and gets left on chairs. For a device that is by definition not on a staffed
 table, the exposure is the worse risk.
 
+## Every feature is optional per event
+
+Not every event wants session scanning, and some want no door scanning at all — a
+small seminar checks people in at a desk and nothing else. Nothing in this build
+may be mandatory.
+
+This exposes a muddle in `leod_checkin_entitlements`. It currently holds two
+different kinds of flag:
+
+- **Commercial entitlements** — `checkin_core`, `multi_point_scanning`,
+  `integration_api`, `pii_in_api`. What the organizer's plan *permits*. Set by
+  `checkin-enable-event`, never by the organizer directly.
+- **Operational settings** — `self_registration`, `kiosk_self_print`. What the
+  organizer *chose to switch on for this event*. Added in migration 055 following
+  the existing shape, but they are not the same kind of thing.
+
+The distinction now matters, because `multi_point_scanning` answers *may they* and
+this requirement is *do they want it, here*. Both gates must pass: an event with the
+entitlement but the setting off does no session scanning.
+
+**Migration 058 adds a settings concept**, separating the two rather than piling
+more booleans into the entitlements table:
+
+- `entrance_scanning` — door scanning on or off for this event
+- `session_scanning` — interior scanning on or off, and only usable when
+  `multi_point_scanning` is true
+
+Both default **false**. A feature that appears without the organizer asking for it
+is a feature they will discover at 8am on a day they did not plan for it.
+
+Whether to move `self_registration` and `kiosk_self_print` across at the same time
+is a judgement call for the implementer: it is tidier, but they are already live in
+production and referenced by two deployed Edge Functions. The plan treats that as
+optional and does not require it.
+
+The organizer sets these where they already set up check-in. The scanner reads them
+at pair time and refuses to bind to a scan point whose kind is switched off, with a
+message naming the setting rather than an error code.
+
 ## Architecture
 
 A new standalone page, `cuedeck-scanner.html`, matching the repo's single-file
