@@ -68,9 +68,10 @@ different kinds of flag:
 - **Commercial entitlements** — `checkin_core`, `multi_point_scanning`,
   `integration_api`, `pii_in_api`. What the organizer's plan *permits*. Set by
   `checkin-enable-event`, never by the organizer directly.
-- **Operational settings** — `self_registration`, `kiosk_self_print`. What the
-  organizer *chose to switch on for this event*. Added in migration 055 following
-  the existing shape, but they are not the same kind of thing.
+- **Operational settings** — `auto_send_qr_email` (migration 052),
+  `self_registration` and `kiosk_self_print` (both migration 053). What the
+  organizer *chose to switch on for this event*. Added following the existing
+  shape, but they are not the same kind of thing.
 
 The distinction now matters, because `multi_point_scanning` answers *may they* and
 this requirement is *do they want it, here*. Both gates must pass: an event with the
@@ -86,10 +87,10 @@ more booleans into the entitlements table:
 Both default **false**. A feature that appears without the organizer asking for it
 is a feature they will discover at 8am on a day they did not plan for it.
 
-Whether to move `self_registration` and `kiosk_self_print` across at the same time
-is a judgement call for the implementer: it is tidier, but they are already live in
-production and referenced by two deployed Edge Functions. The plan treats that as
-optional and does not require it.
+Whether to move the three existing operational settings across at the same time is
+a judgement call for the implementer: it is tidier, but all three are live in
+production and read by deployed Edge Functions. The plan treats that as optional and
+does not require it.
 
 The organizer sets these where they already set up check-in. The scanner reads them
 at pair time and refuses to bind to a scan point whose kind is switched off, with a

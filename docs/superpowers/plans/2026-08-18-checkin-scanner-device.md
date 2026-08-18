@@ -49,8 +49,9 @@
 -- leod_checkin_entitlements already mixes two kinds of flag:
 -- commercial ones the plan permits (checkin_core,
 -- multi_point_scanning, integration_api) and operational ones the
--- organizer switched on (self_registration, kiosk_self_print, added
--- in 055 following the existing shape). The distinction matters here:
+-- organizer switched on (auto_send_qr_email from 052,
+-- self_registration and kiosk_self_print from 053). The distinction
+-- matters here:
 -- multi_point_scanning answers "may they", these answer "do they want
 -- it, at this event". BOTH gates must pass — an event holding the
 -- entitlement with the setting off does no session scanning.
@@ -59,8 +60,8 @@
 -- is one an organizer discovers at 8am on a day they did not plan for
 -- it.
 --
--- self_registration and kiosk_self_print are deliberately NOT moved
--- here: they are live in production and read by two deployed Edge
+-- The three existing operational settings are deliberately NOT moved
+-- here: all are live in production and read by deployed Edge
 -- Functions. Tidying that is a separate change with its own risk.
 -- ============================================================
 
