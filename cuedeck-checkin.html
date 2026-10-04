@@ -1102,6 +1102,18 @@ async function flushOutbox() {
       }
       settled.forEach(p => { if (p.action === 'undo' && p.result === 'duplicate') refusedUndos.push(p); });
       settled.forEach(p => { if (p.result === 'test_cap' || p.result === 'outside_window') refusedPaywall.push(p); });
+      // commitParty counted every queued check-in against the test cap.
+      // Take back the ones the server did not apply, then, if it said the
+      // cap is reached, believe it. The reconcile below re-reads the
+      // server's own count.
+      if (S.status === 'test' && S.event) {
+        const notApplied = settled.filter(p => p.action === 'checkin' && p.event_id === S.event.id && p.result !== 'ok').length;
+        S.testUsed = Math.max(0, S.testUsed - notApplied);
+        if (settled.some(p => p.result === 'test_cap')) {
+          S.testUsed = Math.max(S.testUsed, window.CK_POLICY ? window.CK_POLICY.TEST_CAP : 25);
+        }
+        renderTestBanner();
+      }
     }
 
     await renderPendingCount();
@@ -1142,6 +1154,24 @@ async function reconcileRoster() {
   }
   renderParty();
   renderCount();
+  await refreshTestUsed();
+}
+
+// The test counter is the server's, not this desk's: other desks and the
+// kiosk spend the same 25. Re-read it on every reconcile (after a flush
+// and on the idle refresh) so the banner and the early refusal follow it.
+async function refreshTestUsed() {
+  if (S.status !== 'test' || !navigator.onLine || !S.event) return;
+  const { data, error } = await sb.rpc('checkin_my_events');
+  if (error) { console.error('checkin: test usage refresh failed', error); return; }
+  const row = (data || []).find(r => r.event_id === S.event.id);
+  if (row && typeof row.test_used === 'number') {
+    // Plus this desk's check-ins the server has not heard about yet.
+    const owed = (await idbGetAll(STORE_OUTBOX))
+      .filter(p => !p.synced && p.action === 'checkin' && p.event_id === S.event.id).length;
+    S.testUsed = row.test_used + owed;
+    renderTestBanner();
+  }
 }
 
 // The reconcile above only runs after a flush that settled something, so
@@ -1954,9 +1984,10 @@ function showRefusedPaywall(items) {
   const names = items.map(p => S.roster.find(x => x.id === p.attendee_id)).filter(Boolean).map(fullName);
   const cap = items.some(p => p.result === 'test_cap');
   showDeskBlock({
-    title: (names.length === 1 ? '1 check-in was' : names.length + ' check-ins were') + ' not saved',
-    text: (cap ? 'The test limit was reached while this desk was offline. ' : 'These were made outside the check-in window. ')
-          + 'Not checked in: ' + names.join(', ') + '.',
+    title: (items.length === 1 ? '1 check-in was' : items.length + ' check-ins were') + ' not saved',
+    text: (cap ? 'The test limit was reached before these could sync. Go live to keep checking people in.'
+               : 'These were made outside the check-in window, or synced more than a day after they were made.')
+          + (names.length ? ' Not checked in: ' + names.join(', ') + '.' : ''),
   });
 }
 
@@ -3724,7 +3755,11 @@ async function kioskSubmit() {
     const status = kioskErrorStatus(error);
     // Status only. The submitted fields are never written to a log.
     console.error('kiosk: registration failed, status', status);
-    document.getElementById('kk-consent-err').textContent = kioskFailureMessage(status);
+    // The test-cap 403 is told apart from the others by its body.
+    const testCap = status === 403 && (await ksReason(error)).includes('test registrations');
+    document.getElementById('kk-consent-err').textContent = testCap
+      ? 'This event is in test mode and has used its test registrations. Please see the registration desk.'
+      : kioskFailureMessage(status);
     kioskArmIdle();
     return;
   }
