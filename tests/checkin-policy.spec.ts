@@ -127,3 +127,53 @@ describe('routeCheckoutSession', () => {
   });
   it('TEST_CAP is 25', () => { expect(TEST_CAP).toBe(25); });
 });
+
+// Mirror of the server-clock bound in checkin-record-scans (keep identical).
+const LIVE_SKEW_FUTURE_MS = 5 * 60 * 1000;
+const LIVE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+function liveTimeOk(scannedMs: number, nowMs: number): boolean {
+  if (!Number.isFinite(scannedMs)) return false;
+  return scannedMs <= nowMs + LIVE_SKEW_FUTURE_MS && scannedMs >= nowMs - LIVE_MAX_AGE_MS;
+}
+
+// Mirrors the verdict order inside checkin-record-scans for a 'checkin'
+// item whose attendee belongs to the event. inWindow means the calendar
+// window AND the server-clock bound (liveTimeOk) both hold.
+function checkinVerdict(o: { alreadyIn: boolean; isTest: boolean; testUsed: number; inWindow: boolean }):
+  'duplicate' | 'test_cap' | 'outside_window' | 'apply' {
+  if (o.alreadyIn) return 'duplicate';
+  if (o.isTest && o.testUsed >= TEST_CAP) return 'test_cap';
+  if (!o.isTest && !o.inWindow) return 'outside_window';
+  return 'apply';
+}
+
+describe('checkinVerdict', () => {
+  it('a duplicate never consumes the test cap', () => {
+    expect(checkinVerdict({ alreadyIn: true, isTest: true, testUsed: 25, inWindow: true })).toBe('duplicate');
+  });
+  it('the 26th test check-in is refused', () => {
+    expect(checkinVerdict({ alreadyIn: false, isTest: true, testUsed: 25, inWindow: true })).toBe('test_cap');
+  });
+  it('the 25th test check-in is applied', () => {
+    expect(checkinVerdict({ alreadyIn: false, isTest: true, testUsed: 24, inWindow: true })).toBe('apply');
+  });
+  it('test mode ignores the live window', () => {
+    expect(checkinVerdict({ alreadyIn: false, isTest: true, testUsed: 0, inWindow: false })).toBe('apply');
+  });
+  it('live outside the window is refused', () => {
+    expect(checkinVerdict({ alreadyIn: false, isTest: false, testUsed: 0, inWindow: false })).toBe('outside_window');
+  });
+  const NOW = Date.parse('2026-06-20T12:00:00.000Z');
+  const live = (scannedIso: string) =>
+    checkinVerdict({ alreadyIn: false, isTest: false, testUsed: 0, inWindow: liveTimeOk(Date.parse(scannedIso), NOW) });
+  it('live, scanned 10 min in the future is outside_window', () => {
+    expect(live('2026-06-20T12:10:00.000Z')).toBe('outside_window');
+  });
+  it('live, scanned 25h ago is outside_window', () => {
+    expect(live('2026-06-19T11:00:00.000Z')).toBe('outside_window');
+  });
+  it('live, scanned 2h ago inside window is applied', () => {
+    expect(live('2026-06-20T10:00:00.000Z')).toBe('apply');
+  });
+  it('liveTimeOk rejects NaN', () => { expect(liveTimeOk(NaN, NOW)).toBe(false); });
+});

@@ -10,6 +10,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { TEST_CAP, isWithinWindow } from '../_shared/checkin-policy.ts'
 
 interface Item {
   client_id: string
@@ -36,6 +37,17 @@ interface ItemError {
 // recoverable; a livelock is not.
 // THE CLIENT MUST CHUNK its outbox into requests of at most this size.
 const MAX_ITEMS = 200
+
+// The live window must not trust the device clock: a desk could stamp
+// scans with any time. A live check-in is only honoured when scanned_at
+// is within a small skew of the server's now, and not older than a day
+// (an offline desk flushing the same day is fine). Test mode is exempt.
+const LIVE_SKEW_FUTURE_MS = 5 * 60 * 1000
+const LIVE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+function liveTimeOk(scannedMs: number, nowMs: number): boolean {
+  if (!Number.isFinite(scannedMs)) return false
+  return scannedMs <= nowMs + LIVE_SKEW_FUTURE_MS && scannedMs >= nowMs - LIVE_MAX_AGE_MS
+}
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -115,13 +127,44 @@ Deno.serve(async (req) => {
   // auto-created for every event's owner regardless of purchase, so
   // without this an event that never enabled check-in could still take
   // scans.
-  const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core').eq('event_id', event_id).single()
+  const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
+    .select('checkin_core, status').eq('event_id', event_id).maybeSingle()
+  if (entErr) {
+    return new Response(JSON.stringify({ error: entErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
+  const isTest = entRow.status !== 'live'
+
+  // The live window is a calendar rule in the event's own timezone.
+  const { data: evRow, error: evErr } = await sb.from('leod_events')
+    .select('date, timezone').eq('id', event_id).single()
+  if (evErr || !evRow) {
+    return new Response(JSON.stringify({ error: evErr?.message || 'Event not found' }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Read once and counted forward locally, so a batch of 30 cannot all
+  // pass a cap check that each one read as 24. Two desks flushing at the
+  // same instant can still overshoot by a few; the cap is a commercial
+  // limit, not a safety one, and that is accepted.
+  let testUsed = 0
+  if (isTest) {
+    const { data: used, error: usedErr } = await sb.rpc('checkin_test_usage', { p_event_id: event_id })
+    if (usedErr || typeof used !== 'number') {
+      return new Response(JSON.stringify({ error: usedErr?.message || 'Could not read test usage' }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    testUsed = used
+  }
+  const nowMs = Date.now()
 
   // Validated once here rather than per item: the migration 049 trigger
   // rejects a scan_point_id belonging to another event, which would
@@ -228,6 +271,11 @@ Deno.serve(async (req) => {
         result = cleared && cleared.length > 0 ? 'undo' : 'duplicate'
       } else if (att.checked_in_at) {
         result = 'duplicate'
+      } else if (isTest && testUsed >= TEST_CAP) {
+        result = 'test_cap'
+      } else if (!isTest && !(liveTimeOk(Date.parse(it.scanned_at), nowMs)
+                              && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone))) {
+        result = 'outside_window'
       } else {
         const { data: updated, error: updErr } = await sb
           .from('leod_checkin_attendees')
@@ -245,6 +293,7 @@ Deno.serve(async (req) => {
           continue
         }
         result = updated && updated.length > 0 ? 'ok' : 'duplicate'
+        if (isTest && result === 'ok') testUsed++
       }
     }
 
@@ -264,6 +313,7 @@ Deno.serve(async (req) => {
         operator_id: user.id,
         scanned_at: it.scanned_at,
         result,
+        is_test: isTest,
       })
 
     if (insErr) {
