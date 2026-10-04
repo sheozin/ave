@@ -6,6 +6,7 @@
   <title>CueDeck — Admin Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/cuedeck-auth.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -891,6 +892,11 @@
 </head>
 <body>
 
+<!-- CAPTCHA for sign-in and for "reset a user's password" (cuedeck-auth.js).
+     Outside the login screen so it still runs after sign-in; it only shows
+     itself when Cloudflare asks for a click. -->
+<div id="admin-captcha" style="position:fixed;right:16px;bottom:16px;z-index:9999"></div>
+
 <!-- ═══════════════ LOGIN SCREEN ═══════════════ -->
 <div id="login-screen">
   <div class="login-card">
@@ -1334,6 +1340,9 @@
   /* ══════════════════════════════════════════
      AUTH
      ══════════════════════════════════════════ */
+  var adminCap = null;
+  function cap() { return adminCap || (adminCap = cdAuth.mount($('admin-captcha'))); }
+
   async function doLogin() {
     var emailInput = $('login-email');
     var pwInput = $('login-password');
@@ -1352,9 +1361,13 @@
     btn.disabled = true;
     btn.textContent = 'Signing in...';
 
-    var result = await sb.auth.signInWithPassword({ email: email, password: pw });
+    var token;
+    try { token = await cap().token(); }
+    catch (e) { errEl.textContent = e.message; btn.disabled = false; btn.textContent = 'Sign In'; return; }
+    var result = await sb.auth.signInWithPassword({ email: email, password: pw, options: { captchaToken: token } });
+    cap().reset();
     if (result.error) {
-      errEl.textContent = result.error.message;
+      errEl.textContent = cdAuth.message(result.error);
       btn.disabled = false;
       btn.textContent = 'Sign In';
       return;
@@ -1967,7 +1980,9 @@
   async function resetUserPassword(user) {
     try {
       // Password reset requires auth.admin API — use Supabase auth directly
-      var { error: resetErr } = await sb.auth.resetPasswordForEmail(user.email);
+      var token = await cap().token();
+      var { error: resetErr } = await sb.auth.resetPasswordForEmail(user.email, { captchaToken: token });
+      cap().reset();
       if (resetErr) throw resetErr;
       showToast('Password reset email sent', 'success');
     } catch (err) {
@@ -2906,6 +2921,7 @@
      ══════════════════════════════════════════ */
   function init() {
     applyTheme(getTheme());
+    cap();
 
     // Login handlers
     $('btn-login').addEventListener('click', doLogin);

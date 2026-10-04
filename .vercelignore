@@ -15,6 +15,7 @@
 !/cuedeck-checkin-home.html
 !/cuedeck-checkin-setup.html
 !/cuedeck-i18n.js
+!/cuedeck-auth.js
 !/cuedeck-agent-1-incident-advisor.js
 !/cuedeck-agent-2-cue-engine.js
 !/cuedeck-agent-3-report-generator.js

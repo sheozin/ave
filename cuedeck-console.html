@@ -13,6 +13,7 @@
   <link rel="manifest" href="/console-manifest.json">
   <script src="/cuedeck-i18n.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/cuedeck-auth.js"></script>
   <script src="https://js.stripe.com/v3/"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -1710,7 +1711,7 @@
     <input id="rf-name"     type="text"     placeholder="Full Name"             autocomplete="name"             required>
     <input id="rf-org"      type="text"     placeholder="Organization / Company" autocomplete="organization"     required>
     <input id="rf-email"    type="email"    placeholder="Work Email"             autocomplete="username"         required>
-    <input id="rf-password" type="password" placeholder="Password (8+ chars)"    autocomplete="new-password"     required minlength="8">
+    <input id="rf-password" type="password" placeholder="Password (10+ chars)"   autocomplete="new-password"     required minlength="10">
     <div class="rf-hint">Use 12+ characters for a strong password</div>
     <input id="rf-confirm"  type="password" placeholder="Confirm Password"       autocomplete="new-password"     required>
     <!-- Honeypot: hidden from humans, bots auto-fill it -->
@@ -1720,6 +1721,7 @@
     <div id="rf-success" style="display:none">✅ Check your email to confirm your account. Once confirmed, sign in to start your free trial.</div>
     <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
   </form>
+  <div id="cd-captcha" style="display:flex;justify-content:center;margin-top:10px"></div>
   <div id="confirm-email-screen">
     <div class="ce-icon">📬</div>
     <div class="ce-title">Check your inbox</div>
@@ -5801,6 +5803,16 @@ async function checkEF() {
 // ═══════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════
+// CAPTCHA (cuedeck-auth.js): mounted when an auth form is first shown,
+// since Turnstile does not run inside a hidden container. One token per
+// sign-in, sign-up, reset or resend request.
+let _cdCap = null;
+function cdCap() { return _cdCap || (_cdCap = cdAuth.mount(document.getElementById('cd-captcha'))); }
+async function cdCaptchaToken(errEl) {
+  try { return { ok: true, token: await cdCap().token() }; }
+  catch (e) { errEl.textContent = e.message; return { ok: false }; }
+}
+
 function hideLoginForm() {
   document.getElementById('login-form').style.display   = 'none';
   document.getElementById('load-spinner').style.display = '';
@@ -5817,9 +5829,12 @@ async function handleLoginSubmit(e) {
   btn.textContent = 'Signing in…';
   errEl.textContent = '';
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const cap = await cdCaptchaToken(errEl);
+  if (!cap.ok) { btn.disabled = false; btn.textContent = 'Sign in'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password, options: { captchaToken: cap.token } });
+  cdCap().reset();
   if (error) {
-    errEl.textContent   = error.message;
+    errEl.textContent   = cdAuth.message(error);
     btn.disabled        = false;
     btn.textContent     = 'Sign in';
     return;
@@ -5832,6 +5847,7 @@ async function handleLoginSubmit(e) {
 // ── Auth form toggles ───────────────────────────────────────
 function showRegisterForm() {
   stopConfirmPolling();
+  cdCap();
   document.getElementById('load-spinner').style.display           = 'none';
   document.getElementById('load-step').style.display              = 'none';
   document.getElementById('login-form').style.display             = 'none';
@@ -5842,6 +5858,7 @@ function showRegisterForm() {
 }
 function showLoginForm() {
   stopConfirmPolling();
+  cdCap();
   document.getElementById('load-spinner').style.display           = 'none';
   document.getElementById('load-step').style.display              = 'none';
   document.getElementById('register-form').style.display          = 'none';
@@ -5852,6 +5869,7 @@ function showLoginForm() {
 }
 function showResetForm() {
   stopConfirmPolling();
+  cdCap();
   document.getElementById('load-spinner').style.display           = 'none';
   document.getElementById('load-step').style.display              = 'none';
   document.getElementById('login-form').style.display             = 'none';
@@ -5871,11 +5889,15 @@ async function handleResetSubmit(e) {
   errEl.textContent = '';
   btn.disabled = true; btn.textContent = 'Sending…';
 
+  const cap = await cdCaptchaToken(errEl);
+  if (!cap.ok) { btn.disabled = false; btn.textContent = 'Send Reset Link'; return; }
   const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/'
+    redirectTo: window.location.origin + '/',
+    captchaToken: cap.token,
   });
+  cdCap().reset();
   if (error) {
-    errEl.textContent = error.message;
+    errEl.textContent = cdAuth.message(error);
     btn.disabled = false; btn.textContent = 'Send Reset Link';
     return;
   }
@@ -5922,6 +5944,8 @@ async function handleRegisterSubmit(e) {
 
   btn.disabled = true; btn.textContent = 'Creating…';
   sessionStorage.setItem('rf_last_attempt', String(Date.now()));
+  const cap = await cdCaptchaToken(errEl);
+  if (!cap.ok) { btn.disabled = false; btn.textContent = 'Create Account'; return; }
 
   // 1. Create Supabase auth account
   // name + organization are passed as metadata so the server-side
@@ -5933,10 +5957,12 @@ async function handleRegisterSubmit(e) {
     options: {
       data: { name, organization: org },
       emailRedirectTo: window.location.origin,
+      captchaToken: cap.token,
     },
   });
+  cdCap().reset();
   if (error) {
-    errEl.textContent = error.message;
+    errEl.textContent = cdAuth.message(error);
     btn.disabled = false; btn.textContent = 'Create Account';
     return;
   }
@@ -6001,14 +6027,18 @@ async function handleResendEmail() {
   btn.textContent = 'Sending…';
   okEl.style.display = 'none';
 
-  const { error } = await sb.auth.resend({ type: 'signup', email: _confirmPollEmail });
+  const cap = await cdCaptchaToken(okEl);
+  const { error } = cap.ok
+    ? await sb.auth.resend({ type: 'signup', email: _confirmPollEmail, options: { captchaToken: cap.token } })
+    : { error: { message: okEl.textContent } };
+  cdCap().reset();
 
   if (error) {
     btn.disabled    = false;
     btn.textContent = 'Resend confirmation email';
     okEl.style.display  = 'block';
     okEl.style.color    = 'var(--red)';
-    okEl.textContent    = error.message || 'Failed to resend. Try again.';
+    okEl.textContent    = cdAuth.message(error) || 'Failed to resend. Try again.';
   } else {
     btn.disabled    = true;
     btn.textContent = 'Email sent';

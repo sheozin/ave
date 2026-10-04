@@ -35,6 +35,22 @@ self.addEventListener('fetch', event => {
   // Never cache Supabase or Stripe requests
   if (url.hostname.includes('supabase') || url.hostname.includes('stripe')) return;
 
+  // The page itself: network-first, cached copy only when offline. Serving
+  // a stale page first meant every visitor ran the previous release once,
+  // which breaks sign-in whenever auth requirements change (CAPTCHA).
+  if (event.request.mode === 'navigate' && (SHELL_URLS.includes(url.pathname) || url.pathname === '/')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // App shell: cache-first
   if (SHELL_URLS.includes(url.pathname) || url.pathname === '/') {
     event.respondWith(

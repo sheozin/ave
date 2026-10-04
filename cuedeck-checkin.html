@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/cuedeck-auth.js"></script>
 <style>
 /* ── DESIGN TOKENS — LIGHT ──────────────────────────
    The check-in desk lives in a bright hotel lobby, so this page is
@@ -584,6 +585,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
     <input class="ck-input" id="si-password" type="password" autocomplete="current-password" required>
     <div class="ck-err" id="si-err"></div>
     <button class="ck-btn" type="submit" id="si-btn">Sign in</button>
+    <div id="si-captcha" style="display:flex;justify-content:center;margin-top:10px"></div>
   </form>
 </div>
 
@@ -1289,6 +1291,7 @@ function showScreen(name) {
   document.getElementById('signin').style.display  = name === 'signin'  ? 'flex' : 'none';
   document.getElementById('picker').style.display  = name === 'picker'  ? 'flex' : 'none';
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
+  if (name === 'signin') siCap();
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
   if (name === 'station') { startFocusBackstop(); startRosterRefresh(); holdFocus(); }
   // Leaving the desk takes the kiosk modal with it. Switching event or
@@ -1300,6 +1303,10 @@ function showScreen(name) {
 // ═══════════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════════
+// CAPTCHA (cuedeck-auth.js), mounted once the sign-in card is on screen.
+let _siCap = null;
+function siCap() { return _siCap || (_siCap = cdAuth.mount(document.getElementById('si-captcha'))); }
+
 async function handleSignIn(e) {
   e.preventDefault();
   const email    = document.getElementById('si-email').value.trim();
@@ -1310,10 +1317,14 @@ async function handleSignIn(e) {
   btn.textContent = 'Signing in…';
   errEl.textContent = '';
 
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  let token;
+  try { token = await siCap().token(); }
+  catch (err) { btn.disabled = false; btn.textContent = 'Sign in'; errEl.textContent = err.message; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password, options: { captchaToken: token } });
+  siCap().reset();
   btn.disabled = false;
   btn.textContent = 'Sign in';
-  if (error) { errEl.textContent = error.message; return; }
+  if (error) { errEl.textContent = cdAuth.message(error); return; }
 
   S.user = data.user;
   document.getElementById('si-password').value = '';
