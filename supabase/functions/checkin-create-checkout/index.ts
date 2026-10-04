@@ -1,0 +1,94 @@
+// supabase/functions/checkin-create-checkout/index.ts
+// Opens Stripe Checkout for one event's go-live. The webhook, not this
+// function and not the success redirect, is what makes the event live.
+
+import { adminClient } from '../_shared/client.ts'
+import { corsHeaders }  from '../_shared/cors.ts'
+import { stripe }       from '../_shared/stripe.ts'
+
+Deno.serve(async (req) => {
+  const cors = corsHeaders(req)
+  const json = (b: unknown, status = 200) =>
+    new Response(JSON.stringify(b), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
+  if (body._ping) return json({ pong: true })
+
+  const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
+  if (!jwt) return json({ error: 'Unauthorized' }, 401)
+  const sb = adminClient()
+  const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
+  if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+
+  const { data: caller, error: callerErr } = await sb.from('leod_users')
+    .select('active').eq('id', user.id).maybeSingle()
+  if (callerErr) return json({ error: callerErr.message }, 500)
+  if (!caller || caller.active === false) return json({ error: 'Account inactive' }, 403)
+
+  const event_id = String(body.event_id || '')
+  if (!event_id) return json({ error: 'event_id required' }, 400)
+
+  const { data: op, error: opErr } = await sb.from('leod_checkin_operators')
+    .select('role').eq('event_id', event_id).eq('user_id', user.id).maybeSingle()
+  if (opErr) return json({ error: opErr.message }, 500)
+  if (op?.role !== 'organizer') return json({ error: 'Forbidden, organizers only' }, 403)
+
+  const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
+    .select('status').eq('event_id', event_id).maybeSingle()
+  if (entErr) return json({ error: entErr.message }, 500)
+  if (!ent) return json({ error: 'Set up check-in for this event first' }, 409)
+  if (ent.status === 'live') return json({ error: 'This event is already live', code: 'already_live' }, 409)
+
+  const { data: ev, error: evErr } = await sb.from('leod_events').select('name').eq('id', event_id).single()
+  if (evErr || !ev) return json({ error: evErr?.message || 'Event not found' }, 404)
+
+  const priceId = Deno.env.get('CHECKIN_PRICE_ID')
+  if (!priceId) return json({ error: 'Check-in payments are not configured' }, 503)
+
+  const st = stripe()
+
+  // Customer reuse: CueDeck subscription first, then an earlier check-in
+  // purchase, else a new customer. Check-in-only buyers have no
+  // leod_subscriptions row, which create-checkout-session assumes.
+  let customerId: string | null = null
+  const { data: sub, error: subErr } = await sb.from('leod_subscriptions')
+    .select('stripe_customer_id').eq('director_id', user.id).maybeSingle()
+  if (subErr) return json({ error: subErr.message }, 500)
+  customerId = sub?.stripe_customer_id ?? null
+  if (!customerId) {
+    const { data: prev, error: prevErr } = await sb.from('leod_checkin_purchases')
+      .select('stripe_customer_id').eq('buyer_id', user.id).not('stripe_customer_id', 'is', null)
+      .order('created_at', { ascending: false }).limit(1)
+    if (prevErr) return json({ error: prevErr.message }, 500)
+    customerId = prev?.[0]?.stripe_customer_id ?? null
+  }
+
+  try {
+    if (!customerId) {
+      const c = await st.customers.create({ email: user.email ?? undefined, metadata: { cuedeck_user_id: user.id } })
+      customerId = c.id
+    }
+    const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
+    const session = await st.checkout.sessions.create({
+      mode: 'payment',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      automatic_tax: { enabled: true },
+      tax_id_collection: { enabled: true },
+      customer_update: { address: 'auto', name: 'auto' },
+      invoice_creation: { enabled: true, invoice_data: { description: `CueDeck Check-in: ${ev.name}`, metadata: { event_id } } },
+      client_reference_id: user.id,
+      metadata: { product: 'checkin', event_id, buyer_id: user.id },
+      payment_intent_data: { metadata: { product: 'checkin', event_id } },
+      success_url: `${appUrl}/checkin/setup?event=${event_id}&paid=1`,
+      cancel_url: `${appUrl}/checkin/setup?event=${event_id}&step=golive`,
+      locale: 'auto',
+    })
+    return json({ url: session.url })
+  } catch (e) {
+    console.error('checkin-create-checkout: stripe error for event', event_id, (e as Error).message)
+    return json({ error: 'Could not start payment. Please try again.' }, 502)
+  }
+})

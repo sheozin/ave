@@ -125,6 +125,27 @@ describe('routeCheckoutSession', () => {
   it('ignores session with null metadata', () => {
     expect(routeCheckoutSession({ metadata: null, payment_status: 'paid' }, [PPE], P, PPE).route).toBe('ignore');
   });
+  it('routes a paid Pay-per-Event session with the real product among several line items', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, ['prod_other', 'prod_U7KZqMU9oG4QWD'], P, 'prod_U7KZqMU9oG4QWD').route).toBe('perevent');
+  });
+  it('routes Pay-per-Event even when the check-in product id is not configured', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, [PPE], '', PPE).route).toBe('perevent');
+  });
+  it('ignores an async Pay-per-Event session that completed unpaid (credit waits for async_payment_succeeded)', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'unpaid' }, [PPE], P, PPE).reason).toBe('payment_status unpaid');
+  });
+  it('ignores a no_payment_required Pay-per-Event session', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'no_payment_required' }, [PPE], P, PPE).route).toBe('ignore');
+  });
+  it('ignores Pay-per-Event metadata when the line items are only the check-in product', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, [P], P, PPE).route).toBe('ignore');
+  });
+  it('ignores Pay-per-Event when its product id is empty', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, [''], P, '').route).toBe('ignore');
+  });
+  it('a check-in session never routes perevent, even with plan=perevent and the Pay-per-Event product', () => {
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', plan: 'perevent', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, [PPE], P, PPE).route).toBe('ignore');
+  });
   it('TEST_CAP is 25', () => { expect(TEST_CAP).toBe(25); });
 });
 

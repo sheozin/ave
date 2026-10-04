@@ -4,6 +4,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }        from '../_shared/stripe.ts'
+import { routeCheckoutSession } from '../_shared/checkin-policy.ts'
 
 // Types for Supabase client
 type SupabaseClient = ReturnType<typeof adminClient>
@@ -28,6 +29,11 @@ const CUEDECK_PRODUCTS = new Set([
   'prod_U7KgJwoWMsbmzN', // CueDeck Pro
   'prod_U7KZqMU9oG4QWD', // CueDeck Pay-per-Event
 ])
+const PEREVENT_PRODUCT_ID = 'prod_U7KZqMU9oG4QWD'
+// Check-in product id comes from the secret so it is not hardcoded twice.
+// Empty means every check-in session routes to 'ignore' (logged loudly below).
+const CHECKIN_PRODUCT_ID = Deno.env.get('CHECKIN_PRODUCT_ID') || ''
+if (CHECKIN_PRODUCT_ID) CUEDECK_PRODUCTS.add(CHECKIN_PRODUCT_ID)
 
 function isCueDeckSubscription(subscription: Record<string, unknown> | null | undefined): boolean {
   const items = (subscription?.items as { data?: Record<string, unknown>[] } | undefined)?.data
@@ -189,8 +195,51 @@ async function captureInvoice(
   }
 }
 
+// ── Check-in / Pay-per-Event helpers ───────────────────────
+// Product ids on a Checkout Session's line items. Throws on a Stripe error;
+// the caller turns that into a 500 so Stripe retries.
+async function sessionProductIds(st: StripeClient, sessionId: string): Promise<string[]> {
+  const items = await st.checkout.sessions.listLineItems(sessionId, { limit: 10, expand: ['data.price.product'] })
+  // deno-lint-ignore no-explicit-any
+  return items.data.map((li: Record<string, any>) =>
+    typeof li.price?.product === 'string' ? li.price.product : li.price?.product?.id).filter(Boolean)
+}
+
+// Records a routed, paid check-in session. Returns false when the RPC
+// failed, so the caller answers 500 and Stripe retries.
+async function handleCheckinPaid(sb: SupabaseClient, session: Record<string, unknown>): Promise<boolean> {
+  const md = session.metadata as Record<string, string>
+  const details = session.total_details as Record<string, number> | undefined
+  const { data, error } = await sb.rpc('checkin_mark_paid', {
+    p_event_id: md.event_id,
+    p_buyer_id: md.buyer_id,
+    p_session_id: session.id as string,
+    p_payment_intent: (session.payment_intent as string) ?? null,
+    p_customer: (session.customer as string) ?? null,
+    p_amount_total: (session.amount_total as number) ?? null,
+    p_amount_tax: details?.amount_tax ?? null,
+    p_currency: (session.currency as string) ?? null,
+  })
+  if (error) {
+    console.error('stripe-webhook: checkin_mark_paid failed for', session.id, error.message)
+    return false
+  }
+  console.log('stripe-webhook: check-in', md.event_id, '->', data)
+  return true
+}
+
+async function isCheckinPaymentIntent(sb: SupabaseClient, pi: string): Promise<boolean> {
+  const { data, error } = await sb.from('leod_checkin_purchases').select('id').eq('stripe_payment_intent_id', pi).maybeSingle()
+  if (error) { console.error('stripe-webhook: purchase lookup failed', error.message); return false }
+  return !!data
+}
+
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
+  // Non-200 makes Stripe retry the delivery. Used only where a paid
+  // check-in or Pay-per-Event credit would otherwise be lost.
+  const retry = (msg: string) =>
+    new Response(JSON.stringify({ error: msg }), { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } })
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: cors })
@@ -236,36 +285,91 @@ Deno.serve(async (req) => {
   try {
     switch (event.type) {
 
-      case 'checkout.session.completed': {
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded': {
         const session = event.data.object
-        const directorId = session.client_reference_id || session.metadata?.director_id
-        const plan = session.metadata?.plan
+        const isCheckinMd = session.metadata?.product === 'checkin'
+        const isPereventMd = session.metadata?.plan === 'perevent'
+        // Subscriptions are set up by customer.subscription.created.
+        if (!isCheckinMd && !isPereventMd) break
 
-        if (!directorId) break
-
-        if (plan === 'perevent') {
-          // Increment per-event credits
-          await sb.rpc('increment_events_purchased', { p_director_id: directorId }).catch(async () => {
-            // Fallback: direct update
-            const { data } = await sb.from('leod_subscriptions')
-              .select('events_purchased').eq('director_id', directorId).single()
-            if (data) {
-              await sb.from('leod_subscriptions')
-                .update({ events_purchased: data.events_purchased + 1, plan: 'perevent', status: 'active' })
-                .eq('director_id', directorId)
-            }
-          })
-
-          // Log activity
-          await sb.rpc('log_activity', {
-            p_user_id: directorId,
-            p_action: 'event_purchased',
-            p_category: 'billing',
-            p_description: 'Purchased per-event credit',
-            p_metadata: { plan: 'perevent', checkout_session_id: session.id },
-          }).catch(() => {})
+        if (isCheckinMd && !CHECKIN_PRODUCT_ID) {
+          console.error('stripe-webhook: CHECKIN_PRODUCT_ID is not set; check-in session', session.id, 'will be IGNORED and the event will NOT go live')
         }
-        // For subscriptions, the subscription.created event handles setup
+
+        // The outer catch answers 200 to stop retries. A paid session that
+        // failed to record must be retried, so exceptions here (a Stripe
+        // line-item fetch, a network blip) become a 500.
+        let productIds: string[]
+        try {
+          productIds = await sessionProductIds(st, session.id)
+        } catch (e) {
+          console.error('stripe-webhook: line-item fetch failed for', session.id, (e as Error).message)
+          return retry('line items unavailable')
+        }
+
+        const r = routeCheckoutSession(session, productIds, CHECKIN_PRODUCT_ID, PEREVENT_PRODUCT_ID)
+        if (r.route === 'ignore') {
+          console.log('stripe-webhook: session', session.id, 'ignored:', r.reason)
+          break
+        }
+
+        if (r.route === 'checkin') {
+          try {
+            if (!(await handleCheckinPaid(sb, session))) return retry('checkin_mark_paid failed')
+          } catch (e) {
+            console.error('stripe-webhook: check-in handling threw for', session.id, (e as Error).message)
+            return retry('check-in handling failed')
+          }
+          break
+        }
+
+        // r.route === 'perevent': the router has confirmed payment_status
+        // 'paid' and the Pay-per-Event product, so either event type is safe.
+        const directorId = session.client_reference_id || session.metadata?.director_id
+        if (!directorId) {
+          console.error('stripe-webhook: paid Pay-per-Event session', session.id, 'has no director id; credit not recorded')
+          break
+        }
+
+        // supabase-js resolves errors, it never rejects, so the old .catch
+        // fallback could not run; an error now fails the delivery so Stripe retries.
+        const { error: incErr } = await sb.rpc('increment_events_purchased', { p_director_id: directorId })
+        if (incErr) {
+          console.error('stripe-webhook: increment_events_purchased failed for', directorId, incErr.message)
+          return retry('credit not recorded')
+        }
+
+        const { error: logErr } = await sb.rpc('log_activity', {
+          p_user_id: directorId,
+          p_action: 'event_purchased',
+          p_category: 'billing',
+          p_description: 'Purchased per-event credit',
+          p_metadata: { plan: 'perevent', checkout_session_id: session.id },
+        })
+        if (logErr) console.error('stripe-webhook: log_activity failed', logErr.message)
+        break
+      }
+
+      case 'charge.refunded': {
+        const charge = event.data.object
+        const pi = charge.payment_intent as string | null
+        if (!pi) break
+        let isCheckin = charge.metadata?.product === 'checkin'
+        if (!isCheckin) isCheckin = await isCheckinPaymentIntent(sb, pi)
+        if (!isCheckin) break
+        // Partial refunds keep the event live; only a full refund reverts it.
+        if (charge.amount_refunded < charge.amount) {
+          console.log('stripe-webhook: partial check-in refund', pi, charge.amount_refunded, 'of', charge.amount, '- event stays as is')
+          break
+        }
+        const { data, error } = await sb.rpc('checkin_mark_refunded', { p_payment_intent: pi })
+        if (error) {
+          console.error('stripe-webhook: checkin_mark_refunded failed for', pi, error.message)
+          return retry('refund not recorded')
+        }
+        // 'test' | 'refunded_still_live' | 'not_found' | 'already_refunded'
+        console.log('stripe-webhook: check-in refund', pi, '->', data)
         break
       }
 
