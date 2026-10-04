@@ -69,3 +69,9 @@ export function isWithinWindow(scannedAtIso, eventDate, timeZone) {
   if (!w) return false;
   return t >= w.opensAt.getTime() && t < w.closesAt.getTime();
 }
+
+// Going live is pointless once the window has closed (or cannot be computed).
+export function isWindowClosed(eventDate, timeZone, now = new Date()) {
+  const w = checkinWindow(eventDate, timeZone);
+  return !w || now.getTime() >= w.closesAt.getTime();
+}

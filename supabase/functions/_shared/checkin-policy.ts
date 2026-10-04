@@ -72,6 +72,13 @@ export function isWithinWindow(scannedAtIso: string, eventDate: string, timeZone
   return t >= w.opensAt.getTime() && t < w.closesAt.getTime()
 }
 
+// Going live is pointless once the window has closed (or cannot be
+// computed): nothing could be checked in. Mirrored in checkin-window.js.
+export function isWindowClosed(eventDate: string, timeZone: string, now: Date = new Date()): boolean {
+  const w = checkinWindow(eventDate, timeZone)
+  return !w || now.getTime() >= w.closesAt.getTime()
+}
+
 export function routeCheckoutSession(
   s: unknown,
   lineItemProductIds: unknown,
@@ -125,10 +132,14 @@ export function routeCheckoutSession(
 // configured price, once, in its currency. amount_subtotal is before tax
 // and discounts, so automatic tax does not break the match.
 export function checkinAmountMatches(
-  session: { amount_subtotal?: unknown; currency?: unknown },
+  session: { amount_subtotal?: unknown; currency?: unknown; total_details?: { amount_discount?: unknown } | null },
   price: { unit_amount?: unknown; currency?: unknown },
 ): boolean {
   if (typeof price.unit_amount !== 'number' || typeof price.currency !== 'string') return false
+  // amount_subtotal is before discounts, so a discounted session would pass
+  // the subtotal check while paying less. No discount is ever offered here.
+  const discount = session.total_details?.amount_discount
+  if (discount !== undefined && discount !== null && discount !== 0) return false
   return session.amount_subtotal === price.unit_amount * 1 && session.currency === price.currency
 }
 

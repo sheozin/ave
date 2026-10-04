@@ -247,6 +247,20 @@ describe('checkinAmountMatches', () => {
   it('rejects when the price has no unit_amount', () => {
     expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur' }, { unit_amount: null, currency: 'eur' })).toBe(false);
   });
+  it('accepts an explicit zero discount', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: { amount_discount: 0 } }, price)).toBe(true);
+  });
+  it('accepts total_details without amount_discount, or null total_details', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: {} }, price)).toBe(true);
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: null }, price)).toBe(true);
+  });
+  it('rejects a discounted session even when the subtotal matches', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: { amount_discount: 24900 } }, price)).toBe(false);
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: { amount_discount: 1 } }, price)).toBe(false);
+  });
+  it('rejects a non-numeric discount', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur', total_details: { amount_discount: '0' } }, price)).toBe(false);
+  });
 });
 
 describe('classifyPurchaseLookup', () => {

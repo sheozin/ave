@@ -62,4 +62,19 @@ describe('checkin-window.js', () => {
   it.each(SCANS)('isWithinWindow(%s, %s, %s) agrees with the server', (t, d, tz) => {
     expect(browser.isWithinWindow(t, d, tz)).toBe(server.isWithinWindow(t, d, tz));
   });
+  it('isWindowClosed: closed at the exact close instant, open just before, closed when uncomputable', () => {
+    // Warsaw 2026-10-26 closes 2026-10-28T23:00:00Z.
+    expect(browser.isWindowClosed('2026-10-26', 'Europe/Warsaw', new Date('2026-10-28T22:59:59.999Z'))).toBe(false);
+    expect(browser.isWindowClosed('2026-10-26', 'Europe/Warsaw', new Date('2026-10-28T23:00:00.000Z'))).toBe(true);
+    expect(browser.isWindowClosed('2026-10-26', 'Europe/Warsaw', new Date('2026-09-01T00:00:00.000Z'))).toBe(false);
+    expect(browser.isWindowClosed('2026-02-31', 'Europe/Warsaw')).toBe(true);
+    expect(browser.isWindowClosed('2026-10-26', 'Not/AZone')).toBe(true);
+  });
+  it.each([
+    ...WINDOWS.map(([d, tz]) => [d, tz, '2026-10-28T22:59:59.999Z'] as [string, string, string]),
+    ...WINDOWS.map(([d, tz]) => [d, tz, '2026-10-28T23:00:00.000Z'] as [string, string, string]),
+    ...WINDOWS.map(([d, tz]) => [d, tz, '2026-11-23T00:00:00.000Z'] as [string, string, string]),
+  ])('isWindowClosed(%s, %s, %s) agrees with the server', (d, tz, now) => {
+    expect(browser.isWindowClosed(d, tz, new Date(now))).toBe(server.isWindowClosed(d, tz, new Date(now)));
+  });
 });
