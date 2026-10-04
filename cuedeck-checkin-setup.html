@@ -69,6 +69,7 @@
 </nav>
 <div class="banner" id="banner" hidden><span id="banner-t"></span><button class="btn btn-p" id="banner-go" style="height:32px">Go live</button></div>
 <div class="err" id="page-err" style="margin:16px 28px"></div>
+<p class="small" id="page-loading" style="margin:40px auto;text-align:center">Loading your event…</p>
 
 <div class="layout" id="layout" hidden>
   <aside class="steps">
@@ -589,9 +590,15 @@ async function waitForLive() {
   if (!session) { location.replace('/checkin'); return; }
   try {
     loadPrice();
+    // Started together: the staff list is an Edge Function call (slow when
+    // cold) and does not depend on the event read. The function checks the
+    // caller's role itself, so starting it first leaks nothing.
+    const staff = loadStaff();
+    staff.catch(() => {});
     if (!(await loadEvent())) return;
-    await Promise.all([loadAttendees(), loadStaff()]);
-  } catch (e) { $('page-err').textContent = 'Could not load this event: ' + e.message; return; }
+    await Promise.all([loadAttendees(), staff]);
+  } catch (e) { $('page-loading').hidden = true; $('page-err').textContent = 'Could not load this event: ' + e.message; return; }
+  $('page-loading').hidden = true;
   $('layout').hidden = false; renderChrome();
   if (params.get('paid') === '1' && !isLive() && !isComp()) { await waitForLive(); return; }
   const step = params.get('step');
