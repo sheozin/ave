@@ -33,13 +33,25 @@ export function effectiveRole(opRole, isOwner) {
 }
 
 export function can(role, perm) {
-  return !!role && (GRANTS[perm] || []).includes(role);
+  return !!role && Object.hasOwn(GRANTS, perm) && GRANTS[perm].includes(role);
 }
 
 export function invitableRoles(role) {
   if (can(role, 'invite_any')) return [...GRANT_ROLES];
   if (can(role, 'invite_crew')) return ['crew'];
   return [];
+}
+
+export function removeVerdict(caller, targetId, ownerId, ops) {
+  if (!can(caller, 'invite_crew')) return { ok: false, code: 'forbidden' };
+  const row = ops.find(o => o.user_id === targetId);
+  if (!row) return { ok: false, code: 'not_found' };
+  if (targetId === ownerId) return { ok: false, code: 'event_owner' };
+  if (!can(caller, 'invite_any') && row.role !== 'crew') return { ok: false, code: 'forbidden' };
+  if (row.role === 'organizer' && ops.filter(o => o.role === 'organizer').length <= 1) {
+    return { ok: false, code: 'last_organizer' };
+  }
+  return { ok: true };
 }
 
 const LABELS = { owner: 'Owner', organizer: 'Organizer', lead: 'Desk lead', crew: 'Desk staff', viewer: 'Viewer' };
@@ -77,7 +89,10 @@ export function ownCheckins(outbox, userId, eventId) {
 export function mayUndo(role, attendee, own) {
   if (!attendee || !attendee.checked_in_at) return false;
   if (can(role, 'undo_any')) return true;
-  return can(role, 'desk') && !!own && own.get(attendee.id) === attendee.checked_in_at;
+  if (!can(role, 'desk') || !own) return false;
+  const mine = Date.parse(own.get(attendee.id));
+  const current = Date.parse(attendee.checked_in_at);
+  return !Number.isNaN(mine) && !Number.isNaN(current) && mine === current;
 }
 
 // Complimentary status is read from the owner's account (ruling 3), so a

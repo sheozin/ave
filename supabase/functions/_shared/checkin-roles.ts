@@ -46,7 +46,7 @@ export function effectiveRole(opRole: string | null | undefined, isOwner: boolea
 }
 
 export function can(role: CheckinRole | null | undefined, perm: Permission): boolean {
-  return !!role && (GRANTS[perm] ?? []).includes(role)
+  return !!role && Object.hasOwn(GRANTS, perm) && GRANTS[perm].includes(role)
 }
 
 export function invitableRoles(role: CheckinRole | null | undefined): GrantRole[] {
@@ -104,5 +104,5 @@ export async function loadCallerRole(sb: any, eventId: string, userId: string): 
     .select('role').eq('event_id', eventId).eq('user_id', userId).maybeSingle()
   if (opErr) return { role: null, ownerId: null, error: opErr.message }
   const ownerId: string | null = ev.created_by ?? null
-  return { role: effectiveRole(op?.role ?? null, ownerId !== null && ownerId === userId), ownerId, error: null }
+  return { role: effectiveRole(op?.role === 'owner' ? null : (op?.role ?? null), ownerId !== null && ownerId === userId), ownerId, error: null }
 }

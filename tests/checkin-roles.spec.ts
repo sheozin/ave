@@ -7,6 +7,7 @@ import * as server from '../supabase/functions/_shared/checkin-roles.ts';
 import * as browser from '../checkin-roles.js';
 
 type Role = server.CheckinRole;
+const EV_ = '11111111-1111-4111-8111-111111111111';
 const ROLES: Role[] = ['owner', 'organizer', 'lead', 'crew', 'viewer'];
 
 // One row per line of the approved table, plus the three screen-only permissions.
@@ -47,6 +48,26 @@ describe('permission table', () => {
 });
 
 describe('browser copy agrees with the server', () => {
+  it('shares tables', () => {
+    expect(browser.GRANTS).toEqual(server.GRANTS);
+    expect(browser.ROLES).toEqual(server.ROLES);
+    expect(browser.GRANT_ROLES).toEqual(server.GRANT_ROLES);
+  });
+  it.each([EV_, '', 'nope', null, 5, 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA'])('isUuid(%s)', (v) => {
+    expect(browser.isUuid(v)).toBe(server.isUuid(v));
+  });
+  it.each(['owner', 'organizer', 'lead', 'crew', 'viewer', null] as (Role | null)[])('removeVerdict as %s', (caller) => {
+    const ops = [{ user_id: 'o', role: 'organizer' }, { user_id: 'c', role: 'crew' }, { user_id: 'l', role: 'lead' }];
+    for (const t of ['o', 'c', 'l', 'ghost']) {
+      expect(browser.removeVerdict(caller, t, 'o', ops)).toEqual(server.removeVerdict(caller, t, 'o', ops));
+    }
+  });
+  it('can() ignores inherited property names', () => {
+    for (const k of ['constructor', '__proto__', 'toString']) {
+      expect(server.can('organizer', k as server.Permission)).toBe(false);
+      expect(browser.can('organizer', k)).toBe(false);
+    }
+  });
   for (const [perm] of TABLE) {
     for (const role of [...ROLES, null, 'api_consumer']) {
       it(`can(${role}, ${perm})`, () => {
@@ -154,6 +175,10 @@ describe('loadCallerRole', () => {
     const sb = fakeSb({ leod_events: { data: { created_by: 'someone' }, error: null }, leod_checkin_operators: { data: { role: 'lead' }, error: null } });
     expect(await server.loadCallerRole(sb, EV, ME)).toEqual({ role: 'lead', ownerId: 'someone', error: null });
   });
+  it('an operator row saying owner does not make a non-creator owner', async () => {
+    const sb = fakeSb({ leod_events: { data: { created_by: 'someone' }, error: null }, leod_checkin_operators: { data: { role: 'owner' }, error: null } });
+    expect((await server.loadCallerRole(sb, EV, ME)).role).toBeNull();
+  });
   it('no row means no role', async () => {
     const sb = fakeSb({ leod_events: { data: { created_by: 'someone' }, error: null } });
     expect((await server.loadCallerRole(sb, EV, ME)).role).toBeNull();
@@ -195,6 +220,11 @@ describe('ownCheckins and mayUndo (desk, ruling 8)', () => {
   it('desk staff undo their own check-in only', () => {
     expect(browser.mayUndo('crew', { id: 'p1', checked_in_at: T }, own)).toBe(true);
     expect(browser.mayUndo('crew', { id: 'p2', checked_in_at: T }, own)).toBe(false);
+  });
+  it('matches the same instant written as PostgREST text', () => {
+    expect(browser.mayUndo('crew', { id: 'p1', checked_in_at: '2026-10-18T08:00:00+00:00' }, own)).toBe(true);
+    expect(browser.mayUndo('crew', { id: 'p1', checked_in_at: '2026-10-18T08:00:01+00:00' }, own)).toBe(false);
+    expect(browser.mayUndo('crew', { id: 'p1', checked_in_at: 'garbage' }, own)).toBe(false);
   });
   it('desk staff cannot undo once someone else checked the person in again', () => {
     expect(browser.mayUndo('crew', { id: 'p1', checked_in_at: '2026-10-18T10:00:00.000Z' }, own)).toBe(false);
