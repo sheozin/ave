@@ -11,7 +11,7 @@
 // 3. cdPasswordScore: the sign-up strength meter. Supabase enforces the real
 //    rules (length, leaked-password check) server side.
 (function () {
-  var TURNSTILE_SITE_KEY = '';
+  var TURNSTILE_SITE_KEY = '0x4AAAAAAFNjmmDszwstOkPo';
   var PASSWORD_MIN = 10;
   var loading = null;
 

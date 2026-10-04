@@ -50,11 +50,10 @@ describe('message', () => {
   });
 });
 
-describe('mount without a site key', () => {
-  it('yields no token, so requests pass while CAPTCHA is off on the server', async () => {
-    const h = cdAuth.mount({});
-    await expect(h.token()).resolves.toBeUndefined();
-    expect(() => h.reset()).not.toThrow();
+describe('mount', () => {
+  it('has a real Turnstile site key: an empty one silently sends no token', () => {
+    const src = readFileSync(new URL('../cuedeck-auth.js', import.meta.url), 'utf8');
+    expect(src.match(/var TURNSTILE_SITE_KEY = '([^']*)';/)?.[1]).toMatch(/^0x4[A-Za-z0-9_-]{18,}$/);
   });
 });
 
