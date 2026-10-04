@@ -61,3 +61,7 @@ cuedeck-marketing/
 
 # Microsoft Office lock files
 ~$*
+
+**/.auth-state.json
+**/*storage-state*.json
+**/*.auth.json

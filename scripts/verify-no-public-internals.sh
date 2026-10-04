@@ -10,6 +10,7 @@ MUST_404=(
   supabase/migrations/061_security_hardening.sql
   docs/outreach/CueDeck_Outreach_Messages_v2.docx
   tests/checkin-policy.spec.ts package.json
+  assets/youtube-branding/.auth-state.json
 )
 MUST_200=(
   / /admin /display /checkin /checkin/desk /cuedeck-console.html /cuedeck-i18n.js
