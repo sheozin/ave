@@ -246,7 +246,9 @@ BEGIN
      AND u.created_at >= p_since - interval '24 hours'
      AND u.created_at <  now()   - interval '24 hours';
 
-  -- Watchers. 15 minutes of grace on top of each job's interval.
+  -- Watchers. 15 minutes of grace on top of each job's interval. Staleness
+  -- is measured from the last 'ok' run, not the last start: a job that
+  -- keeps starting and crashing leaves 'running' rows and must not look ok.
   SELECT count(*)::int INTO v_registered FROM leod_checkin_jobs WHERE active;
 
   SELECT coalesce(jsonb_agg(jsonb_build_object(
@@ -257,9 +259,9 @@ BEGIN
            'last_failure',         r.last_failure,
            'consecutive_failures', r.consecutive_failures,
            'status', CASE
-                       WHEN r.last_start IS NULL
-                         OR r.last_start < now() - j.expected_interval - interval '15 minutes' THEN 'stale'
                        WHEN r.consecutive_failures > 0 THEN 'failing'
+                       WHEN r.last_success IS NULL
+                         OR r.last_success < now() - j.expected_interval - interval '15 minutes' THEN 'stale'
                        ELSE 'ok'
                      END) ORDER BY j.job_name), '[]'::jsonb)
     INTO v_jobs

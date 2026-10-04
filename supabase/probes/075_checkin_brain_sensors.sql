@@ -163,9 +163,10 @@ DO $probe$
 DECLARE
   r JSONB;
   j JSONB;
-  want JSONB := '{"probe_never":"stale","probe_overdue":"stale","probe_failing":"failing","probe_fine":"ok"}';
+  want JSONB := '{"probe_never":"stale","probe_overdue":"stale","probe_failing":"failing","probe_fine":"ok","probe_crashing":"stale"}';
 BEGIN
   INSERT INTO leod_checkin_jobs (job_name, expected_interval) VALUES
+    ('probe_crashing', interval '1 hour'),
     ('probe_never',   interval '1 hour'),
     ('probe_overdue', interval '1 hour'),
     ('probe_failing', interval '1 hour'),
@@ -177,6 +178,10 @@ BEGIN
     ('probe_failing', now() - interval '10 minutes', now(), 'failed'),
     ('probe_fine',    now() - interval '5 minutes',  now(), 'ok'),
     ('probe_rogue',   now() - interval '5 minutes',  now(), 'ok');
+  -- Started fresh but never finished: only 'running' rows, no success.
+  INSERT INTO leod_checkin_job_runs (job_name, started_at, status) VALUES
+    ('probe_crashing', now() - interval '30 minutes', 'running'),
+    ('probe_crashing', now() - interval '5 minutes',  'running');
 
   r := public.checkin_brain_signals(now());
   FOR j IN SELECT * FROM jsonb_array_elements(r->'watchers'->'jobs') LOOP
