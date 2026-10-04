@@ -1165,6 +1165,15 @@ async function refreshTestUsed() {
   const { data, error } = await sb.rpc('checkin_my_events');
   if (error) { console.error('checkin: test usage refresh failed', error); return; }
   const row = (data || []).find(r => r.event_id === S.event.id);
+  // The organizer went live while this desk sat open: drop test mode, the
+  // banner and the TEST watermark on the badge preview.
+  if (row && row.status === 'live') {
+    S.status = 'live';
+    S.testUsed = 0;
+    renderTestBanner();
+    renderParty();
+    return;
+  }
   if (row && typeof row.test_used === 'number') {
     // Plus this desk's check-ins the server has not heard about yet.
     const owed = (await idbGetAll(STORE_OUTBOX))
