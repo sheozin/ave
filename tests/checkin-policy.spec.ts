@@ -2,7 +2,7 @@
 // Imports supabase/functions/_shared/checkin-policy.ts directly.
 // Tests verify validation, fail-closed behavior, and routing logic.
 import { describe, it, expect } from 'vitest';
-import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml } from '../supabase/functions/_shared/checkin-policy.ts';
+import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId } from '../supabase/functions/_shared/checkin-policy.ts';
 
 describe('checkinWindow', () => {
   it('opens at local midnight 7 days before, Warsaw summer (UTC+2)', () => {
@@ -287,5 +287,39 @@ describe('billingAlertEmailHtml', () => {
     const html = billingAlertEmailHtml('orphan_refund', 'u', 'ch_1', {});
     expect(html).toContain('<b>orphan_refund</b>');
     expect(html).toContain('leod_billing_alerts');
+  });
+});
+
+describe('invoiceSubscriptionId', () => {
+  it('basil shape with a string id', () => {
+    expect(invoiceSubscriptionId({ parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } })).toBe('sub_1');
+  });
+  it('basil shape with an expanded subscription object', () => {
+    expect(invoiceSubscriptionId({ parent: { type: 'subscription_details', subscription_details: { subscription: { id: 'sub_2', object: 'subscription' } } } })).toBe('sub_2');
+  });
+  it('legacy shape with a string id', () => {
+    expect(invoiceSubscriptionId({ subscription: 'sub_3' })).toBe('sub_3');
+  });
+  it('legacy shape with an expanded object', () => {
+    expect(invoiceSubscriptionId({ subscription: { id: 'sub_4' } })).toBe('sub_4');
+  });
+  it('prefers the basil location when both are present', () => {
+    expect(invoiceSubscriptionId({ parent: { subscription_details: { subscription: 'sub_new' } }, subscription: 'sub_old' })).toBe('sub_new');
+  });
+  it('one-off invoices are null', () => {
+    expect(invoiceSubscriptionId({ parent: null, subscription: null })).toBeNull();
+    expect(invoiceSubscriptionId({ parent: { type: 'quote_details', quote_details: { quote: 'qt_1' } } })).toBeNull();
+    expect(invoiceSubscriptionId({ parent: { type: 'subscription_details' } })).toBeNull();
+    expect(invoiceSubscriptionId({ parent: { subscription_details: { subscription: '' } } })).toBeNull();
+    expect(invoiceSubscriptionId({})).toBeNull();
+  });
+  it('garbage is null and never throws', () => {
+    expect(invoiceSubscriptionId(null)).toBeNull();
+    expect(invoiceSubscriptionId(undefined)).toBeNull();
+    expect(invoiceSubscriptionId('in_123')).toBeNull();
+    expect(invoiceSubscriptionId(42)).toBeNull();
+    expect(invoiceSubscriptionId({ parent: 'x', subscription: 7 })).toBeNull();
+    expect(invoiceSubscriptionId({ parent: { subscription_details: 'x' } })).toBeNull();
+    expect(invoiceSubscriptionId({ subscription: { id: 5 } })).toBeNull();
   });
 });

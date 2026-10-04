@@ -4,7 +4,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }        from '../_shared/stripe.ts'
-import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, type PurchaseLookup } from '../_shared/checkin-policy.ts'
+import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId, type PurchaseLookup } from '../_shared/checkin-policy.ts'
 import { sendEmail }     from '../_shared/resend.ts'
 
 // Types for Supabase client
@@ -653,13 +653,15 @@ Deno.serve(async (req) => {
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object
-        if (invoice.subscription) {
+        // basil moved invoice.subscription to parent.subscription_details.
+        const subscriptionId = invoiceSubscriptionId(invoice)
+        if (subscriptionId) {
           const { data: failedSub } = await sb.from('leod_subscriptions')
-            .select('director_id, plan').eq('stripe_subscription_id', invoice.subscription).single()
+            .select('director_id, plan').eq('stripe_subscription_id', subscriptionId).single()
 
           await sb.from('leod_subscriptions')
             .update({ status: 'past_due' })
-            .eq('stripe_subscription_id', invoice.subscription)
+            .eq('stripe_subscription_id', subscriptionId)
 
           // Log activity
           if (failedSub?.director_id) {
@@ -678,14 +680,16 @@ Deno.serve(async (req) => {
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object
-        if (invoice.subscription) {
+        // basil moved invoice.subscription to parent.subscription_details.
+        const subscriptionId = invoiceSubscriptionId(invoice)
+        if (subscriptionId) {
           const updateData: Record<string, unknown> = { status: 'active' }
           if (invoice.lines?.data?.[0]?.period?.end) {
             updateData.current_period_end = new Date(invoice.lines.data[0].period.end * 1000).toISOString()
           }
           await sb.from('leod_subscriptions')
             .update(updateData)
-            .eq('stripe_subscription_id', invoice.subscription)
+            .eq('stripe_subscription_id', subscriptionId)
         }
 
         // ── Invoice capture (non-blocking) ──────────────────────
@@ -693,7 +697,7 @@ Deno.serve(async (req) => {
         // invoices only: a one-off check-in purchase already is a Stripe
         // invoice (invoice_creation), and capturing it would issue it a
         // second invoice number.
-        if (invoice.subscription) {
+        if (subscriptionId) {
           try {
             await captureInvoice(sb, st, invoice)
           } catch (invoiceErr) {

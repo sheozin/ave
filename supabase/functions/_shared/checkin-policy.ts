@@ -167,3 +167,30 @@ export function billingAlertEmailHtml(
   return `<p>CueDeck billing alert: <b>${escapeHtml(kind)}</b></p><table>${body}</table>` +
     `<p>Recorded in leod_billing_alerts. Set resolved_at when handled.</p>`
 }
+
+// The subscription an invoice belongs to, across Stripe API versions. From
+// 2025-03-31.basil (what the live CueDeck endpoint delivers) it sits at
+// invoice.parent.subscription_details.subscription; older versions used
+// invoice.subscription. Either may be an id or an expanded object.
+// null means a one-off invoice (or malformed input); never throws.
+export function invoiceSubscriptionId(invoice: unknown): string | null {
+  const idOf = (v: unknown): string | null => {
+    if (typeof v === 'string') return v.length > 0 ? v : null
+    if (v && typeof v === 'object') {
+      const id = (v as Record<string, unknown>).id
+      return typeof id === 'string' && id.length > 0 ? id : null
+    }
+    return null
+  }
+  if (!invoice || typeof invoice !== 'object') return null
+  const inv = invoice as Record<string, unknown>
+  const parent = inv.parent
+  if (parent && typeof parent === 'object') {
+    const details = (parent as Record<string, unknown>).subscription_details
+    if (details && typeof details === 'object') {
+      const id = idOf((details as Record<string, unknown>).subscription)
+      if (id) return id
+    }
+  }
+  return idOf(inv.subscription)
+}
