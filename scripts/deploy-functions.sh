@@ -5,7 +5,7 @@
 set -euo pipefail
 
 PROJ=$(cd "$(dirname "$0")/.." && pwd)
-ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun invite-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair)
+ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun invite-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair checkin-invite-staff)
 FAIL=0
 
 green() { echo "  OK  $1"; }
@@ -26,7 +26,9 @@ echo ""
 echo "-- Deploy --"
 for func in "${DEPLOY_LIST[@]}"; do
   echo "  -> deploying $func..."
-  if supabase functions deploy "$func" --project-ref "sawekpguemzvuvvulfbc" --workdir "$PROJ" 2>&1; then
+  extra=()
+  case "$func" in stripe-webhook|checkin-price|create-checkout-session|customer-portal|send-invoice-email|ai-proxy) extra=(--no-verify-jwt) ;; esac
+  if supabase functions deploy "$func" --project-ref "sawekpguemzvuvvulfbc" --workdir "$PROJ" ${extra[@]+"${extra[@]}"} 2>&1; then
     green "$func deployed"
   else
     red "$func FAILED to deploy"

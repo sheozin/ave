@@ -77,18 +77,44 @@ Deno.serve(async (req) => {
     })
   }
 
-  const opts = (body.entitlements as Record<string, boolean>) || {}
-  const { error: upsertErr } = await sb.from('leod_checkin_entitlements').upsert({
-    event_id,
-    checkin_core: true,
-    multi_point_scanning: !!opts.multi_point_scanning,
-    integration_api: !!opts.integration_api,
-    personalization_station: !!opts.personalization_station,
-    pii_in_api: !!opts.pii_in_api,
-  }, { onConflict: 'event_id' })
+  // Create in test. ON CONFLICT DO NOTHING: an existing row keeps its
+  // status (this function must never move an event to or from live;
+  // only checkin_mark_paid / checkin_mark_refunded do that).
+  const { error: insErr } = await sb.from('leod_checkin_entitlements')
+    .upsert({ event_id, checkin_core: true, status: 'test' }, { onConflict: 'event_id', ignoreDuplicates: true })
+  if (insErr) {
+    return new Response(JSON.stringify({ error: insErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
 
-  if (upsertErr) {
-    return new Response(JSON.stringify({ error: upsertErr.message }), {
+  // Operational settings: what the organizer chose for this event.
+  const s = (body.settings as Record<string, unknown>) || {}
+  const patch: Record<string, boolean> = {}
+  for (const k of ['self_registration', 'kiosk_self_print', 'auto_send_qr_email']) {
+    if (typeof s[k] === 'boolean') patch[k] = s[k] as boolean
+  }
+  // Commercial entitlements: what was bought. Admin only. Before this
+  // change any event owner could switch these on for themselves.
+  const ent = (body.entitlements as Record<string, unknown>) || {}
+  if (isAdmin) {
+    for (const k of ['multi_point_scanning', 'integration_api', 'personalization_station', 'pii_in_api']) {
+      if (typeof ent[k] === 'boolean') patch[k] = ent[k] as boolean
+    }
+  }
+  if (Object.keys(patch).length) {
+    const { error: patchErr } = await sb.from('leod_checkin_entitlements').update(patch).eq('event_id', event_id)
+    if (patchErr) {
+      return new Response(JSON.stringify({ error: patchErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+  }
+
+  const { data: after, error: readErr } = await sb.from('leod_checkin_entitlements')
+    .select('status').eq('event_id', event_id).single()
+  if (readErr || !after) {
+    return new Response(JSON.stringify({ error: readErr?.message || 'Entitlement missing after write' }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -101,10 +127,14 @@ Deno.serve(async (req) => {
     const { error: grantErr } = await sb.from('leod_checkin_operators')
       .upsert({ event_id, user_id: event.created_by, role: 'organizer' },
         { onConflict: 'event_id,user_id' })
-    if (grantErr) console.error('checkin-enable-event: organizer grant failed:', grantErr.message)
+    if (grantErr) {
+      return new Response(JSON.stringify({ error: 'Could not grant organizer: ' + grantErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
-  return new Response(JSON.stringify({ ok: true, event_id }), {
+  return new Response(JSON.stringify({ ok: true, event_id, status: after.status }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })
