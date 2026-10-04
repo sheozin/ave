@@ -391,11 +391,12 @@ Deno.serve(async (req) => {
 
     if (lookupErr) {
       console.error('checkin-self-register: collision lookup failed, device', device.id, lookupErr.code)
-    } else if (existing && event) {
+    } else if (existing && event && !isTest) {
       // To the address ON FILE, never to what was typed. Those are the
       // same string in the ordinary case and different in exactly the
       // case this protects against: someone probing a colleague's
       // address at a public screen.
+      // (test mode: see 5c, no email is sent)
       const results = await sendQrEmailsForAttendees(sb, event, [existing])
       if (results.some(r => r.status === 'error')) {
         console.error('checkin-self-register: collision email failed, device', device.id)
@@ -426,7 +427,12 @@ Deno.serve(async (req) => {
   // own design puts the durable copy in the inbox and the short code
   // on the screen for the walk to the desk. It also keeps the two
   // branches symmetrical: both send exactly one email.
-  if (event && created.email) {
+  // In test mode no email may reach a real inbox: an organizer could
+  // otherwise replay imported guests' emails through a kiosk to get
+  // free QR delivery.
+  if (isTest) {
+    // no email in test mode
+  } else if (event && created.email) {
     const results = await sendQrEmailsForAttendees(sb, event, [created])
     if (results.some(r => r.status === 'error')) {
       console.error('checkin-self-register: registration email failed, device', device.id)

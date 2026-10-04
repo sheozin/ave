@@ -137,3 +137,20 @@ describe('qrSendGate', () => {
   it('live sends', () => { expect(qrSendGate('live', false)).toBe('send_all'); });
   it('live send-to-self still only goes to self', () => { expect(qrSendGate('live', true)).toBe('send_self'); });
 });
+
+// Mirrors checkin-self-register: in test mode neither the registered nor
+// the already-registered path may send an email.
+function kioskShouldEmail(isTest: boolean): boolean { return !isTest; }
+
+// Mirrors the fromName sanitizer in _shared/qr-email.ts.
+function safeFromName(name: string): string {
+  return name.replace(/[<>"\r\n]/g, '').trim().slice(0, 64) || 'CueDeck';
+}
+
+describe('kiosk email gate and fromName sanitizer', () => {
+  it('kiosk does not email in test mode', () => { expect(kioskShouldEmail(true)).toBe(false); });
+  it('kiosk emails in live mode', () => { expect(kioskShouldEmail(false)).toBe(true); });
+  it('strips header-injection characters', () => { expect(safeFromName('Acme <evil@x>\r\n"Q"')).toBe('Acme evil@x Q'); });
+  it('falls back when nothing is left', () => { expect(safeFromName('<>')).toBe('CueDeck'); });
+  it('caps at 64 chars', () => { expect(safeFromName('a'.repeat(100))).toHaveLength(64); });
+});

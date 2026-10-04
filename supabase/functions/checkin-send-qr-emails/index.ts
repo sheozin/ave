@@ -86,6 +86,11 @@ Deno.serve(async (req) => {
   }
 
   if (testToSelf) {
+    if (!user.email_confirmed_at) {
+      return new Response(JSON.stringify({ error: 'Confirm your email address first', code: 'email_unconfirmed' }), {
+        status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
     if (!user.email) {
       return new Response(JSON.stringify({ error: 'Your account has no email address' }), {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
