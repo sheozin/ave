@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check-in Setup</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+.crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
+.crumb a{color:var(--t2);text-decoration:none}.crumb b{color:var(--t1);font-weight:600}
+.banner{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 28px 0;padding:12px 16px;border-radius:12px;background:var(--amsf);border:1px solid var(--ambd);color:var(--am);font-size:13px}
+.banner b{color:#7A4700}
+.layout{display:grid;grid-template-columns:240px 1fr;gap:22px;padding:20px 28px 40px;max-width:1240px;margin:0 auto}
+.steps{background:#fff;border-radius:18px;padding:10px;box-shadow:var(--shadow);align-self:start;position:sticky;top:76px}
+.steps .ttl{padding:10px 12px 6px}.steps .ttl h3{margin:0;font-size:15px;letter-spacing:-.2px;overflow-wrap:anywhere}.steps .ttl p{margin:2px 0 0;font-size:12px;color:var(--t2)}
+.st{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;font-size:13.5px;font-weight:500;border:0;background:none;width:100%;text-align:left;cursor:pointer;color:var(--t2)}
+.st .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:11px;font-weight:700;border:1.5px solid var(--bd2);color:var(--t3)}
+.st.done{color:var(--t1)}.st.done .dot{border:0;background:var(--gnsf);color:var(--gn)}
+.st[aria-current="step"]{background:var(--acsf);color:var(--ac);font-weight:600}.st[aria-current="step"] .dot{border:0;background:var(--ac);color:#fff}
+.st small{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:500}
+.st.golive{margin-top:6px;border-top:1px solid #F0F0F3;border-radius:0 0 11px 11px;padding-top:14px;color:var(--t1)}
+.st.golive .dot{border:0;background:var(--t1);color:#fff}
+.panel{background:#fff;border-radius:18px;padding:24px;box-shadow:var(--shadow);min-width:0}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.ph h2{margin:0 0 4px;font-size:22px;letter-spacing:-.6px}.ph p{margin:0;font-size:13.5px;color:var(--t2)}
+.tools{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.search{flex:1;min-width:200px;height:36px;border:1px solid var(--bd2);border-radius:10px;background:var(--wm);padding:0 12px;font-size:13px}
+.chip{height:36px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--t1);color:#fff}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:10px;border-bottom:1px solid #F0F0F3}
+.tbl td{padding:12px 10px;border-bottom:1px solid #F5F5F7;vertical-align:top}
+.nm{font-weight:600}.em{color:var(--t2);font-size:12px;overflow-wrap:anywhere}
+.tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.t-sent{background:var(--acsf);color:var(--ac)}.t-wait{background:var(--pg);color:var(--t2)}.t-in{background:var(--gnsf);color:var(--gn)}.t-test{background:var(--amsf);color:var(--am)}
+.foot{display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12.5px;color:var(--t2);flex-wrap:wrap}
+.drop{margin-top:18px;border:1.5px dashed var(--bd2);border-radius:14px;padding:18px;display:flex;align-items:center;gap:14px;background:var(--wm);cursor:pointer}
+.drop.over{border-color:var(--ac);background:var(--acsf)}
+.drop b{font-size:13.5px}.drop p{margin:2px 0 0;font-size:12.5px;color:var(--t2)}
+.preview{margin-top:16px;border:1px solid var(--bd);border-radius:14px;padding:16px}
+.preview .sum{display:flex;gap:18px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
+.toggle{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #F5F5F7}
+.toggle b{font-size:14px}.toggle p{margin:3px 0 0;font-size:12.5px;color:var(--t2);max-width:520px}
+.sw{position:relative;width:44px;height:26px;flex:none}
+.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;border-radius:26px;background:var(--bd2);transition:.15s;cursor:pointer}
+.sw span::after{content:"";position:absolute;width:22px;height:22px;left:2px;top:2px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.15s}
+.sw input:checked + span{background:var(--gn)}.sw input:checked + span::after{transform:translateX(18px)}
+.gl{display:grid;grid-template-columns:1.25fr 1fr;gap:18px}
+.inc{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin:18px 0 20px}
+.inc div{display:flex;gap:9px;font-size:13px;line-height:1.4}.inc svg{flex:none;color:var(--gn);margin-top:1px}
+.facts{border:1px solid var(--bd);border-radius:14px;overflow:hidden;font-size:13px}
+.facts .r{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid #F0F0F3}.facts .r:last-child{border:0}
+.facts .r span:first-child{color:var(--t2)}.facts .r b{font-weight:600;text-align:right}
+.bigprice{display:flex;align-items:baseline;gap:8px;margin:4px 0}.bigprice b{font-size:34px;letter-spacing:-1px}.bigprice span{color:var(--t2);font-size:13px}
+.fine{font-size:12px;color:var(--t2);line-height:1.5;text-align:left;margin-top:0}
+.center{text-align:center}
+@media (max-width:900px){.layout{grid-template-columns:1fr;padding:16px}.steps{position:static}.gl,.inc{grid-template-columns:1fr}.banner{margin:16px 16px 0}.tbl .hide-sm{display:none}}
+#page-err:empty{display:none}
+@media (max-width:600px){#f-inv{grid-template-columns:1fr!important}.nav{padding:14px 16px}.crumb{display:none}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
+  <div class="nav-r"><a class="btn btn-s" id="desk-link" href="#">Try the desk</a></div>
+</nav>
+<div class="banner" id="banner" hidden><span id="banner-t"></span><button class="btn btn-p" id="banner-go" style="height:32px">Go live</button></div>
+<div class="err" id="page-err" style="margin:16px 28px"></div>
+
+<div class="layout" id="layout" hidden>
+  <aside class="steps">
+    <div class="ttl"><h3 id="side-name"></h3><p id="side-meta"></p></div>
+    <button class="st" data-step="details"><span class="dot">1</span>Event details</button>
+    <button class="st" data-step="attendees"><span class="dot">2</span>Attendees<small id="n-att"></small></button>
+    <button class="st" data-step="staff"><span class="dot">3</span>Desk staff<small id="n-staff"></small></button>
+    <button class="st" data-step="kiosk"><span class="dot">4</span>Kiosk &amp; badges</button>
+    <button class="st" data-step="qr"><span class="dot">5</span>QR emails</button>
+    <button class="st golive" data-step="golive"><span class="dot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span id="gl-rail">Go live</span><small id="gl-rail-price" data-price></small></button>
+  </aside>
+
+  <section class="panel" id="p-details" hidden>
+    <div class="ph"><div><h2>Event details</h2><p id="det-note">Shown on the desk, the kiosk and in QR emails.</p></div></div>
+    <form id="f-det">
+      <div class="field"><label for="d-name">Event name</label><input id="d-name" required maxlength="160"></div>
+      <div class="row2">
+        <div class="field"><label for="d-date">Date</label><input id="d-date" type="date" required></div>
+        <div class="field"><label for="d-tz">Timezone</label><select id="d-tz"></select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="d-start">Starts</label><input id="d-start" type="time" required></div>
+        <div class="field"><label for="d-end">Ends</label><input id="d-end" type="time" required></div>
+      </div>
+      <div class="field"><label for="d-venue">Venue</label><input id="d-venue" maxlength="160"></div>
+      <button class="btn btn-p" id="d-save">Save</button><span class="ok" id="d-ok"></span>
+      <div class="err" id="d-err"></div>
+    </form>
+  </section>
+
+  <section class="panel" id="p-attendees" hidden>
+    <div class="ph">
+      <div><h2>Attendees</h2><p id="att-sub"></p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s" id="att-export">Export CSV</button><button class="btn btn-s" id="att-add">Add person</button><button class="btn btn-p" id="att-import">Import CSV</button></div>
+    </div>
+    <div class="tools">
+      <input class="search" id="att-q" placeholder="Search name, email or company" autocomplete="off">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="noemail" aria-pressed="false">No email</button>
+      <button class="chip" data-f="in" aria-pressed="false">Checked in</button>
+    </div>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Name</th><th class="hide-sm">Company</th><th class="hide-sm">Ticket</th><th>QR email</th><th>Status</th><th></th></tr></thead><tbody id="att-body"></tbody></table></div>
+    <div class="foot"><span id="att-count"></span></div>
+    <label class="drop" id="drop"><input type="file" id="csv-file" accept=".csv,text/csv" hidden>
+      <div><b>Drop a CSV to add people</b><p>You'll see who will be added, updated or skipped before anything is saved. Columns: first name, last name, email, company, ticket type.</p></div></label>
+    <div class="preview" id="imp-prev" hidden></div>
+    <div class="err" id="att-err"></div>
+  </section>
+
+  <section class="panel" id="p-staff" hidden>
+    <div class="ph"><div><h2>Desk staff</h2><p>Desk staff can check people in and print badges. Co-organizers can also change setup.</p></div></div>
+    <form id="f-inv" class="row2" style="align-items:end;grid-template-columns:2fr 1fr auto;gap:10px">
+      <div class="field"><label for="inv-email">Email</label><input id="inv-email" type="email" required></div>
+      <div class="field"><label for="inv-role">Role</label><select id="inv-role"><option value="crew">Desk staff</option><option value="organizer">Co-organizer</option></select></div>
+      <div class="field"><button class="btn btn-p" id="inv-btn">Invite</button></div>
+    </form>
+    <div class="err" id="inv-err"></div><div class="ok" id="inv-ok"></div>
+    <table class="tbl" style="margin-top:12px"><thead><tr><th>Person</th><th>Role</th><th></th></tr></thead><tbody id="staff-body"></tbody></table>
+  </section>
+
+  <section class="panel" id="p-kiosk" hidden>
+    <div class="ph"><div><h2>Kiosk &amp; badges</h2><p>How walk-ins and badges work at this event.</p></div></div>
+    <div class="toggle"><div><b>Self-registration kiosk</b><p>Walk-ins can register themselves on a paired tablet. Pair one from the desk with "Set up a kiosk".</p></div><label class="sw"><input type="checkbox" data-set="self_registration"><span></span></label></div>
+    <div class="toggle"><div><b>Kiosk prints badges</b><p>Print a badge straight after a walk-in registers at the kiosk.</p></div><label class="sw"><input type="checkbox" data-set="kiosk_self_print"><span></span></label></div>
+    <div class="toggle"><div><b>Email QR codes on import</b><p>New guests get their QR code as soon as they are imported. Only once the event is live.</p></div><label class="sw"><input type="checkbox" data-set="auto_send_qr_email"><span></span></label></div>
+    <div class="err" id="set-err"></div>
+  </section>
+
+  <section class="panel" id="p-qr" hidden>
+    <div class="ph"><div><h2>QR emails</h2><p id="qr-sub"></p></div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-s" id="qr-self">Send a test to myself</button><button class="btn btn-p" id="qr-all" hidden></button></div>
+    <div class="ok" id="qr-ok"></div><div class="err" id="qr-err"></div>
+  </section>
+
+  <section id="p-golive" hidden>
+    <div class="gl">
+      <div class="panel">
+        <h2 style="margin:0 0 4px;font-size:22px;letter-spacing:-.6px" id="gl-h">Go live</h2>
+        <p style="margin:0;color:var(--t2);font-size:13.5px" id="gl-sub"></p>
+        <div class="inc">
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Unlimited attendees and desks</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>QR code email to every guest</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Badge printing at the desk</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Self-registration kiosk</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Works offline at the venue</div>
+          <div><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Attendance export afterwards</div>
+        </div>
+        <div class="facts" id="gl-facts"></div>
+      </div>
+      <div class="panel" id="gl-pay">
+        <div class="bigprice"><b data-price></b><span>one payment, this event</span></div>
+        <p class="fine" style="margin:0 0 16px">Excl. VAT. Tax is calculated at checkout from your billing address, and you can add a VAT ID. You'll get an invoice by email.</p>
+        <button class="btn btn-p" style="width:100%;height:42px" id="gl-btn">Continue to secure payment</button>
+        <p class="fine center" style="margin-top:10px">Payment handled by Stripe</p>
+        <div class="err" id="gl-err"></div>
+      </div>
+      <div class="panel center" id="gl-comp" hidden>
+        <h3 style="margin:8px 0">Included</h3>
+        <p class="fine center">Check-in is included with your account.</p>
+        <button class="btn btn-p" id="gl-comp-btn" style="margin-top:14px" hidden>Turn on live check-in</button>
+        <div class="err" id="gl-comp-err"></div>
+      </div>
+      <div class="panel center" id="gl-wait" hidden><h3 style="margin:8px 0">Confirming your payment…</h3><p class="fine" id="gl-wait-t">This usually takes a few seconds.</p></div>
+      <div class="panel center" id="gl-done" hidden>
+        <div style="width:58px;height:58px;border-radius:50%;background:var(--gnsf);display:grid;place-items:center;margin:0 auto 14px;color:var(--gn)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <h3 style="margin:0 0 6px">You're live</h3>
+        <p class="fine" id="gl-done-t"></p>
+        <div style="display:flex;gap:8px;justify-content:center;margin-top:14px"><button class="btn btn-p" id="gl-qr">Send QR emails</button><a class="btn btn-s" id="gl-desk" href="#">Open desk</a></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<dialog id="dlg-add">
+  <form id="f-add" method="dialog">
+    <h3 style="margin:0 0 14px">Add a person</h3>
+    <div class="row2"><div class="field"><label for="a-first">First name</label><input id="a-first" required></div><div class="field"><label for="a-last">Last name</label><input id="a-last" required></div></div>
+    <div class="field"><label for="a-email">Email</label><input id="a-email" type="email"></div>
+    <div class="row2"><div class="field"><label for="a-co">Company</label><input id="a-co"></div><div class="field"><label for="a-tt">Ticket type</label><input id="a-tt" placeholder="attendee"></div></div>
+    <div class="err" id="a-err"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button type="button" class="btn btn-s" id="a-cancel">Cancel</button><button class="btn btn-p" id="a-save">Add</button></div>
+  </form>
+</dialog>
+
+<script type="module">
+import { checkinWindow, TEST_CAP } from '/checkin-window.js';
+import { parseCsv, mapRows } from '/checkin-csv.js';
+
+const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = (id) => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const params = new URLSearchParams(location.search);
+const EVENT_ID = params.get('event');
+let EV = null, ENT = null, ATT = [], STAFF = [], PRICE = null, FILTER = 'all', PENDING_IMPORT = null;
+
+const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const fmtDay = (d, tz) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
+const isLive = () => ENT?.status === 'live';
+// Complimentary account: no price, no test banner, no paid go-live.
+const isComp = () => !!EV?.is_comp;
+async function fnError(error) {
+  // supabase-js puts the Response on error.context for non-2xx replies.
+  try { const b = await error.context.json(); if (b?.error) return b.error; } catch (_) { /* unreadable body */ }
+  return error.message;
+}
+
+// ── loading ──────────────────────────────────────────────
+async function loadEvent() {
+  const { data, error } = await sb.rpc('checkin_my_events');
+  if (error) throw new Error(error.message);
+  EV = (data || []).find(r => r.event_id === EVENT_ID) || null;
+  if (!EV) throw new Error('This event is not in your check-in events.');
+  if (EV.role !== 'organizer') { location.replace('/checkin/desk?event=' + EVENT_ID); return false; }
+  const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements').select('*').eq('event_id', EVENT_ID).maybeSingle();
+  if (entErr) throw new Error(entErr.message);
+  if (!ent) { location.replace('/checkin'); return false; }
+  ENT = ent;
+  return true;
+}
+
+async function loadAttendees() {
+  const all = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('leod_checkin_attendees')
+      .select('id,first_name,last_name,email,company,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at')
+      .eq('event_id', EVENT_ID).order('last_name').order('first_name').range(from, from + 999);
+    if (error) throw new Error(error.message);
+    all.push(...data);
+    if (data.length < 1000) break;
+  }
+  ATT = all;
+}
+
+async function loadStaff() {
+  const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'list' } });
+  if (error) throw new Error(await fnError(error));
+  STAFF = data.staff || [];
+}
+
+async function loadPrice() {
+  try {
+    const r = await fetch(SUPABASE_URL + '/functions/v1/checkin-price');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const p = await r.json();
+    PRICE = new Intl.NumberFormat('en-IE', { style: 'currency', currency: p.currency.toUpperCase(), minimumFractionDigits: p.amount % 100 ? 2 : 0 }).format(p.amount / 100);
+    document.querySelectorAll('[data-price]').forEach(n => n.textContent = PRICE);
+    if (EV && ENT) renderChrome();
+  } catch (e) { console.error('setup: price unavailable', e); }
+}
+
+// ── chrome: banner, rail, header ─────────────────────────
+function renderChrome() {
+  $('crumb-ev').textContent = EV.name; $('side-name').textContent = EV.name;
+  $('side-meta').textContent = fmtDate(EV.date) + ' · ' + (isLive() ? 'Live' : 'Test mode');
+  $('desk-link').href = '/checkin/desk?event=' + EVENT_ID;
+  $('desk-link').textContent = isLive() ? 'Open desk' : 'Try the desk';
+  $('banner').hidden = isLive() || isComp();
+  $('gl-rail').textContent = isComp() ? 'Included' : 'Go live';
+  $('gl-rail-price').hidden = isComp() || isLive();
+  $('banner-t').replaceChildren(el('b', null, 'Test mode. '),
+    document.createTextNode('Everything works, but check-ins are capped at ' + TEST_CAP + ' and cleared when you go live. ' + EV.test_used + ' of ' + TEST_CAP + ' used.'));
+  $('banner-go').textContent = PRICE ? 'Go live · ' + PRICE : 'Go live';
+  $('n-att').textContent = ATT.length || '';
+  $('n-staff').textContent = STAFF.filter(s => !s.is_owner).length || '';
+  const done = {
+    details: true,
+    attendees: ATT.length > 0,
+    staff: STAFF.some(s => !s.is_owner),
+    kiosk: ENT.self_registration || ENT.kiosk_self_print || ENT.auto_send_qr_email,
+    qr: ATT.some(a => a.qr_email_sent_at),
+    golive: isLive(),
+  };
+  document.querySelectorAll('.st').forEach(b => b.classList.toggle('done', !!done[b.dataset.step] && b.dataset.step !== 'golive'));
+}
+
+function go(step) {
+  for (const s of ['details', 'attendees', 'staff', 'kiosk', 'qr', 'golive']) $('p-' + s).hidden = s !== step;
+  document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
+  ({ details: renderDetails, attendees: renderAttendees, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
+  const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
+}
+document.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => go(b.dataset.step)));
+$('banner-go').onclick = () => go('golive');
+
+// ── 1. details ───────────────────────────────────────────
+function renderDetails() {
+  $('d-name').value = EV.name; $('d-date').value = EV.date; $('d-venue').value = EV.venue || '';
+  $('d-start').value = (EV.event_start || '09:00').slice(0, 5); $('d-end').value = (EV.event_end || '18:00').slice(0, 5);
+  const sel = $('d-tz'); sel.replaceChildren();
+  const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [EV.timezone];
+  if (!zones.includes(EV.timezone)) zones.unshift(EV.timezone);
+  for (const z of zones) { const o = el('option', null, z.replace(/_/g, ' ')); o.value = z; o.selected = z === EV.timezone; sel.appendChild(o); }
+  const owner = EV.is_owner;
+  for (const id of ['d-name', 'd-date', 'd-tz', 'd-start', 'd-end', 'd-venue', 'd-save']) $(id).disabled = !owner;
+  const dateLocked = isLive() && !isComp();
+  if (dateLocked) $('d-date').disabled = true;
+  $('det-note').textContent = !owner ? 'Only the event owner can change these details.'
+    : dateLocked ? 'The date is locked now the event is live. Contact support@cuedeck.io to move it.'
+    : 'Shown on the desk, the kiosk and in QR emails.';
+}
+$('f-det').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('d-err').textContent = ''; $('d-ok').textContent = ''; $('d-save').disabled = true;
+  const patch = { name: $('d-name').value.trim(), venue: $('d-venue').value.trim() || null, timezone: $('d-tz').value,
+                  event_start: $('d-start').value, event_end: $('d-end').value };
+  if (!isLive() || isComp()) patch.date = $('d-date').value;
+  const { error } = await sb.from('leod_events').update(patch).eq('id', EVENT_ID);
+  $('d-save').disabled = false;
+  if (error) { $('d-err').textContent = error.message; return; }
+  await loadEvent(); renderChrome(); $('d-ok').textContent = ' Saved';
+});
+
+// ── 2. attendees ─────────────────────────────────────────
+function statusTag(a) {
+  if (a.checked_in_at) return el('span', 'tag ' + (isLive() ? 't-in' : 't-test'), isLive() ? 'Checked in' : 'Test check-in');
+  return el('span', 'em', 'Expected');
+}
+function renderAttendees() {
+  const q = $('att-q').value.trim().toLowerCase();
+  const rows = ATT.filter(a => (FILTER === 'all' || (FILTER === 'noemail' && !a.email) || (FILTER === 'in' && a.checked_in_at)) &&
+    (!q || `${a.first_name} ${a.last_name} ${a.email || ''} ${a.company || ''}`.toLowerCase().includes(q)));
+  $('att-sub').textContent = ATT.length + ' people. People from the same company check in together with one scan.';
+  document.querySelectorAll('.chip').forEach(c => {
+    const n = c.dataset.f === 'all' ? ATT.length : c.dataset.f === 'noemail' ? ATT.filter(a => !a.email).length : ATT.filter(a => a.checked_in_at).length;
+    c.textContent = ({ all: 'All', noemail: 'No email', in: 'Checked in' })[c.dataset.f] + ' ' + n;
+  });
+  const body = $('att-body'); body.replaceChildren();
+  for (const a of rows.slice(0, 200)) {
+    const tr = el('tr');
+    const n = el('td'); n.append(el('div', 'nm', a.first_name + ' ' + a.last_name), el('div', 'em', a.email || 'No email'));
+    if (!a.email) n.lastChild.style.color = 'var(--rd)';
+    const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
+    const st = el('td'); st.appendChild(statusTag(a));
+    const del = el('td'); const b = el('button', 'link', 'Remove'); b.onclick = () => removeAttendee(a); del.appendChild(b);
+    tr.append(n, el('td', 'hide-sm', a.company || ''), el('td', 'hide-sm', a.ticket_type || ''), qr, st, del);
+    body.appendChild(tr);
+  }
+  $('att-count').textContent = 'Showing ' + Math.min(rows.length, 200) + ' of ' + rows.length + (rows.length > 200 ? '. Search to narrow the list.' : '');
+}
+$('att-q').addEventListener('input', renderAttendees);
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+  FILTER = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === c))); renderAttendees();
+}));
+
+async function removeAttendee(a) {
+  $('att-err').textContent = '';
+  if (!confirm('Remove ' + a.first_name + ' ' + a.last_name + ' from the guest list?')) return;
+  const { error } = await sb.from('leod_checkin_attendees').delete().eq('id', a.id);
+  if (error) { $('att-err').textContent = error.code === '23503' ? 'This person has check-in history, so they cannot be removed.' : error.message; return; }
+  ATT = ATT.filter(x => x.id !== a.id); renderAttendees(); renderChrome();
+}
+
+$('att-add').onclick = () => { $('a-err').textContent = ''; $('f-add').reset(); $('dlg-add').showModal(); };
+$('a-cancel').onclick = () => $('dlg-add').close();
+$('f-add').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('a-save').disabled = true;
+  const row = { first_name: $('a-first').value.trim(), last_name: $('a-last').value.trim() };
+  for (const [k, id] of [['email', 'a-email'], ['company', 'a-co'], ['ticket_type', 'a-tt']]) { const v = $(id).value.trim(); if (v) row[k] = v; }
+  const { data, error } = await sb.functions.invoke('checkin-import-attendees', { body: { event_id: EVENT_ID, rows: [row], dry_run: false } });
+  $('a-save').disabled = false;
+  if (error) { $('a-err').textContent = await fnError(error); return; }
+  const r = data.results?.[0];
+  if (r?.action === 'skip') { $('a-err').textContent = r.reason || 'Not added'; return; }
+  $('dlg-add').close(); await loadAttendees(); renderAttendees(); renderChrome();
+});
+
+$('att-import').onclick = () => $('csv-file').click();
+$('csv-file').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) previewImport(f); e.target.value = ''; });
+const drop = $('drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) previewImport(f); });
+
+async function previewImport(file) {
+  $('att-err').textContent = ''; const box = $('imp-prev'); box.hidden = false; box.replaceChildren(el('div', 'fine', 'Reading ' + file.name + '…'));
+  const { rows, unmapped, missing } = mapRows(parseCsv(await file.text()));
+  if (missing.length) { box.replaceChildren(el('div', 'err', 'This file has no ' + missing.join(' or ').replace(/_/g, ' ') + ' column. Add it and try again.')); return; }
+  if (!rows.length) { box.replaceChildren(el('div', 'err', 'No people found in this file.')); return; }
+  const { data, error } = await sb.functions.invoke('checkin-import-attendees', { body: { event_id: EVENT_ID, rows, dry_run: true } });
+  if (error) { box.replaceChildren(el('div', 'err', await fnError(error))); return; }
+  PENDING_IMPORT = rows;
+  const s = data.summary;
+  const sum = el('div', 'sum');
+  sum.append(el('b', null, s.to_create + ' to add'), el('span', null, s.to_update + ' to update'), el('span', null, s.to_skip + ' skipped'));
+  box.replaceChildren(sum);
+  if (unmapped.length) box.appendChild(el('div', 'fine', 'Ignored columns: ' + unmapped.join(', ')));
+  const skips = data.results.filter(r => r.action === 'skip').slice(0, 10);
+  for (const r of skips) box.appendChild(el('div', 'fine', (r.row.first_name || '?') + ' ' + (r.row.last_name || '') + ': ' + r.reason));
+  const acts = el('div'); acts.style.cssText = 'display:flex;gap:8px;margin-top:12px';
+  const ok = el('button', 'btn btn-p', 'Import ' + (s.to_create + s.to_update) + ' people');
+  ok.disabled = s.to_create + s.to_update === 0;
+  const no = el('button', 'btn btn-s', 'Cancel');
+  no.onclick = () => { PENDING_IMPORT = null; box.hidden = true; };
+  ok.onclick = async () => {
+    ok.disabled = true; ok.textContent = 'Importing…';
+    const { data: done, error: e2 } = await sb.functions.invoke('checkin-import-attendees', { body: { event_id: EVENT_ID, rows: PENDING_IMPORT, dry_run: false } });
+    if (e2) { ok.disabled = false; ok.textContent = 'Try again'; box.appendChild(el('div', 'err', await fnError(e2))); return; }
+    PENDING_IMPORT = null;
+    box.replaceChildren(el('div', 'ok', 'Imported. ' + done.summary.to_create + ' added, ' + done.summary.to_update + ' updated.'));
+    if (done.update_errors?.length) box.appendChild(el('div', 'err', done.update_errors.length + ' updates failed. See the browser console for names.'));
+    await loadAttendees(); renderAttendees(); renderChrome();
+  };
+  acts.append(ok, no); box.appendChild(acts);
+}
+
+$('att-export').onclick = () => {
+  const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Checked in at', 'Badge printed at'];
+  const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const lines = [head, ...ATT.map(a => [a.first_name, a.last_name, a.email, a.company, a.ticket_type, a.checked_in_at, a.badge_printed_at])]
+    .map(r => r.map(cell).join(','));
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const a = el('a'); a.href = url; a.download = EV.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + '-attendance.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+};
+
+// ── 3. staff ─────────────────────────────────────────────
+function renderStaff() {
+  const body = $('staff-body'); body.replaceChildren();
+  for (const s of STAFF) {
+    const tr = el('tr');
+    const p = el('td'); p.append(el('div', 'nm', s.name || s.email || 'Invited user')); if (s.name && s.email) p.appendChild(el('div', 'em', s.email));
+    const r = el('td', null, s.is_owner ? 'Owner' : s.role === 'organizer' ? 'Co-organizer' : 'Desk staff');
+    const x = el('td');
+    if (!s.is_owner) { const b = el('button', 'link', 'Remove'); b.onclick = () => removeStaff(s); x.appendChild(b); }
+    tr.append(p, r, x); body.appendChild(tr);
+  }
+}
+$('f-inv').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('inv-err').textContent = ''; $('inv-ok').textContent = ''; $('inv-btn').disabled = true;
+  const { error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'invite', email: $('inv-email').value, role: $('inv-role').value } });
+  $('inv-btn').disabled = false;
+  if (error) { $('inv-err').textContent = await fnError(error); return; }
+  $('inv-ok').textContent = 'Invitation sent.';
+  $('inv-email').value = ''; await loadStaff(); renderStaff(); renderChrome();
+});
+async function removeStaff(s) {
+  $('inv-err').textContent = '';
+  const { error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'remove', user_id: s.user_id } });
+  if (error) { $('inv-err').textContent = await fnError(error); return; }
+  await loadStaff(); renderStaff(); renderChrome();
+}
+
+// ── 4. kiosk & badges ────────────────────────────────────
+function renderKiosk() { document.querySelectorAll('[data-set]').forEach(i => i.checked = !!ENT[i.dataset.set]); }
+document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', async () => {
+  $('set-err').textContent = ''; i.disabled = true;
+  const { data, error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: EVENT_ID, settings: { [i.dataset.set]: i.checked } } });
+  i.disabled = false;
+  if (error) { i.checked = !i.checked; $('set-err').textContent = await fnError(error); return; }
+  // A comp event comes back live from enable-event, so take its status too.
+  ENT[i.dataset.set] = i.checked; if (data?.status) ENT.status = data.status; renderChrome();
+}));
+
+// ── 5. QR emails ─────────────────────────────────────────
+function renderQr() {
+  const unsent = ATT.filter(a => a.email && !a.qr_email_sent_at).length;
+  $('qr-sub').textContent = isLive()
+    ? unsent + ' guests with an email address have not been sent their QR code yet.'
+    : 'Send yourself a sample to see what guests receive. Sending to guests unlocks when you go live.';
+  $('qr-all').hidden = !isLive();
+  $('qr-all').textContent = 'Send to ' + unsent + ' guests';
+  $('qr-all').disabled = unsent === 0;
+}
+$('qr-self').onclick = async () => {
+  $('qr-ok').textContent = ''; $('qr-err').textContent = ''; $('qr-self').disabled = true;
+  const { data, error } = await sb.functions.invoke('checkin-send-qr-emails', { body: { event_id: EVENT_ID, test_to_self: true } });
+  $('qr-self').disabled = false;
+  if (error) { $('qr-err').textContent = await fnError(error); return; }
+  $('qr-ok').textContent = 'Sample sent to ' + data.sent_to + '.';
+};
+async function sendAll(btn, msgEl, errEl) {
+  errEl.textContent = ''; btn.disabled = true;
+  const { data, error } = await sb.functions.invoke('checkin-send-qr-emails', { body: { event_id: EVENT_ID } });
+  btn.disabled = false;
+  if (error) { errEl.textContent = await fnError(error); return; }
+  const s = data.summary;
+  msgEl.textContent = s.sent + ' sent' + (s.skipped_no_email ? ', ' + s.skipped_no_email + ' without email' : '') + (s.errored ? ', ' + s.errored + ' failed' : '') + '.';
+  await loadAttendees(); renderChrome(); if (!$('p-qr').hidden) renderQr();
+}
+$('qr-all').onclick = () => sendAll($('qr-all'), $('qr-ok'), $('qr-err'));
+
+// ── 6. go live ───────────────────────────────────────────
+function renderGolive() {
+  // Null for an unreadable date or timezone: say so rather than show wrong dates.
+  const w = checkinWindow(EV.date, EV.timezone);
+  const windowText = w ? fmtDay(w.opensAt, EV.timezone) + ' to ' + fmtDay(new Date(w.closesAt.getTime() - 1), EV.timezone)
+    : "Check the event's date and timezone";
+  $('gl-sub').textContent = isLive() ? EV.name + ' is live.' : EV.name + ' is ready. Going live turns on real check-ins and QR emails for this event.';
+  const facts = $('gl-facts'); facts.replaceChildren();
+  for (const [k, v] of [['Check-in window', windowText],
+                        ['Attendees kept', 'All ' + ATT.filter(a => !a.is_test).length],
+                        ...(isComp() ? [] : [['Test check-ins', EV.test_used + ', cleared on go-live'], ['Event date', 'Locked once live']])]) {
+    const r = el('div', 'r'); r.append(el('span', null, k), el('b', null, v)); facts.appendChild(r);
+  }
+  $('gl-pay').hidden = isLive() || isComp(); $('gl-done').hidden = !isLive() || isComp(); $('gl-wait').hidden = true;
+  $('gl-comp').hidden = !isComp(); $('gl-comp-btn').hidden = !isComp() || isLive();
+  $('gl-h').textContent = isComp() ? 'Check-in' : 'Go live';
+  if (isComp()) $('gl-sub').textContent = isLive() ? EV.name + ' is live. Check-in is included with your account.' : 'Check-in is included with your account.';
+  $('gl-done-t').textContent = 'Check-ins now count for real' + (ATT.length ? ', and you can send QR emails to your ' + ATT.length + ' attendees.' : '.');
+  $('gl-desk').href = '/checkin/desk?event=' + EVENT_ID;
+}
+$('gl-btn').onclick = async () => {
+  $('gl-err').textContent = ''; $('gl-btn').disabled = true; $('gl-btn').textContent = 'Opening payment…';
+  const { data, error } = await sb.functions.invoke('checkin-create-checkout', { body: { event_id: EVENT_ID } });
+  if (error || !data?.url) { $('gl-btn').disabled = false; $('gl-btn').textContent = 'Continue to secure payment'; $('gl-err').textContent = error ? await fnError(error) : 'Could not start payment.'; return; }
+  location.href = data.url;
+};
+$('gl-qr').onclick = () => go('qr');
+// Comp event still in test (the account was made complimentary later):
+// enable-event takes it live through the same locked path as a payment.
+$('gl-comp-btn').onclick = async () => {
+  $('gl-comp-err').textContent = ''; $('gl-comp-btn').disabled = true;
+  const { error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: EVENT_ID } });
+  $('gl-comp-btn').disabled = false;
+  if (error) { $('gl-comp-err').textContent = await fnError(error); return; }
+  try { await loadEvent(); await loadAttendees(); } catch (e) { $('gl-comp-err').textContent = e.message; return; }
+  renderChrome(); renderGolive();
+};
+
+async function waitForLive() {
+  go('golive'); $('gl-pay').hidden = true; $('gl-wait').hidden = false;
+  for (let i = 0; i < 30; i++) {
+    const { data, error } = await sb.from('leod_checkin_entitlements').select('status').eq('event_id', EVENT_ID).single();
+    if (!error && data.status === 'live') {
+      await loadEvent(); await loadAttendees(); renderChrome(); renderGolive();
+      history.replaceState(null, '', '/checkin/setup?event=' + EVENT_ID + '&step=golive');
+      return;
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  $('gl-wait-t').textContent = 'Payment received, still confirming. Refresh in a minute. If this page still says test mode after that, email support@cuedeck.io.';
+}
+
+// ── boot ─────────────────────────────────────────────────
+(async () => {
+  if (!EVENT_ID) { location.replace('/checkin'); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { location.replace('/checkin'); return; }
+  try {
+    loadPrice();
+    if (!(await loadEvent())) return;
+    await Promise.all([loadAttendees(), loadStaff()]);
+  } catch (e) { $('page-err').textContent = 'Could not load this event: ' + e.message; return; }
+  $('layout').hidden = false; renderChrome();
+  if (params.get('paid') === '1' && !isLive() && !isComp()) { await waitForLive(); return; }
+  const step = params.get('step');
+  go(['details', 'attendees', 'staff', 'kiosk', 'qr', 'golive'].includes(step) ? step
+     : !ATT.length || isLive() || isComp() ? 'attendees' : 'golive');
+})();
+</script>
+</body>
+</html>
