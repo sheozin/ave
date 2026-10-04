@@ -17,6 +17,8 @@ DECLARE
   v_role  text;
   v_bool  boolean;
   v_name  text;
+  v_venue text;
+  v_ev2   uuid;
 BEGIN
   -- Fixture (as the migration owner).
   INSERT INTO auth.users (id, email, aud, role, raw_user_meta_data)
@@ -131,6 +133,60 @@ BEGIN
   RESET ROLE;
   SELECT name INTO v_name FROM leod_events WHERE id = v_ev;
   IF v_name IS DISTINCT FROM 'Probe renamed' THEN RAISE EXCEPTION 'PROBE FAIL: name is %', v_name; END IF;
+  v_n := v_n + 1;
+
+  -- ── fix round 1: venue keep/clear, end after start, console events ──
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_org, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, NULL, NULL);
+  RESET ROLE;
+  SELECT venue INTO v_venue FROM leod_events WHERE id = v_ev;
+  IF v_venue IS DISTINCT FROM 'Hall B' THEN RAISE EXCEPTION 'PROBE FAIL: venue NULL gave %, want Hall B kept', v_venue; END IF;
+  v_n := v_n + 1;
+  SET LOCAL ROLE authenticated;
+  PERFORM checkin_update_event_details(v_ev, 'Probe renamed', '', NULL, NULL, NULL, NULL);
+  RESET ROLE;
+  SELECT venue INTO v_venue FROM leod_events WHERE id = v_ev;
+  IF v_venue IS NOT NULL THEN RAISE EXCEPTION 'PROBE FAIL: venue empty string gave %, want NULL', v_venue; END IF;
+  v_n := v_n + 1;
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, '12:00', '12:00');
+    RAISE EXCEPTION 'PROBE FAIL: end equal to start accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'The event must end after it starts' THEN RAISE; END IF;
+    v_n := v_n + 1;
+  END;
+  BEGIN
+    -- start stays 10:00 (kept), end 09:30 comes in alone
+    PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, NULL, '09:30');
+    RAISE EXCEPTION 'PROBE FAIL: end before the kept start accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    IF SQLERRM <> 'The event must end after it starts' THEN RAISE; END IF;
+    v_n := v_n + 1;
+  END;
+  RESET ROLE;
+  -- A console event owned by v_owner, where v_org is also an organizer.
+  INSERT INTO leod_events (name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES ('Probe 070 console', current_date + 30, '09:00', '18:00', 'Europe/Warsaw', v_owner, 'console')
+  RETURNING id INTO v_ev2;
+  INSERT INTO leod_checkin_entitlements (event_id, checkin_core, status) VALUES (v_ev2, true, 'test');
+  INSERT INTO leod_checkin_operators (event_id, user_id, role) VALUES (v_ev2, v_org, 'organizer');
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    PERFORM checkin_update_event_details(v_ev2, 'Hijacked', NULL, NULL, NULL, NULL, NULL);
+    RAISE EXCEPTION 'PROBE FAIL: non-owner organizer edited a console event';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'Only the event owner can edit a console event' THEN RAISE; END IF;
+    v_n := v_n + 1;
+  END;
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_owner, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  PERFORM checkin_update_event_details(v_ev2, 'Console renamed', NULL, NULL, NULL, NULL, NULL);
+  RESET ROLE;
+  SELECT name INTO v_name FROM leod_events WHERE id = v_ev2;
+  IF v_name IS DISTINCT FROM 'Console renamed' THEN RAISE EXCEPTION 'PROBE FAIL: owner could not edit own console event (%)', v_name; END IF;
   v_n := v_n + 1;
 
   -- ── owner ──
