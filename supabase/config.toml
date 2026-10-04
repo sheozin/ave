@@ -1,1 +1,22 @@
 project_id = "sawekpguemzvuvvulfbc"
+
+# These run without a user JWT. Production already has verify_jwt = false
+# for stripe-webhook (checked 2026-10-04); recording it here stops a CLI
+# deploy from silently turning verification back on and breaking Stripe.
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.checkin-price]
+verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.customer-portal]
+verify_jwt = false
+
+[functions.send-invoice-email]
+verify_jwt = false
+
+[functions.ai-proxy]
+verify_jwt = false
