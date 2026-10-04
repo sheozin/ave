@@ -124,3 +124,16 @@ describe('QR token reuse on resend', () => {
     expect(buildEmailQrToken(attendee)).toBe('existing-token-abc');
   });
 });
+
+// Mirrors the gate at the top of checkin-send-qr-emails after 059.
+function qrSendGate(status: 'test' | 'live', testToSelf: boolean): 'send_all' | 'send_self' | 'refuse' {
+  if (testToSelf) return 'send_self';
+  return status === 'live' ? 'send_all' : 'refuse';
+}
+
+describe('qrSendGate', () => {
+  it('test mode refuses a real send', () => { expect(qrSendGate('test', false)).toBe('refuse'); });
+  it('test mode allows send-to-self', () => { expect(qrSendGate('test', true)).toBe('send_self'); });
+  it('live sends', () => { expect(qrSendGate('live', false)).toBe('send_all'); });
+  it('live send-to-self still only goes to self', () => { expect(qrSendGate('live', true)).toBe('send_self'); });
+});

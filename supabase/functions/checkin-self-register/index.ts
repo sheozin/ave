@@ -29,6 +29,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
+import { TEST_CAP } from '../_shared/checkin-policy.ts'
 
 // ── Validation, mirrored from tests/checkin-kiosk.spec.ts ──────────
 // The kiosk runs these too, as courtesy for the person typing. They
@@ -277,7 +278,7 @@ Deno.serve(async (req) => {
   // screen has nobody to read a more precise one, and the distinction
   // is an organizer's billing state, not a stranger's business.
   const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core, self_registration').eq('event_id', event_id).single()
+    .select('checkin_core, self_registration, status').eq('event_id', event_id).single()
   if (!entRow?.checkin_core || !entRow?.self_registration) {
     console.warn('checkin-self-register: self-registration not enabled, device', device.id)
     return json({ error: 'Self-registration is not enabled for this event' }, 403)
@@ -347,6 +348,20 @@ Deno.serve(async (req) => {
   const typedEmail = form.email.trim()
   const company = form.company.trim().slice(0, MAX_COMPANY)
 
+  const isTest = entRow.status !== 'live'
+  if (isTest) {
+    // Count-then-insert, not under a lock: accepted, because
+    // checkin_kiosk_rate_check already bounds registrations per device and event.
+    const { data: used, error: usedErr } = await sb.rpc('checkin_test_usage', { p_event_id: event_id })
+    if (usedErr || typeof used !== 'number') {
+      console.error('checkin-self-register: test usage read failed, device', device.id, usedErr?.code)
+      return json({ error: 'Registration failed' }, 500)
+    }
+    if (used >= TEST_CAP) {
+      return json({ error: 'This event is in test mode and has used its test registrations. Please see the desk.', code: 'test_cap' }, 403)
+    }
+  }
+
   const qr_token = makeQrToken()
   const { data: created, error: insErr } = await sb.from('leod_checkin_attendees')
     .insert({
@@ -357,6 +372,7 @@ Deno.serve(async (req) => {
       company:    company || null,
       qr_token,
       source:     'kiosk',
+      is_test:    isTest,
       consent_at: new Date().toISOString(),
     })
     .select('id, first_name, email, qr_token')
@@ -421,5 +437,5 @@ Deno.serve(async (req) => {
 
   console.log('checkin-self-register: outcome registered, device', device.id)
   await padTo(startedAt)
-  return json({ status: 'registered', code: shortCode(created.qr_token) })
+  return json({ status: 'registered', code: shortCode(created.qr_token), test: isTest })
 })

@@ -96,11 +96,16 @@ export async function sendQrEmailsForAttendees(
   sb: ReturnType<typeof import('./client.ts').adminClient>,
   event: QrEmailEvent,
   attendees: QrEmailAttendee[],
+  // overrideTo: deliver to this address instead (the organizer's own
+  // "send a test to myself"). recordSent false: do not stamp
+  // qr_email_sent_at, because the guest has not been emailed.
+  opts: { overrideTo?: string; recordSent?: boolean } = {},
 ): Promise<QrEmailResult[]> {
   const results: QrEmailResult[] = []
 
   for (const attendee of attendees) {
-    if (!attendee.email) {
+    const to = opts.overrideTo ?? attendee.email
+    if (!to) {
       results.push({ attendee_id: attendee.id, status: 'skipped_no_email' })
       continue
     }
@@ -115,7 +120,7 @@ export async function sendQrEmailsForAttendees(
       const html = renderQrEmailHtml(event, attendee, qrDataUrl)
 
       const { error } = await sendEmail({
-        to: attendee.email,
+        to,
         subject: `Your check-in QR code — ${event.name}`,
         html,
         fromName: `${event.name} Check-in`,
@@ -126,14 +131,16 @@ export async function sendQrEmailsForAttendees(
         continue
       }
 
-      const { error: updateErr } = await sb.from('leod_checkin_attendees')
-        .update({ qr_email_sent_at: new Date().toISOString() })
-        .eq('id', attendee.id)
-      if (updateErr) {
-        // Email genuinely sent — record it as sent even though the
-        // sent_at bookkeeping failed, so callers don't double-send. Log
-        // for visibility rather than silently losing the discrepancy.
-        console.error('sendQrEmailsForAttendees: qr_email_sent_at update failed for', attendee.id, updateErr.message)
+      if (opts.recordSent !== false) {
+        const { error: updateErr } = await sb.from('leod_checkin_attendees')
+          .update({ qr_email_sent_at: new Date().toISOString() })
+          .eq('id', attendee.id)
+        if (updateErr) {
+          // Email genuinely sent — record it as sent even though the
+          // sent_at bookkeeping failed, so callers don't double-send. Log
+          // for visibility rather than silently losing the discrepancy.
+          console.error('sendQrEmailsForAttendees: qr_email_sent_at update failed for', attendee.id, updateErr.message)
+        }
       }
       results.push({ attendee_id: attendee.id, status: 'sent' })
     } catch (err) {

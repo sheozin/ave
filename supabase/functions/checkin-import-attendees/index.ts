@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
   // every event's creator regardless of purchase) would let attendees
   // be imported into an event that never enabled check-in.
   const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core, auto_send_qr_email').eq('event_id', event_id).single()
+    .select('checkin_core, auto_send_qr_email, status').eq('event_id', event_id).single()
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
   // regardless of email delivery, matching the precedent set by
   // checkin-enable-event's organizer-grant upsert. Only fires for
   // newly-CREATED attendees — re-imports/updates never trigger a send.
-  if (entRow.auto_send_qr_email && insertedAttendees.length) {
+  if (entRow.auto_send_qr_email && entRow.status === 'live' && insertedAttendees.length) {
     const { data: event, error: eventErr } = await sb.from('leod_events')
       .select('name, date, venue').eq('id', event_id).single()
     if (event) {

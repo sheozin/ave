@@ -63,9 +63,16 @@ Deno.serve(async (req) => {
   // (migration 051's checkin_role_for_event) is never consulted here —
   // same explicit check as checkin-import-attendees.
   const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core').eq('event_id', event_id).single()
+    .select('checkin_core, status').eq('event_id', event_id).single()
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  const testToSelf = body.test_to_self === true
+  if (!testToSelf && entRow.status !== 'live') {
+    return new Response(JSON.stringify({ error: 'Go live to send QR emails to your guests', code: 'not_live' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -75,6 +82,34 @@ Deno.serve(async (req) => {
   if (!event) {
     return new Response(JSON.stringify({ error: 'Event not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (testToSelf) {
+    if (!user.email) {
+      return new Response(JSON.stringify({ error: 'Your account has no email address' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    const { data: sample, error: sampleErr } = await sb.from('leod_checkin_attendees')
+      .select('id, first_name, email, qr_token')
+      .eq('event_id', event_id).order('created_at', { ascending: true }).limit(1)
+    if (sampleErr) {
+      return new Response(JSON.stringify({ error: sampleErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    if (!sample || !sample.length) {
+      return new Response(JSON.stringify({ error: 'Add at least one attendee first' }), {
+        status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    const res = await sendQrEmailsForAttendees(sb, event, sample, { overrideTo: user.email, recordSent: false })
+    const failed = res.find(r => r.status === 'error')
+    return new Response(JSON.stringify(failed
+      ? { ok: false, error: failed.error }
+      : { ok: true, sent_to: user.email }), {
+      status: failed ? 502 : 200, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
