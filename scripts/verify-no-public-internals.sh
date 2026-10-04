@@ -17,6 +17,14 @@ MUST_200=(
   /favicon.svg /console-manifest.json /console-sw.js /checkin-window.js
   /checkin/setup /checkin-app.css /checkin-csv.js /cuedeck-auth.js
 )
+# Vercel's bot protection answers scripted clients with 403 + x-vercel-mitigated
+# on every path. That says nothing about the deploy, so it must not read as a
+# failure or a pass: exit 2 and say so, and check from a browser instead.
+if curl -sI "$BASE/" | grep -qi '^x-vercel-mitigated:'; then
+  echo "BLOCKED  Vercel bot protection is challenging this machine; results would be meaningless."
+  echo "         Re-run later or check the paths from a browser session."
+  exit 2
+fi
 fail=0
 for p in "${MUST_404[@]}"; do
   c=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/$p")
