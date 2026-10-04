@@ -53,7 +53,7 @@ Database (one migration):
 - Policies: attendee read and update to `organizer, lead, crew`; attendee insert to `organizer` plus `lead` for `source = 'walk_in'` rows; device and scan point write to `organizer, lead`; scan event insert to `organizer, lead, crew`; purchases read to owner only; entitlements and operators read to all five; scan event read to `organizer, lead, crew` (today it is any role, which would include viewers).
 - `checkin_my_events` returns the five roles (owner shown as `owner`), so every screen reads one value.
 - `checkin_apply_scan` gains the undo-own rule (ruling 8).
-- New `checkin_event_stats(event_id)` for viewers and the dashboard (ruling 5).
+- New `checkin_event_stats(event_id)` for the dashboard (see Check-in dashboard).
 
 Edge Functions:
 - `checkin-create-checkout`: owner only.
@@ -68,7 +68,31 @@ Edge Functions:
 - Front page cards: role label on each card; viewer cards show counts and a "View dashboard" button only.
 - Setup: Desk staff step lists roles with plain descriptions; Go live panel shows the owner's name to non-owners ("Only the event owner, <name>, can go live"); owner sees Transfer ownership and Delete event under Event details.
 - Desk: Add walk-in and "undo anyone" for leads and above; staff see Undo only on their own check-ins; Set up a kiosk for leads and above.
-- Dashboard: a read-only page `/checkin/dashboard?event=` with arrivals, turnout, arrivals by hour and by ticket type, refreshing every 30 seconds. Open to every role.
+- Dashboard: see the next section.
+
+## Check-in dashboard
+
+Requested 2026-10-04: charts for registered, checked in, and registration status. Modelled on what Cvent OnArrival and Bizzabo show live (check-in counts, no-shows, peak times), zkipster's show-up rate and post-event Attended / No-show totals, and Eventbrite's check-ins and ticket-type reports.
+
+Page `/checkin/dashboard?event=<id>`, read-only, open to all five roles, refreshes every 30 seconds, linked from every event card and from Setup. In test mode it carries the same amber TEST banner and counts test rows; at go-live those are cleared like everywhere else.
+
+Tiles:
+- **Registered**: all attendees on the list.
+- **Checked in**: arrived so far, with turnout percent.
+- **Still expected** while the check-in window is open; becomes **No-shows** once it closes.
+- **Walk-ins**: kiosk self-registrations plus desk walk-ins.
+- **Peak arrivals**: the busiest 15 minutes and how many arrived in it.
+
+Charts (Chart.js 4, already used by the admin page with SRI; no new dependency):
+1. **Arrivals over time**: bars per 15 minutes in the event's timezone, with a cumulative line.
+2. **Registration status**: doughnut of Checked in / Still expected (or No-show after close).
+3. **By ticket type**: horizontal bars, registered next to checked in, with turnout per type.
+4. **How people registered**: imported, kiosk, walk-in.
+5. **QR email status**: sent, not sent, no email address.
+
+Data: one call to `checkin_event_stats(event_id)` (SECURITY DEFINER, any of the five roles on that event, `auth.uid()` only) returning a single JSON object with the tile numbers and the five breakdowns. It returns counts and labels only (ticket type names, 15-minute buckets), never names, emails or companies, which is what lets viewers use it (ruling 5). Undone check-ins do not count; a re-check-in counts once, at its latest time.
+
+Out of scope for the dashboard: per-desk activity, company breakdowns, session or room attendance, and exports (the attendee CSV export stays in Setup for organizers).
 
 ## Tests
 
