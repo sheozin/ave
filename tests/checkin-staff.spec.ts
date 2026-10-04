@@ -41,3 +41,30 @@ describe('likeSafe', () => {
   it('escapes backslash, percent and underscore', () => { expect(likeSafe('a_b%c\\d@x.com')).toBe('a\\_b\\%c\\\\d@x.com'); });
   it('leaves ordinary addresses alone', () => { expect(likeSafe('ana@example.com')).toBe('ana@example.com'); });
 });
+
+// Mirrors the existing-grant decision, subject sanitizer and rate-limit predicate.
+function inviteDecision(cur: string | null, role: string): 'insert' | 'noop' | 'already_on_event' {
+  if (cur === null) return 'insert';
+  return cur === role ? 'noop' : 'already_on_event';
+}
+const safeSubjectName = (n: string) => n.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 80);
+const rateLimited = (eventCount: number, inviterCount: number) => eventCount >= 50 || inviterCount >= 100;
+
+describe('inviteDecision', () => {
+  it('inserts when no grant exists', () => { expect(inviteDecision(null, 'crew')).toBe('insert'); });
+  it('is a no-op for the same role', () => { expect(inviteDecision('crew', 'crew')).toBe('noop'); });
+  it('refuses a different role (crew -> organizer)', () => { expect(inviteDecision('crew', 'organizer')).toBe('already_on_event'); });
+  it('refuses demoting an organizer/owner', () => { expect(inviteDecision('organizer', 'crew')).toBe('already_on_event'); });
+  it('refuses api_consumer', () => { expect(inviteDecision('api_consumer', 'crew')).toBe('already_on_event'); });
+});
+
+describe('safeSubjectName', () => {
+  it('strips newlines and angle brackets/quotes', () => { expect(safeSubjectName('Gala\r\nBcc: x <b>"hi"</b>')).toBe('Gala Bcc: x bhi/b'); });
+  it('caps at 80 chars', () => { expect(safeSubjectName('x'.repeat(200))).toHaveLength(80); });
+});
+
+describe('rateLimited', () => {
+  it('allows below both caps', () => { expect(rateLimited(49, 99)).toBe(false); });
+  it('blocks at the event cap', () => { expect(rateLimited(50, 0)).toBe(true); });
+  it('blocks at the inviter cap', () => { expect(rateLimited(0, 100)).toBe(true); });
+});

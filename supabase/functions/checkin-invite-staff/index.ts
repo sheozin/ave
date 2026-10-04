@@ -35,6 +35,11 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
   if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
+  const { data: caller, error: callerErr } = await sb.from('leod_users')
+    .select('active').eq('id', user.id).maybeSingle()
+  if (callerErr) return json({ error: callerErr.message }, 500)
+  if (!caller || caller.active === false) return json({ error: 'Account inactive' }, 403)
+
   const event_id = String(body.event_id || '')
   const action = String(body.action || '')
   if (!event_id || !['invite', 'remove', 'list'].includes(action)) return json({ error: 'event_id and action required' }, 400)
@@ -87,6 +92,17 @@ Deno.serve(async (req) => {
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : ''
   if (!email || !role) return json({ error: 'A valid email and role are required' }, 400)
 
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { count: eventCount, error: ecErr } = await sb.from('leod_checkin_invite_log')
+    .select('id', { count: 'exact', head: true }).eq('event_id', event_id).gte('created_at', since)
+  if (ecErr) return json({ error: ecErr.message }, 500)
+  const { count: inviterCount, error: icErr } = await sb.from('leod_checkin_invite_log')
+    .select('id', { count: 'exact', head: true }).eq('inviter_id', user.id).gte('created_at', since)
+  if (icErr) return json({ error: icErr.message }, 500)
+  if ((eventCount ?? 0) >= 50 || (inviterCount ?? 0) >= 100) {
+    return json({ error: 'Invite limit reached for today', code: 'invite_rate' }, 429)
+  }
+
   const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
   const likeSafe = email.replace(/[\\%_]/g, (m) => '\\' + m)
   const { data: existing, error: exErr } = await sb.from('leod_users')
@@ -94,27 +110,38 @@ Deno.serve(async (req) => {
   if (exErr) return json({ error: exErr.message }, 500)
 
   let userId: string
-  let invited = false
+  let isNew = false
   if (existing) {
     userId = existing.id
+    const { data: cur, error: curErr } = await sb.from('leod_checkin_operators')
+      .select('role').eq('event_id', event_id).eq('user_id', userId).maybeSingle()
+    if (curErr) return json({ error: curErr.message }, 500)
+    if (cur) {
+      if (cur.role === role) return json({ ok: true })
+      return json({ error: 'This person is already on this event with another role', code: 'already_on_event' }, 409)
+    }
   } else {
     const { data: inv, error: invErr } = await sb.auth.admin.inviteUserByEmail(email, {
       data: { checkin_staff: 'true', name },
       redirectTo: `${appUrl}/checkin`,
     })
-    if (invErr || !inv?.user) return json({ error: invErr?.message || 'Invite failed' }, 502)
+    if (invErr || !inv?.user) {
+      console.error('checkin-invite-staff: invite failed', invErr?.code ?? invErr?.status ?? 'unknown')
+      return json({ error: 'Could not send the invitation' }, 502)
+    }
     userId = inv.user.id
-    invited = true
+    isNew = true
   }
 
   const { error: grantErr } = await sb.from('leod_checkin_operators')
-    .upsert({ event_id, user_id: userId, role }, { onConflict: 'event_id,user_id' })
+    .insert({ event_id, user_id: userId, role })
   if (grantErr) return json({ error: grantErr.message }, 500)
 
-  if (!invited) {
+  if (!isNew) {
+    const safeName = ev.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 80)
     const { error: mailErr } = await sendEmail({
       to: email,
-      subject: `You've been added to ${ev.name} check-in`,
+      subject: `You've been added to ${safeName} check-in`,
       html: `<p>You can now open the check-in desk for <b>${escapeHtml(ev.name)}</b>.</p>` +
             `<p><a href="${appUrl}/checkin">Open CueDeck Check-in</a> and sign in with your CueDeck login.</p>`,
       fromName: 'CueDeck Check-in',
@@ -124,5 +151,8 @@ Deno.serve(async (req) => {
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)
   }
 
-  return json({ ok: true, user_id: userId, invited })
+  const { error: logErr } = await sb.from('leod_checkin_invite_log').insert({ event_id, inviter_id: user.id })
+  if (logErr) console.error('checkin-invite-staff: invite log insert failed', logErr.message)
+
+  return json({ ok: true })
 })

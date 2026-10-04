@@ -64,7 +64,12 @@ Deno.serve(async (req) => {
   }
 
   const { data: callerRow } = await sb.from('leod_users')
-    .select('role').eq('id', user.id).single()
+    .select('role, active').eq('id', user.id).single()
+  if (!callerRow || callerRow.active === false) {
+    return new Response(JSON.stringify({ error: 'Account inactive' }), {
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   const { data: opRow } = await sb.from('leod_checkin_operators')
     .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
 
