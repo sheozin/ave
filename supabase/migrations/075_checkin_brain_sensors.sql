@@ -349,3 +349,198 @@ REVOKE ALL ON FUNCTION public.checkin_brain_signals(TIMESTAMPTZ) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.checkin_brain_signals(TIMESTAMPTZ) TO service_role;
 COMMENT ON FUNCTION public.checkin_brain_signals(TIMESTAMPTZ) IS
   'AVE Brain nightly sensor. null = could not measure, 0 = measured none. Service role only.';
+
+-- ============================================================
+-- Part B: checkin_guard_results (applied as 075_checkin_guard_results)
+-- ============================================================
+-- One row per guard. Every guard runs in its own exception block: a
+-- guard that throws is reported ok = false with the error as detail,
+-- never skipped. Guards are written by exclusion (list what must not
+-- exist) wherever the invariant allows it.
+CREATE OR REPLACE FUNCTION public.checkin_guard_results()
+RETURNS TABLE (guard TEXT, ok BOOLEAN, detail TEXT, checked_at TIMESTAMPTZ)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_ok     BOOLEAN;
+  v_detail TEXT;
+  v_bad    TEXT[];
+  v_roles  TEXT[];
+BEGIN
+  -- G1 (061, 064, 069): no leod_checkin_* table writable by anon. Writable
+  -- = an INSERT/UPDATE/DELETE grant AND (RLS off OR a permissive write
+  -- policy that applies to anon or PUBLIC). TRUNCATE is not counted:
+  -- PostgREST cannot issue it, and Supabase grants it to anon by default.
+  BEGIN
+    SELECT array_agg(c.relname::text ORDER BY c.relname)
+      INTO v_bad
+      FROM pg_class c
+      JOIN pg_namespace ns ON ns.oid = c.relnamespace
+     WHERE ns.nspname = 'public'
+       AND c.relkind IN ('r', 'p')
+       AND c.relname LIKE 'leod\_checkin\_%'
+       AND has_table_privilege('anon', c.oid, 'INSERT, UPDATE, DELETE')
+       AND (NOT c.relrowsecurity OR EXISTS (
+             SELECT 1 FROM pg_policy p
+              WHERE p.polrelid = c.oid
+                AND p.polpermissive
+                AND p.polcmd IN ('a', 'w', 'd', '*')
+                AND (0::oid = ANY (p.polroles) OR 'anon'::regrole::oid = ANY (p.polroles))));
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'no leod_checkin_* table is writable by anon'
+                     ELSE 'writable by anon: ' || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'checkin_tables_not_anon_writable'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G2 (061, 064, 069): no table in public with RLS off.
+  BEGIN
+    SELECT array_agg(c.relname::text ORDER BY c.relname)
+      INTO v_bad
+      FROM pg_class c
+      JOIN pg_namespace ns ON ns.oid = c.relnamespace
+     WHERE ns.nspname = 'public'
+       AND c.relkind IN ('r', 'p')
+       AND NOT c.relrowsecurity;
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'every table in public has RLS on'
+                     ELSE 'RLS off: ' || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'public_tables_rls_on'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G3 (069): leod_config not writable by authenticated (same definition
+  -- of writable as G1).
+  BEGIN
+    IF to_regclass('public.leod_config') IS NULL THEN
+      v_ok := false;
+      v_detail := 'leod_config does not exist';
+    ELSE
+      SELECT NOT (has_table_privilege('authenticated', c.oid, 'INSERT, UPDATE, DELETE')
+                  AND (NOT c.relrowsecurity OR EXISTS (
+                        SELECT 1 FROM pg_policy p
+                         WHERE p.polrelid = c.oid
+                           AND p.polpermissive
+                           AND p.polcmd IN ('a', 'w', 'd', '*')
+                           AND (0::oid = ANY (p.polroles)
+                                OR 'authenticated'::regrole::oid = ANY (p.polroles)))))
+        INTO v_ok
+        FROM pg_class c
+       WHERE c.oid = to_regclass('public.leod_config');
+      v_detail := CASE WHEN v_ok THEN 'authenticated cannot write leod_config'
+                       ELSE 'authenticated can write leod_config' END;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'leod_config_not_authenticated_writable'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G4 (roles build): every leod_checkin_operators.role is allowed. Five
+  -- roles once the roles build has widened the check constraint, three
+  -- before it.
+  BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'public.leod_checkin_operators'::regclass
+                  AND contype = 'c'
+                  AND pg_get_constraintdef(oid) LIKE '%''lead''%'
+                  AND pg_get_constraintdef(oid) LIKE '%''viewer''%') THEN
+      v_roles := ARRAY['organizer', 'lead', 'crew', 'viewer', 'api_consumer'];
+    ELSE
+      v_roles := ARRAY['organizer', 'crew', 'api_consumer'];
+    END IF;
+    SELECT array_agg(DISTINCT coalesce(o.role, '<null>'))
+      INTO v_bad
+      FROM leod_checkin_operators o
+     WHERE o.role IS NULL OR NOT (o.role = ANY (v_roles));
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'every role is one of: ' || array_to_string(v_roles, ', ')
+                     ELSE 'roles outside {' || array_to_string(v_roles, ', ') || '}: '
+                          || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'checkin_operator_roles_allowed'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G5 (billing invariants): no live event without a paid, unrefunded
+  -- purchase unless its owner is a comp account. Rows that 059 made live
+  -- when paid go-live shipped (went_live_at = created_at, created before
+  -- 059 was applied at 2026-10-04 10:42:11 UTC) were enabled by hand and
+  -- are grandfathered.
+  BEGIN
+    SELECT array_agg(n.event_id::text ORDER BY n.event_id)
+      INTO v_bad
+      FROM leod_checkin_entitlements n
+      JOIN leod_events e ON e.id = n.event_id
+     WHERE n.status = 'live'
+       AND NOT EXISTS (SELECT 1 FROM leod_checkin_purchases p
+                        WHERE p.event_id = n.event_id
+                          AND p.paid_at IS NOT NULL
+                          AND p.refunded_at IS NULL)
+       AND NOT EXISTS (SELECT 1 FROM leod_checkin_comp_accounts c WHERE c.user_id = e.created_by)
+       AND NOT (n.went_live_at = n.created_at
+                AND n.created_at < timestamptz '2026-10-04 10:42:11+00');
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'every live event has a paid purchase or a comp owner'
+                     ELSE 'live without payment: ' || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'live_events_have_purchase'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G6 (billing invariants): no paid purchase without a matching
+  -- entitlement: live while the purchase stands, any status once refunded
+  -- (checkin_mark_refunded sets the entitlement back to 'test').
+  BEGIN
+    SELECT array_agg(p.id::text ORDER BY p.id)
+      INTO v_bad
+      FROM leod_checkin_purchases p
+      LEFT JOIN leod_checkin_entitlements n ON n.event_id = p.event_id
+     WHERE p.paid_at IS NOT NULL
+       AND (n.event_id IS NULL
+            OR (p.refunded_at IS NULL AND n.status IS DISTINCT FROM 'live'));
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'every paid purchase has a live or refunded entitlement'
+                     ELSE 'purchase without matching entitlement: ' || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'purchases_have_entitlement'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G7 (069): every SECURITY DEFINER function in public pins search_path.
+  BEGIN
+    SELECT array_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+                     ORDER BY p.proname)
+      INTO v_bad
+      FROM pg_proc p
+      JOIN pg_namespace ns ON ns.oid = p.pronamespace
+     WHERE ns.nspname = 'public'
+       AND p.prosecdef
+       AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}'::text[])) cfg
+                        WHERE cfg LIKE 'search\_path=%');
+    v_ok := v_bad IS NULL;
+    v_detail := CASE WHEN v_ok THEN 'every SECURITY DEFINER function in public sets search_path'
+                     ELSE cardinality(v_bad) || ' without search_path: ' || array_to_string(v_bad, ', ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'security_definer_search_path'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.checkin_guard_results() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.checkin_guard_results() TO service_role;
+COMMENT ON FUNCTION public.checkin_guard_results() IS
+  'AVE Brain nightly guards: one row per guard, ok = false on violation or on guard error. Service role only.';

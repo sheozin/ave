@@ -284,3 +284,218 @@ BEGIN
   RAISE EXCEPTION 'PROBE_OK S7 event day follows the event time zone';
 END
 $probe$;
+
+-- ============================================================
+-- Guard probes (part B). Same rules: one execute_sql per block, pass =
+-- error starting PROBE_OK. Each block breaks one invariant and asserts
+-- that exactly that guard turns ok = false.
+-- ============================================================
+
+-- G-perm. Only service_role may execute checkin_guard_results.
+DO $probe$
+DECLARE
+  f CONSTANT TEXT := 'public.checkin_guard_results()';
+  r TEXT;
+BEGIN
+  IF has_function_privilege('anon', f, 'EXECUTE') OR has_function_privilege('authenticated', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL anon or authenticated holds EXECUTE on %', f;
+  END IF;
+  IF NOT has_function_privilege('service_role', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL service_role cannot execute %', f;
+  END IF;
+  FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    BEGIN
+      EXECUTE format('SET LOCAL ROLE %I', r);
+      PERFORM * FROM public.checkin_guard_results();
+      RAISE EXCEPTION 'PROBE_FAIL % executed %', r, f;
+    EXCEPTION WHEN insufficient_privilege THEN
+      NULL;
+    END;
+  END LOOP;
+  RAISE EXCEPTION 'PROBE_OK G-perm only service_role executes checkin_guard_results';
+END
+$probe$;
+
+-- G0. Seven guards, each with a name, a verdict and a detail.
+DO $probe$
+DECLARE
+  n INT;
+BEGIN
+  SELECT count(*) INTO n FROM public.checkin_guard_results()
+   WHERE guard IS NOT NULL AND ok IS NOT NULL AND detail IS NOT NULL AND checked_at IS NOT NULL;
+  IF n <> 7 THEN
+    RAISE EXCEPTION 'PROBE_FAIL expected 7 complete guard rows, got %', n;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G0 seven guard rows';
+END
+$probe$;
+
+-- G1. A leod_checkin_* table writable by anon.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE TABLE public.leod_checkin_zz_probe (id INT);
+  ALTER TABLE public.leod_checkin_zz_probe ENABLE ROW LEVEL SECURITY;
+  GRANT INSERT ON public.leod_checkin_zz_probe TO anon;
+  CREATE POLICY zz_probe_anon_insert ON public.leod_checkin_zz_probe FOR INSERT TO anon WITH CHECK (true);
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_tables_not_anon_writable';
+  IF g.ok OR g.detail NOT LIKE '%leod_checkin_zz_probe%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G1 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G1 %', g.detail;
+END
+$probe$;
+
+-- G2. A public table with RLS off.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE TABLE public.zz_probe_rls_off (id INT);
+  -- A project event trigger enables RLS on every new table; switch it off again.
+  ALTER TABLE public.zz_probe_rls_off DISABLE ROW LEVEL SECURITY;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'public_tables_rls_on';
+  IF g.ok OR g.detail NOT LIKE '%zz_probe_rls_off%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G2 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G2 %', g.detail;
+END
+$probe$;
+
+-- G3. leod_config writable by authenticated.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT INSERT ON public.leod_config TO authenticated;
+  CREATE POLICY zz_probe_config_insert ON public.leod_config FOR INSERT TO authenticated WITH CHECK (true);
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'leod_config_not_authenticated_writable';
+  IF g.ok THEN
+    RAISE EXCEPTION 'PROBE_FAIL G3 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G3 %', g.detail;
+END
+$probe$;
+
+-- G4. An operator role outside the allowed set.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g4@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by)
+  VALUES (e, 'probe 075 g4', current_date, '09:00', '18:00', u);  -- auto-grants an organizer row
+  EXECUTE (SELECT 'ALTER TABLE public.leod_checkin_operators DROP CONSTRAINT ' || quote_ident(conname)
+             FROM pg_constraint
+            WHERE conrelid = 'public.leod_checkin_operators'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%role%' LIMIT 1);
+  UPDATE leod_checkin_operators SET role = 'superuser' WHERE event_id = e AND user_id = u;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_operator_roles_allowed';
+  IF g.ok OR g.detail NOT LIKE '%superuser%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G4 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G4 %', g.detail;
+END
+$probe$;
+
+-- G5. A live event with no purchase and a non-comp owner.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g5@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g5', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.ok OR g.detail NOT LIKE '%' || e::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G5 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G5 %', g.detail;
+END
+$probe$;
+
+-- G5b. The same live event is fine when its owner is a comp account.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g5b@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_checkin_comp_accounts (user_id, note) VALUES (u, 'probe 075');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g5b', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.detail LIKE '%' || e::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G5b comp event flagged: %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G5b comp event not flagged';
+END
+$probe$;
+
+-- G6. A paid, unrefunded purchase whose entitlement is still 'test'.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  p UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g6@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g6', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status) VALUES (e, 'test');
+  INSERT INTO leod_checkin_purchases (id, event_id, buyer_id, stripe_checkout_session_id, paid_at)
+  VALUES (p, e, u, 'cs_probe_075_g6', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'purchases_have_entitlement';
+  IF g.ok OR g.detail NOT LIKE '%' || p::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G6 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G6 %', g.detail;
+END
+$probe$;
+
+-- G7. A SECURITY DEFINER function without search_path.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE FUNCTION public.zz_probe_secdef() RETURNS INT LANGUAGE sql SECURITY DEFINER AS 'SELECT 1';
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'security_definer_search_path';
+  IF g.ok OR g.detail NOT LIKE '%zz_probe_secdef()%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G7 %', left(row_to_json(g)::text, 500);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G7 flagged zz_probe_secdef';
+END
+$probe$;
+
+-- G8. A guard that throws is ok = false with the error, and the other
+--     guards still run.
+DO $probe$
+DECLARE
+  g RECORD;
+  n INT;
+BEGIN
+  ALTER TABLE public.leod_checkin_comp_accounts RENAME TO leod_checkin_comp_accounts_zz;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.ok OR g.detail NOT LIKE 'guard error:%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G8 %', row_to_json(g);
+  END IF;
+  SELECT count(*) INTO n FROM public.checkin_guard_results();
+  IF n <> 7 THEN
+    RAISE EXCEPTION 'PROBE_FAIL G8 only % rows when one guard throws', n;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G8 %', g.detail;
+END
+$probe$;
