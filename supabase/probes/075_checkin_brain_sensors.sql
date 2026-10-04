@@ -347,6 +347,24 @@ BEGIN
 END
 $probe$;
 
+-- G1b. No leod_checkin_* table in scope is a failure, not an all-clear.
+DO $probe$
+DECLARE
+  t TEXT;
+  g RECORD;
+BEGIN
+  FOR t IN SELECT c.relname::text FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace
+            WHERE ns.nspname = 'public' AND c.relkind IN ('r', 'p') AND c.relname LIKE 'leod\_checkin\_%' LOOP
+    EXECUTE format('ALTER TABLE public.%I RENAME TO %I', t, 'zzprobe_' || t);
+  END LOOP;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_tables_not_anon_writable';
+  IF g.ok OR g.detail NOT LIKE '0 leod_checkin_* tables found%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G1b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G1b %', g.detail;
+END
+$probe$;
+
 -- G2. A public table with RLS off.
 DO $probe$
 DECLARE

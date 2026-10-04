@@ -370,29 +370,38 @@ DECLARE
   v_detail TEXT;
   v_bad    TEXT[];
   v_roles  TEXT[];
+  v_n      INT;
+  v_total  INT;
+  v_gf     INT;
 BEGIN
   -- G1 (061, 064, 069): no leod_checkin_* table writable by anon. Writable
   -- = an INSERT/UPDATE/DELETE grant AND (RLS off OR a permissive write
   -- policy that applies to anon or PUBLIC). TRUNCATE is not counted:
   -- PostgREST cannot issue it, and Supabase grants it to anon by default.
+  -- An empty in-scope set (prefix renamed, tables moved) is a failure: the
+  -- guard must not pass by looking at nothing.
   BEGIN
-    SELECT array_agg(c.relname::text ORDER BY c.relname)
-      INTO v_bad
+    SELECT count(*),
+           array_agg(c.relname::text ORDER BY c.relname) FILTER (WHERE
+             has_table_privilege('anon', c.oid, 'INSERT, UPDATE, DELETE')
+             AND (NOT c.relrowsecurity OR EXISTS (
+                   SELECT 1 FROM pg_policy p
+                    WHERE p.polrelid = c.oid
+                      AND p.polpermissive
+                      AND p.polcmd IN ('a', 'w', 'd', '*')
+                      AND (0::oid = ANY (p.polroles) OR 'anon'::regrole::oid = ANY (p.polroles)))))
+      INTO v_total, v_bad
       FROM pg_class c
       JOIN pg_namespace ns ON ns.oid = c.relnamespace
      WHERE ns.nspname = 'public'
        AND c.relkind IN ('r', 'p')
-       AND c.relname LIKE 'leod\_checkin\_%'
-       AND has_table_privilege('anon', c.oid, 'INSERT, UPDATE, DELETE')
-       AND (NOT c.relrowsecurity OR EXISTS (
-             SELECT 1 FROM pg_policy p
-              WHERE p.polrelid = c.oid
-                AND p.polpermissive
-                AND p.polcmd IN ('a', 'w', 'd', '*')
-                AND (0::oid = ANY (p.polroles) OR 'anon'::regrole::oid = ANY (p.polroles))));
-    v_ok := v_bad IS NULL;
-    v_detail := CASE WHEN v_ok THEN 'no leod_checkin_* table is writable by anon'
-                     ELSE 'writable by anon: ' || array_to_string(v_bad, ', ') END;
+       AND c.relname LIKE 'leod\_checkin\_%';
+    v_n := coalesce(cardinality(v_bad), 0);
+    v_ok := v_total > 0 AND v_n = 0;
+    v_detail := CASE WHEN v_total = 0 THEN '0 leod_checkin_* tables found'
+                     WHEN v_n = 0 THEN '0 of ' || v_total || ' leod_checkin_* tables writable by anon'
+                     ELSE v_n || ' of ' || v_total || ' leod_checkin_* tables writable by anon: '
+                          || array_to_string(v_bad, ', ') END;
   EXCEPTION WHEN OTHERS THEN
     v_ok := false; v_detail := 'guard error: ' || SQLERRM;
   END;
@@ -477,21 +486,25 @@ BEGIN
   -- 059 was applied at 2026-10-04 10:42:11 UTC) were enabled by hand and
   -- are grandfathered.
   BEGIN
-    SELECT array_agg(n.event_id::text ORDER BY n.event_id)
-      INTO v_bad
-      FROM leod_checkin_entitlements n
-      JOIN leod_events e ON e.id = n.event_id
-     WHERE n.status = 'live'
-       AND NOT EXISTS (SELECT 1 FROM leod_checkin_purchases p
-                        WHERE p.event_id = n.event_id
-                          AND p.paid_at IS NOT NULL
-                          AND p.refunded_at IS NULL)
-       AND NOT EXISTS (SELECT 1 FROM leod_checkin_comp_accounts c WHERE c.user_id = e.created_by)
-       AND NOT (n.went_live_at = n.created_at
-                AND n.created_at < timestamptz '2026-10-04 10:42:11+00');
-    v_ok := v_bad IS NULL;
-    v_detail := CASE WHEN v_ok THEN 'every live event has a paid purchase or a comp owner'
-                     ELSE 'live without payment: ' || array_to_string(v_bad, ', ') END;
+    SELECT count(*),
+           array_agg(x.event_id::text ORDER BY x.event_id) FILTER (WHERE x.unpaid AND NOT x.gf),
+           count(*) FILTER (WHERE x.unpaid AND x.gf)
+      INTO v_total, v_bad, v_gf
+      FROM (SELECT n.event_id,
+                   (NOT EXISTS (SELECT 1 FROM leod_checkin_purchases p
+                                 WHERE p.event_id = n.event_id
+                                   AND p.paid_at IS NOT NULL
+                                   AND p.refunded_at IS NULL)
+                    AND NOT EXISTS (SELECT 1 FROM leod_checkin_comp_accounts c WHERE c.user_id = e.created_by)) AS unpaid,
+                   coalesce(n.went_live_at = n.created_at
+                            AND n.created_at < timestamptz '2026-10-04 10:42:11+00', false) AS gf
+              FROM leod_checkin_entitlements n
+              JOIN leod_events e ON e.id = n.event_id
+             WHERE n.status = 'live') x;
+    v_n := coalesce(cardinality(v_bad), 0);
+    v_ok := v_n = 0;
+    v_detail := v_n || ' of ' || v_total || ' live entitlements without a purchase (' || v_gf || ' grandfathered)'
+                || CASE WHEN v_ok THEN '' ELSE ': ' || array_to_string(v_bad, ', ') END;
   EXCEPTION WHEN OTHERS THEN
     v_ok := false; v_detail := 'guard error: ' || SQLERRM;
   END;
@@ -502,16 +515,17 @@ BEGIN
   -- entitlement: live while the purchase stands, any status once refunded
   -- (checkin_mark_refunded sets the entitlement back to 'test').
   BEGIN
-    SELECT array_agg(p.id::text ORDER BY p.id)
-      INTO v_bad
+    SELECT count(*),
+           array_agg(p.id::text ORDER BY p.id) FILTER (WHERE n.event_id IS NULL
+             OR (p.refunded_at IS NULL AND n.status IS DISTINCT FROM 'live'))
+      INTO v_total, v_bad
       FROM leod_checkin_purchases p
       LEFT JOIN leod_checkin_entitlements n ON n.event_id = p.event_id
-     WHERE p.paid_at IS NOT NULL
-       AND (n.event_id IS NULL
-            OR (p.refunded_at IS NULL AND n.status IS DISTINCT FROM 'live'));
-    v_ok := v_bad IS NULL;
-    v_detail := CASE WHEN v_ok THEN 'every paid purchase has a live or refunded entitlement'
-                     ELSE 'purchase without matching entitlement: ' || array_to_string(v_bad, ', ') END;
+     WHERE p.paid_at IS NOT NULL;
+    v_n := coalesce(cardinality(v_bad), 0);
+    v_ok := v_n = 0;
+    v_detail := v_n || ' of ' || v_total || ' paid purchases without a matching entitlement'
+                || CASE WHEN v_ok THEN '' ELSE ': ' || array_to_string(v_bad, ', ') END;
   EXCEPTION WHEN OTHERS THEN
     v_ok := false; v_detail := 'guard error: ' || SQLERRM;
   END;
