@@ -242,3 +242,64 @@ REVOKE ALL ON FUNCTION checkin_update_event_details(uuid, text, text, date, text
 GRANT EXECUTE ON FUNCTION checkin_update_event_details(uuid, text, text, date, text, time, time) TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Fix round 2 (review): applied separately as checkin_roles_details_overnight.
+-- Overnight events are real (22:00 to 02:00 means the next day), so an end
+-- earlier than the start is allowed. Only end = start is refused. The
+-- console gate and the venue keep/clear rule are unchanged from round 1.
+CREATE OR REPLACE FUNCTION checkin_update_event_details(
+  p_event_id uuid, p_name text, p_venue text, p_date date, p_timezone text,
+  p_event_start time, p_event_end time)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_name     text := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  v_venue    text := btrim(regexp_replace(p_venue, '\s+', ' ', 'g'));
+  v_is_owner boolean;
+  v_via      text;
+  v_start    time;
+  v_end      time;
+BEGIN
+  v_is_owner := checkin_is_owner(p_event_id);
+  IF auth.uid() IS NULL
+     OR NOT (v_is_owner OR checkin_role_for_event(p_event_id) = 'organizer') THEN
+    RAISE EXCEPTION 'Only the event owner or an organizer can change event details'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  SELECT created_via, event_start, event_end INTO v_via, v_start, v_end
+    FROM leod_events WHERE id = p_event_id AND active;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Event not found' USING ERRCODE = 'P0002';
+  END IF;
+  IF NOT v_is_owner AND v_via IS DISTINCT FROM 'checkin' THEN
+    RAISE EXCEPTION 'Only the event owner can edit a console event'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF v_name = '' OR length(v_name) > 160 THEN
+    RAISE EXCEPTION 'The event name is required, at most 160 characters' USING ERRCODE = '22023';
+  END IF;
+  IF v_venue IS NOT NULL AND length(v_venue) > 160 THEN
+    RAISE EXCEPTION 'The venue is at most 160 characters' USING ERRCODE = '22023';
+  END IF;
+  IF p_timezone IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = p_timezone) THEN
+    RAISE EXCEPTION 'Unknown timezone %', p_timezone USING ERRCODE = '22023';
+  END IF;
+  IF COALESCE(p_event_end, v_end) = COALESCE(p_event_start, v_start) THEN
+    RAISE EXCEPTION 'The event must end at a different time than it starts' USING ERRCODE = '22023';
+  END IF;
+  UPDATE leod_events
+     SET name = v_name,
+         venue = CASE WHEN p_venue IS NULL THEN venue ELSE NULLIF(v_venue, '') END,
+         date = COALESCE(p_date, date),
+         timezone = COALESCE(p_timezone, timezone),
+         event_start = COALESCE(p_event_start, event_start),
+         event_end = COALESCE(p_event_end, event_end)
+   WHERE id = p_event_id AND active;
+END;
+$$;
+REVOKE ALL ON FUNCTION checkin_update_event_details(uuid, text, text, date, text, time, time) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION checkin_update_event_details(uuid, text, text, date, text, time, time) TO authenticated;
+
+NOTIFY pgrst, 'reload schema';

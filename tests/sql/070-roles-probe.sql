@@ -154,18 +154,15 @@ BEGIN
     PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, '12:00', '12:00');
     RAISE EXCEPTION 'PROBE FAIL: end equal to start accepted';
   EXCEPTION WHEN invalid_parameter_value THEN
-    IF SQLERRM <> 'The event must end after it starts' THEN RAISE; END IF;
+    IF SQLERRM <> 'The event must end at a different time than it starts' THEN RAISE; END IF;
     v_n := v_n + 1;
   END;
-  BEGIN
-    -- start stays 10:00 (kept), end 09:30 comes in alone
-    PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, NULL, '09:30');
-    RAISE EXCEPTION 'PROBE FAIL: end before the kept start accepted';
-  EXCEPTION WHEN invalid_parameter_value THEN
-    IF SQLERRM <> 'The event must end after it starts' THEN RAISE; END IF;
-    v_n := v_n + 1;
-  END;
+  -- Overnight: 22:00 to 02:00 is accepted (the end is the next day).
+  PERFORM checkin_update_event_details(v_ev, 'Probe renamed', NULL, NULL, NULL, '22:00', '02:00');
   RESET ROLE;
+  SELECT name INTO v_name FROM leod_events WHERE id = v_ev AND event_start = '22:00' AND event_end = '02:00';
+  IF v_name IS NULL THEN RAISE EXCEPTION 'PROBE FAIL: overnight 22:00 to 02:00 not stored'; END IF;
+  v_n := v_n + 1;
   -- A console event owned by v_owner, where v_org is also an organizer.
   INSERT INTO leod_events (name, date, event_start, event_end, timezone, created_by, created_via)
   VALUES ('Probe 070 console', current_date + 30, '09:00', '18:00', 'Europe/Warsaw', v_owner, 'console')
