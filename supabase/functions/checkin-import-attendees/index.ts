@@ -31,7 +31,20 @@ function makeQrToken(): string {
   return crypto.randomUUID().replace(/-/g, '')
 }
 
+const MAX_ROWS = 5000
+const MAX_FIELD = 200
+const ROW_FIELDS = ['first_name', 'last_name', 'email', 'company', 'role_title', 'ticket_type', 'external_ref']
+
+// Rows come straight from the request body: check types and lengths
+// before touching them, so a bad value skips the row instead of a 500.
 function validateRow(row: ImportRow): string | null {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return 'Invalid value'
+  for (const k of ROW_FIELDS) {
+    const v = (row as unknown as Record<string, unknown>)[k]
+    if (v == null) continue
+    if (typeof v !== 'string') return 'Invalid value'
+    if (v.length > MAX_FIELD) return 'Field too long'
+  }
   if (!row.first_name?.trim()) return 'Missing first_name'
   if (!row.last_name?.trim()) return 'Missing last_name'
   return null
@@ -75,6 +88,12 @@ Deno.serve(async (req) => {
 
   if (!event_id || rows.length === 0) {
     return new Response(JSON.stringify({ error: 'Missing event_id or rows' }), {
+      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
+  if (rows.length > MAX_ROWS) {
+    return new Response(JSON.stringify({ error: 'Too many rows (max 5000)' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

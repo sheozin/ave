@@ -57,8 +57,18 @@ interface RowResult {
   reason?: string;
 }
 
-// Line-for-line re-expression of validateRow() at index.ts:33-37.
+// Line-for-line re-expression of validateRow() and its caps in index.ts.
+const MAX_ROWS = 5000;
+const MAX_FIELD = 200;
+const ROW_FIELDS = ['first_name', 'last_name', 'email', 'company', 'role_title', 'ticket_type', 'external_ref'];
 function validateRow(row: ImportRow): string | null {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return 'Invalid value';
+  for (const k of ROW_FIELDS) {
+    const v = (row as unknown as Record<string, unknown>)[k];
+    if (v == null) continue;
+    if (typeof v !== 'string') return 'Invalid value';
+    if (v.length > MAX_FIELD) return 'Field too long';
+  }
   if (!row.first_name?.trim()) return 'Missing first_name';
   if (!row.last_name?.trim()) return 'Missing last_name';
   return null;
@@ -182,6 +192,24 @@ describe('checkin-import: validateRow', () => {
   it('04 accepts a row with both names present and no email at all', () => {
     const row: ImportRow = { first_name: 'Jane', last_name: 'Doe' };
     expect(validateRow(row)).toBeNull();
+  });
+  it('skips a row with a non-string field instead of throwing', () => {
+    expect(validateRow({ first_name: 1, last_name: 'B' } as unknown as ImportRow)).toBe('Invalid value');
+    expect(validateRow({ first_name: 'A', last_name: 'B', email: { x: 1 } } as unknown as ImportRow)).toBe('Invalid value');
+    expect(validateRow(null as unknown as ImportRow)).toBe('Invalid value');
+    expect(validateRow(['A', 'B'] as unknown as ImportRow)).toBe('Invalid value');
+  });
+  it('skips a row with a field over 200 characters', () => {
+    expect(validateRow({ first_name: 'A', last_name: 'B', company: 'x'.repeat(201) })).toBe('Field too long');
+    expect(validateRow({ first_name: 'A', last_name: 'B', company: 'x'.repeat(200) })).toBeNull();
+  });
+  it('allows null or absent optional fields', () => {
+    expect(validateRow({ first_name: 'A', last_name: 'B', email: null } as unknown as ImportRow)).toBeNull();
+  });
+  it('caps a request at 5000 rows', () => {
+    const tooMany = (n: number) => n > MAX_ROWS;
+    expect(tooMany(5000)).toBe(false);
+    expect(tooMany(5001)).toBe(true);
   });
 });
 

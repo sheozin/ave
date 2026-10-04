@@ -195,7 +195,7 @@
 
 <script type="module">
 import { checkinWindow, TEST_CAP } from '/checkin-window.js';
-import { parseCsv, mapRows } from '/checkin-csv.js';
+import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -236,7 +236,7 @@ async function loadAttendees() {
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb.from('leod_checkin_attendees')
       .select('id,first_name,last_name,email,company,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at')
-      .eq('event_id', EVENT_ID).order('last_name').order('first_name').range(from, from + 999);
+      .eq('event_id', EVENT_ID).order('last_name').order('first_name').order('id').range(from, from + 999);
     if (error) throw new Error(error.message);
     all.push(...data);
     if (data.length < 1000) break;
@@ -383,9 +383,14 @@ drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.ad
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) previewImport(f); });
 
+// Same row cap as checkin-import-attendees; checked before any network call.
+const MAX_FILE_BYTES = 5 * 1024 * 1024, MAX_IMPORT_ROWS = 5000;
 async function previewImport(file) {
   $('att-err').textContent = ''; const box = $('imp-prev'); box.hidden = false; box.replaceChildren(el('div', 'fine', 'Reading ' + file.name + '…'));
-  const { rows, unmapped, missing } = mapRows(parseCsv(await file.text()));
+  if (file.size > MAX_FILE_BYTES) { box.replaceChildren(el('div', 'err', 'This file is over 5 MB. Split it into smaller files and import each one.')); return; }
+  const table = parseCsv(await file.text());
+  if (table.length - 1 > MAX_IMPORT_ROWS) { box.replaceChildren(el('div', 'err', 'This file has ' + (table.length - 1) + ' rows. Import at most ' + MAX_IMPORT_ROWS + ' at a time.')); return; }
+  const { rows, unmapped, missing } = mapRows(table);
   if (missing.length) { box.replaceChildren(el('div', 'err', 'This file has no ' + missing.join(' or ').replace(/_/g, ' ') + ' column. Add it and try again.')); return; }
   if (!rows.length) { box.replaceChildren(el('div', 'err', 'No people found in this file.')); return; }
   const { data, error } = await sb.functions.invoke('checkin-import-attendees', { body: { event_id: EVENT_ID, rows, dry_run: true } });
@@ -408,8 +413,14 @@ async function previewImport(file) {
     const { data: done, error: e2 } = await sb.functions.invoke('checkin-import-attendees', { body: { event_id: EVENT_ID, rows: PENDING_IMPORT, dry_run: false } });
     if (e2) { ok.disabled = false; ok.textContent = 'Try again'; box.appendChild(el('div', 'err', await fnError(e2))); return; }
     PENDING_IMPORT = null;
-    box.replaceChildren(el('div', 'ok', 'Imported. ' + done.summary.to_create + ' added, ' + done.summary.to_update + ' updated.'));
-    if (done.update_errors?.length) box.appendChild(el('div', 'err', done.update_errors.length + ' updates failed. See the browser console for names.'));
+    const failed = done.update_errors || [];
+    box.replaceChildren(el('div', 'ok', 'Imported. ' + done.summary.to_create + ' added, ' + (done.summary.to_update - failed.length) + ' updated.'));
+    if (failed.length) {
+      console.error('setup: attendee updates failed', failed);
+      box.appendChild(el('div', 'err', failed.length + (failed.length === 1 ? ' update' : ' updates') + ' failed:'));
+      for (const f of failed.slice(0, 10)) box.appendChild(el('div', 'fine', [f.first_name, f.last_name].filter(Boolean).join(' ') + (f.email ? ' (' + f.email + ')' : '')));
+      if (failed.length > 10) box.appendChild(el('div', 'fine', 'and ' + (failed.length - 10) + ' more.'));
+    }
     await loadAttendees(); renderAttendees(); renderChrome();
   };
   acts.append(ok, no); box.appendChild(acts);
@@ -417,10 +428,8 @@ async function previewImport(file) {
 
 $('att-export').onclick = () => {
   const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Checked in at', 'Badge printed at'];
-  const cell = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [head, ...ATT.map(a => [a.first_name, a.last_name, a.email, a.company, a.ticket_type, a.checked_in_at, a.badge_printed_at])]
-    .map(r => r.map(cell).join(','));
-  const url = URL.createObjectURL(new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+  const csv = toCsv([head, ...ATT.map(a => [a.first_name, a.last_name, a.email, a.company, a.ticket_type, a.checked_in_at, a.badge_printed_at])]);
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
   const a = el('a'); a.href = url; a.download = EV.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + '-attendance.csv';
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 };
@@ -515,6 +524,8 @@ $('gl-btn').onclick = async () => {
   $('gl-err').textContent = ''; $('gl-btn').disabled = true; $('gl-btn').textContent = 'Opening payment…';
   const { data, error } = await sb.functions.invoke('checkin-create-checkout', { body: { event_id: EVENT_ID } });
   if (error || !data?.url) { $('gl-btn').disabled = false; $('gl-btn').textContent = 'Continue to secure payment'; $('gl-err').textContent = error ? await fnError(error) : 'Could not start payment.'; return; }
+  // Only ever leave for Stripe's hosted checkout.
+  if (!/^https:\/\/checkout\.stripe\.com\//.test(data.url)) { $('gl-btn').disabled = false; $('gl-btn').textContent = 'Continue to secure payment'; $('gl-err').textContent = 'Could not start payment.'; return; }
   location.href = data.url;
 };
 $('gl-qr').onclick = () => go('qr');
@@ -531,14 +542,20 @@ $('gl-comp-btn').onclick = async () => {
 
 async function waitForLive() {
   go('golive'); $('gl-pay').hidden = true; $('gl-wait').hidden = false;
-  for (let i = 0; i < 30; i++) {
-    const { data, error } = await sb.from('leod_checkin_entitlements').select('status').eq('event_id', EVENT_ID).single();
-    if (!error && data.status === 'live') {
-      await loadEvent(); await loadAttendees(); renderChrome(); renderGolive();
-      history.replaceState(null, '', '/checkin/setup?event=' + EVENT_ID + '&step=golive');
-      return;
+  try {
+    for (let i = 0; i < 30; i++) {
+      const { data, error } = await sb.from('leod_checkin_entitlements').select('status').eq('event_id', EVENT_ID).single();
+      if (!error && data.status === 'live') {
+        await loadEvent(); await loadAttendees(); renderChrome(); renderGolive();
+        history.replaceState(null, '', '/checkin/setup?event=' + EVENT_ID + '&step=golive');
+        return;
+      }
+      await new Promise(r => setTimeout(r, 2000));
     }
-    await new Promise(r => setTimeout(r, 2000));
+  } catch (e) {
+    console.error('setup: refresh after payment failed', e);
+    $('gl-wait-t').textContent = 'Payment received, but this page could not refresh. Reload in a minute.';
+    return;
   }
   $('gl-wait-t').textContent = 'Payment received, still confirming. Refresh in a minute. If this page still says test mode after that, email support@cuedeck.io.';
 }

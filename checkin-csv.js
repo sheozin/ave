@@ -59,3 +59,16 @@ export function mapRows(table) {
   }
   return { rows, unmapped, missing };
 }
+
+// Rows to CSV text for Excel. ';' by default because organizers in PL/DE
+// open CSVs in Excel with that locale. A cell starting with = + - @ tab
+// or CR would run as a formula, and guest names come from kiosks and
+// imports, so such a cell gets a leading apostrophe.
+export function toCsv(rows, sep = ';') {
+  const cell = (v) => {
+    let s = v == null ? '' : String(v);
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return s.includes('"') || s.includes(sep) || /[\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return rows.map(r => r.map(cell).join(sep)).join('\r\n');
+}

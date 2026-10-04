@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv, mapRows } from '../checkin-csv.js';
+import { parseCsv, mapRows, toCsv } from '../checkin-csv.js';
 
 describe('parseCsv', () => {
   it('handles quotes, escaped quotes, commas and CRLF', () => {
@@ -28,5 +28,24 @@ describe('mapRows', () => {
   });
   it('drops rows that are entirely empty', () => {
     expect(mapRows([['first name', 'last name'], ['', ''], ['A', 'B']]).rows).toHaveLength(1);
+  });
+});
+
+describe('toCsv', () => {
+  it('neutralises spreadsheet formulas', () => {
+    for (const p of ['=', '+', '-', '@', '\t', '\r']) {
+      const out = toCsv([[p + 'HYPERLINK("http://x")']]);
+      expect(out.replace(/^"/, '').startsWith("'" + p)).toBe(true);
+    }
+  });
+  it('quotes the separator, quotes and newlines', () => {
+    expect(toCsv([['a;b', 'say "hi"', 'x\ny', 'plain']])).toBe('"a;b";"say ""hi""";"x\ny";plain');
+  });
+  it('writes null and undefined as empty cells and joins rows with CRLF', () => {
+    expect(toCsv([['a', null, undefined], ['b', '', 'c']])).toBe('a;;\r\nb;;c');
+  });
+  it('round-trips a normal row through parseCsv', () => {
+    const rows = [['First name', 'Last name', 'Email'], ['Ana', 'Nowak; Jr', 'ana@x.pl']];
+    expect(parseCsv(toCsv(rows))).toEqual(rows);
   });
 });
