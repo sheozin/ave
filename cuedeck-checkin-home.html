@@ -67,7 +67,7 @@
 <!-- SET PASSWORD (invite or recovery link) -->
 <main class="wrap" id="v-pass" hidden>
   <form class="card" id="f-pass" style="max-width:420px;margin:40px auto">
-    <h3>Choose a password</h3><p class="s">You'll use it to sign in to CueDeck Check-in.</p>
+    <h3>Choose a password</h3><p class="s">You'll use it to sign in to CueDeck Check-in.</p><p class="s" id="pw-who"></p>
     <div class="field"><label for="pw-1">New password</label><input id="pw-1" type="password" autocomplete="new-password" minlength="8" required></div>
     <button class="btn btn-p full" id="pw-btn">Save and continue</button>
     <div class="err" id="pw-err"></div>
@@ -77,7 +77,7 @@
 <!-- SIGNED IN -->
 <main class="wrap" id="v-in" hidden>
   <div class="head">
-    <div><h1>Your events</h1><p id="head-sub">Set up for free. <span data-price-line hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
+    <div><h1>Your events</h1><p id="head-sub">Set up for free. <span id="head-price" hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
     <button class="btn btn-p" id="new-btn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New event</button>
   </div>
   <div class="err" id="ev-err"></div>
@@ -87,7 +87,7 @@
 
 <dialog id="dlg-new">
   <form id="f-new" method="dialog">
-    <h3 style="margin:0 0 4px">New event</h3><p class="s" style="margin:0 0 16px;color:var(--t2);font-size:13px">Starts in free test mode.</p>
+    <h3 style="margin:0 0 4px">New event</h3><p class="s" id="ne-sub" style="margin:0 0 16px;color:var(--t2);font-size:13px">Starts in free test mode.</p>
     <div class="field"><label for="ne-name">Event name</label><input id="ne-name" required maxlength="160"></div>
     <div class="field"><label for="ne-date">Date</label><input id="ne-date" type="date" required></div>
     <div class="row2">
@@ -110,14 +110,42 @@ import { checkinWindow, TEST_CAP } from '/checkin-window.js';
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 // Read before createClient: supabase-js consumes and clears the hash.
-const NEEDS_PASSWORD = /type=(invite|recovery)/.test(location.hash);
+const NEEDS_PASSWORD_HASH = /type=(invite|recovery)/.test(location.hash);
+// Kept across a reload: once the hash is consumed it is the only trace that
+// this session came from an invite or recovery link.
+function pwFlag(op) {
+  try {
+    if (op === 'set') sessionStorage.setItem('ck_needs_password', '1');
+    else if (op === 'clear') sessionStorage.removeItem('ck_needs_password');
+    else return sessionStorage.getItem('ck_needs_password') === '1';
+  } catch (_) {}
+  return false;
+}
+if (NEEDS_PASSWORD_HASH) pwFlag('set');
+const NEEDS_PASSWORD = NEEDS_PASSWORD_HASH || pwFlag('get');
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = (id) => document.getElementById(id);
-let ME = null, MY_ROLE = null;
+let ME = null, MY_ROLE = null, PRICE_OK = false, ACCOUNT_IS_COMP = false, createdId = null;
 
 function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = label; }
+// The function's own { error } body, not supabase-js's generic non-2xx message.
+async function fnError(error) {
+  try { const b = await error.context.json(); if (b && b.error) return b.error; } catch (_) {}
+  return error.message;
+}
+// Comp accounts never pay to go live, so they never see the go-live price.
+function syncHeadPrice() { $('head-price').hidden = !PRICE_OK || ACCOUNT_IS_COMP; }
+function navUser(text, withSignOut) {
+  const nav = $('nav-r'); nav.replaceChildren();
+  nav.appendChild(el('span', null, text));
+  if (withSignOut) {
+    const out = el('button', 'link', 'Sign out');
+    out.onclick = async () => { pwFlag('clear'); await sb.auth.signOut(); location.href = '/checkin'; };
+    nav.appendChild(out);
+  }
+}
 function fmtDate(ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); }
 
 async function loadPrice() {
@@ -129,6 +157,7 @@ async function loadPrice() {
       minimumFractionDigits: p.amount % 100 ? 2 : 0 }).format(p.amount / 100);
     document.querySelectorAll('[data-price]').forEach(n => n.textContent = s);
     document.querySelectorAll('[data-price-line]').forEach(n => n.hidden = false);
+    PRICE_OK = true; syncHeadPrice();
   } catch (e) {
     // No number is better than a wrong one: the lines stay hidden.
     console.error('checkin home: price unavailable', e);
@@ -192,6 +221,7 @@ $('f-pass').addEventListener('submit', async (e) => {
   const { data, error } = await sb.auth.updateUser({ password: $('pw-1').value });
   busy($('pw-btn'), false, 'Save and continue');
   if (error) { $('pw-err').textContent = error.message; return; }
+  pwFlag('clear');
   history.replaceState(null, '', '/checkin');
   await enter(data.user);
 });
@@ -202,11 +232,7 @@ async function enter(user) {
   const { data: me, error } = await sb.from('leod_users').select('role, name').eq('id', user.id).maybeSingle();
   if (error) console.error('checkin home: profile read failed', error.message);
   MY_ROLE = me?.role || 'director';
-  const nav = $('nav-r'); nav.replaceChildren();
-  nav.appendChild(el('span', null, me?.name || user.email));
-  const out = el('button', 'link', 'Sign out');
-  out.onclick = async () => { await sb.auth.signOut(); location.href = '/checkin'; };
-  nav.appendChild(out);
+  navUser(me?.name || user.email, true);
   $('new-btn').hidden = MY_ROLE === 'checkin_staff';
   show('v-in');
   await loadEvents();
@@ -227,6 +253,8 @@ async function loadEvents() {
   $('ev-err').textContent = '';
   const { data, error } = await sb.rpc('checkin_my_events');
   if (error) { $('ev-err').textContent = 'Could not load your events: ' + error.message; return; }
+  ACCOUNT_IS_COMP = (data || []).some(r => r.is_owner && r.is_comp);
+  syncHeadPrice();
   const rows = (data || []).map(r => ({ ...r, state: stateOf(r) }))
     .sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.date.localeCompare(b.date));
   const grid = $('ev-grid'); grid.replaceChildren();
@@ -275,7 +303,7 @@ function card(r) {
     b.onclick = async () => {
       busy(b, true, 'Setting up…');
       const { error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: r.event_id } });
-      if (error) { busy(b, false, 'Set up check-in'); $('ev-err').textContent = 'Could not set up check-in: ' + error.message; return; }
+      if (error) { busy(b, false, 'Set up check-in'); $('ev-err').textContent = 'Could not set up check-in: ' + await fnError(error); return; }
       location.href = setup;
     };
     acts.appendChild(b);
@@ -299,27 +327,49 @@ function fillTimezones() {
   const sel = $('ne-tz'); sel.replaceChildren();
   for (const z of zones) { const o = el('option', null, z.replace(/_/g, ' ')); o.value = z; if (z === here) o.selected = true; sel.appendChild(o); }
 }
-$('new-btn').onclick = () => { fillTimezones(); $('ne-err').textContent = ''; $('dlg-new').showModal(); };
+$('new-btn').onclick = () => {
+  createdId = null; busy($('ne-save'), false, 'Create event');
+  $('ne-sub').textContent = ACCOUNT_IS_COMP ? 'Check-in is included with your account.' : 'Starts in free test mode.';
+  fillTimezones(); $('ne-err').textContent = ''; $('dlg-new').showModal();
+};
 $('ne-cancel').onclick = () => $('dlg-new').close();
+// Closing after a half-finished create: show the new event's card so it can be set up from there.
+$('dlg-new').addEventListener('close', () => { if (createdId) loadEvents(); });
 $('f-new').addEventListener('submit', async (e) => {
   e.preventDefault();
-  busy($('ne-save'), true, 'Creating…'); $('ne-err').textContent = '';
-  const { data: ev, error } = await sb.from('leod_events').insert({
-    name: $('ne-name').value.trim(), date: $('ne-date').value,
-    event_start: $('ne-start').value, event_end: $('ne-end').value,
-    venue: $('ne-venue').value.trim() || null, timezone: $('ne-tz').value,
-    active: true, created_by: ME.id, created_via: 'checkin',
-  }).select('id').single();
-  if (error) { busy($('ne-save'), false, 'Create event'); $('ne-err').textContent = error.message; return; }
-  const { error: enErr } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: ev.id } });
-  if (enErr) { busy($('ne-save'), false, 'Create event'); $('ne-err').textContent = 'Event created, but check-in could not be set up: ' + enErr.message; return; }
-  location.href = '/checkin/setup?event=' + ev.id;
+  $('ne-err').textContent = '';
+  // The event row exists once the insert succeeds; a retry only re-runs
+  // enable-event for it, never inserts a second event.
+  if (!createdId) {
+    busy($('ne-save'), true, 'Creating…');
+    const { data: ev, error } = await sb.from('leod_events').insert({
+      name: $('ne-name').value.trim(), date: $('ne-date').value,
+      event_start: $('ne-start').value, event_end: $('ne-end').value,
+      venue: $('ne-venue').value.trim() || null, timezone: $('ne-tz').value,
+      active: true, created_by: ME.id, created_via: 'checkin',
+    }).select('id').single();
+    if (error) { busy($('ne-save'), false, 'Create event'); $('ne-err').textContent = error.message; return; }
+    createdId = ev.id;
+  } else {
+    busy($('ne-save'), true, 'Setting up…');
+  }
+  const { error: enErr } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: createdId } });
+  if (enErr) {
+    busy($('ne-save'), false, 'Finish setting up');
+    $('ne-err').textContent = 'Event created, but check-in could not be set up: ' + await fnError(enErr);
+    return;
+  }
+  location.href = '/checkin/setup?event=' + createdId;
 });
 
 // ── boot ────────────────────────────────────────────────
 loadPrice();
 const { data: { session } } = await sb.auth.getSession();
-if (session && NEEDS_PASSWORD) { show('v-pass'); $('pw-1').focus(); }
+if (session) navUser(session.user.email, false);
+if (session && NEEDS_PASSWORD) {
+  $('pw-who').textContent = 'Setting the password for ' + session.user.email;
+  show('v-pass'); $('pw-1').focus();
+}
 else if (session) await enter(session.user);
 else { show('v-out'); tab('in'); }
 </script>
