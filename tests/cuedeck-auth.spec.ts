@@ -57,3 +57,19 @@ describe('mount without a site key', () => {
     expect(() => h.reset()).not.toThrow();
   });
 });
+
+// The static app and the marketing CMS deploy separately but sign in to the
+// same Supabase project. If CAPTCHA is switched on while one of them still
+// has no site key, that login stops working. Both copies must match.
+describe('Turnstile site key', () => {
+  it('is the same in cuedeck-auth.js and the CMS login', () => {
+    const key = (path: string, re: RegExp) => {
+      const m = readFileSync(new URL(path, import.meta.url), 'utf8').match(re);
+      if (!m) throw new Error('site key constant not found in ' + path);
+      return m[1];
+    };
+    const app = key('../cuedeck-auth.js', /var TURNSTILE_SITE_KEY = '([^']*)';/);
+    const cms = key('../cuedeck-marketing/app/(cms-auth)/login/page.tsx', /const TURNSTILE_SITE_KEY = '([^']*)';/);
+    expect(cms).toBe(app);
+  });
+});
