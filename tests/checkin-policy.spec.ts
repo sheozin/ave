@@ -136,9 +136,9 @@ function liveTimeOk(scannedMs: number, nowMs: number): boolean {
   return scannedMs <= nowMs + LIVE_SKEW_FUTURE_MS && scannedMs >= nowMs - LIVE_MAX_AGE_MS;
 }
 
-// Mirrors the verdict order inside checkin-record-scans for a 'checkin'
-// item whose attendee belongs to the event. inWindow means the calendar
-// window AND the server-clock bound (liveTimeOk) both hold.
+// Mirrors the CASE order inside checkin_apply_scan (migration 062) for a
+// 'checkin' item whose attendee belongs to the event. inWindow is the
+// p_live_time_ok flag: calendar window AND server-clock bound (liveTimeOk).
 function checkinVerdict(o: { alreadyIn: boolean; isTest: boolean; testUsed: number; inWindow: boolean }):
   'duplicate' | 'test_cap' | 'outside_window' | 'apply' {
   if (o.alreadyIn) return 'duplicate';
@@ -146,6 +146,22 @@ function checkinVerdict(o: { alreadyIn: boolean; isTest: boolean; testUsed: numb
   if (!o.isTest && !o.inWindow) return 'outside_window';
   return 'apply';
 }
+
+// Mirror of validTs in checkin-record-scans (keep identical).
+const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
+function validTs(v: unknown): boolean {
+  return typeof v === 'string' && ISO_TS.test(v) && Number.isFinite(Date.parse(v));
+}
+
+describe('validTs', () => {
+  it('accepts Z', () => { expect(validTs('2026-10-04T10:00:00Z')).toBe(true); });
+  it('accepts fractional with offset', () => { expect(validTs('2026-10-04T10:00:00.123+02:00')).toBe(true); });
+  it('rejects no zone', () => { expect(validTs('2026-10-04T10:00:00')).toBe(false); });
+  it('rejects infinity', () => { expect(validTs('infinity')).toBe(false); });
+  it('rejects non-string', () => { expect(validTs(null)).toBe(false); });
+  // Documented: V8 and Postgres both read 24:00:00Z as the next day's midnight, so it is accepted.
+  it('accepts 24:00:00Z (next midnight)', () => { expect(validTs('2026-10-04T24:00:00Z')).toBe(true); });
+});
 
 describe('checkinVerdict', () => {
   it('a duplicate never consumes the test cap', () => {

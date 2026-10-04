@@ -3,6 +3,9 @@
 // authority on checked_in_at: it is set only when currently NULL, so
 // the first scan wins even when two desks sync out of order. A scan
 // that arrives second is recorded as 'duplicate', never dropped.
+// Each item is ONE call to checkin_apply_scan (migration 062): dedup,
+// attendee update, test cap and audit row commit in a single
+// transaction, serialised per event.
 //
 // Every item produces a scan_events row — including unknown_token and
 // wrong_event — so the audit shows the attempt and the client_id is
@@ -10,7 +13,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { TEST_CAP, isWithinWindow } from '../_shared/checkin-policy.ts'
+import { isWithinWindow } from '../_shared/checkin-policy.ts'
 
 interface Item {
   client_id: string
@@ -44,6 +47,12 @@ const MAX_ITEMS = 200
 // (an offline desk flushing the same day is fine). Test mode is exempt.
 const LIVE_SKEW_FUTURE_MS = 5 * 60 * 1000
 const LIVE_MAX_AGE_MS = 24 * 60 * 60 * 1000
+// Strict ISO-8601 with an explicit zone; Date.parse alone accepts
+// zone-less and non-ISO strings that Postgres would read differently.
+const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/
+function validTs(v: unknown): v is string {
+  return typeof v === 'string' && ISO_TS.test(v) && Number.isFinite(Date.parse(v))
+}
 function liveTimeOk(scannedMs: number, nowMs: number): boolean {
   if (!Number.isFinite(scannedMs)) return false
   return scannedMs <= nowMs + LIVE_SKEW_FUTURE_MS && scannedMs >= nowMs - LIVE_MAX_AGE_MS
@@ -99,15 +108,6 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Defense in depth for ordering. The client sorts its outbox by
-  // scanned_at before flushing, but the server must not depend on a
-  // client behaving correctly — a checkin and its later undo arriving
-  // in the wrong array order would otherwise apply in the wrong
-  // sequence. Compared as strings: scanned_at is canonical UTC ISO
-  // from Date#toISOString(), so lexical order is chronological.
-  const ordered = [...items].sort((a, b) =>
-    a.scanned_at < b.scanned_at ? -1 : a.scanned_at > b.scanned_at ? 1 : 0)
-
   // This client uses the service-role key, which bypasses RLS entirely.
   // checkin_role_for_event() cannot be used here: it is SECURITY
   // DEFINER over auth.uid(), which is NULL on a service-role
@@ -150,20 +150,6 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Read once and counted forward locally, so a batch of 30 cannot all
-  // pass a cap check that each one read as 24. Two desks flushing at the
-  // same instant can still overshoot by a few; the cap is a commercial
-  // limit, not a safety one, and that is accepted.
-  let testUsed = 0
-  if (isTest) {
-    const { data: used, error: usedErr } = await sb.rpc('checkin_test_usage', { p_event_id: event_id })
-    if (usedErr || typeof used !== 'number') {
-      return new Response(JSON.stringify({ error: usedErr?.message || 'Could not read test usage' }), {
-        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
-      })
-    }
-    testUsed = used
-  }
   const nowMs = Date.now()
 
   // Validated once here rather than per item: the migration 049 trigger
@@ -182,158 +168,63 @@ Deno.serve(async (req) => {
   const results: Record<string, string> = {}
   const errors: ItemError[] = []
 
+  // Validate every item first (both modes), so nothing malformed reaches
+  // the sort or the database.
+  const valid: Item[] = []
+  for (const raw of items) {
+    const it = raw as Partial<Item> | null
+    const cid = it && typeof it === 'object' && typeof it.client_id === 'string' ? it.client_id : null
+    const bad = (error: string) => {
+      errors.push({ client_id: cid, stage: 'validate', error })
+      if (cid) results[cid] = 'error'
+    }
+    if (!it || typeof it !== 'object') { bad('item must be an object'); continue }
+    if (!cid || typeof it.attendee_id !== 'string' || !it.attendee_id) {
+      bad('client_id and attendee_id are required'); continue
+    }
+    if (!validTs(it.scanned_at)) { bad('scanned_at must be ISO-8601 with a timezone'); continue }
+    if (it.action !== 'checkin' && it.action !== 'undo') { bad(`Unknown action: ${it.action}`); continue }
+    if (it.action === 'undo' && !validTs(it.prev_checked_in_at)) {
+      bad('prev_checked_in_at is required for action undo (ISO-8601 with a timezone)'); continue
+    }
+    valid.push(it as Item)
+  }
+
+  // Defense in depth for ordering: a checkin and its later undo arriving
+  // in the wrong array order must still apply in time order. Sorted on
+  // parsed instants, since offsets may differ between strings.
+  const ordered = valid.sort((a, b) => Date.parse(a.scanned_at) - Date.parse(b.scanned_at))
+
   for (const it of ordered) {
-    if (!it?.client_id || !it.attendee_id || !it.scanned_at) {
-      errors.push({
-        client_id: it?.client_id ?? null, stage: 'validate',
-        error: 'client_id, attendee_id and scanned_at are required',
-      })
-      if (it?.client_id) results[it.client_id] = 'error'
-      continue
-    }
-    if (it.action !== 'checkin' && it.action !== 'undo') {
-      errors.push({ client_id: it.client_id, stage: 'validate', error: `Unknown action: ${it.action}` })
-      results[it.client_id] = 'error'
-      continue
-    }
-    if (it.action === 'undo' && !it.prev_checked_in_at) {
-      errors.push({
-        client_id: it.client_id, stage: 'validate',
-        error: 'prev_checked_in_at is required for action undo',
-      })
-      results[it.client_id] = 'error'
-      continue
-    }
-
-    // At-most-once. The station retries on reconnect, so a flush whose
-    // response was lost re-sends this item. If we already recorded it,
-    // return the original verdict and touch nothing.
-    const { data: prior, error: priorErr } = await sb
-      .from('leod_checkin_scan_events')
-      .select('result').eq('client_id', it.client_id).maybeSingle()
-    if (priorErr) {
-      errors.push({ client_id: it.client_id, stage: 'dedup_lookup', error: priorErr.message })
-      results[it.client_id] = 'error'
-      continue
-    }
-    if (prior) { results[it.client_id] = prior.result; continue }
-
-    const { data: att, error: attErr } = await sb
-      .from('leod_checkin_attendees')
-      .select('id, event_id, checked_in_at').eq('id', it.attendee_id).maybeSingle()
-    if (attErr) {
-      errors.push({ client_id: it.client_id, stage: 'attendee_lookup', error: attErr.message })
-      results[it.client_id] = 'error'
-      continue
-    }
-
-    let result: string
-    // The migration 049 trigger requires attendee_id to belong to the
-    // scan event's event_id, so it stays NULL for both the no-match and
-    // the cross-event cases — otherwise the audit insert would raise.
-    let auditAttendeeId: string | null = null
-
-    if (!att) {
-      result = 'unknown_token'
-    } else if (att.event_id !== event_id) {
-      result = 'wrong_event'
-    } else {
-      auditAttendeeId = att.id
-
-      if (it.action === 'undo') {
-        // Compare-and-set against the value the desk saw. Without this
-        // guard a stale undo silently revokes a newer, legitimate
-        // check-in:
-        //   09:00  Desk 1 checks in the attendee, syncs.
-        //   09:02  Operator hits undo (wrong badge). Desk 1's wifi is
-        //          already down, so the undo sits in its outbox.
-        //   09:30  The attendee arrives properly and Desk 3 checks
-        //          them in. Legitimate.
-        //   10:15  Desk 1 reconnects and flushes the 09:02 undo.
-        // An unconditional NULL would mark a physically present
-        // attendee as not-checked-in and corrupt the head count. The
-        // client sorts its own outbox by scanned_at, but that cannot
-        // order across desks, which is exactly this case.
-        const { data: cleared, error: undoErr } = await sb
-          .from('leod_checkin_attendees')
-          .update({ checked_in_at: null })
-          .eq('id', it.attendee_id)
-          .eq('checked_in_at', it.prev_checked_in_at!)
-          .select('id')
-        if (undoErr) {
-          errors.push({ client_id: it.client_id, stage: 'undo_update', error: undoErr.message })
-          results[it.client_id] = 'error'
-          continue
-        }
-        // 0 rows means a newer check-in superseded this undo. Record
-        // the attempt as a no-op rather than inventing a result value:
-        // 'duplicate' is already in the migration 053 CHECK.
-        result = cleared && cleared.length > 0 ? 'undo' : 'duplicate'
-      } else if (att.checked_in_at) {
-        result = 'duplicate'
-      } else if (isTest && testUsed >= TEST_CAP) {
-        result = 'test_cap'
-      } else if (!isTest && !(liveTimeOk(Date.parse(it.scanned_at), nowMs)
-                              && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone))) {
-        result = 'outside_window'
-      } else {
-        const { data: updated, error: updErr } = await sb
-          .from('leod_checkin_attendees')
-          .update({ checked_in_at: it.scanned_at })
-          .eq('id', it.attendee_id)
-          .is('checked_in_at', null)
-          .select('id')
-        if (updErr) {
-          // Must not fall through to the 0-rows branch: reporting a
-          // failed write as 'duplicate' would tell the operator the
-          // attendee was already checked in, which is the most
-          // misleading verdict this function could return.
-          errors.push({ client_id: it.client_id, stage: 'checkin_update', error: updErr.message })
-          results[it.client_id] = 'error'
-          continue
-        }
-        result = updated && updated.length > 0 ? 'ok' : 'duplicate'
-        if (isTest && result === 'ok') testUsed++
-      }
-    }
-
-    // The state change above and this audit row are separate
-    // transactions. If the insert fails the attendee row still carries
-    // the change, so the item is reported 'error' and the retry will
-    // re-derive its verdict from current state. Making the pair atomic
-    // needs a Postgres function; it is not achievable from here.
-    const { error: insErr } = await sb
-      .from('leod_checkin_scan_events').insert({
-        id: crypto.randomUUID(),
-        event_id,
-        client_id: it.client_id,
-        attendee_id: auditAttendeeId,
-        scan_point_id,
-        device_id: null,
-        operator_id: user.id,
-        scanned_at: it.scanned_at,
-        result,
-        is_test: isTest,
-      })
-
-    if (insErr) {
-      // 23505 = unique violation on client_id: a concurrent flush of
-      // the same item won the race. Its row is authoritative, so read
-      // it back rather than reporting our own verdict.
-      if (insErr.code === '23505') {
-        const { data: raced } = await sb
-          .from('leod_checkin_scan_events')
+    const p_live_time_ok = isTest
+      ? true
+      : liveTimeOk(Date.parse(it.scanned_at), nowMs)
+        && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone)
+    const { data: result, error } = await sb.rpc('checkin_apply_scan', {
+      p_event_id: event_id,
+      p_client_id: it.client_id,
+      p_attendee_id: it.attendee_id,
+      p_scanned_at: it.scanned_at,
+      p_action: it.action,
+      p_prev_checked_in_at: it.action === 'undo' ? it.prev_checked_in_at : null,
+      p_operator_id: user.id,
+      p_scan_point_id: scan_point_id,
+      p_live_time_ok,
+    })
+    if (error) {
+      // 23505: client_id already recorded (e.g. under another event). The
+      // function rolled back, so report the stored verdict.
+      if (error.code === '23505') {
+        const { data: raced } = await sb.from('leod_checkin_scan_events')
           .select('result').eq('client_id', it.client_id).maybeSingle()
-        results[it.client_id] = raced?.result ?? result
-        continue
+        if (raced?.result) { results[it.client_id] = raced.result; continue }
       }
-      console.error('checkin-record-scans: scan event insert failed for', it.client_id, insErr.message)
-      errors.push({ client_id: it.client_id, stage: 'scan_event_insert', error: insErr.message })
+      console.error('checkin-record-scans: apply failed for', it.client_id, error.message)
+      errors.push({ client_id: it.client_id, stage: 'apply', error: error.message })
       results[it.client_id] = 'error'
       continue
     }
-
-    results[it.client_id] = result
+    results[it.client_id] = String(result)
   }
 
   return new Response(JSON.stringify({ ok: errors.length === 0, results, errors }), {
