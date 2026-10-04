@@ -4,7 +4,8 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }        from '../_shared/stripe.ts'
-import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, type PurchaseLookup } from '../_shared/checkin-policy.ts'
+import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, type PurchaseLookup } from '../_shared/checkin-policy.ts'
+import { sendEmail }     from '../_shared/resend.ts'
 
 // Types for Supabase client
 type SupabaseClient = ReturnType<typeof adminClient>
@@ -229,39 +230,79 @@ async function handleCheckinPaid(sb: SupabaseClient, session: Record<string, unk
   return String(data)
 }
 
-// Is this payment intent a check-in purchase? 'error' must fail the
-// delivery so Stripe retries, never read as "not ours".
-async function lookupCheckinPurchase(sb: SupabaseClient, pi: string): Promise<PurchaseLookup> {
-  const res = await sb.from('leod_checkin_purchases')
-    .select('buyer_id, event_id').eq('stripe_payment_intent_id', pi).maybeSingle()
+// Is this payment intent a check-in purchase (or, with the orphan table, a
+// payment recorded as orphaned)? 'error' must fail the delivery so Stripe
+// retries, never read as "not ours".
+async function lookupByPaymentIntent(
+  sb: SupabaseClient, table: 'leod_checkin_purchases' | 'leod_checkin_orphan_payments', pi: string,
+): Promise<PurchaseLookup> {
+  const res = await sb.from(table)
+    .select('buyer_id, event_id').eq('stripe_payment_intent_id', pi).limit(1).maybeSingle()
   const r = classifyPurchaseLookup(res)
-  if (r.kind === 'error') console.error('stripe-webhook: purchase lookup failed for', pi, r.message)
+  if (r.kind === 'error') console.error('stripe-webhook:', table, 'lookup failed for', pi, r.message)
   return r
 }
 
-// Something a person must act on (refund, double charge, dispute). Lands in
-// activity_log under category 'billing_alert' (allowed since migration 065).
-// p_user_id is nullable; a failed write is logged, never fatal.
-async function billingAlert(sb: SupabaseClient, kind: string, userId: string | null, description: string, details: Record<string, unknown>) {
-  console.error('stripe-webhook: BILLING ALERT', kind, description, JSON.stringify(details))
-  const { error } = await sb.rpc('log_activity', {
-    p_user_id: userId,
-    p_action: kind,
-    p_category: 'billing_alert',
-    p_description: description,
-    p_metadata: details,
+const failed = (msg: string) =>
+  new Response(JSON.stringify({ error: msg }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+
+// Something a person must act on (refund, double charge, dispute). Recorded
+// in leod_billing_alerts (service-only, admins read; migration 066), then
+// emailed to BILLING_ALERT_EMAIL. One alert per (kind, Stripe object), so a
+// retried delivery does not alert twice. Returns a 500 Response when the
+// alert could not be recorded: the caller returns it and Stripe retries.
+async function billingAlert(
+  sb: SupabaseClient, kind: string, userId: string | null, stripeObjectId: string | null, details: Record<string, unknown>,
+): Promise<Response | null> {
+  console.error('stripe-webhook: BILLING ALERT', kind, stripeObjectId, JSON.stringify(details))
+
+  if (stripeObjectId) {
+    const { data: seen, error: seenErr } = await sb.from('leod_billing_alerts')
+      .select('id').eq('kind', kind).eq('stripe_object_id', stripeObjectId).limit(1)
+    if (seenErr) {
+      console.error('stripe-webhook: billing alert lookup failed', kind, seenErr.message)
+      return failed('billing alert not recorded')
+    }
+    if (seen && seen.length > 0) { console.log('stripe-webhook: billing alert already recorded', kind, stripeObjectId); return null }
+  }
+
+  const { data: row, error } = await sb.from('leod_billing_alerts')
+    .insert({ kind, user_id: userId, stripe_object_id: stripeObjectId, details })
+    .select('id').single()
+  if (error || !row) {
+    console.error('stripe-webhook: billing alert not recorded', kind, error?.message)
+    return failed('billing alert not recorded')
+  }
+
+  const to = Deno.env.get('BILLING_ALERT_EMAIL')
+  if (!to) {
+    console.error('stripe-webhook: BILLING_ALERT_EMAIL is not set; alert', row.id, 'recorded but not emailed')
+    return null
+  }
+  const sent = await sendEmail({
+    to,
+    subject: `CueDeck billing alert: ${kind}`,
+    html: billingAlertEmailHtml(kind, userId, stripeObjectId, details),
   })
-  if (error) console.error('stripe-webhook: billing alert not recorded', kind, error.message)
+  if (sent.error) {
+    console.error('stripe-webhook: billing alert email failed for', row.id, sent.error)
+    return null
+  }
+  const { error: updErr } = await sb.from('leod_billing_alerts')
+    .update({ emailed_at: new Date().toISOString() }).eq('id', row.id)
+  if (updErr) console.error('stripe-webhook: emailed_at not recorded for alert', row.id, updErr.message)
+  return null
 }
 
 // The check-in price, cached per isolate like checkin-price. Throws when the
-// price id is unset or Stripe fails; the caller answers 500 so Stripe retries.
+// price id is unset, the price is inactive or Stripe fails.
 let checkinPriceCache: { at: number; unit_amount: number | null; currency: string } | null = null
 async function checkinPrice(st: StripeClient): Promise<{ unit_amount: number | null; currency: string }> {
   if (checkinPriceCache && Date.now() - checkinPriceCache.at < 10 * 60 * 1000) return checkinPriceCache
   const priceId = Deno.env.get('CHECKIN_PRICE_ID')
   if (!priceId) throw new Error('CHECKIN_PRICE_ID is not set')
   const p = await st.prices.retrieve(priceId)
+  if (!p.active || p.unit_amount == null) throw new Error(`price ${priceId} inactive or has no unit_amount`)
   checkinPriceCache = { at: Date.now(), unit_amount: p.unit_amount, currency: p.currency }
   return checkinPriceCache
 }
@@ -360,13 +401,29 @@ Deno.serve(async (req) => {
             price = await checkinPrice(st)
           } catch (e) {
             console.error('stripe-webhook: check-in price unavailable for', session.id, (e as Error).message)
-            return retry('check-in price unavailable')
+            const res = await billingAlert(sb, 'checkin_price_unavailable', buyerId, session.id,
+              { ...alertBase, summary: 'Check-in price could not be read; payment not recorded yet, Stripe will retry', error: (e as Error).message })
+            return res ?? retry('check-in price unavailable')
           }
           if (!checkinAmountMatches(session, price)) {
-            await billingAlert(sb, 'checkin_amount_mismatch', buyerId,
-              'Check-in session paid an amount that does not match the check-in price; event NOT made live',
-              { ...alertBase, amount_subtotal: session.amount_subtotal ?? null, currency: session.currency ?? null,
+            const { error: orphanErr } = await sb.from('leod_checkin_orphan_payments').upsert({
+              stripe_checkout_session_id: session.id,
+              event_id: eventId,
+              buyer_id: buyerId,
+              stripe_payment_intent_id: (session.payment_intent as string) ?? null,
+              amount_total: (session.amount_total as number) ?? null,
+              currency: (session.currency as string) ?? null,
+              reason: 'amount_mismatch',
+            }, { onConflict: 'stripe_checkout_session_id', ignoreDuplicates: true })
+            if (orphanErr) {
+              console.error('stripe-webhook: amount-mismatch orphan not recorded for', session.id, orphanErr.message)
+              return retry('orphan not recorded')
+            }
+            const res = await billingAlert(sb, 'checkin_amount_mismatch', buyerId, session.id,
+              { ...alertBase, summary: 'Paid amount does not match the check-in price; event NOT made live, refund or resolve by hand',
+                amount_subtotal: session.amount_subtotal ?? null, currency: session.currency ?? null,
                 expected_amount: price.unit_amount, expected_currency: price.currency })
+            if (res) return res
             break
           }
 
@@ -380,13 +437,15 @@ Deno.serve(async (req) => {
           if (result === null) return retry('checkin_mark_paid failed')
 
           if (result === 'already_live') {
-            await billingAlert(sb, 'checkin_already_live', buyerId,
-              'Second paid check-in session for an event that was already live; likely double charge, refund one',
-              { ...alertBase, amount_total: session.amount_total ?? null })
+            const res = await billingAlert(sb, 'checkin_already_live', buyerId, session.id,
+              { ...alertBase, summary: 'Second paid check-in session for an event that was already live; likely double charge, refund one',
+                amount_total: session.amount_total ?? null })
+            if (res) return res
           } else if (result === 'orphaned') {
-            await billingAlert(sb, 'checkin_orphaned_payment', buyerId,
-              'Check-in paid for an event or entitlement that no longer exists; needs a manual refund',
-              { ...alertBase, amount_total: session.amount_total ?? null })
+            const res = await billingAlert(sb, 'checkin_orphaned_payment', buyerId, session.id,
+              { ...alertBase, summary: 'Check-in paid for an event or entitlement that no longer exists; needs a manual refund',
+                amount_total: session.amount_total ?? null })
+            if (res) return res
           } else {
             console.log('stripe-webhook: check-in', eventId, '->', result)
           }
@@ -397,9 +456,9 @@ Deno.serve(async (req) => {
         // 'paid' and the Pay-per-Event product, so either event type is safe.
         const directorId = session.client_reference_id || session.metadata?.director_id
         if (!directorId) {
-          await billingAlert(sb, 'perevent_no_director', null,
-            'Paid Pay-per-Event session has no director id; credit not recorded',
-            { session_id: session.id, customer: session.customer ?? null })
+          const res = await billingAlert(sb, 'perevent_no_director', null, session.id,
+            { summary: 'Paid Pay-per-Event session has no director id; credit not recorded', session_id: session.id, customer: session.customer ?? null })
+          if (res) return res
           break
         }
 
@@ -414,9 +473,9 @@ Deno.serve(async (req) => {
           return retry('credit not recorded')
         }
         if (credit === 'orphaned') {
-          await billingAlert(sb, 'perevent_orphaned_payment', directorId,
-            'Paid Pay-per-Event session for a director with no subscription row; credit not applied',
-            { session_id: session.id })
+          const res = await billingAlert(sb, 'perevent_orphaned_payment', directorId, session.id,
+            { summary: 'Paid Pay-per-Event session for a director with no subscription row; credit not applied', session_id: session.id })
+          if (res) return res
           break
         }
         console.log('stripe-webhook: Pay-per-Event', session.id, '->', credit)
@@ -437,10 +496,22 @@ Deno.serve(async (req) => {
         const charge = event.data.object
         const pi = charge.payment_intent as string | null
         if (!pi) break
-        if (charge.metadata?.product !== 'checkin') {
-          const found = await lookupCheckinPurchase(sb, pi)
-          if (found.kind === 'error') return retry('purchase lookup failed')
-          if (found.kind === 'not_checkin') break
+        // Always look the payment up: an orphaned check-in payment also
+        // carries metadata.product = 'checkin' but has no purchase row.
+        const found = await lookupByPaymentIntent(sb, 'leod_checkin_purchases', pi)
+        if (found.kind === 'error') return retry('purchase lookup failed')
+        if (found.kind === 'not_checkin') {
+          // Not a purchase, but maybe a payment we recorded as orphaned
+          // (event gone, amount mismatch): someone must close it out.
+          const orphan = await lookupByPaymentIntent(sb, 'leod_checkin_orphan_payments', pi)
+          if (orphan.kind === 'error') return retry('orphan lookup failed')
+          if (orphan.kind === 'checkin') {
+            const res = await billingAlert(sb, 'orphan_refund', orphan.buyer_id, charge.id,
+              { summary: 'Orphaned check-in payment was refunded; confirm and resolve the orphan row',
+                payment_intent: pi, event_id: orphan.event_id, amount_refunded: charge.amount_refunded, amount: charge.amount })
+            if (res) return res
+          }
+          break
         }
         // Partial refunds keep the event live; only a full refund reverts it.
         if (charge.amount_refunded < charge.amount) {
@@ -461,14 +532,23 @@ Deno.serve(async (req) => {
         const dispute = event.data.object
         const pi = dispute.payment_intent as string | null
         if (!pi) break
-        const found = await lookupCheckinPurchase(sb, pi)
+        const disputeDetails = { dispute_id: dispute.id, payment_intent: pi, amount: dispute.amount ?? null, reason: dispute.reason ?? null }
+        const found = await lookupByPaymentIntent(sb, 'leod_checkin_purchases', pi)
         if (found.kind === 'error') return retry('purchase lookup failed')
-        if (found.kind === 'not_checkin') break
-        // No state change: a dispute is decided by Stripe, a person responds.
-        await billingAlert(sb, 'checkin_dispute', found.buyer_id,
-          'Check-in payment disputed; respond in the Stripe dashboard',
-          { dispute_id: dispute.id, payment_intent: pi, event_id: found.event_id,
-            amount: dispute.amount ?? null, reason: dispute.reason ?? null })
+        if (found.kind === 'checkin') {
+          // No state change: a dispute is decided by Stripe, a person responds.
+          const res = await billingAlert(sb, 'checkin_dispute', found.buyer_id, dispute.id,
+            { summary: 'Check-in payment disputed; respond in the Stripe dashboard', event_id: found.event_id, ...disputeDetails })
+          if (res) return res
+          break
+        }
+        const orphan = await lookupByPaymentIntent(sb, 'leod_checkin_orphan_payments', pi)
+        if (orphan.kind === 'error') return retry('orphan lookup failed')
+        if (orphan.kind === 'checkin') {
+          const res = await billingAlert(sb, 'orphan_dispute', orphan.buyer_id, dispute.id,
+            { summary: 'Orphaned check-in payment disputed; respond in the Stripe dashboard', event_id: orphan.event_id, ...disputeDetails })
+          if (res) return res
+        }
         break
       }
 

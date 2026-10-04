@@ -2,7 +2,7 @@
 // Imports supabase/functions/_shared/checkin-policy.ts directly.
 // Tests verify validation, fail-closed behavior, and routing logic.
 import { describe, it, expect } from 'vitest';
-import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup } from '../supabase/functions/_shared/checkin-policy.ts';
+import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml } from '../supabase/functions/_shared/checkin-policy.ts';
 
 describe('checkinWindow', () => {
   it('opens at local midnight 7 days before, Warsaw summer (UTC+2)', () => {
@@ -261,5 +261,31 @@ describe('classifyPurchaseLookup', () => {
   });
   it('a row is a check-in purchase with its buyer and event', () => {
     expect(classifyPurchaseLookup({ data: { buyer_id: 'b', event_id: 'e' }, error: null })).toEqual({ kind: 'checkin', buyer_id: 'b', event_id: 'e' });
+  });
+});
+
+describe('billingAlertEmailHtml', () => {
+  it('escapes HTML in kind, ids, keys and values', () => {
+    const html = billingAlertEmailHtml('k<b>', 'u"1', "cs_'x", { '<k>': '<script>alert(1)</script>', amp: 'a&b' });
+    expect(html).not.toContain('<script>');
+    expect(html).not.toContain('k<b>');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).toContain('k&lt;b&gt;');
+    expect(html).toContain('u&quot;1');
+    expect(html).toContain('cs_&#39;x');
+    expect(html).toContain('&lt;k&gt;');
+    expect(html).toContain('a&amp;b');
+  });
+  it('renders non-string values as escaped JSON and nulls as a dash', () => {
+    const html = billingAlertEmailHtml('checkin_dispute', null, null, { amount: 24900, nested: { a: '<x>' }, none: null });
+    expect(html).toContain('24900');
+    expect(html).toContain('{&quot;a&quot;:&quot;&lt;x&gt;&quot;}');
+    expect(html).toMatch(/<b>user_id<\/b><\/td><td>-<\/td>/);
+    expect(html).toMatch(/<b>none<\/b><\/td><td>-<\/td>/);
+  });
+  it('names the kind and the table to resolve in', () => {
+    const html = billingAlertEmailHtml('orphan_refund', 'u', 'ch_1', {});
+    expect(html).toContain('<b>orphan_refund</b>');
+    expect(html).toContain('leod_billing_alerts');
   });
 });

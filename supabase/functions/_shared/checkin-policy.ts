@@ -146,3 +146,24 @@ export function classifyPurchaseLookup(
   if (!res.data) return { kind: 'not_checkin' }
   return { kind: 'checkin', buyer_id: res.data.buyer_id ?? null, event_id: res.data.event_id ?? null }
 }
+
+function escapeHtml(v: unknown): string {
+  const s = typeof v === 'string' ? v : JSON.stringify(v) ?? String(v)
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+// Plain HTML body for a billing alert email. Every value is escaped: details
+// carry Stripe and metadata strings that a buyer can influence.
+export function billingAlertEmailHtml(
+  kind: string, userId: string | null, stripeObjectId: string | null, details: Record<string, unknown>,
+): string {
+  const rows: [string, unknown][] = [
+    ['kind', kind], ['user_id', userId ?? '-'], ['stripe_object_id', stripeObjectId ?? '-'],
+    ...Object.entries(details),
+  ]
+  const body = rows.map(([k, v]) =>
+    `<tr><td style="padding:2px 12px 2px 0"><b>${escapeHtml(k)}</b></td><td>${escapeHtml(v ?? '-')}</td></tr>`).join('')
+  return `<p>CueDeck billing alert: <b>${escapeHtml(kind)}</b></p><table>${body}</table>` +
+    `<p>Recorded in leod_billing_alerts. Set resolved_at when handled.</p>`
+}
