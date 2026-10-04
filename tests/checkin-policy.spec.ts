@@ -1,74 +1,36 @@
 // tests/checkin-policy.spec.ts
-// Mirrors supabase/functions/_shared/checkin-policy.ts. Deno Edge
-// Functions are not importable into vitest (see checkin-scan.spec.ts),
-// so the logic is re-expressed here and kept in sync by hand.
+// Imports supabase/functions/_shared/checkin-policy.ts directly.
+// Tests verify validation, fail-closed behavior, and routing logic.
 import { describe, it, expect } from 'vitest';
-
-const TEST_CAP = 25;
-
-function tzOffsetMs(at: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).formatToParts(at);
-  const get = (t: string) => Number(parts.find(p => p.type === t)!.value);
-  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
-  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
-}
-
-function addDays(ymd: string, n: number): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
-}
-
-function zonedMidnightUtc(ymd: string, timeZone: string): Date {
-  const [y, m, d] = ymd.split('-').map(Number);
-  const guess = Date.UTC(y, m - 1, d);
-  const off1 = tzOffsetMs(new Date(guess), timeZone);
-  let t = guess - off1;
-  const off2 = tzOffsetMs(new Date(t), timeZone);
-  if (off2 !== off1) t = guess - off2;
-  return new Date(t);
-}
-
-function checkinWindow(eventDate: string, timeZone: string) {
-  return { opensAt: zonedMidnightUtc(addDays(eventDate, -7), timeZone),
-           closesAt: zonedMidnightUtc(addDays(eventDate, 3), timeZone) };
-}
-
-function isWithinWindow(scannedAtIso: string, eventDate: string, timeZone: string): boolean {
-  const t = Date.parse(scannedAtIso);
-  if (Number.isNaN(t)) return false;
-  const w = checkinWindow(eventDate, timeZone);
-  return t >= w.opensAt.getTime() && t < w.closesAt.getTime();
-}
-
-function routeCheckoutSession(
-  s: { metadata?: Record<string, string> | null; payment_status?: string },
-  lineItemProductIds: string[], checkinProductId: string,
-): { route: 'checkin' | 'perevent' | 'ignore'; reason?: string } {
-  const md = s.metadata || {};
-  if (md.product === 'checkin') {
-    if (!md.event_id || !md.buyer_id) return { route: 'ignore', reason: 'checkin session missing event_id or buyer_id' };
-    if (!lineItemProductIds.includes(checkinProductId)) return { route: 'ignore', reason: 'checkin metadata but line item is not the check-in product' };
-    if (s.payment_status !== 'paid') return { route: 'ignore', reason: `payment_status ${s.payment_status}` };
-    return { route: 'checkin' };
-  }
-  if (md.plan === 'perevent') return { route: 'perevent' };
-  return { route: 'ignore', reason: 'not a CueDeck check-in or Pay-per-Event session' };
-}
+import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession } from '../supabase/functions/_shared/checkin-policy.ts';
 
 describe('checkinWindow', () => {
   it('opens at local midnight 7 days before, Warsaw summer (UTC+2)', () => {
-    expect(checkinWindow('2026-06-20', 'Europe/Warsaw').opensAt.toISOString()).toBe('2026-06-12T22:00:00.000Z');
+    const w = checkinWindow('2026-06-20', 'Europe/Warsaw');
+    expect(w).not.toBeNull();
+    expect(w!.opensAt.toISOString()).toBe('2026-06-12T22:00:00.000Z');
   });
   it('closes at local midnight starting date+3, Warsaw summer', () => {
-    expect(checkinWindow('2026-06-20', 'Europe/Warsaw').closesAt.toISOString()).toBe('2026-06-22T22:00:00.000Z');
+    const w = checkinWindow('2026-06-20', 'Europe/Warsaw');
+    expect(w).not.toBeNull();
+    expect(w!.closesAt.toISOString()).toBe('2026-06-22T22:00:00.000Z');
   });
   it('handles a DST change inside the window (Warsaw, Oct 25 2026)', () => {
     const w = checkinWindow('2026-10-26', 'Europe/Warsaw');
-    expect(w.opensAt.toISOString()).toBe('2026-10-18T22:00:00.000Z'); // still CEST
-    expect(w.closesAt.toISOString()).toBe('2026-10-28T23:00:00.000Z'); // CET
+    expect(w).not.toBeNull();
+    expect(w!.opensAt.toISOString()).toBe('2026-10-18T22:00:00.000Z'); // still CEST
+    expect(w!.closesAt.toISOString()).toBe('2026-10-28T23:00:00.000Z'); // CET
+  });
+  it('Asia/Kolkata event 2026-11-20: opensAt is 2026-11-12T18:30:00.000Z', () => {
+    const w = checkinWindow('2026-11-20', 'Asia/Kolkata');
+    expect(w).not.toBeNull();
+    expect(w!.opensAt.toISOString()).toBe('2026-11-12T18:30:00.000Z');
+  });
+  it('returns null for invalid eventDate', () => {
+    expect(checkinWindow('2026-02-31', 'Europe/Warsaw')).toBeNull();
+  });
+  it('returns null for invalid timeZone', () => {
+    expect(checkinWindow('2026-11-20', 'Mars/Base')).toBeNull();
   });
 });
 
@@ -88,24 +50,80 @@ describe('isWithinWindow', () => {
   it('garbage timestamp is outside', () => {
     expect(isWithinWindow('not-a-date', '2026-11-20', 'UTC')).toBe(false);
   });
+  it('returns false for invalid eventDate (bad format)', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '2026-13-45', 'Europe/Warsaw')).toBe(false);
+  });
+  it('returns false for invalid eventDate (impossible date)', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '2026-02-31', 'Europe/Warsaw')).toBe(false);
+  });
+  it('returns false for empty eventDate', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '', 'Europe/Warsaw')).toBe(false);
+  });
+  it('returns false for null eventDate', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', null as unknown as string, 'Europe/Warsaw')).toBe(false);
+  });
+  it('returns false for invalid timeZone (bad name)', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '2026-11-12', 'Mars/Base')).toBe(false);
+  });
+  it('returns false for empty timeZone', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '2026-11-12', '')).toBe(false);
+  });
+  it('returns false for undefined timeZone', () => {
+    expect(isWithinWindow('2026-11-14T21:30:00.000Z', '2026-11-12', undefined as unknown as string)).toBe(false);
+  });
+  it('returns false for ISO string without timezone', () => {
+    expect(isWithinWindow('2026-11-12T12:00:00', '2026-11-12', 'UTC')).toBe(false);
+  });
+  it('never throws on any invalid input', () => {
+    expect(() => isWithinWindow('garbage', '2026-13-45', 'Mars/Base')).not.toThrow();
+  });
 });
 
 describe('routeCheckoutSession', () => {
   const P = 'prod_checkin';
+  const PPE = 'prod_U7KZqMU9oG4QWD';
+
   it('routes a paid check-in session', () => {
-    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, [P], P).route).toBe('checkin');
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, [P], P, PPE).route).toBe('checkin');
   });
   it('ignores an unpaid (async) check-in session', () => {
-    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'unpaid' }, [P], P).route).toBe('ignore');
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'unpaid' }, [P], P, PPE).route).toBe('ignore');
   });
   it('ignores check-in metadata on a different product (forged or CueQuote)', () => {
-    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, ['prod_other'], P).route).toBe('ignore');
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, ['prod_other'], P, PPE).route).toBe('ignore');
   });
-  it('routes Pay-per-Event', () => {
-    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, ['prod_U7KZqMU9oG4QWD'], P).route).toBe('perevent');
+  it('routes Pay-per-Event when paid with correct product', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, [PPE], P, PPE).route).toBe('perevent');
   });
   it('ignores a CueQuote session with no CueDeck metadata', () => {
-    expect(routeCheckoutSession({ metadata: { company_id: 'x' }, payment_status: 'paid' }, ['prod_cq'], P).route).toBe('ignore');
+    expect(routeCheckoutSession({ metadata: { company_id: 'x' }, payment_status: 'paid' }, ['prod_cq'], P, PPE).route).toBe('ignore');
+  });
+  it('ignores check-in with two line items', () => {
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, [P, 'prod_x'], P, PPE).route).toBe('ignore');
+  });
+  it('ignores check-in with empty checkinProductId', () => {
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, [''], '', PPE).route).toBe('ignore');
+  });
+  it('ignores check-in with whitespace-only event_id', () => {
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: '  ', buyer_id: 'b' }, payment_status: 'paid' }, [P], P, PPE).route).toBe('ignore');
+  });
+  it('ignores unpaid perevent session', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'unpaid' }, [PPE], P, PPE).route).toBe('ignore');
+  });
+  it('ignores perevent with different product in line items', () => {
+    expect(routeCheckoutSession({ metadata: { plan: 'perevent' }, payment_status: 'paid' }, ['prod_other'], P, PPE).route).toBe('ignore');
+  });
+  it('ignores undefined session', () => {
+    expect(routeCheckoutSession(undefined, [P], P, PPE).route).toBe('ignore');
+  });
+  it('ignores null session', () => {
+    expect(routeCheckoutSession(null, [P], P, PPE).route).toBe('ignore');
+  });
+  it('ignores non-array lineItemProductIds', () => {
+    expect(routeCheckoutSession({ metadata: { product: 'checkin', event_id: 'e', buyer_id: 'b' }, payment_status: 'paid' }, 'not-array' as unknown as string[], P, PPE).route).toBe('ignore');
+  });
+  it('ignores session with null metadata', () => {
+    expect(routeCheckoutSession({ metadata: null, payment_status: 'paid' }, [PPE], P, PPE).route).toBe('ignore');
   });
   it('TEST_CAP is 25', () => { expect(TEST_CAP).toBe(25); });
 });
