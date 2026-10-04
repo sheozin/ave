@@ -49,10 +49,32 @@ Deno.serve(async (req) => {
 
   // ── Plan check: an active pro / enterprise plan, or an unexpired trial.
   // No subscription row means no AI (it used to default to 'trial').
+  // Operators have no row of their own: resolve to the inviting director,
+  // mirroring get_subscription_for_user() (migration 011), which cannot be
+  // called here because the service role has no auth.uid().
+  const { data: me, error: meErr } = await sb
+    .from('leod_users')
+    .select('role, invited_by, active')
+    .eq('id', user.id)
+    .maybeSingle()
+  if (meErr) {
+    console.error('ai-proxy: user lookup failed', meErr.message)
+    return new Response(JSON.stringify({ error: 'Could not verify your plan' }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!me || me.active === false) {
+    return new Response(
+      JSON.stringify({ error: 'AI features are not available on your current plan. Upgrade to Pro to unlock AI.' }),
+      { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } },
+    )
+  }
+  const ownerId = (me.role === 'director' || !me.invited_by) ? user.id : me.invited_by as string
+
   const { data: subRow, error: subErr } = await sb
     .from('leod_subscriptions')
     .select('plan, status, trial_ends_at')
-    .eq('director_id', user.id)
+    .eq('director_id', ownerId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
