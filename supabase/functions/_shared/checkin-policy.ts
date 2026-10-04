@@ -194,3 +194,40 @@ export function invoiceSubscriptionId(invoice: unknown): string | null {
   }
   return idOf(inv.subscription)
 }
+
+// Unix seconds -> ISO string, or null when not a finite, representable time.
+function unixToIso(v: unknown): string | null {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null
+  const d = new Date(v * 1000)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+// A subscription's current period, across Stripe API versions. From
+// 2025-03-31.basil the top-level current_period_start/end are gone and live on
+// items.data[i]; older versions have them top-level. Never throws.
+export function subscriptionPeriod(sub: unknown): { start: string | null; end: string | null } {
+  if (!sub || typeof sub !== 'object') return { start: null, end: null }
+  const s = sub as Record<string, unknown>
+  const items = s.items && typeof s.items === 'object' ? (s.items as Record<string, unknown>).data : undefined
+  const first = Array.isArray(items) && items[0] && typeof items[0] === 'object'
+    ? items[0] as Record<string, unknown>
+    : {}
+  return {
+    start: unixToIso(s.current_period_start) ?? unixToIso(first.current_period_start),
+    end: unixToIso(s.current_period_end) ?? unixToIso(first.current_period_end),
+  }
+}
+
+// An invoice's tax in minor units, across Stripe API versions. basil replaced
+// invoice.tax with total_taxes[] ({ amount, ... }). Never throws.
+export function invoiceTaxAmount(inv: unknown): number {
+  if (!inv || typeof inv !== 'object') return 0
+  const i = inv as Record<string, unknown>
+  if (Array.isArray(i.total_taxes)) {
+    return i.total_taxes.reduce((sum: number, t: unknown) => {
+      const a = t && typeof t === 'object' ? (t as Record<string, unknown>).amount : undefined
+      return typeof a === 'number' && Number.isFinite(a) ? sum + a : sum
+    }, 0)
+  }
+  return typeof i.tax === 'number' && Number.isFinite(i.tax) ? i.tax : 0
+}

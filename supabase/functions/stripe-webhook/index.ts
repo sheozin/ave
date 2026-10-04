@@ -4,7 +4,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }        from '../_shared/stripe.ts'
-import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId, type PurchaseLookup } from '../_shared/checkin-policy.ts'
+import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId, subscriptionPeriod, invoiceTaxAmount, type PurchaseLookup } from '../_shared/checkin-policy.ts'
 import { sendEmail }     from '../_shared/resend.ts'
 
 // Types for Supabase client
@@ -144,7 +144,7 @@ async function captureInvoice(
       amount_due: (invoice.amount_due as number) || 0,
       amount_paid: amountPaid,
       currency: (invoice.currency as string) || 'eur',
-      tax_amount: (invoice.tax as number) || 0,
+      tax_amount: invoiceTaxAmount(invoice), // basil: total_taxes[], legacy: tax
       customer_email: customerEmail,
       customer_name: userData?.name || (invoice.customer_name as string) || null,
       company_name: userData?.company_name || null,
@@ -584,12 +584,14 @@ Deno.serve(async (req) => {
 
         const interval = subscription.items?.data?.[0]?.price?.recurring?.interval || null
 
+        // basil moved current_period_* onto items.data[]; null rather than throw.
+        const period = subscriptionPeriod(subscription)
         const updateData: Record<string, unknown> = {
           stripe_subscription_id: subscription.id,
           status,
           billing_interval: interval,
-          current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-          current_period_end:   new Date(subscription.current_period_end * 1000).toISOString(),
+          current_period_start: period.start,
+          current_period_end:   period.end,
           trial_ends_at: null, // trial consumed
         }
 
@@ -600,9 +602,13 @@ Deno.serve(async (req) => {
           updateData.cancel_at = null
         }
 
-        await sb.from('leod_subscriptions')
+        const { error: subErr } = await sb.from('leod_subscriptions')
           .update(updateData)
           .eq('stripe_customer_id', customerId)
+        if (subErr) {
+          console.error('stripe-webhook: subscription update failed', subErr.message)
+          return retry('subscription update failed')
+        }
 
         // Log activity
         const { data: subOwner } = await sb.from('leod_subscriptions')
@@ -659,9 +665,13 @@ Deno.serve(async (req) => {
           const { data: failedSub } = await sb.from('leod_subscriptions')
             .select('director_id, plan').eq('stripe_subscription_id', subscriptionId).single()
 
-          await sb.from('leod_subscriptions')
+          const { error: pdErr } = await sb.from('leod_subscriptions')
             .update({ status: 'past_due' })
             .eq('stripe_subscription_id', subscriptionId)
+          if (pdErr) {
+            console.error('stripe-webhook: past_due update failed', pdErr.message)
+            return retry('past_due update failed')
+          }
 
           // Log activity
           if (failedSub?.director_id) {
@@ -687,9 +697,13 @@ Deno.serve(async (req) => {
           if (invoice.lines?.data?.[0]?.period?.end) {
             updateData.current_period_end = new Date(invoice.lines.data[0].period.end * 1000).toISOString()
           }
-          await sb.from('leod_subscriptions')
+          const { error: actErr } = await sb.from('leod_subscriptions')
             .update(updateData)
             .eq('stripe_subscription_id', subscriptionId)
+          if (actErr) {
+            console.error('stripe-webhook: active update failed', actErr.message)
+            return retry('active update failed')
+          }
         }
 
         // ── Invoice capture (non-blocking) ──────────────────────

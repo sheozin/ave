@@ -2,7 +2,7 @@
 // Imports supabase/functions/_shared/checkin-policy.ts directly.
 // Tests verify validation, fail-closed behavior, and routing logic.
 import { describe, it, expect } from 'vitest';
-import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId } from '../supabase/functions/_shared/checkin-policy.ts';
+import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, billingAlertEmailHtml, invoiceSubscriptionId, subscriptionPeriod, invoiceTaxAmount } from '../supabase/functions/_shared/checkin-policy.ts';
 
 describe('checkinWindow', () => {
   it('opens at local midnight 7 days before, Warsaw summer (UTC+2)', () => {
@@ -321,5 +321,47 @@ describe('invoiceSubscriptionId', () => {
     expect(invoiceSubscriptionId({ parent: 'x', subscription: 7 })).toBeNull();
     expect(invoiceSubscriptionId({ parent: { subscription_details: 'x' } })).toBeNull();
     expect(invoiceSubscriptionId({ subscription: { id: 5 } })).toBeNull();
+  });
+});
+
+describe('subscriptionPeriod', () => {
+  const S = 1767225600; // 2026-01-01T00:00:00Z
+  const E = 1769904000; // 2026-02-01T00:00:00Z
+  it('reads items.data[0] in the basil shape', () => {
+    expect(subscriptionPeriod({ items: { data: [{ current_period_start: S, current_period_end: E }] } }))
+      .toEqual({ start: '2026-01-01T00:00:00.000Z', end: '2026-02-01T00:00:00.000Z' });
+  });
+  it('reads the legacy top-level fields', () => {
+    expect(subscriptionPeriod({ current_period_start: S, current_period_end: E, items: { data: [{}] } }))
+      .toEqual({ start: '2026-01-01T00:00:00.000Z', end: '2026-02-01T00:00:00.000Z' });
+  });
+  it('returns nulls when the period is missing everywhere', () => {
+    expect(subscriptionPeriod({ id: 'sub_1', items: { data: [{ price: {} }] } })).toEqual({ start: null, end: null });
+    expect(subscriptionPeriod({ items: { data: [] } })).toEqual({ start: null, end: null });
+  });
+  it('returns nulls for garbage and never throws', () => {
+    for (const g of [null, undefined, 'x', 5, {}, { items: 'x' }, { items: { data: 'x' } },
+      { current_period_start: 'S', current_period_end: NaN }, { current_period_start: 1e20 },
+      { items: { data: [null] } }, { items: { data: [{ current_period_start: '1', current_period_end: {} }] } }]) {
+      expect(subscriptionPeriod(g)).toEqual({ start: null, end: null });
+    }
+  });
+});
+
+describe('invoiceTaxAmount', () => {
+  it('sums total_taxes amounts (basil)', () => {
+    expect(invoiceTaxAmount({ total_taxes: [{ amount: 1000 }, { amount: 234 }] })).toBe(1234);
+  });
+  it('reads the legacy tax field', () => {
+    expect(invoiceTaxAmount({ tax: 500 })).toBe(500);
+  });
+  it('returns 0 when neither is present', () => {
+    expect(invoiceTaxAmount({})).toBe(0);
+    expect(invoiceTaxAmount({ tax: null })).toBe(0);
+  });
+  it('ignores non-numeric entries and garbage', () => {
+    expect(invoiceTaxAmount({ total_taxes: [{ amount: 100 }, { amount: 'x' }, null] })).toBe(100);
+    expect(invoiceTaxAmount(null)).toBe(0);
+    expect(invoiceTaxAmount('x')).toBe(0);
   });
 });
