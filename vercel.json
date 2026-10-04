@@ -1,10 +1,16 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/admin",   "destination": "/cuedeck-admin.html" },
-    { "source": "/",        "destination": "/cuedeck-console.html" },
-    { "source": "/d",       "destination": "/cuedeck-display.html" },
-    { "source": "/display", "destination": "/cuedeck-display.html" }
+    { "source": "/admin",         "destination": "/cuedeck-admin.html" },
+    { "source": "/",              "destination": "/cuedeck-console.html" },
+    { "source": "/d",             "destination": "/cuedeck-display.html" },
+    { "source": "/display",       "destination": "/cuedeck-display.html" },
+    { "source": "/checkin",       "destination": "/cuedeck-checkin-home.html" },
+    { "source": "/checkin/setup", "destination": "/cuedeck-checkin-setup.html" },
+    { "source": "/checkin/desk",  "destination": "/cuedeck-checkin.html" }
+  ],
+  "redirects": [
+    { "source": "/kiosk", "destination": "/checkin/desk?mode=kiosk", "permanent": false }
   ],
   "headers": [
     {

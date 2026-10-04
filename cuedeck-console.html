@@ -359,6 +359,14 @@
       font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
     }
     #billing-btn:hover { filter:brightness(1.15); }
+    #checkin-btn {
+      display:flex; align-items:center; gap:5px;
+      background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.3);
+      color:#60A5FA; font-weight:600; text-decoration:none;
+      border-radius:5px; padding:3px 9px; font-size:11px;
+      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
+    }
+    #checkin-btn:hover { filter:brightness(1.15); }
     /* USER CHIP */
     .user-chip {
       display:none; align-items:center; gap:7px;
@@ -1499,6 +1507,7 @@
       /* Hide header buttons — moved to hamburger menu */
       #billing-btn { display: none !important; }
       #users-btn { display: none !important; }
+      #checkin-btn { display: none !important; }
       #logout-btn { display: none !important; }
       #auto-start-btn { display: none !important; }
       .user-chip { display: none !important; }
@@ -1819,6 +1828,7 @@
   </div>
   <button id="auto-start-btn" onclick="toggleAutoStart()" title="Auto-start sessions at planned time">⏱ AUTO</button>
   <button id="billing-btn" onclick="openBillingModal()" title="Manage billing" style="display:none">&#x1F4B3; Billing</button>
+  <a id="checkin-btn" href="/checkin" target="_blank" rel="noopener" title="Open the check-in desk">Check-in</a>
   <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
     &#x1F465; Operators <span id="users-badge"></span>
   </button>
@@ -1936,6 +1946,7 @@
     <button onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button onclick="openInvoiceModal();toggleHamburger()">Invoices</button>
     <button onclick="openUsersModal();toggleHamburger()">Operators</button>
+    <button onclick="window.open('/checkin','_blank');toggleHamburger()">Check-in</button>
     <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     <div id="mobile-signed-in" style="padding:6px 14px;font-size:10px;color:var(--dim);font-style:italic"></div>
@@ -2642,7 +2653,7 @@ function correctedHMS() {
 // ═══════════════════════════════════════════════════
 async function loadEvents() {
   const { data, error } = await sb
-    .from('leod_events').select('*').eq('active', true).order('date', { ascending: false });
+    .from('leod_events').select('*').eq('active', true).eq('created_via', 'console').order('date', { ascending: false });
   if (error) throw error;
   return data || [];
 }
@@ -5284,11 +5295,10 @@ async function submitEvModal() {
       const seedId = document.getElementById('evm-seed').value;
       if (seedId) await seedSessions(seedId, ev.id);
 
-      // Track per-event credit usage
+      // Per-event usage is counted by trg_leod_events_count_perevent_usage
+      // (migration 060). The client update this replaced was silently
+      // rejected by RLS. Mirror it locally so the badge is right now.
       if (S.subscription?.plan === 'perevent') {
-        await sb.from('leod_subscriptions')
-          .update({ events_used: (S.subscription.events_used || 0) + 1 })
-          .eq('director_id', S.user.id);
         S.subscription.events_used = (S.subscription.events_used || 0) + 1;
       }
 
@@ -7018,6 +7028,31 @@ async function loadUserRole() {
   if (data.role === 'pending') {
     showPendingScreen(S.user.email);
     throw new Error('pending'); // abort boot()
+  }
+
+  // Check-in-only staff (migration 059). Without this the console would
+  // treat them as an account with no plan and offer a trial.
+  if (data.role === 'checkin_staff') {
+    document.getElementById('load-spinner').style.display = 'none';
+    document.getElementById('load-step').style.display = 'none';
+    var ckOverlay = document.createElement('div');
+    ckOverlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center';
+    var ckInner = document.createElement('div');
+    ckInner.style.cssText = 'text-align:center;max-width:380px;padding:40px';
+    var ckTitle = document.createElement('div');
+    ckTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff;margin-bottom:8px';
+    ckTitle.textContent = 'This login is for CueDeck Check-in';
+    var ckMsg = document.createElement('div');
+    ckMsg.style.cssText = 'font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:24px';
+    ckMsg.textContent = 'You were invited to work a registration desk. Open Check-in to see your events.';
+    var ckLink = document.createElement('a');
+    ckLink.href = '/checkin';
+    ckLink.style.cssText = 'display:inline-block;background:#3b82f6;color:#fff;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;text-decoration:none';
+    ckLink.textContent = 'Open Check-in';
+    ckInner.appendChild(ckTitle); ckInner.appendChild(ckMsg); ckInner.appendChild(ckLink);
+    ckOverlay.appendChild(ckInner);
+    document.body.appendChild(ckOverlay);
+    throw new Error('checkin_staff'); // abort boot()
   }
 
   // Admin accounts cannot operate the console — redirect to /admin

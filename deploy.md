@@ -22,6 +22,10 @@ No build step — Vercel serves the HTML files directly per `vercel.json` rewrit
 - `/` → `cuedeck-console.html`
 - `/admin` → `cuedeck-admin.html`
 - `/display`, `/d` → `cuedeck-display.html`
+- `/checkin` → `cuedeck-checkin-home.html` (check-in front page)
+- `/checkin/setup` → `cuedeck-checkin-setup.html` (organizer setup)
+- `/checkin/desk` → `cuedeck-checkin.html` (registration desk)
+- `/kiosk` → redirects to `/checkin/desk?mode=kiosk` (self-registration kiosk)
 
 Deploy is git-push-triggered auto-deploy on the `cuedeck` remote (per existing `CLAUDE.md`). No manual `vercel deploy` command is documented in this repo — TBD if manual deploys are ever used.
 
