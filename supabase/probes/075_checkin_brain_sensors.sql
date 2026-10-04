@@ -316,18 +316,18 @@ BEGIN
 END
 $probe$;
 
--- G0. Eight guards (G1 to G7, plus G9 from 077), each with a name, a
---     verdict and a detail.
+-- G0. Nine guards (G1 to G7, G9 from 077, G10 from 078), each with a
+--     name, a verdict and a detail.
 DO $probe$
 DECLARE
   n INT;
 BEGIN
   SELECT count(*) INTO n FROM public.checkin_guard_results()
    WHERE guard IS NOT NULL AND ok IS NOT NULL AND detail IS NOT NULL AND checked_at IS NOT NULL;
-  IF n <> 8 THEN
-    RAISE EXCEPTION 'PROBE_FAIL expected 8 complete guard rows, got %', n;
+  IF n <> 9 THEN
+    RAISE EXCEPTION 'PROBE_FAIL expected 9 complete guard rows, got %', n;
   END IF;
-  RAISE EXCEPTION 'PROBE_OK G0 eight guard rows';
+  RAISE EXCEPTION 'PROBE_OK G0 nine guard rows';
 END
 $probe$;
 
@@ -512,7 +512,7 @@ BEGIN
     RAISE EXCEPTION 'PROBE_FAIL G8 %', row_to_json(g);
   END IF;
   SELECT count(*) INTO n FROM public.checkin_guard_results();
-  IF n <> 8 THEN
+  IF n <> 9 THEN
     RAISE EXCEPTION 'PROBE_FAIL G8 only % rows when one guard throws', n;
   END IF;
   RAISE EXCEPTION 'PROBE_OK G8 %', g.detail;
@@ -581,5 +581,46 @@ BEGIN
     RAISE EXCEPTION 'PROBE_FAIL G9b %', row_to_json(g);
   END IF;
   RAISE EXCEPTION 'PROBE_OK G9b %', g.detail;
+END
+$probe$;
+
+-- G10 (078). Live: no admin_* function is executable by anon or PUBLIC.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF NOT g.ok OR g.detail NOT LIKE '0 of %' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10 live %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10 %', g.detail;
+END
+$probe$;
+
+-- G10b. EXECUTE granted back to anon on one admin_* function is named.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO anon;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF g.ok OR g.detail NOT LIKE '1 of %admin_get_stats()%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10b %', g.detail;
+END
+$probe$;
+
+-- G10c. A PUBLIC grant is caught too (anon would inherit it).
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT EXECUTE ON FUNCTION public.admin_list_users(text,text,text,integer,integer) TO PUBLIC;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF g.ok OR g.detail NOT LIKE '%admin_list_users(%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10c %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10c %', g.detail;
 END
 $probe$;
