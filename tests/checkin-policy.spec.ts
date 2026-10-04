@@ -2,7 +2,7 @@
 // Imports supabase/functions/_shared/checkin-policy.ts directly.
 // Tests verify validation, fail-closed behavior, and routing logic.
 import { describe, it, expect } from 'vitest';
-import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession } from '../supabase/functions/_shared/checkin-policy.ts';
+import { TEST_CAP, checkinWindow, isWithinWindow, routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup } from '../supabase/functions/_shared/checkin-policy.ts';
 
 describe('checkinWindow', () => {
   it('opens at local midnight 7 days before, Warsaw summer (UTC+2)', () => {
@@ -225,4 +225,41 @@ describe('checkinVerdict', () => {
     expect(live('2026-06-20T10:00:00.000Z')).toBe('apply');
   });
   it('liveTimeOk rejects NaN', () => { expect(liveTimeOk(NaN, NOW)).toBe(false); });
+});
+
+describe('checkinAmountMatches', () => {
+  const price = { unit_amount: 24900, currency: 'eur' };
+  it('matches the configured price before tax', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur' }, price)).toBe(true);
+  });
+  it('rejects a different amount', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 100, currency: 'eur' }, price)).toBe(false);
+  });
+  it('rejects quantity 2 (twice the price)', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 49800, currency: 'eur' }, price)).toBe(false);
+  });
+  it('rejects a different currency', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'usd' }, price)).toBe(false);
+  });
+  it('rejects a missing subtotal', () => {
+    expect(checkinAmountMatches({ currency: 'eur' }, price)).toBe(false);
+  });
+  it('rejects when the price has no unit_amount', () => {
+    expect(checkinAmountMatches({ amount_subtotal: 24900, currency: 'eur' }, { unit_amount: null, currency: 'eur' })).toBe(false);
+  });
+});
+
+describe('classifyPurchaseLookup', () => {
+  it('a DB error is an error, never "not ours"', () => {
+    expect(classifyPurchaseLookup({ data: null, error: { message: 'timeout' } })).toEqual({ kind: 'error', message: 'timeout' });
+  });
+  it('error wins even if data came back', () => {
+    expect(classifyPurchaseLookup({ data: { buyer_id: 'b', event_id: 'e' }, error: { message: 'x' } }).kind).toBe('error');
+  });
+  it('no row is not a check-in purchase', () => {
+    expect(classifyPurchaseLookup({ data: null, error: null })).toEqual({ kind: 'not_checkin' });
+  });
+  it('a row is a check-in purchase with its buyer and event', () => {
+    expect(classifyPurchaseLookup({ data: { buyer_id: 'b', event_id: 'e' }, error: null })).toEqual({ kind: 'checkin', buyer_id: 'b', event_id: 'e' });
+  });
 });

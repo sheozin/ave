@@ -120,3 +120,29 @@ export function routeCheckoutSession(
 
   return { route: 'ignore', reason: 'not a CueDeck check-in or Pay-per-Event session' }
 }
+
+// A routed check-in session is only marked paid when it was charged the
+// configured price, once, in its currency. amount_subtotal is before tax
+// and discounts, so automatic tax does not break the match.
+export function checkinAmountMatches(
+  session: { amount_subtotal?: unknown; currency?: unknown },
+  price: { unit_amount?: unknown; currency?: unknown },
+): boolean {
+  if (typeof price.unit_amount !== 'number' || typeof price.currency !== 'string') return false
+  return session.amount_subtotal === price.unit_amount * 1 && session.currency === price.currency
+}
+
+// Result of looking a payment intent up in leod_checkin_purchases. 'error'
+// must fail the webhook delivery (Stripe retries); it is never "not ours".
+export type PurchaseLookup =
+  | { kind: 'checkin'; buyer_id: string | null; event_id: string | null }
+  | { kind: 'not_checkin' }
+  | { kind: 'error'; message: string }
+
+export function classifyPurchaseLookup(
+  res: { data: { buyer_id?: string | null; event_id?: string | null } | null; error: { message: string } | null },
+): PurchaseLookup {
+  if (res.error) return { kind: 'error', message: res.error.message }
+  if (!res.data) return { kind: 'not_checkin' }
+  return { kind: 'checkin', buyer_id: res.data.buyer_id ?? null, event_id: res.data.event_id ?? null }
+}

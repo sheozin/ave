@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   if (op?.role !== 'organizer') return json({ error: 'Forbidden, organizers only' }, 403)
 
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('status').eq('event_id', event_id).maybeSingle()
+    .select('status, checkout_session_id, checkout_expires_at').eq('event_id', event_id).maybeSingle()
   if (entErr) return json({ error: entErr.message }, 500)
   if (!ent) return json({ error: 'Set up check-in for this event first' }, 409)
   if (ent.status === 'live') return json({ error: 'This event is already live', code: 'already_live' }, 409)
@@ -49,14 +49,33 @@ Deno.serve(async (req) => {
 
   const st = stripe()
 
-  // Customer reuse: CueDeck subscription first, then an earlier check-in
-  // purchase, else a new customer. Check-in-only buyers have no
-  // leod_subscriptions row, which create-checkout-session assumes.
+  // Reuse this buyer's still-open session for the event, so a second click
+  // (or a second tab) cannot produce two payable sessions.
+  if (ent.checkout_session_id && ent.checkout_expires_at && new Date(ent.checkout_expires_at).getTime() > Date.now()) {
+    try {
+      const open = await st.checkout.sessions.retrieve(ent.checkout_session_id)
+      if (open.status === 'open' && open.url && open.metadata?.buyer_id === user.id) return json({ url: open.url })
+    } catch (e) {
+      console.error('checkin-create-checkout: could not retrieve session', ent.checkout_session_id, (e as Error).message)
+    }
+  }
+
+  // Customer reuse: CueDeck subscription, then the billing customer map,
+  // then an earlier check-in purchase, else a new customer (recorded in the
+  // map so repeated clicks do not create one customer each).
+  // Check-in-only buyers have no leod_subscriptions row, which
+  // create-checkout-session assumes.
   let customerId: string | null = null
   const { data: sub, error: subErr } = await sb.from('leod_subscriptions')
     .select('stripe_customer_id').eq('director_id', user.id).maybeSingle()
   if (subErr) return json({ error: subErr.message }, 500)
   customerId = sub?.stripe_customer_id ?? null
+  if (!customerId) {
+    const { data: bc, error: bcErr } = await sb.from('leod_billing_customers')
+      .select('stripe_customer_id').eq('user_id', user.id).maybeSingle()
+    if (bcErr) return json({ error: bcErr.message }, 500)
+    customerId = bc?.stripe_customer_id ?? null
+  }
   if (!customerId) {
     const { data: prev, error: prevErr } = await sb.from('leod_checkin_purchases')
       .select('stripe_customer_id').eq('buyer_id', user.id).not('stripe_customer_id', 'is', null)
@@ -69,8 +88,12 @@ Deno.serve(async (req) => {
     if (!customerId) {
       const c = await st.customers.create({ email: user.email ?? undefined, metadata: { cuedeck_user_id: user.id } })
       customerId = c.id
+      const { error: mapErr } = await sb.from('leod_billing_customers')
+        .insert({ user_id: user.id, stripe_customer_id: customerId })
+      if (mapErr) console.error('checkin-create-checkout: billing customer not recorded for', user.id, mapErr.message)
     }
     const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
+    const expiresAt = Math.floor(Date.now() / 1000) + 60 * 60
     const session = await st.checkout.sessions.create({
       mode: 'payment',
       customer: customerId,
@@ -85,7 +108,12 @@ Deno.serve(async (req) => {
       success_url: `${appUrl}/checkin/setup?event=${event_id}&paid=1`,
       cancel_url: `${appUrl}/checkin/setup?event=${event_id}&step=golive`,
       locale: 'auto',
+      expires_at: expiresAt,
     })
+    const { error: entUpdErr } = await sb.from('leod_checkin_entitlements')
+      .update({ checkout_session_id: session.id, checkout_expires_at: new Date(expiresAt * 1000).toISOString() })
+      .eq('event_id', event_id)
+    if (entUpdErr) console.error('checkin-create-checkout: session not recorded on entitlement', event_id, entUpdErr.message)
     return json({ url: session.url })
   } catch (e) {
     console.error('checkin-create-checkout: stripe error for event', event_id, (e as Error).message)

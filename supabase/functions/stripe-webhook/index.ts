@@ -4,7 +4,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }        from '../_shared/stripe.ts'
-import { routeCheckoutSession } from '../_shared/checkin-policy.ts'
+import { routeCheckoutSession, checkinAmountMatches, classifyPurchaseLookup, type PurchaseLookup } from '../_shared/checkin-policy.ts'
 
 // Types for Supabase client
 type SupabaseClient = ReturnType<typeof adminClient>
@@ -166,7 +166,7 @@ async function captureInvoice(
   console.log('Invoice captured:', invoiceNumber, newInvoice?.id)
 
   // Log activity
-  await sb.rpc('log_activity', {
+  const { error: logErr } = await sb.rpc('log_activity', {
     p_user_id: subData.director_id,
     p_action: 'invoice_paid',
     p_category: 'billing',
@@ -177,7 +177,8 @@ async function captureInvoice(
       amount: amountPaid,
       currency: invoice.currency,
     },
-  }).catch(() => {})
+  })
+  if (logErr) console.error('stripe-webhook: log_activity failed', logErr.message)
 
   // Trigger invoice email (fire and forget)
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -205,9 +206,10 @@ async function sessionProductIds(st: StripeClient, sessionId: string): Promise<s
     typeof li.price?.product === 'string' ? li.price.product : li.price?.product?.id).filter(Boolean)
 }
 
-// Records a routed, paid check-in session. Returns false when the RPC
-// failed, so the caller answers 500 and Stripe retries.
-async function handleCheckinPaid(sb: SupabaseClient, session: Record<string, unknown>): Promise<boolean> {
+// Records a routed, paid check-in session. Returns checkin_mark_paid's
+// result ('live' | 'already_processed' | 'already_live' | 'orphaned'), or
+// null when the RPC failed, so the caller answers 500 and Stripe retries.
+async function handleCheckinPaid(sb: SupabaseClient, session: Record<string, unknown>): Promise<string | null> {
   const md = session.metadata as Record<string, string>
   const details = session.total_details as Record<string, number> | undefined
   const { data, error } = await sb.rpc('checkin_mark_paid', {
@@ -222,16 +224,46 @@ async function handleCheckinPaid(sb: SupabaseClient, session: Record<string, unk
   })
   if (error) {
     console.error('stripe-webhook: checkin_mark_paid failed for', session.id, error.message)
-    return false
+    return null
   }
-  console.log('stripe-webhook: check-in', md.event_id, '->', data)
-  return true
+  return String(data)
 }
 
-async function isCheckinPaymentIntent(sb: SupabaseClient, pi: string): Promise<boolean> {
-  const { data, error } = await sb.from('leod_checkin_purchases').select('id').eq('stripe_payment_intent_id', pi).maybeSingle()
-  if (error) { console.error('stripe-webhook: purchase lookup failed', error.message); return false }
-  return !!data
+// Is this payment intent a check-in purchase? 'error' must fail the
+// delivery so Stripe retries, never read as "not ours".
+async function lookupCheckinPurchase(sb: SupabaseClient, pi: string): Promise<PurchaseLookup> {
+  const res = await sb.from('leod_checkin_purchases')
+    .select('buyer_id, event_id').eq('stripe_payment_intent_id', pi).maybeSingle()
+  const r = classifyPurchaseLookup(res)
+  if (r.kind === 'error') console.error('stripe-webhook: purchase lookup failed for', pi, r.message)
+  return r
+}
+
+// Something a person must act on (refund, double charge, dispute). Lands in
+// activity_log under category 'billing_alert' (allowed since migration 065).
+// p_user_id is nullable; a failed write is logged, never fatal.
+async function billingAlert(sb: SupabaseClient, kind: string, userId: string | null, description: string, details: Record<string, unknown>) {
+  console.error('stripe-webhook: BILLING ALERT', kind, description, JSON.stringify(details))
+  const { error } = await sb.rpc('log_activity', {
+    p_user_id: userId,
+    p_action: kind,
+    p_category: 'billing_alert',
+    p_description: description,
+    p_metadata: details,
+  })
+  if (error) console.error('stripe-webhook: billing alert not recorded', kind, error.message)
+}
+
+// The check-in price, cached per isolate like checkin-price. Throws when the
+// price id is unset or Stripe fails; the caller answers 500 so Stripe retries.
+let checkinPriceCache: { at: number; unit_amount: number | null; currency: string } | null = null
+async function checkinPrice(st: StripeClient): Promise<{ unit_amount: number | null; currency: string }> {
+  if (checkinPriceCache && Date.now() - checkinPriceCache.at < 10 * 60 * 1000) return checkinPriceCache
+  const priceId = Deno.env.get('CHECKIN_PRICE_ID')
+  if (!priceId) throw new Error('CHECKIN_PRICE_ID is not set')
+  const p = await st.prices.retrieve(priceId)
+  checkinPriceCache = { at: Date.now(), unit_amount: p.unit_amount, currency: p.currency }
+  return checkinPriceCache
 }
 
 Deno.serve(async (req) => {
@@ -275,7 +307,7 @@ Deno.serve(async (req) => {
   try {
     event = await st.webhooks.constructEventAsync(rawBody, signature, webhookSecret)
   } catch (e) {
-    console.error('Webhook signature verification failed:', e.message)
+    console.error('Webhook signature verification failed:', (e as Error).message)
     return new Response(JSON.stringify({ error: 'Invalid signature' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
@@ -293,8 +325,12 @@ Deno.serve(async (req) => {
         // Subscriptions are set up by customer.subscription.created.
         if (!isCheckinMd && !isPereventMd) break
 
+        // A misconfiguration must not drop a payment: without the product id
+        // the router would ignore the session, so answer 500 and let Stripe
+        // retry until CHECKIN_PRODUCT_ID is set.
         if (isCheckinMd && !CHECKIN_PRODUCT_ID) {
-          console.error('stripe-webhook: CHECKIN_PRODUCT_ID is not set; check-in session', session.id, 'will be IGNORED and the event will NOT go live')
+          console.error('stripe-webhook: CHECKIN_PRODUCT_ID is not set; check-in session', session.id, 'NOT recorded, asking Stripe to retry')
+          return retry('check-in not configured')
         }
 
         // The outer catch answers 200 to stop retries. A paid session that
@@ -315,11 +351,44 @@ Deno.serve(async (req) => {
         }
 
         if (r.route === 'checkin') {
+          const buyerId = (session.metadata?.buyer_id as string) || null
+          const eventId = (session.metadata?.event_id as string) || null
+          const alertBase = { session_id: session.id, event_id: eventId, payment_intent: session.payment_intent ?? null }
+
+          let price: { unit_amount: number | null; currency: string }
           try {
-            if (!(await handleCheckinPaid(sb, session))) return retry('checkin_mark_paid failed')
+            price = await checkinPrice(st)
+          } catch (e) {
+            console.error('stripe-webhook: check-in price unavailable for', session.id, (e as Error).message)
+            return retry('check-in price unavailable')
+          }
+          if (!checkinAmountMatches(session, price)) {
+            await billingAlert(sb, 'checkin_amount_mismatch', buyerId,
+              'Check-in session paid an amount that does not match the check-in price; event NOT made live',
+              { ...alertBase, amount_subtotal: session.amount_subtotal ?? null, currency: session.currency ?? null,
+                expected_amount: price.unit_amount, expected_currency: price.currency })
+            break
+          }
+
+          let result: string | null
+          try {
+            result = await handleCheckinPaid(sb, session)
           } catch (e) {
             console.error('stripe-webhook: check-in handling threw for', session.id, (e as Error).message)
             return retry('check-in handling failed')
+          }
+          if (result === null) return retry('checkin_mark_paid failed')
+
+          if (result === 'already_live') {
+            await billingAlert(sb, 'checkin_already_live', buyerId,
+              'Second paid check-in session for an event that was already live; likely double charge, refund one',
+              { ...alertBase, amount_total: session.amount_total ?? null })
+          } else if (result === 'orphaned') {
+            await billingAlert(sb, 'checkin_orphaned_payment', buyerId,
+              'Check-in paid for an event or entitlement that no longer exists; needs a manual refund',
+              { ...alertBase, amount_total: session.amount_total ?? null })
+          } else {
+            console.log('stripe-webhook: check-in', eventId, '->', result)
           }
           break
         }
@@ -328,17 +397,30 @@ Deno.serve(async (req) => {
         // 'paid' and the Pay-per-Event product, so either event type is safe.
         const directorId = session.client_reference_id || session.metadata?.director_id
         if (!directorId) {
-          console.error('stripe-webhook: paid Pay-per-Event session', session.id, 'has no director id; credit not recorded')
+          await billingAlert(sb, 'perevent_no_director', null,
+            'Paid Pay-per-Event session has no director id; credit not recorded',
+            { session_id: session.id, customer: session.customer ?? null })
           break
         }
 
-        // supabase-js resolves errors, it never rejects, so the old .catch
-        // fallback could not run; an error now fails the delivery so Stripe retries.
-        const { error: incErr } = await sb.rpc('increment_events_purchased', { p_director_id: directorId })
+        // Idempotent per session since migration 065: a redelivery returns
+        // 'already_processed' instead of crediting twice.
+        const { data: credit, error: incErr } = await sb.rpc('increment_events_purchased', {
+          p_director_id: directorId,
+          p_session_id: session.id,
+        })
         if (incErr) {
           console.error('stripe-webhook: increment_events_purchased failed for', directorId, incErr.message)
           return retry('credit not recorded')
         }
+        if (credit === 'orphaned') {
+          await billingAlert(sb, 'perevent_orphaned_payment', directorId,
+            'Paid Pay-per-Event session for a director with no subscription row; credit not applied',
+            { session_id: session.id })
+          break
+        }
+        console.log('stripe-webhook: Pay-per-Event', session.id, '->', credit)
+        if (credit !== 'credited') break
 
         const { error: logErr } = await sb.rpc('log_activity', {
           p_user_id: directorId,
@@ -355,9 +437,11 @@ Deno.serve(async (req) => {
         const charge = event.data.object
         const pi = charge.payment_intent as string | null
         if (!pi) break
-        let isCheckin = charge.metadata?.product === 'checkin'
-        if (!isCheckin) isCheckin = await isCheckinPaymentIntent(sb, pi)
-        if (!isCheckin) break
+        if (charge.metadata?.product !== 'checkin') {
+          const found = await lookupCheckinPurchase(sb, pi)
+          if (found.kind === 'error') return retry('purchase lookup failed')
+          if (found.kind === 'not_checkin') break
+        }
         // Partial refunds keep the event live; only a full refund reverts it.
         if (charge.amount_refunded < charge.amount) {
           console.log('stripe-webhook: partial check-in refund', pi, charge.amount_refunded, 'of', charge.amount, '- event stays as is')
@@ -370,6 +454,21 @@ Deno.serve(async (req) => {
         }
         // 'test' | 'refunded_still_live' | 'not_found' | 'already_refunded'
         console.log('stripe-webhook: check-in refund', pi, '->', data)
+        break
+      }
+
+      case 'charge.dispute.created': {
+        const dispute = event.data.object
+        const pi = dispute.payment_intent as string | null
+        if (!pi) break
+        const found = await lookupCheckinPurchase(sb, pi)
+        if (found.kind === 'error') return retry('purchase lookup failed')
+        if (found.kind === 'not_checkin') break
+        // No state change: a dispute is decided by Stripe, a person responds.
+        await billingAlert(sb, 'checkin_dispute', found.buyer_id,
+          'Check-in payment disputed; respond in the Stripe dashboard',
+          { dispute_id: dispute.id, payment_intent: pi, event_id: found.event_id,
+            amount: dispute.amount ?? null, reason: dispute.reason ?? null })
         break
       }
 
@@ -429,13 +528,14 @@ Deno.serve(async (req) => {
         const { data: subOwner } = await sb.from('leod_subscriptions')
           .select('director_id').eq('stripe_customer_id', customerId).single()
         if (subOwner?.director_id) {
-          await sb.rpc('log_activity', {
+          const { error: logErr } = await sb.rpc('log_activity', {
             p_user_id: subOwner.director_id,
             p_action: event.type === 'customer.subscription.created' ? 'subscription_created' : 'subscription_updated',
             p_category: 'billing',
             p_description: `Subscription ${event.type === 'customer.subscription.created' ? 'started' : 'updated'}: ${plan || 'unknown'} (${status})`,
             p_metadata: { plan, status, interval, subscription_id: subscription.id },
-          }).catch(() => {})
+          })
+          if (logErr) console.error('stripe-webhook: log_activity failed', logErr.message)
         }
 
         break
@@ -459,13 +559,14 @@ Deno.serve(async (req) => {
 
         // Log activity
         if (cancelledSub?.director_id) {
-          await sb.rpc('log_activity', {
+          const { error: logErr } = await sb.rpc('log_activity', {
             p_user_id: cancelledSub.director_id,
             p_action: 'subscription_cancelled',
             p_category: 'billing',
             p_description: `Subscription cancelled: ${cancelledSub.plan || 'unknown'}`,
             p_metadata: { previous_plan: cancelledSub.plan, subscription_id: subscription.id },
-          }).catch(() => {})
+          })
+          if (logErr) console.error('stripe-webhook: log_activity failed', logErr.message)
         }
         break
       }
@@ -482,13 +583,14 @@ Deno.serve(async (req) => {
 
           // Log activity
           if (failedSub?.director_id) {
-            await sb.rpc('log_activity', {
+            const { error: logErr } = await sb.rpc('log_activity', {
               p_user_id: failedSub.director_id,
               p_action: 'payment_failed',
               p_category: 'billing',
               p_description: `Payment failed for ${failedSub.plan || 'subscription'}`,
               p_metadata: { invoice_id: invoice.id, amount: invoice.amount_due },
-            }).catch(() => {})
+            })
+            if (logErr) console.error('stripe-webhook: log_activity failed', logErr.message)
           }
         }
         break
@@ -507,12 +609,17 @@ Deno.serve(async (req) => {
         }
 
         // ── Invoice capture (non-blocking) ──────────────────────
-        // Create invoice record and trigger email delivery
-        try {
-          await captureInvoice(sb, st, invoice)
-        } catch (invoiceErr) {
-          // Log but don't fail the webhook
-          console.error('Invoice capture failed:', invoiceErr)
+        // Create invoice record and trigger email delivery. Subscription
+        // invoices only: a one-off check-in purchase already is a Stripe
+        // invoice (invoice_creation), and capturing it would issue it a
+        // second invoice number.
+        if (invoice.subscription) {
+          try {
+            await captureInvoice(sb, st, invoice)
+          } catch (invoiceErr) {
+            // Log but don't fail the webhook
+            console.error('Invoice capture failed:', invoiceErr)
+          }
         }
         break
       }
