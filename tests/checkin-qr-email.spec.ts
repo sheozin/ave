@@ -144,7 +144,7 @@ function kioskShouldEmail(isTest: boolean): boolean { return !isTest; }
 
 // Mirrors the fromName sanitizer in _shared/qr-email.ts.
 function safeFromName(name: string): string {
-  return name.replace(/[<>"\r\n]/g, '').trim().slice(0, 64) || 'CueDeck';
+  return name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck';
 }
 
 describe('kiosk email gate and fromName sanitizer', () => {

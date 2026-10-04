@@ -116,7 +116,7 @@ export async function sendQrEmailsForAttendees(
     // this one attendee rather than aborting the whole batch, which
     // would silently drop every remaining attendee's email.
     try {
-      const safeFrom = event.name.replace(/[<>"\r\n]/g, '').trim().slice(0, 64) || 'CueDeck'
+      const safeFrom = event.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck'
       const qrDataUrl = generateQrDataUrl(attendee.qr_token)
       const html = renderQrEmailHtml(event, attendee, qrDataUrl)
 
