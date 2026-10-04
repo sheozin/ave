@@ -7,6 +7,7 @@
 <meta name="description" content="Run your event registration desk: import guests, send QR codes, print badges as people arrive. Set up free.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<script src="/cuedeck-auth.js"></script>
 <link rel="stylesheet" href="/checkin-app.css">
 </head>
 <body>
@@ -37,7 +38,7 @@
       <form id="f-in">
         <h3>Welcome back</h3><p class="s">Use your CueDeck login.</p>
         <div class="field"><label for="in-email">Email</label><input id="in-email" type="email" autocomplete="email" required></div>
-        <div class="field"><label for="in-pass">Password</label><input id="in-pass" type="password" autocomplete="current-password" required></div>
+        <div class="field"><label for="in-pass">Password</label><div class="pwrap"><input id="in-pass" type="password" autocomplete="current-password" required></div></div>
         <button class="btn btn-p full" id="in-btn">Sign in</button>
         <div class="err" id="in-err"></div>
         <div class="fine"><button type="button" class="link" id="go-forgot">Forgot password?</button></div>
@@ -47,12 +48,23 @@
         <div class="field"><label for="up-name">Your name</label><input id="up-name" autocomplete="name" required maxlength="120"></div>
         <div class="field"><label for="up-org">Company</label><input id="up-org" autocomplete="organization" maxlength="120"></div>
         <div class="field"><label for="up-email">Work email</label><input id="up-email" type="email" autocomplete="email" required></div>
-        <div class="field"><label for="up-pass">Password</label><input id="up-pass" type="password" autocomplete="new-password" minlength="8" required></div>
+        <div class="field"><label for="up-pass">Password</label><div class="pwrap"><input id="up-pass" type="password" autocomplete="new-password" minlength="10" required aria-describedby="up-meter-l"></div><div class="meter" id="up-meter" data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="meter-l" id="up-meter-l">At least 10 characters. A short sentence works well.</div></div>
         <div class="hp" aria-hidden="true"><label for="up-website">Website</label><input id="up-website" tabindex="-1" autocomplete="off"></div>
         <button class="btn btn-p full" id="up-btn">Create account</button>
         <div class="err" id="up-err"></div>
       </form>
-      <div id="up-done" hidden><h3>Check your inbox</h3><p class="s" id="up-done-t"></p></div>
+      <div id="up-done" hidden>
+        <h3>Check your inbox</h3><p class="s" id="up-done-t"></p>
+        <ol class="next">
+          <li><b>Confirm your email.</b> The link comes from noreply@cuedeck.io and signs you straight in.</li>
+          <li><b>Create your event</b> and import your guest list.</li>
+          <li><b>Try the desk for free</b> with up to <span id="up-cap"></span> test check-ins.</li>
+          <li><b>Go live</b> <span data-price-line hidden>for <span data-price></span> per event, excl. VAT,</span> when you are ready.</li>
+        </ol>
+        <p class="small">Nothing after a few minutes? Check your spam folder, then <button type="button" class="link" id="up-resend">send it again</button>. <span id="up-resend-msg"></span></p>
+        <p class="small">Already have a CueDeck account with this email? Then no new email is sent: <button type="button" class="link" id="up-to-in">sign in</button> or <button type="button" class="link" id="up-to-reset">reset your password</button>.</p>
+        <p class="small"><button type="button" class="link" id="up-again">Use a different email</button></p>
+      </div>
       <form id="f-forgot" hidden>
         <h3>Reset your password</h3><p class="s">We'll email you a link.</p>
         <div class="field"><label for="fg-email">Email</label><input id="fg-email" type="email" autocomplete="email" required></div>
@@ -60,6 +72,7 @@
         <div class="err" id="fg-err"></div><div class="ok" id="fg-ok"></div>
         <div class="fine"><button type="button" class="link" id="back-in">Back to sign in</button></div>
       </form>
+      <div class="captcha" id="captcha"></div>
     </div>
   </div>
 </main>
@@ -68,7 +81,7 @@
 <main class="wrap" id="v-pass" hidden>
   <form class="card" id="f-pass" style="max-width:420px;margin:40px auto">
     <h3>Choose a password</h3><p class="s">You'll use it to sign in to CueDeck Check-in.</p><p class="s" id="pw-who"></p>
-    <div class="field"><label for="pw-1">New password</label><input id="pw-1" type="password" autocomplete="new-password" minlength="8" required></div>
+    <div class="field"><label for="pw-1">New password</label><div class="pwrap"><input id="pw-1" type="password" autocomplete="new-password" minlength="10" required></div><div class="meter-l">At least 10 characters.</div></div>
     <button class="btn btn-p full" id="pw-btn">Save and continue</button>
     <div class="err" id="pw-err"></div>
   </form>
@@ -77,13 +90,29 @@
 <!-- SIGNED IN -->
 <main class="wrap" id="v-in" hidden>
   <div class="head">
-    <div><h1>Your events</h1><p id="head-sub">Set up for free. <span id="head-price" hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
+    <div><p class="hello" id="hello"></p><h1>Your events</h1><p id="head-sub">Set up for free. <span id="head-price" hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
     <button class="btn btn-p" id="new-btn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New event</button>
   </div>
   <div class="err" id="ev-err"></div>
+  <section class="start" id="start" hidden><h2>Getting started</h2><ol id="start-list"></ol></section>
   <div class="grid" id="ev-grid"></div>
   <div class="empty" id="ev-empty" hidden></div>
 </main>
+
+<dialog id="dlg-acct">
+  <h3 style="margin:0">Your account</h3>
+  <dl class="kv">
+    <dt>Name</dt><dd id="ac-name"></dd>
+    <dt>Email</dt><dd id="ac-email"></dd>
+    <dt>Billing</dt><dd id="ac-bill"></dd>
+  </dl>
+  <p class="small">Signed in on a shared or lost device? Signing out everywhere ends every session, including this one.</p>
+  <div class="err" id="ac-err"></div>
+  <div class="acts" style="justify-content:flex-end;margin-top:8px">
+    <button type="button" class="btn btn-s" id="ac-all">Sign out on all devices</button>
+    <button type="button" class="btn btn-p" id="ac-close">Close</button>
+  </div>
+</dialog>
 
 <dialog id="dlg-new">
   <form id="f-new" method="dialog">
@@ -125,7 +154,35 @@ if (NEEDS_PASSWORD_HASH) pwFlag('set');
 const NEEDS_PASSWORD = NEEDS_PASSWORD_HASH || pwFlag('get');
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = (id) => document.getElementById(id);
-let ME = null, MY_ROLE = null, PRICE_OK = false, ACCOUNT_IS_COMP = false, COMP_GRANTED = false, createdId = null;
+let ME = null, MY_ROLE = null, MY_NAME = '', PRICE_OK = false, ACCOUNT_IS_COMP = false, COMP_GRANTED = false, createdId = null;
+
+// Mounted only once the signed-out view is on screen: Turnstile does not
+// run inside a hidden container.
+let captcha = null;
+const cap = () => captcha || (captcha = cdAuth.mount($('captcha')));
+// One CAPTCHA token per auth request; a failed check becomes the form's error.
+async function captchaToken(errEl) {
+  try { return { ok: true, token: await cap().token() }; }
+  catch (e) { errEl.textContent = e.message; return { ok: false }; }
+}
+
+for (const w of document.querySelectorAll('.pwrap')) {
+  const input = w.querySelector('input');
+  const t = el('button', 'pw-t', 'Show'); t.type = 'button';
+  t.setAttribute('aria-label', 'Show password');
+  t.onclick = () => {
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    t.textContent = showing ? 'Show' : 'Hide';
+    t.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  };
+  w.appendChild(t);
+}
+$('up-pass').addEventListener('input', () => {
+  const r = cdAuth.passwordScore($('up-pass').value);
+  $('up-meter').dataset.s = String(r.score);
+  $('up-meter-l').textContent = r.label || 'At least ' + cdAuth.PASSWORD_MIN + ' characters. A short sentence works well.';
+});
 
 function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -141,6 +198,9 @@ function navUser(text, withSignOut) {
   const nav = $('nav-r'); nav.replaceChildren();
   nav.appendChild(el('span', null, text));
   if (withSignOut) {
+    const acct = el('button', 'link', 'Account');
+    acct.onclick = openAccount;
+    nav.appendChild(acct);
     const out = el('button', 'link', 'Sign out');
     out.onclick = async () => { pwFlag('clear'); await sb.auth.signOut(); location.href = '/checkin'; };
     nav.appendChild(out);
@@ -181,9 +241,21 @@ $('back-in').onclick = () => tab('in');
 $('f-in').addEventListener('submit', async (e) => {
   e.preventDefault();
   busy($('in-btn'), true, 'Signing in…'); $('in-err').textContent = '';
-  const { data, error } = await sb.auth.signInWithPassword({ email: $('in-email').value.trim(), password: $('in-pass').value });
+  const email = $('in-email').value.trim();
+  const c = await captchaToken($('in-err'));
+  if (!c.ok) { busy($('in-btn'), false, 'Sign in'); return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: $('in-pass').value, options: { captchaToken: c.token } });
+  cap().reset();
   busy($('in-btn'), false, 'Sign in');
-  if (error) { $('in-err').textContent = error.message; return; }
+  if (error) {
+    $('in-err').textContent = cdAuth.message(error) + ' ';
+    if (error.code === 'email_not_confirmed') {
+      const b = el('button', 'link', 'Send a new link'); b.type = 'button';
+      b.onclick = () => { showDone(email); resend(); };
+      $('in-err').appendChild(b);
+    }
+    return;
+  }
   $('in-pass').value = '';
   await enter(data.user);
 });
@@ -191,27 +263,73 @@ $('f-in').addEventListener('submit', async (e) => {
 $('f-up').addEventListener('submit', async (e) => {
   e.preventDefault();
   if ($('up-website').value) return;           // honeypot: a bot filled the hidden field
-  busy($('up-btn'), true, 'Creating…'); $('up-err').textContent = '';
+  $('up-err').textContent = '';
+  if ($('up-pass').value.length < cdAuth.PASSWORD_MIN) { $('up-err').textContent = 'Use at least ' + cdAuth.PASSWORD_MIN + ' characters.'; return; }
+  busy($('up-btn'), true, 'Creating…');
   const email = $('up-email').value.trim();
+  const c = await captchaToken($('up-err'));
+  if (!c.ok) { busy($('up-btn'), false, 'Create account'); return; }
   const { error } = await sb.auth.signUp({
     email, password: $('up-pass').value,
     options: {
       data: { name: $('up-name').value.trim(), organization: $('up-org').value.trim(), signup_source: 'checkin' },
       emailRedirectTo: location.origin + '/checkin',
+      captchaToken: c.token,
     },
   });
+  cap().reset();
   busy($('up-btn'), false, 'Create account');
-  if (error) { $('up-err').textContent = error.message; return; }
-  $('f-up').hidden = true; $('up-done').hidden = false;
-  $('up-done-t').textContent = 'We sent a confirmation link to ' + email + '. Open it on this device and you will land back here, signed in.';
+  if (error) { $('up-err').textContent = cdAuth.message(error); return; }
+  $('up-pass').value = '';
+  showDone(email);
 });
+
+// The confirmation screen. Supabase answers a sign-up for an address that
+// already has an account exactly like a new one (and sends nothing), so
+// that nobody can use this form to find out who has an account. The screen
+// therefore says what to do in both cases instead of guessing.
+let doneEmail = '', resendTimer = null;
+function showDone(email) {
+  doneEmail = email;
+  $('f-in').hidden = true; $('f-up').hidden = true; $('f-forgot').hidden = true; $('up-done').hidden = false;
+  $('up-done-t').textContent = 'If ' + email + ' is new to CueDeck, a confirmation link is on its way. Open it on this device and you will land back here, signed in.';
+  $('up-resend-msg').textContent = '';
+  cooldown(60);
+}
+function cooldown(sec) {
+  clearInterval(resendTimer);
+  const b = $('up-resend');
+  let left = sec;
+  const tick = () => {
+    if (left <= 0) { clearInterval(resendTimer); b.disabled = false; b.textContent = 'send it again'; return; }
+    b.disabled = true; b.textContent = 'send it again (' + left-- + 's)';
+  };
+  tick(); resendTimer = setInterval(tick, 1000);
+}
+async function resend() {
+  $('up-resend-msg').textContent = '';
+  const c = await captchaToken($('up-resend-msg'));
+  if (!c.ok) return;
+  const { error } = await sb.auth.resend({ type: 'signup', email: doneEmail, options: { emailRedirectTo: location.origin + '/checkin', captchaToken: c.token } });
+  cap().reset();
+  if (error) { $('up-resend-msg').textContent = cdAuth.message(error); return; }
+  $('up-resend-msg').textContent = 'Sent, if this address is waiting for confirmation.';
+  cooldown(60);
+}
+$('up-resend').onclick = resend;
+$('up-to-in').onclick = () => { tab('in'); $('in-email').value = doneEmail; $('in-pass').focus(); };
+$('up-to-reset').onclick = () => { tab('forgot'); $('fg-email').value = doneEmail; };
+$('up-again').onclick = () => { tab('up'); $('up-email').value = ''; $('up-email').focus(); };
 
 $('f-forgot').addEventListener('submit', async (e) => {
   e.preventDefault();
   busy($('fg-btn'), true, 'Sending…'); $('fg-err').textContent = ''; $('fg-ok').textContent = '';
-  const { error } = await sb.auth.resetPasswordForEmail($('fg-email').value.trim(), { redirectTo: location.origin + '/checkin' });
+  const c = await captchaToken($('fg-err'));
+  if (!c.ok) { busy($('fg-btn'), false, 'Send reset link'); return; }
+  const { error } = await sb.auth.resetPasswordForEmail($('fg-email').value.trim(), { redirectTo: location.origin + '/checkin', captchaToken: c.token });
+  cap().reset();
   busy($('fg-btn'), false, 'Send reset link');
-  if (error) { $('fg-err').textContent = error.message; return; }
+  if (error) { $('fg-err').textContent = cdAuth.message(error); return; }
   $('fg-ok').textContent = 'If that address has an account, a reset link is on its way.';
 });
 
@@ -220,7 +338,7 @@ $('f-pass').addEventListener('submit', async (e) => {
   busy($('pw-btn'), true, 'Saving…'); $('pw-err').textContent = '';
   const { data, error } = await sb.auth.updateUser({ password: $('pw-1').value });
   busy($('pw-btn'), false, 'Save and continue');
-  if (error) { $('pw-err').textContent = error.message; return; }
+  if (error) { $('pw-err').textContent = cdAuth.message(error); return; }
   pwFlag('clear');
   history.replaceState(null, '', '/checkin');
   await enter(data.user);
@@ -232,7 +350,9 @@ async function enter(user) {
   const { data: me, error } = await sb.from('leod_users').select('role, name').eq('id', user.id).maybeSingle();
   if (error) console.error('checkin home: profile read failed', error.message);
   MY_ROLE = me?.role || 'director';
+  MY_NAME = me?.name || '';
   navUser(me?.name || user.email, true);
+  $('hello').textContent = (MY_NAME ? 'Welcome, ' + MY_NAME.split(/\s+/)[0] + '. ' : '') + 'Signed in as ' + user.email + '.';
   $('new-btn').hidden = MY_ROLE === 'checkin_staff';
   show('v-in');
   // A comp account that owns no events yet: the row-based check below has
@@ -262,6 +382,7 @@ async function loadEvents() {
   syncHeadPrice();
   const rows = (data || []).map(r => ({ ...r, state: stateOf(r) }))
     .sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.date.localeCompare(b.date));
+  renderStart(rows);
   const grid = $('ev-grid'); grid.replaceChildren();
   $('ev-empty').hidden = rows.length > 0;
   if (!rows.length) {
@@ -272,6 +393,48 @@ async function loadEvents() {
   }
   for (const r of rows) grid.appendChild(card(r));
 }
+
+// Getting started: each step is read from the organizer's own events, so it
+// ticks itself off. Gone once every step is done, and never shown to desk staff.
+function renderStart(rows) {
+  const mine = rows.filter(r => r.is_owner && r.status);
+  const steps = [
+    ['Create an event', 'Name, date and venue.', rows.some(r => r.is_owner)],
+    ['Import your guests', 'Upload a CSV from any spreadsheet.', mine.some(r => r.attendees > 0)],
+    ['Try the desk', 'Free test check-ins, no emails sent.', mine.some(r => r.test_used > 0 || r.state === 'live' || r.state === 'ended')],
+    ['Go live', ACCOUNT_IS_COMP ? 'Included with your account.' : 'Pay once per event when you are ready.', mine.some(r => r.state === 'live' || r.state === 'ended')],
+  ];
+  const all = steps.every(s => s[2]);
+  $('start').hidden = MY_ROLE === 'checkin_staff' || all;
+  if ($('start').hidden) return;
+  const ol = $('start-list'); ol.replaceChildren();
+  steps.forEach(([title, hint, done], i) => {
+    const li = el('li', done ? 'done' : null);
+    li.appendChild(el('span', 'dot', done ? '✓' : String(i + 1)));
+    const t = el('div'); t.append(el('b', null, title), el('span', null, hint));
+    li.appendChild(t); ol.appendChild(li);
+  });
+}
+
+function openAccount() {
+  $('ac-name').textContent = MY_NAME || 'Not set';
+  $('ac-email').textContent = ME.email;
+  const price = PRICE_OK ? document.querySelector('[data-price]').textContent : null;
+  $('ac-bill').textContent = MY_ROLE === 'checkin_staff'
+    ? 'Desk staff. The organizer pays for their events.'
+    : ACCOUNT_IS_COMP
+      ? 'Complimentary. Check-in is included with your account.'
+      : 'Pay per event. Test mode is free; each event goes live for ' + (price ? price + ', excl. VAT' : 'a one-off fee') + '. No subscription.';
+  $('ac-err').textContent = '';
+  $('dlg-acct').showModal();
+}
+$('ac-close').onclick = () => $('dlg-acct').close();
+$('ac-all').onclick = async () => {
+  busy($('ac-all'), true, 'Signing out…');
+  const { error } = await sb.auth.signOut({ scope: 'global' });
+  if (error) { busy($('ac-all'), false, 'Sign out on all devices'); $('ac-err').textContent = cdAuth.message(error); return; }
+  pwFlag('clear'); location.href = '/checkin';
+};
 
 function card(r) {
   const c = el('div', 'ev');
@@ -368,6 +531,7 @@ $('f-new').addEventListener('submit', async (e) => {
 });
 
 // ── boot ────────────────────────────────────────────────
+$('up-cap').textContent = String(TEST_CAP);
 loadPrice();
 const { data: { session } } = await sb.auth.getSession();
 if (session) navUser(session.user.email, false);
@@ -376,7 +540,7 @@ if (session && NEEDS_PASSWORD) {
   show('v-pass'); $('pw-1').focus();
 }
 else if (session) await enter(session.user);
-else { show('v-out'); tab('in'); }
+else { show('v-out'); tab('in'); cap(); }
 </script>
 </body>
 </html>
