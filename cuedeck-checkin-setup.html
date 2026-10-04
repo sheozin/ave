@@ -194,7 +194,7 @@
 </dialog>
 
 <script type="module">
-import { checkinWindow, TEST_CAP } from '/checkin-window.js';
+import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
@@ -306,16 +306,17 @@ function renderDetails() {
   const owner = EV.is_owner;
   for (const id of ['d-name', 'd-date', 'd-tz', 'd-start', 'd-end', 'd-venue', 'd-save']) $(id).disabled = !owner;
   const dateLocked = isLive() && !isComp();
-  if (dateLocked) $('d-date').disabled = true;
+  if (dateLocked) { $('d-date').disabled = true; $('d-tz').disabled = true; }
   $('det-note').textContent = !owner ? 'Only the event owner can change these details.'
-    : dateLocked ? 'The date is locked now the event is live. Contact support@cuedeck.io to move it.'
+    : dateLocked ? 'The date and timezone are locked now the event is live. Contact support@cuedeck.io to move it.'
     : 'Shown on the desk, the kiosk and in QR emails.';
 }
 $('f-det').addEventListener('submit', async (e) => {
   e.preventDefault(); $('d-err').textContent = ''; $('d-ok').textContent = ''; $('d-save').disabled = true;
-  const patch = { name: $('d-name').value.trim(), venue: $('d-venue').value.trim() || null, timezone: $('d-tz').value,
+  const patch = { name: $('d-name').value.trim(), venue: $('d-venue').value.trim() || null,
                   event_start: $('d-start').value, event_end: $('d-end').value };
-  if (!isLive() || isComp()) patch.date = $('d-date').value;
+  // Migration 069 locks timezone with the date on a live, paid event.
+  if (!isLive() || isComp()) { patch.date = $('d-date').value; patch.timezone = $('d-tz').value; }
   const { error } = await sb.from('leod_events').update(patch).eq('id', EVENT_ID);
   $('d-save').disabled = false;
   if (error) { $('d-err').textContent = error.message; return; }
@@ -342,6 +343,12 @@ function renderAttendees() {
     const n = el('td'); n.append(el('div', 'nm', a.first_name + ' ' + a.last_name), el('div', 'em', a.email || 'No email'));
     if (!a.email) n.lastChild.style.color = 'var(--rd)';
     const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
+    if (isLive() && a.email) {
+      const rs = el('button', 'link', 'Resend QR'); rs.dataset.resend = a.id;
+      const out = el('div', 'em');
+      rs.onclick = () => resendQr(a, rs, out);
+      qr.append(el('br'), rs, out);
+    }
     const st = el('td'); st.appendChild(statusTag(a));
     const del = el('td'); const b = el('button', 'link', 'Remove'); b.onclick = () => removeAttendee(a); del.appendChild(b);
     tr.append(n, el('td', 'hide-sm', a.company || ''), el('td', 'hide-sm', a.ticket_type || ''), qr, st, del);
@@ -350,6 +357,17 @@ function renderAttendees() {
   $('att-count').textContent = 'Showing ' + Math.min(rows.length, 200) + ' of ' + rows.length + (rows.length > 200 ? '. Search to narrow the list.' : '');
 }
 $('att-q').addEventListener('input', renderAttendees);
+// One person's QR email again, e.g. "I never got it". The result stays on
+// the row; the list is not re-rendered under the organizer.
+async function resendQr(a, btn, out) {
+  btn.disabled = true; out.style.color = ''; out.textContent = 'Sending…';
+  const { data, error } = await sb.functions.invoke('checkin-send-qr-emails', { body: { event_id: EVENT_ID, attendee_ids: [a.id] } });
+  btn.disabled = false;
+  if (error) { out.style.color = 'var(--rd)'; out.textContent = await fnError(error); return; }
+  const s = data.summary || {};
+  if (s.sent) { out.textContent = 'Sent to ' + a.email; a.qr_email_sent_at = a.qr_email_sent_at || new Date().toISOString(); }
+  else { out.style.color = 'var(--rd)'; out.textContent = 'Not sent. Try again.'; }
+}
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
   FILTER = c.dataset.f; document.querySelectorAll('.chip').forEach(x => x.setAttribute('aria-pressed', String(x === c))); renderAttendees();
 }));
@@ -519,6 +537,10 @@ function renderGolive() {
   if (isComp()) $('gl-sub').textContent = isLive() ? EV.name + ' is live. Check-in is included with your account.' : 'Check-in is included with your account.';
   $('gl-done-t').textContent = 'Check-ins now count for real' + (ATT.length ? ', and you can send QR emails to your ' + ATT.length + ' attendees.' : '.');
   $('gl-desk').href = '/checkin/desk?event=' + EVENT_ID;
+  // Same rule checkin-create-checkout enforces: no paying for a closed window.
+  const closed = !isLive() && !isComp() && isWindowClosed(EV.date, EV.timezone);
+  $('gl-btn').disabled = closed;
+  $('gl-err').textContent = closed ? 'Check-in for this event has already closed. Change the event date before going live.' : '';
 }
 $('gl-btn').onclick = async () => {
   $('gl-err').textContent = ''; $('gl-btn').disabled = true; $('gl-btn').textContent = 'Opening payment…';

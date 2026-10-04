@@ -125,7 +125,7 @@ if (NEEDS_PASSWORD_HASH) pwFlag('set');
 const NEEDS_PASSWORD = NEEDS_PASSWORD_HASH || pwFlag('get');
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = (id) => document.getElementById(id);
-let ME = null, MY_ROLE = null, PRICE_OK = false, ACCOUNT_IS_COMP = false, createdId = null;
+let ME = null, MY_ROLE = null, PRICE_OK = false, ACCOUNT_IS_COMP = false, COMP_GRANTED = false, createdId = null;
 
 function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -235,6 +235,11 @@ async function enter(user) {
   navUser(me?.name || user.email, true);
   $('new-btn').hidden = MY_ROLE === 'checkin_staff';
   show('v-in');
+  // A comp account that owns no events yet: the row-based check below has
+  // nothing to read, so ask directly.
+  const { data: comp, error: compErr } = await sb.rpc('checkin_account_is_comp');
+  if (compErr) console.error('checkin home: comp check failed', compErr.message);
+  COMP_GRANTED = comp === true;
   await loadEvents();
 }
 
@@ -253,7 +258,7 @@ async function loadEvents() {
   $('ev-err').textContent = '';
   const { data, error } = await sb.rpc('checkin_my_events');
   if (error) { $('ev-err').textContent = 'Could not load your events: ' + error.message; return; }
-  ACCOUNT_IS_COMP = (data || []).some(r => r.is_owner && r.is_comp);
+  ACCOUNT_IS_COMP = COMP_GRANTED || (data || []).some(r => r.is_owner && r.is_comp);
   syncHeadPrice();
   const rows = (data || []).map(r => ({ ...r, state: stateOf(r) }))
     .sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.date.localeCompare(b.date));
