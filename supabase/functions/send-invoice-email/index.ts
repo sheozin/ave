@@ -1,5 +1,8 @@
 // send-invoice-email — Generates and sends branded invoice PDF via email
-// Called by stripe-webhook after invoice.payment_succeeded
+// Called by stripe-webhook after invoice.payment_succeeded (service-role
+// bearer), and by the console's "Email invoice" for the invoice's own
+// director or an admin (user JWT). verify_jwt stays off for the webhook
+// call, so the check below is the only gate.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -41,7 +44,26 @@ Deno.serve(async (req) => {
     })
   }
 
+  const json = (b: unknown, status: number) => new Response(JSON.stringify(b), {
+    status, headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+  const bearer = req.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? ''
+  if (!bearer) return json({ error: 'Unauthorized' }, 401)
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const isService = serviceKey.length > 0 && bearer === serviceKey
+
   const sb = adminClient()
+
+  let callerId: string | null = null
+  let callerIsAdmin = false
+  if (!isService) {
+    const { data: { user }, error: authErr } = await sb.auth.getUser(bearer)
+    if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+    callerId = user.id
+    const { data: me, error: meErr } = await sb.from('leod_users').select('role').eq('id', user.id).maybeSingle()
+    if (meErr) return json({ error: meErr.message }, 500)
+    callerIsAdmin = me?.role === 'admin'
+  }
 
   // Fetch invoice from database
   const { data: invoice, error: fetchError } = await sb
@@ -56,6 +78,10 @@ Deno.serve(async (req) => {
       status: 404,
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
+  }
+
+  if (!isService && !callerIsAdmin && invoice.director_id !== callerId) {
+    return json({ error: 'Forbidden' }, 403)
   }
 
   // Skip if email already sent

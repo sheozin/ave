@@ -6,7 +6,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 
-const AI_PLANS = new Set(['trial', 'pro', 'enterprise'])
+const PAID_AI_PLANS = new Set(['pro', 'enterprise'])
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -47,17 +47,27 @@ Deno.serve(async (req) => {
     })
   }
 
-  // ── Plan check: AI is only available on trial / pro / enterprise ─
-  const { data: subRow } = await sb
+  // ── Plan check: an active pro / enterprise plan, or an unexpired trial.
+  // No subscription row means no AI (it used to default to 'trial').
+  const { data: subRow, error: subErr } = await sb
     .from('leod_subscriptions')
-    .select('plan')
+    .select('plan, status, trial_ends_at')
     .eq('director_id', user.id)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (subErr) {
+    console.error('ai-proxy: subscription lookup failed', subErr.message)
+    return new Response(JSON.stringify({ error: 'Could not verify your plan' }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
 
-  const plan = (subRow?.plan as string) || 'trial'
-  if (!AI_PLANS.has(plan)) {
+  const plan = subRow?.plan as string | undefined
+  const paidOk = !!plan && PAID_AI_PLANS.has(plan) && subRow?.status === 'active'
+  const trialEnds = subRow?.trial_ends_at ? Date.parse(subRow.trial_ends_at as string) : NaN
+  const trialOk = plan === 'trial' && !Number.isNaN(trialEnds) && trialEnds > Date.now()
+  if (!paidOk && !trialOk) {
     return new Response(
       JSON.stringify({ error: 'AI features are not available on your current plan. Upgrade to Pro to unlock AI.' }),
       { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } },
