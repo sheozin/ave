@@ -316,17 +316,18 @@ BEGIN
 END
 $probe$;
 
--- G0. Seven guards, each with a name, a verdict and a detail.
+-- G0. Eight guards (G1 to G7, plus G9 from 077), each with a name, a
+--     verdict and a detail.
 DO $probe$
 DECLARE
   n INT;
 BEGIN
   SELECT count(*) INTO n FROM public.checkin_guard_results()
    WHERE guard IS NOT NULL AND ok IS NOT NULL AND detail IS NOT NULL AND checked_at IS NOT NULL;
-  IF n <> 7 THEN
-    RAISE EXCEPTION 'PROBE_FAIL expected 7 complete guard rows, got %', n;
+  IF n <> 8 THEN
+    RAISE EXCEPTION 'PROBE_FAIL expected 8 complete guard rows, got %', n;
   END IF;
-  RAISE EXCEPTION 'PROBE_OK G0 seven guard rows';
+  RAISE EXCEPTION 'PROBE_OK G0 eight guard rows';
 END
 $probe$;
 
@@ -511,9 +512,74 @@ BEGIN
     RAISE EXCEPTION 'PROBE_FAIL G8 %', row_to_json(g);
   END IF;
   SELECT count(*) INTO n FROM public.checkin_guard_results();
-  IF n <> 7 THEN
+  IF n <> 8 THEN
     RAISE EXCEPTION 'PROBE_FAIL G8 only % rows when one guard throws', n;
   END IF;
   RAISE EXCEPTION 'PROBE_OK G8 %', g.detail;
+END
+$probe$;
+
+-- G9 (077). Admin read RPCs are called as an admin, so a broken statement
+--     AFTER a working admin check is caught, and a Forbidden raised while
+--     impersonating an admin is a failure. Four throwaway functions:
+--       admin_get_zz_probe_after      admin check passes, then an ambiguous
+--                                     unqualified id (42702) further down
+--       admin_list_zz_probe_forbidden raises Forbidden for everyone
+--       admin_get_zz_probe_fine       works; must not be named
+--       admin_get_zz_probe_args(uuid) needs an argument; listed, not failed
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE FUNCTION public.admin_get_zz_probe_after() RETURNS TABLE (id uuid)
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM leod_users lu WHERE lu.id = auth.uid() AND lu.role = 'admin') THEN
+      RAISE EXCEPTION 'Forbidden';
+    END IF;
+    RETURN QUERY SELECT id FROM leod_users;
+  END $f$;
+  CREATE FUNCTION public.admin_list_zz_probe_forbidden() RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RAISE EXCEPTION 'Forbidden';
+  END $f$;
+  CREATE FUNCTION public.admin_get_zz_probe_fine() RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RETURN 1;
+  END $f$;
+  CREATE FUNCTION public.admin_get_zz_probe_args(p uuid) RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RETURN 1;
+  END $f$;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_read_rpcs_callable';
+  IF g.ok
+     OR g.detail NOT LIKE '%admin_get_zz_probe_after() 42702%'
+     OR g.detail NOT LIKE '%admin_list_zz_probe_forbidden() P0001 Forbidden%'
+     OR g.detail LIKE '%admin_get_zz_probe_fine%'
+     OR g.detail NOT LIKE '%not callable without args:%admin_get_zz_probe_args(p uuid)%'
+     OR g.detail NOT LIKE '2 of %' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G9 %', left(row_to_json(g)::text, 900);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G9 %', g.detail;
+END
+$probe$;
+
+-- G9b. No admin to impersonate is a failure, not an all-clear. Triggers are
+--      bypassed for the demotion so nothing is logged; rolled back anyway.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  SET LOCAL session_replication_role = replica;
+  UPDATE leod_users SET role = 'director' WHERE role = 'admin';
+  SET LOCAL session_replication_role = origin;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_read_rpcs_callable';
+  IF g.ok OR g.detail <> 'no admin user to test as' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G9b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G9b %', g.detail;
 END
 $probe$;
