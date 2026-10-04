@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CueDeck Check-in</title>
+<meta name="description" content="Run your event registration desk: import guests, send QR codes, print badges as people arrive. Set up free.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/checkin-app.css">
+</head>
+<body>
+<nav class="nav">
+  <a class="logo" href="/checkin"><span class="mk"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck<span class="tag">Check-in</span></a>
+  <div class="nav-r" id="nav-r"><a class="link" href="https://cuedeck.io/solutions/check-in">How it works</a></div>
+</nav>
+
+<!-- SIGNED OUT -->
+<main class="wrap" id="v-out" hidden>
+  <div class="hero">
+    <div>
+      <div class="eyebrow">Event check-in</div>
+      <h1>Every guest through the door in seconds.</h1>
+      <p class="lead">Import your guest list, send each person a QR code, and run the registration desk from any laptop or tablet. Badges print as people arrive.</p>
+      <ul class="ticks">
+        <li><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>One scan brings up the whole company, so a group checks in together</span></li>
+        <li><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Self-registration kiosk for walk-ins</span></li>
+        <li><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Keeps working when the venue Wi-Fi drops</span></li>
+      </ul>
+      <div class="price" data-price-line hidden><b data-price></b> per event, excl. VAT · set up free</div>
+    </div>
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="t-in" aria-selected="true">Sign in</button>
+        <button type="button" role="tab" id="t-up" aria-selected="false">Create account</button>
+      </div>
+      <form id="f-in">
+        <h3>Welcome back</h3><p class="s">Use your CueDeck login.</p>
+        <div class="field"><label for="in-email">Email</label><input id="in-email" type="email" autocomplete="email" required></div>
+        <div class="field"><label for="in-pass">Password</label><input id="in-pass" type="password" autocomplete="current-password" required></div>
+        <button class="btn btn-p full" id="in-btn">Sign in</button>
+        <div class="err" id="in-err"></div>
+        <div class="fine"><button type="button" class="link" id="go-forgot">Forgot password?</button></div>
+      </form>
+      <form id="f-up" hidden>
+        <h3>Create your account</h3><p class="s">Free to set up. You only pay when an event goes live.</p>
+        <div class="field"><label for="up-name">Your name</label><input id="up-name" autocomplete="name" required maxlength="120"></div>
+        <div class="field"><label for="up-org">Company</label><input id="up-org" autocomplete="organization" maxlength="120"></div>
+        <div class="field"><label for="up-email">Work email</label><input id="up-email" type="email" autocomplete="email" required></div>
+        <div class="field"><label for="up-pass">Password</label><input id="up-pass" type="password" autocomplete="new-password" minlength="8" required></div>
+        <div class="hp" aria-hidden="true"><label for="up-website">Website</label><input id="up-website" tabindex="-1" autocomplete="off"></div>
+        <button class="btn btn-p full" id="up-btn">Create account</button>
+        <div class="err" id="up-err"></div>
+      </form>
+      <div id="up-done" hidden><h3>Check your inbox</h3><p class="s" id="up-done-t"></p></div>
+      <form id="f-forgot" hidden>
+        <h3>Reset your password</h3><p class="s">We'll email you a link.</p>
+        <div class="field"><label for="fg-email">Email</label><input id="fg-email" type="email" autocomplete="email" required></div>
+        <button class="btn btn-p full" id="fg-btn">Send reset link</button>
+        <div class="err" id="fg-err"></div><div class="ok" id="fg-ok"></div>
+        <div class="fine"><button type="button" class="link" id="back-in">Back to sign in</button></div>
+      </form>
+    </div>
+  </div>
+</main>
+
+<!-- SET PASSWORD (invite or recovery link) -->
+<main class="wrap" id="v-pass" hidden>
+  <form class="card" id="f-pass" style="max-width:420px;margin:40px auto">
+    <h3>Choose a password</h3><p class="s">You'll use it to sign in to CueDeck Check-in.</p>
+    <div class="field"><label for="pw-1">New password</label><input id="pw-1" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="btn btn-p full" id="pw-btn">Save and continue</button>
+    <div class="err" id="pw-err"></div>
+  </form>
+</main>
+
+<!-- SIGNED IN -->
+<main class="wrap" id="v-in" hidden>
+  <div class="head">
+    <div><h1>Your events</h1><p id="head-sub">Set up for free. <span data-price-line hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
+    <button class="btn btn-p" id="new-btn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New event</button>
+  </div>
+  <div class="err" id="ev-err"></div>
+  <div class="grid" id="ev-grid"></div>
+  <div class="empty" id="ev-empty" hidden></div>
+</main>
+
+<dialog id="dlg-new">
+  <form id="f-new" method="dialog">
+    <h3 style="margin:0 0 4px">New event</h3><p class="s" style="margin:0 0 16px;color:var(--t2);font-size:13px">Starts in free test mode.</p>
+    <div class="field"><label for="ne-name">Event name</label><input id="ne-name" required maxlength="160"></div>
+    <div class="field"><label for="ne-date">Date</label><input id="ne-date" type="date" required></div>
+    <div class="row2">
+      <div class="field"><label for="ne-start">Starts</label><input id="ne-start" type="time" value="09:00" required></div>
+      <div class="field"><label for="ne-end">Ends</label><input id="ne-end" type="time" value="18:00" required></div>
+    </div>
+    <div class="field"><label for="ne-venue">Venue</label><input id="ne-venue" maxlength="160"></div>
+    <div class="field"><label for="ne-tz">Timezone</label><select id="ne-tz"></select></div>
+    <div class="err" id="ne-err"></div>
+    <div class="acts" style="justify-content:flex-end;margin-top:8px">
+      <button type="button" class="btn btn-s" id="ne-cancel">Cancel</button>
+      <button type="submit" class="btn btn-p" id="ne-save">Create event</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { checkinWindow, TEST_CAP } from '/checkin-window.js';
+
+const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+// Read before createClient: supabase-js consumes and clears the hash.
+const NEEDS_PASSWORD = /type=(invite|recovery)/.test(location.hash);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = (id) => document.getElementById(id);
+let ME = null, MY_ROLE = null;
+
+function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = label; }
+function fmtDate(ymd) { return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); }
+
+async function loadPrice() {
+  try {
+    const r = await fetch(SUPABASE_URL + '/functions/v1/checkin-price');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const p = await r.json();
+    const s = new Intl.NumberFormat('en-IE', { style: 'currency', currency: p.currency.toUpperCase(),
+      minimumFractionDigits: p.amount % 100 ? 2 : 0 }).format(p.amount / 100);
+    document.querySelectorAll('[data-price]').forEach(n => n.textContent = s);
+    document.querySelectorAll('[data-price-line]').forEach(n => n.hidden = false);
+  } catch (e) {
+    // No number is better than a wrong one: the lines stay hidden.
+    console.error('checkin home: price unavailable', e);
+  }
+}
+
+// ── auth views ──────────────────────────────────────────
+function tab(which) {
+  $('t-in').setAttribute('aria-selected', String(which === 'in'));
+  $('t-up').setAttribute('aria-selected', String(which === 'up'));
+  $('f-in').hidden = which !== 'in';
+  $('f-up').hidden = which !== 'up';
+  $('f-forgot').hidden = which !== 'forgot';
+  $('up-done').hidden = true;
+}
+$('t-in').onclick = () => tab('in');
+$('t-up').onclick = () => tab('up');
+$('go-forgot').onclick = () => tab('forgot');
+$('back-in').onclick = () => tab('in');
+
+$('f-in').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  busy($('in-btn'), true, 'Signing in…'); $('in-err').textContent = '';
+  const { data, error } = await sb.auth.signInWithPassword({ email: $('in-email').value.trim(), password: $('in-pass').value });
+  busy($('in-btn'), false, 'Sign in');
+  if (error) { $('in-err').textContent = error.message; return; }
+  $('in-pass').value = '';
+  await enter(data.user);
+});
+
+$('f-up').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if ($('up-website').value) return;           // honeypot: a bot filled the hidden field
+  busy($('up-btn'), true, 'Creating…'); $('up-err').textContent = '';
+  const email = $('up-email').value.trim();
+  const { error } = await sb.auth.signUp({
+    email, password: $('up-pass').value,
+    options: {
+      data: { name: $('up-name').value.trim(), organization: $('up-org').value.trim(), signup_source: 'checkin' },
+      emailRedirectTo: location.origin + '/checkin',
+    },
+  });
+  busy($('up-btn'), false, 'Create account');
+  if (error) { $('up-err').textContent = error.message; return; }
+  $('f-up').hidden = true; $('up-done').hidden = false;
+  $('up-done-t').textContent = 'We sent a confirmation link to ' + email + '. Open it on this device and you will land back here, signed in.';
+});
+
+$('f-forgot').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  busy($('fg-btn'), true, 'Sending…'); $('fg-err').textContent = ''; $('fg-ok').textContent = '';
+  const { error } = await sb.auth.resetPasswordForEmail($('fg-email').value.trim(), { redirectTo: location.origin + '/checkin' });
+  busy($('fg-btn'), false, 'Send reset link');
+  if (error) { $('fg-err').textContent = error.message; return; }
+  $('fg-ok').textContent = 'If that address has an account, a reset link is on its way.';
+});
+
+$('f-pass').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  busy($('pw-btn'), true, 'Saving…'); $('pw-err').textContent = '';
+  const { data, error } = await sb.auth.updateUser({ password: $('pw-1').value });
+  busy($('pw-btn'), false, 'Save and continue');
+  if (error) { $('pw-err').textContent = error.message; return; }
+  history.replaceState(null, '', '/checkin');
+  await enter(data.user);
+});
+
+// ── signed in ───────────────────────────────────────────
+async function enter(user) {
+  ME = user;
+  const { data: me, error } = await sb.from('leod_users').select('role, name').eq('id', user.id).maybeSingle();
+  if (error) console.error('checkin home: profile read failed', error.message);
+  MY_ROLE = me?.role || 'director';
+  const nav = $('nav-r'); nav.replaceChildren();
+  nav.appendChild(el('span', null, me?.name || user.email));
+  const out = el('button', 'link', 'Sign out');
+  out.onclick = async () => { await sb.auth.signOut(); location.href = '/checkin'; };
+  nav.appendChild(out);
+  $('new-btn').hidden = MY_ROLE === 'checkin_staff';
+  show('v-in');
+  await loadEvents();
+}
+
+function stateOf(r) {
+  if (!r.status) return 'none';
+  if (r.status === 'test') return 'test';
+  // An unreadable date or timezone gives no window: show it as live, never as ended.
+  const w = checkinWindow(r.date, r.timezone);
+  return w && Date.now() >= w.closesAt.getTime() ? 'ended' : 'live';
+}
+
+const PILL = { none: ['p-none', 'Not set up'], test: ['p-test', 'Test mode'], live: ['p-live', 'Live'], ended: ['p-end', 'Ended'] };
+const ORDER = { live: 0, test: 1, none: 2, ended: 3 };
+
+async function loadEvents() {
+  $('ev-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_my_events');
+  if (error) { $('ev-err').textContent = 'Could not load your events: ' + error.message; return; }
+  const rows = (data || []).map(r => ({ ...r, state: stateOf(r) }))
+    .sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.date.localeCompare(b.date));
+  const grid = $('ev-grid'); grid.replaceChildren();
+  $('ev-empty').hidden = rows.length > 0;
+  if (!rows.length) {
+    $('ev-empty').textContent = MY_ROLE === 'checkin_staff'
+      ? 'You have not been added to an event yet. Ask the organizer to invite you.'
+      : 'No events yet. Create one to import guests and try the desk for free.';
+    return;
+  }
+  for (const r of rows) grid.appendChild(card(r));
+}
+
+function card(r) {
+  const c = el('div', 'ev');
+  const top = el('div', 'ev-top');
+  const left = el('div');
+  left.appendChild(el('h3', null, r.name));
+  const where = [fmtDate(r.date), r.venue || (r.state === 'none' && r.created_via === 'console' ? 'from your CueDeck console' : null)].filter(Boolean).join(' · ');
+  left.appendChild(el('div', 'meta', where));
+  const [pc, pt] = PILL[r.state];
+  const pill = el('span', 'pill ' + pc); pill.appendChild(el('i')); pill.appendChild(document.createTextNode(pt));
+  top.append(left, pill); c.appendChild(top);
+
+  const org = r.role === 'organizer';
+  if (r.state === 'live' || r.state === 'ended') {
+    const st = el('div', 'stats');
+    for (const [n, l] of [[r.arrived, 'checked in'], [r.attendees, 'attendees']]) { const s = el('div', 'stat'); s.append(el('b', null, String(n)), el('span', null, l)); st.appendChild(s); }
+    if (r.state === 'ended' && r.attendees) { const s = el('div', 'stat'); s.append(el('b', null, Math.round(100 * r.arrived / r.attendees) + '%'), el('span', null, 'turnout')); st.appendChild(s); }
+    c.appendChild(st);
+    if (r.state === 'live') { const bar = el('div', 'bar'); const f = el('div'); f.style.width = (r.attendees ? 100 * r.arrived / r.attendees : 0) + '%'; f.style.background = 'var(--gn)'; bar.appendChild(f); c.appendChild(bar); }
+  } else if (r.state === 'test') {
+    c.appendChild(el('div', 'note', r.attendees + ' attendees imported. ' + r.test_used + ' of ' + TEST_CAP + ' test check-ins used.'));
+  } else if (r.is_comp) {
+    // Complimentary account: setting up makes the event live, nothing to pay.
+    c.appendChild(el('div', 'note', 'Set up check-in to import guests and run the desk. Included with your account.'));
+  } else {
+    c.appendChild(el('div', 'note', 'Add check-in to import guests and run the desk.'));
+  }
+
+  const acts = el('div', 'acts');
+  const go = (label, cls, href) => { const a = el('a', 'btn ' + cls, label); a.href = href; acts.appendChild(a); };
+  const setup = '/checkin/setup?event=' + r.event_id, desk = '/checkin/desk?event=' + r.event_id;
+  if (r.state === 'none' && org) {
+    const b = el('button', 'btn btn-g', 'Set up check-in');
+    b.onclick = async () => {
+      busy(b, true, 'Setting up…');
+      const { error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: r.event_id } });
+      if (error) { busy(b, false, 'Set up check-in'); $('ev-err').textContent = 'Could not set up check-in: ' + error.message; return; }
+      location.href = setup;
+    };
+    acts.appendChild(b);
+  } else if (r.state === 'test') {
+    if (org) go('Continue setup', 'btn-p', setup);
+    go(org ? 'Try the desk' : 'Open desk (test)', org ? 'btn-s' : 'btn-p', desk);
+  } else if (r.state === 'live') {
+    go('Open desk', 'btn-p', desk);
+    if (org) go('Setup', 'btn-s', setup);
+  } else if (r.state === 'ended' && org) {
+    go('View attendance', 'btn-s', setup + '&step=attendees');
+  }
+  c.appendChild(acts);
+  return c;
+}
+
+// ── new event ───────────────────────────────────────────
+function fillTimezones() {
+  const here = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [here];
+  const sel = $('ne-tz'); sel.replaceChildren();
+  for (const z of zones) { const o = el('option', null, z.replace(/_/g, ' ')); o.value = z; if (z === here) o.selected = true; sel.appendChild(o); }
+}
+$('new-btn').onclick = () => { fillTimezones(); $('ne-err').textContent = ''; $('dlg-new').showModal(); };
+$('ne-cancel').onclick = () => $('dlg-new').close();
+$('f-new').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  busy($('ne-save'), true, 'Creating…'); $('ne-err').textContent = '';
+  const { data: ev, error } = await sb.from('leod_events').insert({
+    name: $('ne-name').value.trim(), date: $('ne-date').value,
+    event_start: $('ne-start').value, event_end: $('ne-end').value,
+    venue: $('ne-venue').value.trim() || null, timezone: $('ne-tz').value,
+    active: true, created_by: ME.id, created_via: 'checkin',
+  }).select('id').single();
+  if (error) { busy($('ne-save'), false, 'Create event'); $('ne-err').textContent = error.message; return; }
+  const { error: enErr } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: ev.id } });
+  if (enErr) { busy($('ne-save'), false, 'Create event'); $('ne-err').textContent = 'Event created, but check-in could not be set up: ' + enErr.message; return; }
+  location.href = '/checkin/setup?event=' + ev.id;
+});
+
+// ── boot ────────────────────────────────────────────────
+loadPrice();
+const { data: { session } } = await sb.auth.getSession();
+if (session && NEEDS_PASSWORD) { show('v-pass'); $('pw-1').focus(); }
+else if (session) await enter(session.user);
+else { show('v-out'); tab('in'); }
+</script>
+</body>
+</html>
