@@ -36,7 +36,10 @@ END
 $probe$;
 
 -- S2. Seeded funnel: right count per stage, denominators present,
---     test-desk stage non-gating, null vs 0 in event_day.
+--     test-desk stage non-gating, null vs 0 in event_day. Since 079 the
+--     cohort is sign-ups 14 days to 1 day old, independent of p_since, so
+--     the seeded users are 3 days old and the funnel is compared as a
+--     delta against a baseline taken before seeding.
 DO $probe$
 DECLARE
   u1 UUID := gen_random_uuid();  -- signed up, never confirmed
@@ -48,14 +51,17 @@ DECLARE
   e4 UUID := gen_random_uuid();
   a3 UUID := gen_random_uuid();
   r  JSONB;
+  b  JSONB;
+  bs JSONB;
   st JSONB;
   expected JSONB := '{"signed_up":[3,null],"confirmed":[2,3],"created_event":[2,2],"imported_guests":[1,2],"used_test_desk":[1,1],"opened_checkout":[1,1],"paid":[1,1],"went_live":[1,1]}';
 BEGIN
+  b := public.checkin_brain_signals(now());
   INSERT INTO auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at, aud, role) VALUES
-    (u1, 'probe-075-u1@probe.invalid', '{"signup_source":"checkin"}', NULL,  now(), 'authenticated', 'authenticated'),
-    (u2, 'probe-075-u2@probe.invalid', '{"signup_source":"checkin"}', now(), now(), 'authenticated', 'authenticated'),
-    (u3, 'probe-075-u3@probe.invalid', '{"signup_source":"checkin"}', now(), now(), 'authenticated', 'authenticated'),
-    (u4, 'probe-075-u4@probe.invalid', '{}',                          now(), now(), 'authenticated', 'authenticated');
+    (u1, 'probe-075-u1@probe.invalid', '{"signup_source":"checkin"}', NULL,  now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u2, 'probe-075-u2@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u3, 'probe-075-u3@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u4, 'probe-075-u4@probe.invalid', '{}',                          now(), now() - interval '3 days', 'authenticated', 'authenticated');
 
   INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via) VALUES
     (e2, 'probe 075 e2', current_date, '09:00', '18:00', 'UTC', u2, 'checkin'),
@@ -80,10 +86,11 @@ BEGIN
     IF NOT (st ? 'of') THEN
       RAISE EXCEPTION 'PROBE_FAIL stage % has no denominator key', st->>'stage';
     END IF;
-    IF (st->'count') IS DISTINCT FROM (expected->(st->>'stage')->0)
-       OR (st->'of') IS DISTINCT FROM (expected->(st->>'stage')->1) THEN
-      RAISE EXCEPTION 'PROBE_FAIL stage %: got count=% of=%, want %',
-        st->>'stage', st->'count', st->'of', expected->(st->>'stage');
+    SELECT x INTO bs FROM jsonb_array_elements(b->'funnel'->'stages') x WHERE x->>'stage' = st->>'stage';
+    IF (st->>'count')::int - (bs->>'count')::int IS DISTINCT FROM (expected->(st->>'stage')->>0)::int
+       OR (st->>'of')::int - (bs->>'of')::int IS DISTINCT FROM (expected->(st->>'stage')->>1)::int THEN
+      RAISE EXCEPTION 'PROBE_FAIL stage %: got count=% of=% (baseline %), want delta %',
+        st->>'stage', st->'count', st->'of', bs, expected->(st->>'stage');
     END IF;
   END LOOP;
   IF jsonb_array_length(r->'funnel'->'stages') <> 8 THEN
@@ -131,9 +138,16 @@ DECLARE
   e UUID := gen_random_uuid();
   r JSONB;
   st JSONB;
+  bu INT;
+  bc INT;
+  bl INT;
 BEGIN
+  -- Baseline first: since 079 the cohort is sign-ups 1 to 14 days old.
+  r := public.checkin_brain_signals(now());
+  SELECT (s->>'count')::int, (s->>'unknown')::int INTO bc, bu FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'used_test_desk';
+  SELECT (s->>'count')::int INTO bl FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'went_live';
   INSERT INTO auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at, aud, role)
-  VALUES (u, 'probe-075-s3@probe.invalid', '{"signup_source":"checkin"}', now(), now(), 'authenticated', 'authenticated');
+  VALUES (u, 'probe-075-s3@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated');
   INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via)
   VALUES (e, 'probe 075 s3', current_date + 30, '09:00', '18:00', 'UTC', u, 'checkin');
   INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at, checkout_session_id, checkout_expires_at)
@@ -145,11 +159,11 @@ BEGIN
 
   r := public.checkin_brain_signals(now());
   SELECT s INTO st FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'used_test_desk';
-  IF st->'count' <> '0'::jsonb OR st->'unknown' <> '1'::jsonb OR st->'gating' <> 'false'::jsonb THEN
-    RAISE EXCEPTION 'PROBE_FAIL used_test_desk %', st;
+  IF (st->>'count')::int <> bc OR (st->>'unknown')::int <> bu + 1 OR st->'gating' <> 'false'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL used_test_desk % (baseline count % unknown %)', st, bc, bu;
   END IF;
   SELECT s INTO st FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'went_live';
-  IF st->'count' <> '1'::jsonb THEN
+  IF (st->>'count')::int <> bl + 1 THEN
     RAISE EXCEPTION 'PROBE_FAIL went_live should still count 1 without a test scan, got %', st;
   END IF;
   RAISE EXCEPTION 'PROBE_OK S3 test desk non-gating';
@@ -282,6 +296,90 @@ BEGIN
     RAISE EXCEPTION 'PROBE_FAIL UTC+14 event not in event_day or late sync missed: %', r->'event_day';
   END IF;
   RAISE EXCEPTION 'PROBE_OK S7 event day follows the event time zone';
+END
+$probe$;
+
+-- S8 (079). Scans window on received_at: a scan made offline 5 h ago and
+--     synced 1 h ago is counted for p_since = 2 h ago (scanned before it,
+--     received after it); one received 3 h ago is not.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  a UUID := gen_random_uuid();
+  r JSONB;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-079-s8@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES (e, 'probe 079 s8', current_date, '00:00', '23:59', 'UTC', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  INSERT INTO leod_checkin_attendees (id, event_id, first_name, last_name, qr_token)
+  VALUES (a, e, 'Probe', 'Guest', 'probe-079-' || gen_random_uuid());
+  INSERT INTO leod_checkin_scan_events (id, event_id, attendee_id, scanned_at, received_at, result) VALUES
+    (gen_random_uuid(), e, a, now() - interval '5 hours', now() - interval '1 hour', 'ok'),
+    (gen_random_uuid(), e, a, now() - interval '5 hours', now() - interval '3 hours', 'ok');
+
+  r := public.checkin_brain_signals(now() - interval '2 hours');
+  IF (r->'event_day'->'scans'->>'total')::int <> 1 OR r->'event_day'->'late_sync'->'count' <> '1'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL late-synced scan not counted once by received_at: %', r->'event_day';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S8 scans window on received_at';
+END
+$probe$;
+
+-- S9 (079). Funnel cohort is sign-ups 14 days to 1 day old, whatever
+--     p_since is: a sign-up from 2 h ago is excluded, one from 3 days ago
+--     is included, and cohort_window {from, to} is reported. Checked with
+--     p_since 1 h and 7 days back, so a p_since-based cohort fails both
+--     ways (+0 for 1 h, +2 for 7 days).
+DO $probe$
+DECLARE
+  u_new UUID := gen_random_uuid();
+  u_old UUID := gen_random_uuid();
+  b1 INT;
+  b7 INT;
+  n1 INT;
+  n7 INT;
+  r JSONB;
+BEGIN
+  SELECT (s->>'count')::int INTO b1 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '1 hour')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  SELECT (s->>'count')::int INTO b7 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '7 days')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, aud, role) VALUES
+    (u_new, 'probe-079-s9-new@probe.invalid', '{"signup_source":"checkin"}', now() - interval '2 hours', 'authenticated', 'authenticated'),
+    (u_old, 'probe-079-s9-old@probe.invalid', '{"signup_source":"checkin"}', now() - interval '3 days',  'authenticated', 'authenticated');
+
+  SELECT (s->>'count')::int INTO n1 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '1 hour')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  r := public.checkin_brain_signals(now() - interval '7 days');
+  SELECT (s->>'count')::int INTO n7 FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  IF n1 - b1 <> 1 OR n7 - b7 <> 1 THEN
+    RAISE EXCEPTION 'PROBE_FAIL signed_up should grow by exactly 1 (the 3-day-old sign-up) for any p_since: +% (1 h), +% (7 days)', n1 - b1, n7 - b7;
+  END IF;
+  IF (r->'funnel'->'cohort_window'->>'from')::timestamptz IS DISTINCT FROM now() - interval '14 days'
+     OR (r->'funnel'->'cohort_window'->>'to')::timestamptz IS DISTINCT FROM now() - interval '1 day' THEN
+    RAISE EXCEPTION 'PROBE_FAIL cohort_window %', r->'funnel'->'cohort_window';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S9 cohort is 14d to 1d old, window %', r->'funnel'->'cohort_window';
+END
+$probe$;
+
+-- S10 (079). A function created by postgres in public is not executable by
+--      anon or PUBLIC by default; authenticated and service_role still are.
+DO $probe$
+BEGIN
+  CREATE FUNCTION public.admin_zz_probe_default_priv() RETURNS int LANGUAGE sql AS 'select 1';
+  IF has_function_privilege('anon', 'public.admin_zz_probe_default_priv()', 'EXECUTE')
+     OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) x
+                 WHERE p.oid = 'public.admin_zz_probe_default_priv()'::regprocedure AND x.grantee = 0) THEN
+    RAISE EXCEPTION 'PROBE_FAIL new function executable by anon or PUBLIC: %',
+      (SELECT proacl::text FROM pg_proc WHERE oid = 'public.admin_zz_probe_default_priv()'::regprocedure);
+  END IF;
+  IF NOT has_function_privilege('authenticated', 'public.admin_zz_probe_default_priv()', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.admin_zz_probe_default_priv()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL authenticated or service_role lost the default EXECUTE';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S10 new public function acl %',
+    (SELECT proacl::text FROM pg_proc WHERE oid = 'public.admin_zz_probe_default_priv()'::regprocedure);
 END
 $probe$;
 
