@@ -96,27 +96,23 @@ Deno.serve(async (req) => {
     isComp = !!compRow
   }
 
-  // Create in test, or live for a comp owner. ON CONFLICT DO NOTHING: an
-  // existing row keeps its status (only checkin_mark_paid /
-  // checkin_mark_refunded move it, plus the comp upgrade below).
+  // Always create in test. ON CONFLICT DO NOTHING: an existing row keeps
+  // its status (only checkin_mark_paid / checkin_mark_refunded /
+  // checkin_mark_comp_live move it).
   const { error: insErr } = await sb.from('leod_checkin_entitlements')
-    .upsert(isComp
-      ? { event_id, checkin_core: true, status: 'live', went_live_at: new Date().toISOString() }
-      : { event_id, checkin_core: true, status: 'test' },
-      { onConflict: 'event_id', ignoreDuplicates: true })
+    .upsert({ event_id, checkin_core: true, status: 'test' }, { onConflict: 'event_id', ignoreDuplicates: true })
   if (insErr) {
     return new Response(JSON.stringify({ error: insErr.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  // A comp owner who set up before being granted: lift test to live.
+  // Comp owner: go live through the same lock + test-data cleanup as a
+  // paid go-live (no-op when already live).
   if (isComp) {
-    const { error: upErr } = await sb.from('leod_checkin_entitlements')
-      .update({ status: 'live', went_live_at: new Date().toISOString() })
-      .eq('event_id', event_id).eq('status', 'test')
-    if (upErr) {
-      return new Response(JSON.stringify({ error: upErr.message }), {
+    const { error: liveErr } = await sb.rpc('checkin_mark_comp_live', { p_event_id: event_id })
+    if (liveErr) {
+      return new Response(JSON.stringify({ error: liveErr.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
