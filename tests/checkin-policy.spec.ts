@@ -163,6 +163,18 @@ describe('validTs', () => {
   it('accepts 24:00:00Z (next midnight)', () => { expect(validTs('2026-10-04T24:00:00Z')).toBe(true); });
 });
 
+// The function computes p_live_time_ok regardless of mode (go-live race): the
+// flag is a pure function of the scan time, never of isTest.
+describe('p_live_time_ok is mode independent', () => {
+  const NOW = Date.parse('2026-06-20T12:00:00.000Z');
+  it('is false for a far-future scan even when the event was read as test', () => {
+    expect(liveTimeOk(Date.parse('2026-06-20T13:00:00.000Z'), NOW)).toBe(false);
+  });
+  it('is true for a recent scan', () => {
+    expect(liveTimeOk(Date.parse('2026-06-20T11:59:00.000Z'), NOW)).toBe(true);
+  });
+});
+
 describe('checkinVerdict', () => {
   it('a duplicate never consumes the test cap', () => {
     expect(checkinVerdict({ alreadyIn: true, isTest: true, testUsed: 25, inWindow: true })).toBe('duplicate');

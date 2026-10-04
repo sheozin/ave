@@ -196,10 +196,10 @@ Deno.serve(async (req) => {
   const ordered = valid.sort((a, b) => Date.parse(a.scanned_at) - Date.parse(b.scanned_at))
 
   for (const it of ordered) {
-    const p_live_time_ok = isTest
-      ? true
-      : liveTimeOk(Date.parse(it.scanned_at), nowMs)
-        && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone)
+    // Computed in test mode too: SQL ignores it while the event is test,
+    // but the event can go live between our entitlement read and the RPC.
+    const p_live_time_ok = liveTimeOk(Date.parse(it.scanned_at), nowMs)
+      && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone)
     const { data: result, error } = await sb.rpc('checkin_apply_scan', {
       p_event_id: event_id,
       p_client_id: it.client_id,
@@ -212,11 +212,22 @@ Deno.serve(async (req) => {
       p_live_time_ok,
     })
     if (error) {
-      // 23505: client_id already recorded (e.g. under another event). The
-      // function rolled back, so report the stored verdict.
+      const clash = 'client_id already used for another event'
+      // CK001: raised by checkin_apply_scan when the client_id is recorded under another event.
+      if (error.code === 'CK001') {
+        errors.push({ client_id: it.client_id, stage: 'apply', error: clash })
+        results[it.client_id] = 'error'
+        continue
+      }
+      // 23505: a concurrent insert of the same client_id won; its row is authoritative.
       if (error.code === '23505') {
         const { data: raced } = await sb.from('leod_checkin_scan_events')
-          .select('result').eq('client_id', it.client_id).maybeSingle()
+          .select('result, event_id').eq('client_id', it.client_id).maybeSingle()
+        if (raced?.event_id && raced.event_id !== event_id) {
+          errors.push({ client_id: it.client_id, stage: 'apply', error: clash })
+          results[it.client_id] = 'error'
+          continue
+        }
         if (raced?.result) { results[it.client_id] = raced.result; continue }
       }
       console.error('checkin-record-scans: apply failed for', it.client_id, error.message)
