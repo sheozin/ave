@@ -58,8 +58,9 @@ const POLICIES: Policy[] = [
 
   // ── leod_checkin_operators (045) ──
   // checkin_op_read: SELECT, organizer/crew only (051 removed api_consumer)
-  // checkin_op_write / checkin_op_update / checkin_op_delete: organizer only
-  { table: 'leod_checkin_operators', role: 'organizer',    ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+  // 064 dropped the organizer write policies and revoked writes: grants
+  // change only through checkin-invite-staff's service-role client.
+  { table: 'leod_checkin_operators', role: 'organizer',    ops: ['SELECT'] },
   { table: 'leod_checkin_operators', role: 'crew',         ops: ['SELECT'] },
   { table: 'leod_checkin_operators', role: 'api_consumer', ops: [] },
   { table: 'leod_checkin_operators', role: 'none',         ops: [] },
@@ -167,8 +168,11 @@ describe('Checkin RLS: no-grant-means-no-access', () => {
 });
 
 describe('Checkin RLS: organizer has full control', () => {
-  it('05 organizer can SELECT/INSERT/UPDATE/DELETE leod_checkin_operators', () => {
-    for (const op of ALL_OPS) expect(canDo('organizer', 'leod_checkin_operators', op)).toBe(true);
+  it('05 organizer can only SELECT leod_checkin_operators (064: writes via checkin-invite-staff only)', () => {
+    expect(canDo('organizer', 'leod_checkin_operators', 'SELECT')).toBe(true);
+    expect(canDo('organizer', 'leod_checkin_operators', 'INSERT')).toBe(false);
+    expect(canDo('organizer', 'leod_checkin_operators', 'UPDATE')).toBe(false);
+    expect(canDo('organizer', 'leod_checkin_operators', 'DELETE')).toBe(false);
   });
 
   it('06 organizer can SELECT/INSERT/UPDATE/DELETE leod_checkin_attendees', () => {
@@ -203,7 +207,7 @@ describe('Checkin RLS: organizer has full control', () => {
 });
 
 describe('Checkin RLS: crew has a narrower scope than organizer', () => {
-  it('12 crew can SELECT but CANNOT INSERT/UPDATE/DELETE leod_checkin_operators (organizer-only writes)', () => {
+  it('12 crew can SELECT but CANNOT INSERT/UPDATE/DELETE leod_checkin_operators (no client writes since 064)', () => {
     expect(canDo('crew', 'leod_checkin_operators', 'SELECT')).toBe(true);
     expect(canDo('crew', 'leod_checkin_operators', 'INSERT')).toBe(false);
     expect(canDo('crew', 'leod_checkin_operators', 'UPDATE')).toBe(false);

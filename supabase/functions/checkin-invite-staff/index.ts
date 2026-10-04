@@ -3,7 +3,10 @@
 // gets a Supabase invite carrying checkin_staff = 'true', which migration
 // 059's signup trigger turns into a check-in-only leod_users row (never
 // a director). An existing CueDeck user just gets the grant and a short
-// notice email. Removing deletes the grant only; the login is theirs.
+// notice email, unless they have never signed in: then the first invite
+// was lost or expired, so they get a fresh invite (or set-password) link,
+// also when re-invited with the role they already hold. Removing deletes
+// the grant only; the login is theirs.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
@@ -17,6 +20,7 @@ function normalizeInviteEmail(raw: unknown): string | null {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
 Deno.serve(async (req) => {
@@ -111,15 +115,27 @@ Deno.serve(async (req) => {
 
   let userId: string
   let isNew = false
+  let needsLink = false        // existing account that has never signed in
+  let unconfirmed = false
+  let alreadyGranted = false
   if (existing) {
     userId = existing.id
     const { data: cur, error: curErr } = await sb.from('leod_checkin_operators')
       .select('role').eq('event_id', event_id).eq('user_id', userId).maybeSingle()
     if (curErr) return json({ error: curErr.message }, 500)
-    if (cur) {
-      if (cur.role === role) return json({ ok: true })
+    if (cur && cur.role !== role) {
       return json({ error: 'This person is already on this event with another role', code: 'already_on_event' }, 409)
     }
+    const { data: au, error: auErr } = await sb.auth.admin.getUserById(userId)
+    if (auErr || !au?.user) {
+      console.error('checkin-invite-staff: auth user lookup failed', auErr?.code ?? auErr?.status ?? 'missing')
+      return json({ error: 'Could not send the invitation' }, 502)
+    }
+    needsLink = !au.user.last_sign_in_at
+    unconfirmed = !au.user.email_confirmed_at
+    alreadyGranted = !!cur
+    // Same role, already signed in before: nothing to do.
+    if (alreadyGranted && !needsLink) return json({ ok: true })
   } else {
     const { data: inv, error: invErr } = await sb.auth.admin.inviteUserByEmail(email, {
       data: { checkin_staff: 'true', name },
@@ -133,11 +149,36 @@ Deno.serve(async (req) => {
     isNew = true
   }
 
-  const { error: grantErr } = await sb.from('leod_checkin_operators')
-    .insert({ event_id, user_id: userId, role })
-  if (grantErr) return json({ error: grantErr.message }, 500)
+  if (!alreadyGranted) {
+    const { error: grantErr } = await sb.from('leod_checkin_operators')
+      .insert({ event_id, user_id: userId, role })
+    if (grantErr) return json({ error: grantErr.message }, 500)
+  }
 
-  if (!isNew) {
+  if (needsLink) {
+    const { data: link, error: linkErr } = await sb.auth.admin.generateLink({
+      type: unconfirmed ? 'invite' : 'recovery',
+      email,
+      options: { redirectTo: `${appUrl}/checkin` },
+    })
+    const actionLink = link?.properties?.action_link
+    if (linkErr || !actionLink) {
+      console.error('checkin-invite-staff: invite link failed', linkErr?.code ?? linkErr?.status ?? 'no link')
+      return json({ error: 'Could not send the invitation' }, 502)
+    }
+    const { error: mailErr } = await sendEmail({
+      to: email,
+      subject: 'Your CueDeck Check-in invitation',
+      html: `<p>You have been invited to the check-in desk for <b>${escapeHtml(ev.name)}</b>.</p>` +
+            `<p><a href="${escapeHtml(actionLink)}">Accept the invitation and set your password</a></p>` +
+            `<p>This link works once. If it has expired, ask the organizer to invite you again.</p>`,
+      fromName: 'CueDeck Check-in',
+    })
+    if (mailErr) {
+      console.error('checkin-invite-staff: invite link email failed for event', event_id, mailErr)
+      return json({ error: 'Could not send the invitation' }, 502)
+    }
+  } else if (!isNew) {
     const safeName = ev.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 80)
     const { error: mailErr } = await sendEmail({
       to: email,

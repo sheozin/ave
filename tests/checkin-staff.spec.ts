@@ -43,10 +43,15 @@ describe('likeSafe', () => {
 });
 
 // Mirrors the existing-grant decision, subject sanitizer and rate-limit predicate.
-function inviteDecision(cur: string | null, role: string): 'insert' | 'noop' | 'already_on_event' {
-  if (cur === null) return 'insert';
-  return cur === role ? 'noop' : 'already_on_event';
+// An existing account that has never signed in gets a fresh link: an invite
+// link when its email is unconfirmed, else a recovery (set-password) link.
+type Decision = 'insert' | 'noop' | 'already_on_event' | 'insert+link' | 'link';
+function inviteDecision(cur: string | null, role: string, neverSignedIn = false): Decision {
+  if (cur !== null && cur !== role) return 'already_on_event';
+  if (cur === null) return neverSignedIn ? 'insert+link' : 'insert';
+  return neverSignedIn ? 'link' : 'noop';
 }
+const linkType = (emailConfirmedAt: string | null) => emailConfirmedAt ? 'recovery' : 'invite';
 const safeSubjectName = (n: string) => n.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 80);
 const rateLimited = (eventCount: number, inviterCount: number) => eventCount >= 50 || inviterCount >= 100;
 
@@ -56,6 +61,13 @@ describe('inviteDecision', () => {
   it('refuses a different role (crew -> organizer)', () => { expect(inviteDecision('crew', 'organizer')).toBe('already_on_event'); });
   it('refuses demoting an organizer/owner', () => { expect(inviteDecision('organizer', 'crew')).toBe('already_on_event'); });
   it('refuses api_consumer', () => { expect(inviteDecision('api_consumer', 'crew')).toBe('already_on_event'); });
+  it('re-sends a link to a same-role grantee who never signed in', () => { expect(inviteDecision('crew', 'crew', true)).toBe('link'); });
+  it('grants and sends a link to a new grantee who never signed in', () => { expect(inviteDecision(null, 'crew', true)).toBe('insert+link'); });
+  it('still refuses a different role even if never signed in', () => { expect(inviteDecision('crew', 'organizer', true)).toBe('already_on_event'); });
+  it('uses an invite link when unconfirmed, recovery when confirmed', () => {
+    expect(linkType(null)).toBe('invite');
+    expect(linkType('2026-10-01T00:00:00Z')).toBe('recovery');
+  });
 });
 
 describe('safeSubjectName', () => {
