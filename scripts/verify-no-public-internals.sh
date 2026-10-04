@@ -16,6 +16,7 @@ MUST_200=(
   / /admin /display /checkin /checkin/desk /cuedeck-console.html /cuedeck-i18n.js
   /favicon.svg /console-manifest.json /console-sw.js /checkin-window.js
   /checkin/setup /checkin-app.css /checkin-csv.js /cuedeck-auth.js
+  /checkin-roles.js
 )
 # Vercel's bot protection answers scripted clients with 403 + x-vercel-mitigated
 # on every path. That says nothing about the deploy, so it must not read as a
