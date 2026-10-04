@@ -82,15 +82,44 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Create in test. ON CONFLICT DO NOTHING: an existing row keeps its
-  // status (this function must never move an event to or from live;
-  // only checkin_mark_paid / checkin_mark_refunded do that).
+  // Complimentary accounts: read from the table with the service role,
+  // never from the request body.
+  let isComp = false
+  if (event.created_by) {
+    const { data: compRow, error: compErr } = await sb.from('leod_checkin_comp_accounts')
+      .select('user_id').eq('user_id', event.created_by).maybeSingle()
+    if (compErr) {
+      return new Response(JSON.stringify({ error: compErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    isComp = !!compRow
+  }
+
+  // Create in test, or live for a comp owner. ON CONFLICT DO NOTHING: an
+  // existing row keeps its status (only checkin_mark_paid /
+  // checkin_mark_refunded move it, plus the comp upgrade below).
   const { error: insErr } = await sb.from('leod_checkin_entitlements')
-    .upsert({ event_id, checkin_core: true, status: 'test' }, { onConflict: 'event_id', ignoreDuplicates: true })
+    .upsert(isComp
+      ? { event_id, checkin_core: true, status: 'live', went_live_at: new Date().toISOString() }
+      : { event_id, checkin_core: true, status: 'test' },
+      { onConflict: 'event_id', ignoreDuplicates: true })
   if (insErr) {
     return new Response(JSON.stringify({ error: insErr.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
     })
+  }
+
+  // A comp owner who set up before being granted: lift test to live.
+  if (isComp) {
+    const { error: upErr } = await sb.from('leod_checkin_entitlements')
+      .update({ status: 'live', went_live_at: new Date().toISOString() })
+      .eq('event_id', event_id).eq('status', 'test')
+    if (upErr) {
+      return new Response(JSON.stringify({ error: upErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   // Operational settings: what the organizer chose for this event.
@@ -139,7 +168,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  return new Response(JSON.stringify({ ok: true, event_id, status: after.status }), {
+  return new Response(JSON.stringify({ ok: true, event_id, status: after.status, comp: isComp }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })
