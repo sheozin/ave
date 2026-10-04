@@ -15,6 +15,7 @@ MUST_404=(
 MUST_200=(
   / /admin /display /checkin /checkin/desk /cuedeck-console.html /cuedeck-i18n.js
   /favicon.svg /console-manifest.json /console-sw.js /checkin-window.js
+  /checkin/setup /checkin-app.css /checkin-csv.js
 )
 fail=0
 for p in "${MUST_404[@]}"; do
