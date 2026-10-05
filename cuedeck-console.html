@@ -3359,11 +3359,16 @@ function renderSessions() {
     return;
   }
 
-  // Smart auto-open: switch to timeline when sessions are READY/CALLING
-  // Only triggers on realtime updates (after boot), not on initial page load
+  // Smart auto-open: switch to timeline when a session is newly armed
+  // (PLANNED -> READY/CALLING). Only after boot, and never because of a
+  // restart (LIVE/HOLD/ENDED -> READY) or an unrelated edit while some
+  // session already sits in READY: the operator chose this view.
+  const prevStatus = S._tlPrevStatus || new Map();
+  const newlyArmed = S.sessions.some(s =>
+    (s.status === 'READY' || s.status === 'CALLING') && prevStatus.get(s.id) === 'PLANNED');
+  S._tlPrevStatus = new Map(S.sessions.map(s => [s.id, s.status]));
   if (S.tlBootDone && S.viewMode === 'list' && !S.tlManualOverride) {
-    const hasUpcoming = S.sessions.some(s => s.status === 'READY' || s.status === 'CALLING');
-    if (hasUpcoming) {
+    if (newlyArmed) {
       S.viewMode = 'timeline';
       buildFilterBar();
       const toast = document.getElementById('tl-auto-toast');
