@@ -2,6 +2,11 @@
 -- CueDeck — Full Schema Setup
 -- Paste this entire script into Supabase SQL Editor and run once.
 -- ══════════════════════════════════════════════════════════════════
+-- ⚠ SUPERSEDED by supabase/migrations/ (the live schema is built by the
+-- numbered migrations; the access rules are 095_event_scoped_writes.sql and
+-- later). Do not run this against the live project: it DROPs the core
+-- tables. Kept as a historical bootstrap only. Since 095 it no longer
+-- creates the open write policies or the 'global' broadcast default.
 
 -- ── 0. Cleanup (safe re-run) ──────────────────────────────────────
 DROP TABLE IF EXISTS leod_event_log  CASCADE;
@@ -167,7 +172,7 @@ CREATE INDEX idx_log_session ON leod_event_log (session_id, ts DESC);
 
 -- ── 7. leod_broadcast ────────────────────────────────────────────
 CREATE TABLE leod_broadcast (
-  id         TEXT        PRIMARY KEY DEFAULT 'global',
+  id         TEXT        PRIMARY KEY,   -- = event_id::text (one row per event)
   event_id   UUID        NOT NULL REFERENCES leod_events(id) ON DELETE CASCADE,
   message    TEXT        NOT NULL DEFAULT '',
   priority   TEXT        NOT NULL DEFAULT 'info'
@@ -179,8 +184,8 @@ CREATE TABLE leod_broadcast (
 
 
 -- ── 8. Row Level Security ─────────────────────────────────────────
--- Open policies for testing (anon key can read + write).
--- Tighten to authenticated-only once auth is set up.
+-- RLS on, no write policies here: the event-scoped policies are in
+-- supabase/migrations/095_event_scoped_writes.sql.
 
 ALTER TABLE leod_events     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leod_sessions   ENABLE ROW LEVEL SECURITY;
@@ -191,20 +196,11 @@ ALTER TABLE leod_clock      ENABLE ROW LEVEL SECURITY;
 -- Anon read
 CREATE POLICY anon_read_events     ON leod_events     FOR SELECT USING (true);
 CREATE POLICY anon_read_sessions   ON leod_sessions   FOR SELECT USING (true);
-CREATE POLICY anon_read_log        ON leod_event_log  FOR SELECT USING (true);
-CREATE POLICY anon_read_broadcast  ON leod_broadcast  FOR SELECT USING (true);
 CREATE POLICY anon_read_clock      ON leod_clock      FOR SELECT USING (true);
 
--- ⚠️  DEV-ONLY POLICIES — CRITICAL: MUST BE REMOVED BEFORE PRODUCTION ⚠️
--- These allow the anon key to write all core tables.
--- They exist ONLY to allow local development without full auth setup.
--- Before any production deploy, run:
---   supabase/migrations/001_remove_dev_policies.sql
--- to drop these and replace with authenticated-only write policies.
-CREATE POLICY anon_write_sessions   ON leod_sessions  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY anon_write_log        ON leod_event_log FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY anon_write_broadcast  ON leod_broadcast FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY anon_write_clock      ON leod_clock     FOR ALL USING (true) WITH CHECK (true);
+-- The former dev-only anon write policies (anon_write_sessions,
+-- anon_write_log, anon_write_broadcast, anon_write_clock) are removed: no
+-- client writes anonymously.
 
 
 -- ── 9. Realtime publications ──────────────────────────────────────
@@ -241,7 +237,7 @@ BEGIN
 
   -- Insert broadcast placeholder for this event
   INSERT INTO leod_broadcast (id, event_id, message, priority)
-  VALUES ('global', ev_id, '', 'info');
+  VALUES (ev_id::text, ev_id, '', 'info');
 
   RAISE NOTICE 'Created event id: %', ev_id;
 END $$;
