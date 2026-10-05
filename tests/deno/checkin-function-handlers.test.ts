@@ -400,12 +400,15 @@ async function setupScanner(o: { ent?: Row; point?: string; revoked?: boolean; k
   world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, qr_token: TOKEN, first_name: 'Ewa', ticket_type: 'VIP' }]
   world.rpcResult.checkin_apply_scan = 'ok'
   world.rpcResult.checkin_device_name_quota = true
+  world.tables.leod_checkin_scan_events = []
 }
 const scanTok = (qr_token = TOKEN, action = 'checkin') => ({ client_id: crypto.randomUUID(), qr_token, scanned_at: new Date().toISOString(), action })
 
 Deno.test('checkin-record-scans scanner: a token checks in at the paired point, attributed to the device', async () => {
   await setupScanner()
   const item = scanTok('  ' + TOKEN + '\n')
+  // The row checkin_apply_scan would have inserted for this scan.
+  world.tables.leod_checkin_scan_events.push({ id: crypto.randomUUID(), client_id: item.client_id, event_id: EVENT, attendee_id: ATT, device_id: DEV, result: 'ok' })
   // scan_point_id in the body is ignored: a scanner scans where it was paired.
   const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, scan_point_id: ROOM, items: [item] })
   assert(r.status === 200, JSON.stringify(r))
@@ -467,7 +470,9 @@ Deno.test('checkin-record-scans scanner: no names for a batch, an old scan, or p
   assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'old scan got a name ' + JSON.stringify(r.body))
   await setupScanner()
   world.rpcResult.checkin_device_name_quota = false
-  r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  const fresh = scanTok()
+  world.tables.leod_checkin_scan_events.push({ id: crypto.randomUUID(), client_id: fresh.client_id, event_id: EVENT, attendee_id: ATT, device_id: DEV, result: 'ok' })
+  r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [fresh] })
   assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'quota not applied ' + JSON.stringify(r.body))
   const q = world.rpcCalls.find(x => x.name === 'checkin_device_name_quota')
   assert(q && q.args.p_device_id === DEV && q.args.p_limit === 20, JSON.stringify(q))
@@ -477,6 +482,18 @@ Deno.test('checkin-record-scans scanner: no names for a batch, an old scan, or p
   r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
   assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'duplicate got a name ' + JSON.stringify(r.body))
   assert(!world.rpcCalls.some(x => x.name === 'checkin_device_name_quota'), 'quota claimed for a duplicate')
+})
+Deno.test('checkin-record-scans scanner: a replayed client_id with another token gets no name', async () => {
+  // checkin_apply_scan returns the stored result for a known client_id
+  // without inserting; the stored row belongs to the first guest.
+  await setupScanner()
+  world.tables.leod_checkin_attendees.push({ id: OTHER, event_id: EVENT, qr_token: 'oth0123456789abcdef0123456789abcd', first_name: 'Olga', ticket_type: 'Speaker' })
+  const X = crypto.randomUUID()
+  world.tables.leod_checkin_scan_events = [{ id: crypto.randomUUID(), client_id: X, event_id: EVENT, attendee_id: ATT, device_id: DEV, result: 'ok' }]
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY,
+    items: [{ client_id: X, qr_token: 'oth0123456789abcdef0123456789abcd', scanned_at: new Date().toISOString(), action: 'checkin' }] })
+  assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'replay leaked a name ' + JSON.stringify(r.body))
+  assert(!world.rpcCalls.some(x => x.name === 'checkin_device_name_quota'), 'quota claimed on a replay')
 })
 Deno.test('checkin-scanner: no tokens when scanning at its point is switched off', async () => {
   await setupScanner({ ent: { entrance_scanning: false } })

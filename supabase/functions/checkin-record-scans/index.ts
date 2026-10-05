@@ -330,6 +330,15 @@ Deno.serve(async (req) => {
     }
     results[it.client_id] = String(result)
     if (deviceId && result === 'ok' && whoByAttendee[it.attendee_id]) {
+      // checkin_apply_scan answers a known client_id with its stored result
+      // and inserts nothing, so 'ok' alone does not prove THIS token was
+      // checked in: a replayed client_id with another guest's token would
+      // otherwise read that guest's name. The stored row must be this
+      // device's scan of this attendee (review of cc97059).
+      const { data: row, error: rowErr } = await sb.from('leod_checkin_scan_events')
+        .select('attendee_id, device_id').eq('client_id', it.client_id).eq('event_id', event_id).maybeSingle()
+      if (rowErr) { console.warn('checkin-record-scans: scan row read failed', rowErr.message); continue }
+      if (!row || row.attendee_id !== it.attendee_id || row.device_id !== deviceId) continue
       const { data: quotaOk, error: quotaErr } = await sb.rpc('checkin_device_name_quota', {
         p_device_id: deviceId, p_limit: NAME_RATE_PER_MIN,
       })
