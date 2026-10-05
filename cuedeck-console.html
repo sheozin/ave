@@ -2867,13 +2867,26 @@ async function executeUndo() {
   if (!_undoState) return;
   const { sessionId, prevStatus } = _undoState;
   dismissUndo();
-  // Revert to previous status via direct DB write
-  const { error } = await sb.from('leod_sessions')
-    .update({ status: prevStatus, actual_end: null })
-    .eq('id', sessionId);
+  // Only an ENDED/CANCELLED session can be undone; anything else means it
+  // moved on (restart, another operator) and undo would overwrite that.
+  const cur = S.sessions.find(x => x.id === sessionId);
+  if (!cur || !['ENDED','CANCELLED'].includes(cur.status)) {
+    pushToast(t('toast.nothingToUndo'), 'warn'); return;
+  }
+  // Revert to previous status via direct DB write, guarded by version
+  const ver = cur.version;
+  const { data, error } = await sb.from('leod_sessions')
+    .update({ status: prevStatus, actual_end: null, version: ver + 1 })
+    .eq('id', sessionId).eq('version', ver)
+    .select('id');
   if (error) { pushToast(`Undo failed: ${error.message}`, 'error'); return; }
-  const s = S.sessions.find(x => x.id === sessionId);
-  if (s) { s.status = prevStatus; s.actual_end = null; renderSessions(); }
+  if (!data || data.length === 0) {
+    pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+    if (S.event) loadSessions(S.event.id);
+    return;
+  }
+  const s = cur;
+  s.status = prevStatus; s.actual_end = null; s.version = ver + 1; renderSessions();
   pushToast(`Reverted to ${prevStatus}`, 'success');
   pushLog('UNDO', `reverted to ${prevStatus}`, sessionId);
 }
@@ -3032,7 +3045,8 @@ let _restartTarget = null;
 function openRestartModal(sessionId) {
   const s = S.sessions.find(x => x.id === sessionId);
   if (!s || !canRestartSession(s)) return;
-  _restartTarget = sessionId;
+  // Remember what was confirmed: realtime may change the session while the modal is open.
+  _restartTarget = { id: sessionId, version: s.version, status: s.status };
   document.getElementById('restart-modal-title').textContent   = t('confirm.restartTitle');
   document.getElementById('restart-modal-session').textContent = s.title || '';
   document.getElementById('restart-modal-body').textContent    = t('confirm.restartBody');
@@ -3045,16 +3059,22 @@ function closeRestartModal() {
   document.getElementById('restart-modal').style.display = 'none';
 }
 function confirmRestart() {
-  const id = _restartTarget;
+  const target = _restartTarget;
   closeRestartModal();
-  if (id) restartSession(id);
+  if (!target) return;
+  const s = S.sessions.find(x => x.id === target.id);
+  if (!s || s.status !== target.status) {
+    pushToast('⚠ ' + t('toast.restartStale'), 'warn');
+    return;
+  }
+  restartSession(target.id, target.version);
 }
 
-async function restartSession(sessionId) {
+async function restartSession(sessionId, version) {
   const s = S.sessions.find(x => x.id === sessionId);
   if (!s) return;
   if (!canRestartSession(s)) { pushLog('ERROR', `role ${S.role} cannot restart ${s.status}`, sessionId); return; }
-  const prevVer = s.version;
+  const prevVer = version ?? s.version;
   try {
     const { data, error } = await sb.functions.invoke('restart-session', {
       body: { session_id: sessionId, command_id: crypto.randomUUID(), version: prevVer, operator_role: S.role },
@@ -3062,7 +3082,7 @@ async function restartSession(sessionId) {
     if (!error && data?.ok) {
       s.status = 'READY'; s.actual_start = null; s.actual_end = null;
       if (typeof data.version === 'number') s.version = data.version;
-      S._autoStarted.delete(sessionId);
+      if (_undoState?.sessionId === sessionId) dismissUndo(); // its undo would bring back the old run
       renderSessions();
       pushLog('EF', `RESTART → READY via /restart-session ✓`, sessionId);
       pushToast(`✓ ${t('toast.restarted')}: ${s.title || ''}`, 'success');
@@ -3072,7 +3092,13 @@ async function restartSession(sessionId) {
     try { if (typeof error?.context?.json === 'function') errBody = await error.context.json(); } catch {}
     if (errBody?.error === 'IN_FLIGHT') return; // realtime confirms the result
     if (errBody?.error === 'Version conflict') {
-      pushToast('⚠ Updated by another operator, refreshing', 'warn');
+      pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+      if (S.event) loadSessions(S.event.id);
+      return;
+    }
+    if (errBody?.error === 'NOT_RESTARTABLE') {
+      pushLog('ERROR', `restart refused: ${errBody.status ?? ''} not restartable`, sessionId);
+      pushToast('✕ ' + t('toast.notRestartable'), 'error');
       if (S.event) loadSessions(S.event.id);
       return;
     }

@@ -257,6 +257,10 @@ const CueDeckI18n = (() => {
       'confirm.restartNo':    'Cancel',
       'toast.restarted':      'Session restarted',
       'toast.restartFailed':  'Restart failed',
+      'toast.notRestartable': 'This session has not started, so there is nothing to restart',
+      'toast.restartStale':   'The session changed while this was open. Nothing was restarted.',
+      'toast.versionConflict':'Updated by another operator, refreshing',
+      'toast.nothingToUndo':  'Nothing to undo: the session has changed since',
 
       // Onboarding
       'onboard.welcome':      'Welcome to CueDeck',
@@ -530,6 +534,10 @@ const CueDeckI18n = (() => {
       'confirm.restartNo':    'تراجع',
       'toast.restarted':      'أُعيد بدء الجلسة',
       'toast.restartFailed':  'تعذّرت إعادة البدء',
+      'toast.notRestartable': 'لم تبدأ هذه الجلسة بعد، فلا يوجد ما يُعاد بدؤه',
+      'toast.restartStale':   'تغيّرت الجلسة أثناء فتح هذه النافذة. لم تتم إعادة البدء.',
+      'toast.versionConflict':'عدّلها مشغّل آخر، جارٍ التحديث',
+      'toast.nothingToUndo':  'لا يوجد ما يمكن التراجع عنه: تغيّرت الجلسة منذ ذلك الحين',
 
       'onboard.welcome':      'مرحباً بك في CueDeck',
       'onboard.step1':        'أنشئ أول حدث',
@@ -652,6 +660,10 @@ const CueDeckI18n = (() => {
       'confirm.restartNo':    'Wróć',
       'toast.restarted':      'Sesja rozpoczęta od nowa',
       'toast.restartFailed':  'Nie udało się rozpocząć od nowa',
+      'toast.notRestartable': 'Ta sesja się nie rozpoczęła, więc nie ma czego zaczynać od nowa',
+      'toast.restartStale':   'Sesja zmieniła się, gdy to okno było otwarte. Nic nie zostało rozpoczęte od nowa.',
+      'toast.versionConflict':'Zmienione przez innego operatora, odświeżanie',
+      'toast.nothingToUndo':  'Nie ma czego cofnąć: sesja zmieniła się w międzyczasie',
 
       'toast.refreshed':    'Odświeżono',
       'toast.displayPaired':'Ekran połączony!',
@@ -773,6 +785,10 @@ const CueDeckI18n = (() => {
       'confirm.restartNo':    'Zurück',
       'toast.restarted':      'Session neu gestartet',
       'toast.restartFailed':  'Neustart fehlgeschlagen',
+      'toast.notRestartable': 'Diese Session hat nicht begonnen, es gibt nichts neu zu starten',
+      'toast.restartStale':   'Die Session hat sich geändert, während dieses Fenster offen war. Nichts wurde neu gestartet.',
+      'toast.versionConflict':'Von einem anderen Operator geändert, wird aktualisiert',
+      'toast.nothingToUndo':  'Nichts rückgängig zu machen: Die Session hat sich inzwischen geändert',
 
       'toast.refreshed':    'Aktualisiert',
       'toast.displayPaired':'Display verbunden!',
