@@ -35,7 +35,7 @@ import { describe, it, expect } from 'vitest';
 // checkin_role_for_event() returns one of these, or NULL (modeled as
 // 'none' below) when the caller holds no leod_checkin_operators row
 // for the event.
-type CheckinRole = 'organizer' | 'crew' | 'api_consumer' | 'none';
+type CheckinRole = 'organizer' | 'lead' | 'crew' | 'viewer' | 'api_consumer' | 'none';
 // leod_organizations uses a different authorization axis entirely
 // (org membership via leod_users.org_id), not an event operator role.
 type OrgRole = 'member' | 'none';
@@ -701,5 +701,59 @@ describe('checkin_role_for_event: entitlement gate (migration 051)', () => {
     const operators: OperatorGrant[] = [];
     const entitlements: EntitlementRow[] = [{ event_id: 'A', checkin_core: true }];
     expect(simulateCheckinRoleForEvent('A', 'u-stranger', operators, entitlements)).toBe('none');
+  });
+});
+
+// ════════════════════════════════════════════════════════════════
+// PART D: five roles (migration 070). Lead and viewer rows mirror
+// supabase/migrations/070_checkin_roles.sql; tests/sql/070-roles-probe.sql
+// checks the same facts against the live database.
+// ════════════════════════════════════════════════════════════════
+const POLICIES_070: Policy[] = [
+  { table: 'leod_checkin_operators',    role: 'lead',   ops: ['SELECT'] },
+  { table: 'leod_checkin_operators',    role: 'viewer', ops: ['SELECT'] },
+  { table: 'leod_checkin_entitlements', role: 'lead',   ops: ['SELECT'] },
+  { table: 'leod_checkin_entitlements', role: 'viewer', ops: ['SELECT'] },
+  { table: 'leod_checkin_attendees',    role: 'lead',   ops: ['SELECT', 'UPDATE'] },
+  { table: 'leod_checkin_attendees',    role: 'viewer', ops: [] },
+  { table: 'leod_checkin_scan_points',  role: 'lead',   ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+  { table: 'leod_checkin_scan_points',  role: 'viewer', ops: [] },
+  { table: 'leod_checkin_devices',      role: 'lead',   ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+  { table: 'leod_checkin_devices',      role: 'viewer', ops: [] },
+  { table: 'leod_checkin_scan_events',  role: 'lead',   ops: ['SELECT', 'INSERT'] },
+  { table: 'leod_checkin_scan_events',  role: 'viewer', ops: [] },
+  { table: 'leod_checkin_print_jobs',   role: 'lead',   ops: ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] },
+  { table: 'leod_checkin_print_jobs',   role: 'viewer', ops: [] },
+];
+POLICIES.push(...POLICIES_070);
+
+describe('Checkin RLS: five roles (070)', () => {
+  const PEOPLE_TABLES = ['leod_checkin_attendees', 'leod_checkin_scan_events', 'leod_checkin_devices', 'leod_checkin_scan_points', 'leod_checkin_print_jobs'];
+  it('70.1 a viewer reads no attendee, scan, device, scan point or print job row (ruling 5)', () => {
+    for (const t of PEOPLE_TABLES) for (const op of ALL_OPS) expect(canDo('viewer', t, op)).toBe(false);
+  });
+  it('70.2 a viewer reads the entitlement and the operator list, nothing else', () => {
+    expect(canDo('viewer', 'leod_checkin_entitlements', 'SELECT')).toBe(true);
+    expect(canDo('viewer', 'leod_checkin_operators', 'SELECT')).toBe(true);
+  });
+  it('70.3 a desk lead works the desk like crew and also manages devices and scan points', () => {
+    expect(canDo('lead', 'leod_checkin_attendees', 'SELECT')).toBe(true);
+    expect(canDo('lead', 'leod_checkin_attendees', 'UPDATE')).toBe(true);
+    expect(canDo('lead', 'leod_checkin_attendees', 'INSERT')).toBe(false);
+    expect(canDo('lead', 'leod_checkin_attendees', 'DELETE')).toBe(false);
+    for (const op of ALL_OPS) {
+      expect(canDo('lead', 'leod_checkin_devices', op)).toBe(true);
+      expect(canDo('lead', 'leod_checkin_scan_points', op)).toBe(true);
+    }
+  });
+  it('70.4 crew still cannot manage devices or scan points', () => {
+    expect(canDo('crew', 'leod_checkin_devices', 'INSERT')).toBe(false);
+    expect(canDo('crew', 'leod_checkin_scan_points', 'INSERT')).toBe(false);
+  });
+  it('70.5 every table has a lead and a viewer row', () => {
+    for (const t of ALL_TABLES.filter(x => x !== 'leod_organizations')) {
+      expect(POLICIES.some(p => p.table === t && p.role === 'lead')).toBe(true);
+      expect(POLICIES.some(p => p.table === t && p.role === 'viewer')).toBe(true);
+    }
   });
 });
