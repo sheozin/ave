@@ -18,13 +18,15 @@
 //   qr_token and may only check in. Its scans are attributed to the device
 //   (device_id) and never to an invented operator, at the scan point the
 //   device was paired to, which must be switched on (_shared/checkin-scanner.ts).
-//   The reply adds the guest's first name and ticket type for ok/duplicate
-//   results, so the scanner can show who it is while online, but only for a
-//   single scan made in the last two minutes and only at a human pace
-//   (NAME_RATE_PER_MIN per device). A scanner holds every token, so without
-//   those limits a paired phone could post them all and harvest the guest
-//   list's names, which the tokens-only design exists to prevent. Offline
-//   flushes and bursts get verdicts without names.
+//   The reply adds the guest's first name and ticket type so the scanner can
+//   show who it is, but only when that scan checked the guest in ('ok'), for
+//   a single scan made in the last two minutes, within NAME_RATE_PER_MIN per
+//   device claimed atomically (checkin_device_name_quota, migration 099). A
+//   scanner holds every token; without these a paired phone could post them
+//   all and harvest the guest list's names, which the tokens-only design
+//   exists to prevent. Now learning a name means checking that guest in,
+//   which shows on the dashboard. Repeats, batches and offline flushes get
+//   verdicts without names.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
@@ -259,15 +261,10 @@ Deno.serve(async (req) => {
   // unknown_token in the audit like any other.
   const who: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
   const whoByAttendee: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
-  // Names only for one fresh scan at a human pace (see the header).
-  let namesAllowed = false
-  if (deviceId && valid.length === 1 && Math.abs(Date.now() - Date.parse(valid[0].scanned_at)) <= NAME_FRESH_MS) {
-    const { count, error: rateErr } = await sb.from('leod_checkin_scan_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('device_id', deviceId).gte('received_at', new Date(Date.now() - 60000).toISOString())
-    if (rateErr) console.warn('checkin-record-scans: name rate read failed', rateErr.message)
-    else namesAllowed = (count ?? 0) < NAME_RATE_PER_MIN
-  }
+  // Names only for one fresh scan (see the header); the quota is claimed
+  // after the scan, and only if it checked the guest in.
+  const nameEligible = !!deviceId && valid.length === 1
+    && Math.abs(Date.now() - Date.parse(valid[0].scanned_at)) <= NAME_FRESH_MS
   if (deviceId && valid.length) {
     const tokens = [...new Set(valid.map(it => it.qr_token as string))]
     const { data: rows, error: tokErr } = await sb.from('leod_checkin_attendees')
@@ -278,7 +275,7 @@ Deno.serve(async (req) => {
     for (const it of valid) {
       const hit = byToken.get(it.qr_token as string)
       it.attendee_id = hit ? hit.id : crypto.randomUUID()
-      if (hit && namesAllowed) whoByAttendee[hit.id] = { first_name: hit.first_name, ticket_type: hit.ticket_type }
+      if (hit && nameEligible) whoByAttendee[hit.id] = { first_name: hit.first_name, ticket_type: hit.ticket_type }
     }
   }
 
@@ -332,8 +329,12 @@ Deno.serve(async (req) => {
       continue
     }
     results[it.client_id] = String(result)
-    if (deviceId && (result === 'ok' || result === 'duplicate') && whoByAttendee[it.attendee_id]) {
-      who[it.client_id] = whoByAttendee[it.attendee_id]
+    if (deviceId && result === 'ok' && whoByAttendee[it.attendee_id]) {
+      const { data: quotaOk, error: quotaErr } = await sb.rpc('checkin_device_name_quota', {
+        p_device_id: deviceId, p_limit: NAME_RATE_PER_MIN,
+      })
+      if (quotaErr) console.warn('checkin-record-scans: name quota failed', quotaErr.message)
+      else if (quotaOk === true) who[it.client_id] = whoByAttendee[it.attendee_id]
     }
   }
 
