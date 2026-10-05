@@ -54,6 +54,11 @@ BEGIN
   VALUES ('Probe 088 bad tz', (now() AT TIME ZONE 'Europe/Warsaw')::date - 4, '09:00', '18:00', 'Not/AZone', v_owner, 'checkin')
   RETURNING id INTO r;
   INSERT INTO leod_checkin_entitlements (event_id, checkin_core, status) VALUES (r, true, 'live');
+  -- ...nor a date past timestamp range (091).
+  INSERT INTO leod_events (name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES ('Probe 088 far date', '294277-01-01'::date, '09:00', '18:00', 'Europe/Warsaw', v_owner, 'checkin')
+  RETURNING id INTO r;
+  INSERT INTO leod_checkin_entitlements (event_id, checkin_core, status) VALUES (r, true, 'live');
 
   -- Due list and the one-time claim.
   IF NOT EXISTS (SELECT 1 FROM checkin_reports_due() WHERE event_id = v_ev AND owner_id = v_owner) THEN
