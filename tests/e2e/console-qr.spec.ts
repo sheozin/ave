@@ -4,7 +4,7 @@
 // used until 2026-10-05). No auth needed: showQR is a page function.
 import { test, expect } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:7230';
+const BASE = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const LINK = 'https://app.cuedeck.io/display#id=00000000-0000-4000-8000-000000000001&s=' + 'ab'.repeat(24);
 
 test('the display QR is drawn locally and the link never leaves the page', async ({ page }) => {
