@@ -2825,11 +2825,11 @@ function confirmCancel(sessionId, btn) {
     // First click — show confirm state
     btn.textContent = t('confirm.confirmCancel');
     btn.classList.add('confirm-pending');
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       _cancelPending.delete(sessionId);
       if (btn.isConnected) { btn.textContent = 'CANCEL'; btn.classList.remove('confirm-pending'); }
     }, 2000);
-    _cancelPending.set(sessionId, t);
+    _cancelPending.set(sessionId, timer);
   }
 }
 
@@ -2890,11 +2890,11 @@ function confirmEnd(sessionId, btn) {
   } else {
     btn.textContent = t('confirm.confirmEnd');
     btn.classList.add('confirm-pending');
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       _endPending.delete(sessionId);
       if (btn.isConnected) { btn.textContent = 'END'; btn.classList.remove('confirm-pending'); }
     }, 3000);
-    _endPending.set(sessionId, t);
+    _endPending.set(sessionId, timer);
   }
 }
 
