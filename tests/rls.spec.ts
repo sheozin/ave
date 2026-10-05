@@ -36,9 +36,13 @@ const POLICIES: Policy[] = [
   // leod_signage_displays (anon: none since 080; the display page reads through display_feed())
   { table: 'leod_signage_displays', role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_signage_displays', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
-  // leod_signage_sponsors (anon: SELECT only)
-  { table: 'leod_signage_sponsors', role: 'anon',           ops: ['SELECT'],                        condition: 'always' },
+  // leod_signage_sponsors (anon: none since 083; the display reads sponsors through display_feed()).
+  // authenticated: own or invited events only (scoped_all_sponsors, 083)
+  { table: 'leod_signage_sponsors', role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_signage_sponsors', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
+  // leod_signage_pairing (083: no direct access; display_pair_* functions only)
+  { table: 'leod_signage_pairing',  role: 'anon',           ops: [],                                condition: 'never' },
+  { table: 'leod_signage_pairing',  role: 'authenticated',  ops: [],                                condition: 'never' },
   // storage.objects
   { table: 'storage.objects',       role: 'anon',           ops: ['SELECT'],                        condition: 'bucket_match' },
   { table: 'storage.objects',       role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'bucket_match' },
@@ -87,11 +91,18 @@ describe('RLS: anon role — signage tables', () => {
   it('11 anon CANNOT DELETE leod_signage_displays', () => {
     expect(canDo('anon', 'leod_signage_displays', 'DELETE')).toBe(false);
   });
-  it('12 anon can SELECT leod_signage_sponsors', () => {
-    expect(canDo('anon', 'leod_signage_sponsors', 'SELECT')).toBe(true);
+  it('12 anon CANNOT SELECT leod_signage_sponsors (display_feed carries them)', () => {
+    expect(canDo('anon', 'leod_signage_sponsors', 'SELECT')).toBe(false);
   });
   it('13 anon CANNOT INSERT leod_signage_sponsors', () => {
     expect(canDo('anon', 'leod_signage_sponsors', 'INSERT')).toBe(false);
+  });
+  it('13b nobody reads or links leod_signage_pairing directly (083)', () => {
+    for (const role of ['anon', 'authenticated'] as const) {
+      for (const op of ['SELECT', 'INSERT', 'UPDATE', 'DELETE'] as const) {
+        expect(canDo(role, 'leod_signage_pairing', op)).toBe(false);
+      }
+    }
   });
 });
 
