@@ -26,6 +26,13 @@
 --    (the only caller; no edge function or admin page touches the table) reads
 --    and writes sponsors of S.event only.
 --
+-- 4. Deactivated operators. An invited operator whose leod_users.active is
+--    false still passed the invited branch of every predicate above and of
+--    scoped_all_displays (080). All of them now also require
+--    active IS NOT FALSE; scoped_all_displays is re-created with the same
+--    predicate plus that condition. Live 2026-10-05: active is boolean
+--    NOT NULL DEFAULT true, 21 users, none inactive, so nobody loses access.
+--
 -- leod_clock is left alone on purpose.
 --
 -- Callers checked 2026-10-05: leod_signage_pairing is used by
@@ -45,6 +52,7 @@
 --     USING (display_id IS NULL AND expires_at > now())
 --     WITH CHECK (display_id IS NOT NULL AND EXISTS (SELECT 1 FROM leod_signage_displays d
 --       WHERE d.id = leod_signage_pairing.display_id AND d.event_id = leod_signage_pairing.event_id));
+--   (scoped_all_displays: re-create without "AND leod_users.active IS NOT FALSE", as in 080)
 --   DROP POLICY scoped_all_sponsors ON leod_signage_sponsors;
 --   CREATE POLICY auth_all_sponsors ON leod_signage_sponsors FOR ALL TO authenticated USING (true) WITH CHECK (true);
 --   CREATE POLICY anon_read_sponsors ON leod_signage_sponsors FOR SELECT TO anon USING (true);
@@ -72,7 +80,8 @@ BEGIN
      AND v_uid IS NOT NULL
      AND (e.created_by = v_uid
           OR e.created_by IN (SELECT u.invited_by FROM leod_users u
-                               WHERE u.id = v_uid AND u.invited_by IS NOT NULL));
+                               WHERE u.id = v_uid AND u.invited_by IS NOT NULL
+                                 AND u.active IS NOT FALSE));
   IF NOT FOUND THEN
     RETURN 'forbidden';
   END IF;
@@ -122,7 +131,8 @@ BEGIN
        SELECT e.id FROM leod_events e
         WHERE e.created_by = v_uid
            OR e.created_by IN (SELECT u.invited_by FROM leod_users u
-                                WHERE u.id = v_uid AND u.invited_by IS NOT NULL));
+                                WHERE u.id = v_uid AND u.invited_by IS NOT NULL
+                                 AND u.active IS NOT FALSE));
   IF NOT FOUND THEN
     RETURN false;
   END IF;
@@ -150,10 +160,31 @@ CREATE POLICY scoped_all_sponsors ON public.leod_signage_sponsors
      WHERE leod_events.created_by = auth.uid()
         OR leod_events.created_by IN (SELECT leod_users.invited_by FROM leod_users
                                        WHERE leod_users.id = auth.uid()
-                                         AND leod_users.invited_by IS NOT NULL)))
+                                         AND leod_users.invited_by IS NOT NULL
+                                         AND leod_users.active IS NOT FALSE)))
   WITH CHECK (event_id IN (
     SELECT leod_events.id FROM leod_events
      WHERE leod_events.created_by = auth.uid()
         OR leod_events.created_by IN (SELECT leod_users.invited_by FROM leod_users
                                        WHERE leod_users.id = auth.uid()
-                                         AND leod_users.invited_by IS NOT NULL)));
+                                         AND leod_users.invited_by IS NOT NULL
+                                         AND leod_users.active IS NOT FALSE)));
+
+-- ── 4. Displays: same scope, deactivated operators excluded ───
+DROP POLICY IF EXISTS scoped_all_displays ON public.leod_signage_displays;
+CREATE POLICY scoped_all_displays ON public.leod_signage_displays
+  FOR ALL TO authenticated
+  USING (event_id IN (
+    SELECT leod_events.id FROM leod_events
+     WHERE leod_events.created_by = auth.uid()
+        OR leod_events.created_by IN (SELECT leod_users.invited_by FROM leod_users
+                                       WHERE leod_users.id = auth.uid()
+                                         AND leod_users.invited_by IS NOT NULL
+                                         AND leod_users.active IS NOT FALSE)))
+  WITH CHECK (event_id IN (
+    SELECT leod_events.id FROM leod_events
+     WHERE leod_events.created_by = auth.uid()
+        OR leod_events.created_by IN (SELECT leod_users.invited_by FROM leod_users
+                                       WHERE leod_users.id = auth.uid()
+                                         AND leod_users.invited_by IS NOT NULL
+                                         AND leod_users.active IS NOT FALSE)));

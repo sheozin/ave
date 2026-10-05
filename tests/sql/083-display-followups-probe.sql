@@ -6,6 +6,7 @@ DECLARE
   v_owner    uuid := gen_random_uuid();
   v_op       uuid := gen_random_uuid();   -- operator invited by v_owner
   v_other    uuid := gen_random_uuid();   -- unrelated account
+  v_dead     uuid := gen_random_uuid();   -- operator invited by v_owner, deactivated
   v_ev       uuid;
   v_ev2      uuid;
   v_disp     uuid;
@@ -22,11 +23,14 @@ DECLARE
 BEGIN
   INSERT INTO auth.users (id, email, aud, role)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated'
-    FROM unnest(ARRAY[v_owner, v_op, v_other]) AS u;
+    FROM unnest(ARRAY[v_owner, v_op, v_other, v_dead]) AS u;
   -- on live, the auth.users trigger has already created the row
   INSERT INTO leod_users (id, email, role, invited_by)
   VALUES (v_op, 'probe-' || v_op || '@cuedeck-test.io', 'signage', v_owner)
   ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by;
+  INSERT INTO leod_users (id, email, role, invited_by, active)
+  VALUES (v_dead, 'probe-' || v_dead || '@cuedeck-test.io', 'signage', v_owner, false)
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, active = EXCLUDED.active;
 
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 083', current_date + 30, '09:00', '18:00', v_owner) RETURNING id INTO v_ev;
@@ -247,6 +251,34 @@ BEGIN
     RESET ROLE; RAISE EXCEPTION 'PROBE FAIL 10: feed sponsors';
   END IF;
   RESET ROLE;
+  v_checks := v_checks + 1;
+
+  -- 11. a deactivated operator (active = false) of the same owner is refused
+  --     everywhere the invited operator was allowed
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  SET LOCAL ROLE anon;
+  IF display_pair_start('PRB384', v_nonce) IS DISTINCT FROM true THEN
+    RESET ROLE; RAISE EXCEPTION 'PROBE FAIL 11: pair_start';
+  END IF;
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_dead, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  SELECT count(*) INTO v_n FROM leod_signage_displays WHERE id = v_disp;
+  IF v_n <> 0 THEN RESET ROLE; RAISE EXCEPTION 'PROBE FAIL 11: deactivated operator sees the display'; END IF;
+  SELECT count(*) INTO v_n FROM leod_signage_sponsors WHERE event_id = v_ev;
+  IF v_n <> 0 THEN RESET ROLE; RAISE EXCEPTION 'PROBE FAIL 11: deactivated operator sees % sponsors', v_n; END IF;
+  UPDATE leod_signage_displays SET name = 'HIJACKED' WHERE id = v_disp;
+  v_res := display_pair_link('PRB384', v_disp);
+  v_ok  := display_rotate_secret(v_disp);
+  RESET ROLE;
+  IF v_res IS DISTINCT FROM 'forbidden' OR v_ok IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'PROBE FAIL 11: deactivated operator got link % / rotate %', v_res, v_ok;
+  END IF;
+  IF (SELECT display_id FROM leod_signage_pairing WHERE code = 'PRB384') IS NOT NULL
+     OR (SELECT display_secret FROM leod_signage_displays WHERE id = v_disp) <> v_new
+     OR (SELECT name FROM leod_signage_displays WHERE id = v_disp) <> 'Probe TV' THEN
+    RAISE EXCEPTION 'PROBE FAIL 11: deactivated operator changed something';
+  END IF;
   v_checks := v_checks + 1;
 
   RAISE EXCEPTION 'PROBE OK 083: % checks passed (rolled back)', v_checks;
