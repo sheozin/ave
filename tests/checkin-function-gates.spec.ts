@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import {
   functionGate, enableEventGate, compGoLiveDecision, FUNCTION_GATES, NOT_OWNER, type GatedFunction,
   staffGate, inviteRoleVerdict, removeResponse, transferVerdict, archiveVerdict, STAFF_FORBIDDEN,
+  archivedVerdict, visibleStaff, ARCHIVED,
 } from '../supabase/functions/_shared/checkin-gates.ts';
 import { loadCallerRole, removeVerdict, type CheckinRole, type GrantRole } from '../supabase/functions/_shared/checkin-roles.ts';
 
@@ -183,10 +184,36 @@ describe('remove through removeVerdict', () => {
   });
 });
 
+describe('archivedVerdict', () => {
+  it.each(['invite', 'transfer_owner', 'archive_event'])('%s on an archived event: archived', (a) => {
+    expect(archivedVerdict(a, false)).toEqual({ ok: false, status: 409, body: ARCHIVED });
+    expect(ARCHIVED).toEqual({ error: 'This event was deleted.', code: 'archived' });
+  });
+  it.each(['list', 'remove'])('%s on an archived event stays allowed', (a) => {
+    expect(archivedVerdict(a, false)).toEqual({ ok: true });
+  });
+  it.each([true, null, undefined])('active %s blocks nothing', (active) => {
+    for (const a of ['invite', 'transfer_owner', 'archive_event']) expect(archivedVerdict(a, active)).toEqual({ ok: true });
+  });
+});
+
+describe('visibleStaff', () => {
+  const team = [
+    { user_id: 'own', role: 'organizer' }, { user_id: 'ld', role: 'lead' }, { user_id: 'ld2', role: 'lead' },
+    { user_id: 'cr', role: 'crew' }, { user_id: 'vw', role: 'viewer' },
+  ];
+  it('a lead sees crew and their own row only', () => {
+    expect(visibleStaff('lead', 'ld', team).map(o => o.user_id)).toEqual(['ld', 'cr']);
+  });
+  it.each(['owner', 'organizer'] as CheckinRole[])('%s sees everyone', (r) => {
+    expect(visibleStaff(r, 'own', team)).toHaveLength(5);
+  });
+});
+
 describe('transferVerdict', () => {
   const T = '44444444-4444-4444-8444-444444444444';
   const team = [{ user_id: USER, role: 'organizer' }, { user_id: T, role: 'organizer' }, { user_id: OTHER, role: 'lead' }];
-  const base = { role: 'owner' as CheckinRole | null, createdVia: 'checkin', callerId: USER, targetId: T, targetIsUuid: true, team };
+  const base = { role: 'owner' as CheckinRole | null, createdVia: 'checkin', callerId: USER, targetId: T, targetIsUuid: true, team, targetActive: true };
   it('owner to an organizer on a check-in event', () => { expect(transferVerdict(base)).toEqual({ ok: true }); });
   it.each(WHO.filter(w => w !== 'owner'))('%s: not_owner', (who) => {
     expect(transferVerdict({ ...base, role: roleOf(who) })).toMatchObject({ ok: false, status: 403, body: { code: 'not_owner' } });
@@ -198,6 +225,9 @@ describe('transferVerdict', () => {
   it('to yourself or a malformed id: bad_target', () => {
     expect(transferVerdict({ ...base, targetId: USER })).toMatchObject({ ok: false, status: 400, body: { code: 'bad_target' } });
     expect(transferVerdict({ ...base, targetId: 'x', targetIsUuid: false })).toMatchObject({ ok: false, status: 400, body: { code: 'bad_target' } });
+  });
+  it('to an inactive account: target_inactive', () => {
+    expect(transferVerdict({ ...base, targetActive: false })).toMatchObject({ ok: false, status: 409, body: { code: 'target_inactive' } });
   });
   it('to a lead or someone not on the event: not_organizer', () => {
     expect(transferVerdict({ ...base, targetId: OTHER })).toMatchObject({ ok: false, status: 409, body: { code: 'not_organizer' } });
@@ -214,6 +244,15 @@ describe('archiveVerdict', () => {
   });
   it('a console event: console_event', () => {
     expect(archiveVerdict({ ...base, createdVia: 'console' })).toMatchObject({ ok: false, status: 409, body: { code: 'console_event' } });
+  });
+  const NOW = Date.parse('2026-10-05T10:00:00Z');
+  it('an open checkout: checkout_open', () => {
+    expect(archiveVerdict({ ...base, checkoutSessionId: 'cs_1', checkoutExpiresAt: '2026-10-05T10:30:00Z', nowMs: NOW }))
+      .toEqual({ ok: false, status: 409, body: { error: 'A payment is in progress for this event. Try again in an hour.', code: 'checkout_open' } });
+  });
+  it('an expired or absent checkout does not block', () => {
+    expect(archiveVerdict({ ...base, checkoutSessionId: 'cs_1', checkoutExpiresAt: '2026-10-05T09:59:59Z', nowMs: NOW })).toEqual({ ok: true });
+    expect(archiveVerdict({ ...base, checkoutSessionId: null, checkoutExpiresAt: '2026-10-05T10:30:00Z', nowMs: NOW })).toEqual({ ok: true });
   });
   it('a live event: live_event', () => {
     expect(archiveVerdict({ ...base, entStatus: 'live' })).toMatchObject({ ok: false, status: 409, body: { code: 'live_event' } });
@@ -239,7 +278,18 @@ describe('handlers route through the shared gates', () => {
       'removeResponse(removeVerdict(role, target, ev.created_by, team))',
       'transferVerdict({',
       'archiveVerdict({',
+      'archivedVerdict(action, ev.active)',
+      'visibleStaff(role, user.id, team)',
     ]) expect(s).toContain(call);
+    // The invite log row is written before any send.
+    expect(s.indexOf('await logInvite()')).toBeGreaterThan(0);
+    expect(s.indexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
+    expect(s.lastIndexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
+  });
+  it('checkin-create-checkout refuses an archived event', () => {
+    const s = src('checkin-create-checkout');
+    expect(s).toContain('if (ev.active === false) return json({ ...ARCHIVED }, 409)');
+    expect(s.indexOf('ev.active === false')).toBeLessThan(s.indexOf('const st = stripe()'));
     // No hand-rolled operator-row comparison left over from the two-role version.
     expect(s).not.toContain('me?.role');
   });

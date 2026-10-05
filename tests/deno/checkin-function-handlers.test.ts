@@ -614,3 +614,133 @@ Deno.test(`${IS}: a database error reading the team is a 500`, async () => {
     assert(r.status === 500, `${r.status} ${JSON.stringify(r.body)}`)
   } finally { globalThis.fetch = real }
 })
+
+// ── fix round 1: archived events, open checkout, lead list, log before send, inactive target ──
+async function withFetch<T>(wrap: (real: typeof fetch) => typeof fetch, run: () => Promise<T>): Promise<T> {
+  const real = globalThis.fetch
+  globalThis.fetch = wrap(real)
+  try { return await run() } finally { globalThis.fetch = real }
+}
+const urlOf = (input: Request | URL | string) => String(input instanceof Request ? input.url : input)
+const methodOf = (input: Request | URL | string, init?: RequestInit) =>
+  (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+
+for (const [action, extra] of [
+  ['invite', { email: 'x@stub.test', role: 'crew' }],
+  ['transfer_owner', { user_id: ORG2 }],
+  ['archive_event', {}],
+] as [string, Row][]) {
+  Deno.test(`${IS} ${action}: an archived event is a 409 archived`, async () => {
+    staffSetup('owner')
+    world.tables.leod_events[0].active = false
+    const r = await call(IS, { event_id: EVENT, action, ...extra })
+    assert(r.status === 409 && r.body.code === 'archived' && r.body.error === 'This event was deleted.', JSON.stringify(r))
+    assert(world.invites!.length === 0 && world.tables.leod_events[0].created_by === USER, 'acted anyway')
+  })
+}
+Deno.test(`${IS}: list and remove still work on an archived event`, async () => {
+  staffSetup('owner')
+  world.tables.leod_events[0].active = false
+  assert((await call(IS, { event_id: EVENT, action: 'list' })).status === 200, 'list')
+  const r = await call(IS, { event_id: EVENT, action: 'remove', user_id: CREW })
+  assert(r.status === 200 && opRole(CREW) === null, JSON.stringify(r))
+})
+Deno.test(`${IS} archive_event: an open checkout is a 409 checkout_open`, async () => {
+  staffSetup('owner', { ent: { checkin_core: true, status: 'test', checkout_session_id: 'cs_test_1', checkout_expires_at: new Date(Date.now() + 30 * 60_000).toISOString() } })
+  const r = await call(IS, { event_id: EVENT, action: 'archive_event' })
+  assert(r.status === 409 && r.body.code === 'checkout_open' && r.body.error === 'A payment is in progress for this event. Try again in an hour.', JSON.stringify(r))
+  assert(world.tables.leod_events[0].active === true, 'archived anyway')
+})
+Deno.test(`${IS} archive_event: an expired checkout does not block`, async () => {
+  staffSetup('owner', { ent: { checkin_core: true, status: 'test', checkout_session_id: 'cs_test_1', checkout_expires_at: new Date(Date.now() - 60_000).toISOString() } })
+  const r = await call(IS, { event_id: EVENT, action: 'archive_event' })
+  assert(r.status === 200 && world.tables.leod_events[0].active === false, JSON.stringify(r))
+})
+Deno.test(`${IS} list: a desk lead sees crew and their own row only`, async () => {
+  staffSetup('lead')
+  const r = await call(IS, { event_id: EVENT, action: 'list' })
+  const ids = (r.body.staff as Row[]).map(s => s.user_id).sort()
+  assert(r.status === 200 && JSON.stringify(ids) === JSON.stringify([USER, CREW].sort()), JSON.stringify(r.body))
+  assert(!JSON.stringify(r.body).includes('org2@stub.test') && !JSON.stringify(r.body).includes('view@stub.test'), 'leaked emails')
+})
+Deno.test(`${IS} list: an organizer sees every role`, async () => {
+  staffSetup('organizer')
+  const r = await call(IS, { event_id: EVENT, action: 'list' })
+  const roles = new Set((r.body.staff as Row[]).map(s => s.role))
+  assert(r.status === 200 && ['organizer', 'lead', 'crew', 'viewer'].every(x => roles.has(x)), JSON.stringify(r.body))
+})
+
+// The invite log row is written before the send, and a failed log write stops the send.
+const logFirst = async (run: () => Promise<{ status: number; body: Row }>) => {
+  const order: string[] = []
+  const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+    const u = urlOf(input)
+    if (u.includes('/rest/v1/leod_checkin_invite_log') && methodOf(input, init) === 'POST') order.push('log')
+    if (u.includes('/auth/v1/invite') || u.includes('/auth/v1/admin/generate_link') || u.includes('api.resend.com')) order.push('send')
+    return real(input, init)
+  }) as typeof fetch, run)
+  return { r, order }
+}
+Deno.test(`${IS} invite: new address, log row before the invite`, async () => {
+  staffSetup('organizer')
+  const { r, order } = await logFirst(() => call(IS, { event_id: EVENT, action: 'invite', email: 'new@stub.test', role: 'crew' }))
+  assert(r.status === 200 && order[0] === 'log' && order.includes('send') && order.filter(o => o === 'log').length === 1, JSON.stringify(order))
+})
+Deno.test(`${IS} invite: re-invite, log row before the link and email`, async () => {
+  staffSetup('organizer')
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: null, last_sign_in_at: null, aud: 'authenticated' }
+  const { r, order } = await logFirst(() => call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' }))
+  assert(r.status === 200 && order[0] === 'log' && order.filter(o => o === 'send').length === 2, JSON.stringify(order))
+})
+Deno.test(`${IS} invite: same role, already signed in, is a no-op without a log row`, async () => {
+  staffSetup('organizer')
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: '2026-01-01T00:00:00Z', last_sign_in_at: '2026-01-02T00:00:00Z', aud: 'authenticated' }
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
+  assert(r.status === 200 && world.tables.leod_checkin_invite_log.length === 0 && world.emails!.length === 0, JSON.stringify(r))
+})
+for (const [label, email, prep] of [
+  ['new address', 'new@stub.test', () => {}],
+  ['re-invite', 'crew@stub.test', () => { world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: null, last_sign_in_at: null, aud: 'authenticated' } }],
+] as [string, string, () => void][]) {
+  Deno.test(`${IS} invite: ${label}, a failed log write is a 500 and nothing is sent`, async () => {
+    staffSetup('organizer'); prep()
+    const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+      if (urlOf(input).includes('/rest/v1/leod_checkin_invite_log') && methodOf(input, init) === 'POST') return Promise.resolve(reply(500, { message: 'stub', code: 'XX000' }))
+      return real(input, init)
+    }) as typeof fetch, () => call(IS, { event_id: EVENT, action: 'invite', email, role: 'crew' }))
+    assert(r.status === 500, JSON.stringify(r))
+    assert(world.invites!.length === 0 && world.links!.length === 0 && world.emails!.length === 0, 'sent anyway')
+  })
+}
+Deno.test(`${IS} transfer_owner: an inactive target is a 409 target_inactive`, async () => {
+  staffSetup('owner')
+  world.tables.leod_users.find(u => u.id === ORG2)!.active = false
+  const r = await call(IS, { event_id: EVENT, action: 'transfer_owner', user_id: ORG2 })
+  assert(r.status === 409 && r.body.code === 'target_inactive' && world.tables.leod_events[0].created_by === USER, JSON.stringify(r))
+})
+Deno.test(`${IS} transfer_owner: a database error reading the target is a 500`, async () => {
+  staffSetup('owner')
+  let n = 0
+  const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+    if (urlOf(input).includes('/rest/v1/leod_users') && ++n === 2) return Promise.resolve(reply(500, { message: 'stub', code: 'XX000' }))
+    return real(input, init)
+  }) as typeof fetch, () => call(IS, { event_id: EVENT, action: 'transfer_owner', user_id: ORG2 }))
+  assert(r.status === 500 && world.tables.leod_events[0].created_by === USER, JSON.stringify(r))
+})
+
+// checkin-create-checkout on an archived event
+Deno.test('checkin-create-checkout: an archived event is a 409 archived, before any Stripe call', async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'test' } })
+  world.tables.leod_events[0].active = false
+  Deno.env.set('CHECKIN_PRICE_ID', 'price_stub')
+  const offHost: string[] = []
+  try {
+    const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+      const h = new URL(urlOf(input)).host
+      if (h !== 'stub.local') offHost.push(h)
+      return real(input, init)
+    }) as typeof fetch, () => call('checkin-create-checkout', { event_id: EVENT }))
+    assert(r.status === 409 && r.body.code === 'archived' && r.body.error === 'This event was deleted.', JSON.stringify(r))
+    assert(offHost.length === 0, 'network call to ' + offHost.join(','))
+  } finally { Deno.env.delete('CHECKIN_PRICE_ID') }
+})

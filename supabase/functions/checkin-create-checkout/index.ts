@@ -7,7 +7,7 @@ import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }       from '../_shared/stripe.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
-import { functionGate } from '../_shared/checkin-gates.ts'
+import { functionGate, ARCHIVED } from '../_shared/checkin-gates.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -43,9 +43,11 @@ Deno.serve(async (req) => {
   if (!ent) return json({ error: 'Set up check-in for this event first' }, 409)
   if (ent.status === 'live') return json({ error: 'This event is already live', code: 'already_live' }, 409)
 
-  const { data: ev, error: evErr } = await sb.from('leod_events').select('name, date, timezone').eq('id', event_id).maybeSingle()
+  const { data: ev, error: evErr } = await sb.from('leod_events').select('name, date, timezone, active').eq('id', event_id).maybeSingle()
   if (evErr) return json({ error: evErr.message }, 500)
   if (!ev) return json({ error: 'Event not found' }, 404)
+  // An archived ("deleted") event cannot be paid for.
+  if (ev.active === false) return json({ ...ARCHIVED }, 409)
   // Before any Stripe call: paying for a window that has already closed
   // (or cannot be computed) buys nothing.
   if (isWindowClosed(String(ev.date ?? ''), String(ev.timezone ?? ''))) {

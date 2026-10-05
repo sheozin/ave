@@ -19,7 +19,8 @@ import { corsHeaders }  from '../_shared/cors.ts'
 import { sendEmail }    from '../_shared/resend.ts'
 import { isUuid, loadCallerRole, removeVerdict, GRANT_ROLES, type GrantRole } from '../_shared/checkin-roles.ts'
 import {
-  archiveVerdict, inviteRoleVerdict, removeResponse, staffGate, transferVerdict, type GateVerdict,
+  archivedVerdict, archiveVerdict, inviteRoleVerdict, removeResponse, staffGate, transferVerdict, visibleStaff,
+  type GateVerdict,
 } from '../_shared/checkin-gates.ts'
 
 function normalizeInviteEmail(raw: unknown): string | null {
@@ -67,9 +68,11 @@ Deno.serve(async (req) => {
   const role = callerRole.role
 
   const { data: ev, error: evErr } = await sb.from('leod_events')
-    .select('name, created_by, created_via').eq('id', event_id).maybeSingle()
+    .select('name, created_by, created_via, active').eq('id', event_id).maybeSingle()
   if (evErr) return json({ error: evErr.message }, 500)
   if (!ev) return json({ error: 'Event not found' }, 404)
+  const live = archivedVerdict(action, ev.active)
+  if (!live.ok) return refuse(live)
 
   const { data: ops, error: opsErr } = await sb.from('leod_checkin_operators')
     .select('user_id, role').eq('event_id', event_id).in('role', GRANT_ROLES)
@@ -77,7 +80,8 @@ Deno.serve(async (req) => {
   const team: { user_id: string; role: string }[] = ops || []
 
   if (action === 'list') {
-    const ids = team.map(o => o.user_id)
+    const shown = visibleStaff(role, user.id, team)
+    const ids = shown.map(o => o.user_id)
     const { data: people, error: pErr } = ids.length
       ? await sb.from('leod_users').select('id, email, name').in('id', ids)
       : { data: [], error: null }
@@ -91,7 +95,7 @@ Deno.serve(async (req) => {
       comp = new Set((comps || []).map((c: { user_id: string }) => c.user_id))
     }
     const byId = new Map((people || []).map((p: { id: string; email: string | null; name: string | null }) => [p.id, p]))
-    return json({ ok: true, staff: team.map(o => ({
+    return json({ ok: true, staff: shown.map(o => ({
       user_id: o.user_id, role: o.role,
       email: byId.get(o.user_id)?.email ?? null, name: byId.get(o.user_id)?.name ?? null,
       is_owner: o.user_id === ev.created_by,
@@ -111,8 +115,14 @@ Deno.serve(async (req) => {
 
   if (action === 'transfer_owner') {
     const target = String(body.user_id || '')
+    let targetActive = false
+    if (isUuid(target)) {
+      const { data: tu, error: tuErr } = await sb.from('leod_users').select('active').eq('id', target).maybeSingle()
+      if (tuErr) return json({ error: tuErr.message }, 500)
+      targetActive = !!tu && tu.active !== false
+    }
     const verdict = transferVerdict({
-      role, createdVia: ev.created_via ?? null, callerId: user.id, targetId: target, targetIsUuid: isUuid(target), team,
+      role, createdVia: ev.created_via ?? null, callerId: user.id, targetId: target, targetIsUuid: isUuid(target), team, targetActive,
     })
     if (!verdict.ok) return refuse(verdict)
     // Complimentary status is read from created_by, so it moves with the
@@ -121,7 +131,7 @@ Deno.serve(async (req) => {
       .select('user_id').in('user_id', [user.id, target])
     if (cErr) return json({ error: cErr.message }, 500)
     const compIds = new Set((comps || []).map((c: { user_id: string }) => c.user_id))
-    // The old owner stays on as an organizer.
+    // The old owner stays on as an organizer. Intentional: this overwrites any existing role with organizer.
     const { error: keepErr } = await sb.from('leod_checkin_operators')
       .upsert({ event_id, user_id: user.id, role: 'organizer' }, { onConflict: 'event_id,user_id' })
     if (keepErr) return json({ error: keepErr.message }, 500)
@@ -140,9 +150,12 @@ Deno.serve(async (req) => {
 
   if (action === 'archive_event') {
     const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-      .select('status').eq('event_id', event_id).maybeSingle()
+      .select('status, checkout_session_id, checkout_expires_at').eq('event_id', event_id).maybeSingle()
     if (entErr) return json({ error: entErr.message }, 500)
-    const verdict = archiveVerdict({ role, createdVia: ev.created_via ?? null, entStatus: ent?.status ?? null })
+    const verdict = archiveVerdict({
+      role, createdVia: ev.created_via ?? null, entStatus: ent?.status ?? null,
+      checkoutSessionId: ent?.checkout_session_id ?? null, checkoutExpiresAt: ent?.checkout_expires_at ?? null,
+    })
     if (!verdict.ok) return refuse(verdict)
     const { data: gone, error: arErr } = await sb.from('leod_events')
       .update({ active: false }).eq('id', event_id).eq('created_by', user.id).select('id')
@@ -177,6 +190,13 @@ Deno.serve(async (req) => {
     .select('id').ilike('email', likeSafe).maybeSingle()
   if (exErr) return json({ error: exErr.message }, 500)
 
+  // Every invite that will send something is counted first, so a failed
+  // or slow send still counts toward the limit. No row, no send.
+  const logInvite = async () => {
+    const { error } = await sb.from('leod_checkin_invite_log').insert({ event_id, inviter_id: user.id })
+    return error ? json({ error: error.message }, 500) : null
+  }
+
   // What the invitee is being let into, in the email's words.
   const what = want === 'viewer' ? 'the live check-in dashboard' : 'the check-in desk'
 
@@ -203,7 +223,11 @@ Deno.serve(async (req) => {
     alreadyGranted = !!cur
     // Same role, already signed in before: nothing to do.
     if (alreadyGranted && !needsLink) return json({ ok: true })
+    const logFail = await logInvite()
+    if (logFail) return logFail
   } else {
+    const logFail = await logInvite()
+    if (logFail) return logFail
     const { data: inv, error: invErr } = await sb.auth.admin.inviteUserByEmail(email, {
       data: { checkin_staff: 'true', name },
       redirectTo: `${appUrl}/checkin`,
@@ -258,9 +282,6 @@ Deno.serve(async (req) => {
     // request over, but it must be visible.
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)
   }
-
-  const { error: logErr } = await sb.from('leod_checkin_invite_log').insert({ event_id, inviter_id: user.id })
-  if (logErr) console.error('checkin-invite-staff: invite log insert failed', logErr.message)
 
   return json({ ok: true })
 })

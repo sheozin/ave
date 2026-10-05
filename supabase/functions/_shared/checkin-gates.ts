@@ -92,7 +92,23 @@ export function removeResponse(v: RemoveVerdict): GateVerdict {
   return { ok: false, status, body: { error, code: v.code } }
 }
 
-// Ruling 3: check-in events only, to an existing organizer, owner only.
+// An archived ("deleted") event takes no new people, owner or payment.
+// Listing and removing stay open so the team can still be tidied.
+export const ARCHIVED: GateBody = { error: 'This event was deleted.', code: 'archived' }
+const ARCHIVED_BLOCKS = ['invite', 'transfer_owner', 'archive_event']
+export function archivedVerdict(action: string, active: boolean | null | undefined): GateVerdict {
+  if (active === false && ARCHIVED_BLOCKS.includes(action)) return { ok: false, status: 409, body: { ...ARCHIVED } }
+  return { ok: true }
+}
+
+// A desk lead manages desk staff only, so they see crew rows and their
+// own row, never organizer or viewer contact details.
+export function visibleStaff<T extends { user_id: string; role: string }>(role: CheckinRole | null, callerId: string, team: T[]): T[] {
+  if (can(role, 'invite_any')) return team
+  return team.filter(o => o.role === 'crew' || o.user_id === callerId)
+}
+
+// Ruling 3: check-in events only, to an existing, active organizer, owner only.
 export function transferVerdict(a: {
   role: CheckinRole | null
   createdVia: string | null
@@ -100,6 +116,7 @@ export function transferVerdict(a: {
   targetId: string
   targetIsUuid: boolean
   team: { user_id: string; role: string }[]
+  targetActive: boolean
 }): GateVerdict {
   if (!can(a.role, 'transfer_owner')) {
     return { ok: false, status: 403, body: { error: 'Only the event owner can transfer ownership', code: 'not_owner' } }
@@ -114,13 +131,24 @@ export function transferVerdict(a: {
   if (!row || row.role !== 'organizer') {
     return { ok: false, status: 409, body: { error: 'Ownership can only go to an organizer on this event', code: 'not_organizer' } }
   }
+  if (!a.targetActive) {
+    return { ok: false, status: 409, body: { error: 'This organizer\'s account is inactive. Choose another organizer.', code: 'target_inactive' } }
+  }
   return { ok: true }
 }
 
 // Ruling 2: delete means archive, owner only, check-in events only, and
 // only while in test mode (a live event holds a purchase and attendance).
-// No entitlement row means nothing was ever set up or bought.
-export function archiveVerdict(a: { role: CheckinRole | null; createdVia: string | null; entStatus: string | null }): GateVerdict {
+// No entitlement row means nothing was ever set up or bought. An open
+// Stripe Checkout session could still complete, so wait for it to expire.
+export function archiveVerdict(a: {
+  role: CheckinRole | null
+  createdVia: string | null
+  entStatus: string | null
+  checkoutSessionId?: string | null
+  checkoutExpiresAt?: string | null
+  nowMs?: number
+}): GateVerdict {
   if (!can(a.role, 'archive_event')) {
     return { ok: false, status: 403, body: { error: 'Only the event owner can delete this event', code: 'not_owner' } }
   }
@@ -129,6 +157,9 @@ export function archiveVerdict(a: { role: CheckinRole | null; createdVia: string
   }
   if (a.entStatus !== null && a.entStatus !== 'test') {
     return { ok: false, status: 409, body: { error: 'A live event cannot be deleted here. Email support@cuedeck.io and we will help.', code: 'live_event' } }
+  }
+  if (a.checkoutSessionId && a.checkoutExpiresAt && new Date(a.checkoutExpiresAt).getTime() > (a.nowMs ?? Date.now())) {
+    return { ok: false, status: 409, body: { error: 'A payment is in progress for this event. Try again in an hour.', code: 'checkout_open' } }
   }
   return { ok: true }
 }
