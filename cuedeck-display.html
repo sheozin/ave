@@ -133,6 +133,7 @@ body{
   letter-spacing:.04em;margin-bottom:10px;
   font-family:'SF Mono','Fira Code',monospace;transition:color .4s;
 }
+.d-timer.is-date{font-size:clamp(28px,5.5vw,72px);letter-spacing:.01em}
 .d-timer-lbl{font-size:clamp(10px,1.5vw,14px);letter-spacing:.25em;color:rgba(255,255,255,.4);margin-bottom:36px;font-weight:600;text-transform:uppercase}
 .d-divider{width:60px;height:1px;background:rgba(255,255,255,.1);margin:0 auto 28px}
 .d-next-lbl{font-size:clamp(9px,1.2vw,12px);color:rgba(255,255,255,.3);letter-spacing:.2em;margin-bottom:10px;font-weight:600;text-transform:uppercase}
@@ -846,12 +847,13 @@ function updateTimerInPlace() {
       pb.style.background = ov ? '#ef4444' : remain < 120_000 ? '#f59e0b' : '#22c55e';
     }
   } else if (timerEl && rd) {
-    const start = toMs(rd.scheduled_start);
-    const now   = toTimeMs(correctedNow());
-    const diff  = start - now;
-    timerEl.textContent = fmtCountdown(diff);
+    // Same date-aware countdown as the stage timer: counting to today's
+    // clock time showed 00:00 for a session days away.
+    const cd = standbyCountdown(rd);
+    timerEl.textContent = cd.value;
     timerEl.style.color = '#fbbf24';
-    if (timerLbl) timerLbl.textContent = 'TO START';
+    timerEl.classList.toggle('is-date', cd.label === 'STARTS');
+    if (timerLbl) timerLbl.textContent = cd.label === 'STARTS' ? 'STARTS' : (cd.sub || cd.label);
     // Clear progress bar when no live session
     const pb = document.getElementById('d-progress-bar');
     if (pb) pb.style.width = '0';
@@ -861,10 +863,7 @@ function updateTimerInPlace() {
   }
 
   if (recallEl && rd) {
-    const start = toMs(rd.scheduled_start);
-    const now   = toTimeMs(correctedNow());
-    const diff  = start - now;
-    recallEl.textContent = fmtCountdown(Math.max(0, diff));
+    recallEl.textContent = standbyCountdown(rd).value;
   }
 }
 

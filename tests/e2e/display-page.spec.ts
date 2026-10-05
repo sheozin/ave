@@ -818,3 +818,37 @@ test.describe('Display: stage timer counts to the real event start', () => {
     await expect(page.locator('#st-standby-countdown')).toHaveText(/^\d{2,}:\d{2}$/);
   });
 });
+
+// The main schedule screen and the recall screen used to count to today's
+// clock time, so a READY session days away showed "00:00 TO START".
+test.describe('Display: schedule screen counts to the real event start', () => {
+  test.use({ timezoneId: 'UTC' });
+  const readyFeed = (nowIso: string, mode = 'schedule') => {
+    const f = standbyFeed(nowIso);
+    (f.display as Record<string, unknown>).content_mode = mode;
+    (f.sessions[0] as Record<string, unknown>).status = 'READY';
+    return f;
+  };
+
+  test('58 a READY session a week ahead shows its start day, not 00:00', async ({ page }) => {
+    await mockSupabase(page, { feed: () => readyFeed('2026-10-05T12:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#d-live-timer')).toHaveText('Mon 12 Oct, 09:00');
+    await expect(page.locator('#d-live-timer-lbl')).toHaveText('STARTS');
+    await page.waitForTimeout(1500);
+    await expect(page.locator('#d-live-timer')).toHaveText('Mon 12 Oct, 09:00');
+  });
+
+  test('59 on the day it counts down with hours', async ({ page }) => {
+    await mockSupabase(page, { feed: () => readyFeed('2026-10-12T04:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#d-live-timer')).toHaveText(/^(02:00:00|01:59:[45]\d)$/);
+    await expect(page.locator('#d-live-timer-lbl')).toHaveText('TO START');
+  });
+
+  test('60 past the start it says STARTING NOW', async ({ page }) => {
+    await mockSupabase(page, { feed: () => readyFeed('2026-10-12T06:05:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#d-live-timer')).toHaveText('STARTING NOW');
+  });
+});
