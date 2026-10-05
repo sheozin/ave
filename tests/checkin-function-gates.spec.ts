@@ -274,7 +274,17 @@ describe('archiveVerdict', () => {
 describe('handlers route through the shared gates', () => {
   const src = (fn: string) => readFileSync(`supabase/functions/${fn}/index.ts`, 'utf8');
   it.each(Object.keys(ALLOWED))('%s', (fn) => {
-    expect(src(fn)).toContain(`functionGate('${fn}', await loadCallerRole(sb, event_id, user.id))`);
+    // checkin-record-scans also takes a paired scanner's device key (scanner
+    // Build A); there is no user then, so its operator path gates on
+    // operatorId (= user.id, set only after a valid JWT).
+    const who = fn === 'checkin-record-scans' ? 'operatorId' : 'user.id';
+    expect(src(fn)).toContain(`functionGate('${fn}', await loadCallerRole(sb, event_id, ${who}))`);
+  });
+  it('checkin-record-scans gates every operator and sets operatorId only from a verified user', () => {
+    const s = src('checkin-record-scans');
+    expect(s).toContain('if (authErr || !user) return fail(401, \'Unauthorized\')\n    operatorId = user.id');
+    expect(s).toContain('if (operatorId) {\n    const gate = functionGate(');
+    expect(s).toContain("const auth = await authDevice(sb, event_id, deviceKey, 'scanner')");
   });
   it('checkin-enable-event', () => {
     const s = src('checkin-enable-event');
