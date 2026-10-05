@@ -24,6 +24,14 @@ describe('normalizeWalkIn', () => {
     expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', company: 'x'.repeat(201) })).toEqual({ ok: false, error: 'The company name is too long' });
     expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', ticket_type: 'x'.repeat(61) })).toEqual({ ok: false, error: 'The ticket type is too long' });
   });
+  it('strips control and bidi characters before collapsing spaces', () => {
+    expect(normalizeWalkIn({ first_name: '\u202EWalt\u0007', last_name: 'Walk\u2066in', company: 'North\u200Ewind\u0000 \u0085 Demo', ticket_type: '\u061Cvip\u009F' })).toEqual({
+      ok: true, row: { first_name: 'Walt', last_name: 'Walkin', email: null, company: 'Northwind Demo', ticket_type: 'vip' },
+    });
+  });
+  it('a name made only of control characters counts as missing', () => {
+    expect(normalizeWalkIn({ first_name: '\u202E\u2069', last_name: 'B' })).toEqual({ ok: false, error: 'First and last name are required' });
+  });
   it('ignores non-string values', () => {
     expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: 42, company: ['x'] })).toEqual({
       ok: true, row: { first_name: 'A', last_name: 'B', email: null, company: null, ticket_type: 'attendee' },

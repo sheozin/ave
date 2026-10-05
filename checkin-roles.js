@@ -33,7 +33,7 @@ export function effectiveRole(opRole, isOwner) {
 }
 
 export function can(role, perm) {
-  return !!role && Object.hasOwn(GRANTS, perm) && GRANTS[perm].includes(role);
+  return !!role && Object.prototype.hasOwnProperty.call(GRANTS, perm) && GRANTS[perm].includes(role);
 }
 
 export function invitableRoles(role) {

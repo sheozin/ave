@@ -10,7 +10,14 @@ export type WalkIn = {
   ticket_type: string
 }
 
-const clean = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
+// C0 controls, DEL, C1 controls and the bidi marks and overrides: the same
+// set the desk strips (WALKIN_CONTROL in cuedeck-checkin.html). A name ends
+// up on badges, exports and other people's screens, where a right-to-left
+// override would make it read as something else. The desk is not the only
+// possible caller, so the server strips them too.
+const CONTROL_RE = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
+
+const clean = (v: unknown): string => (typeof v === 'string' ? v.replace(CONTROL_RE, '').replace(/\s+/g, ' ').trim() : '')
 
 export function normalizeWalkIn(body: Record<string, unknown>): { ok: true; row: WalkIn } | { ok: false; error: string } {
   const first = clean(body.first_name)

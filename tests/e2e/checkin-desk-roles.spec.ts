@@ -129,7 +129,7 @@ test('a forbidden undo puts the check-in back even when the roster re-read fails
     return 'forbidden';
   } });
   // The check-in's sync ends in a roster re-read; wait for that one too.
-  const reread = page.waitForResponse(r => r.url().includes('/rest/v1/leod_checkin_attendees') && r.request().timing().startTime > 0
+  const reread = page.waitForResponse(r => r.url().includes('/rest/v1/leod_checkin_attendees')
     && roster[1].checked_in_at !== null);
   await search(page, 'Ben');
   await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
@@ -201,14 +201,145 @@ test('a walk-in needs a connection', async ({ page, context }) => {
   expect(calls).toBe(0);
 });
 
-test('a walk-in request that gets no answer says the walk-in was not added', async ({ page }) => {
+test('a walk-in request that gets no answer says it may or may not have been added', async ({ page }) => {
   await open(page, { role: 'lead' });
   await page.route(/\/functions\/v1\/checkin-add-walk-in/, r => r.abort('failed'));
   await page.locator('#st-walkin').click();
   await page.locator('#wi-first').fill('Walt');
   await page.locator('#wi-last').fill('Walkin');
   await page.locator('#wi-save').click();
-  await expect(page.locator('#wi-err')).toHaveText('Could not reach the server, so the walk-in was not added. Check the connection and try again.');
+  await expect(page.locator('#wi-err')).toHaveText('The server did not answer, so the walk-in may or may not have been added. Search for the name before adding it again.');
   await page.keyboard.press('Escape');
   await expect(page.locator('#walkin')).toBeHidden();
+});
+
+// Fix round 1. The desk is used at live events: a roles module that fails
+// to load must leave a working desk, not a loading screen.
+test('the desk still opens and checks people in when the roles module fails to load', async ({ page }) => {
+  let tries = 0;
+  await page.route(/\/checkin-roles\.js(\?|$)/, r => { tries++; return r.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' }); });
+  await open(page, { role: 'lead' });
+  expect(tries).toBe(2);
+  await expect(page.locator('#st-walkin')).toBeHidden();
+  await expect(page.locator('#st-kiosk')).toBeHidden();
+  await expect(page.locator('#st-notice')).toHaveText('Some desk controls did not load. Reload when the connection is steady.');
+  const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await expect(page.locator('#verdict')).toContainText('Ben Probe is checked in');
+  const sent = (await req).postDataJSON() as { items: { action: string; attendee_id: string }[] };
+  expect(sent.items).toMatchObject([{ action: 'checkin', attendee_id: BEN.id }]);
+});
+
+test('the desk opens on the fallback when the roles module never answers', async ({ page }) => {
+  test.setTimeout(40000);
+  // Held forever: each try gives up on its own time limit.
+  await page.route(/\/checkin-roles\.js(\?|$)/, () => {});
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'crew' })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await table(page, 'leod_checkin_attendees', [ANA, BEN]);
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await expect(page.locator('#station')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('#st-notice')).toHaveText('Some desk controls did not load. Reload when the connection is steady.');
+});
+
+test('the desk shows no notice when the roles module loads', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await expect(page.locator('#st-notice')).toBeHidden();
+});
+
+test('a walk-in the server answered with an error it could not explain was not added', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await page.route(/\/functions\/v1\/checkin-add-walk-in/, r => r.request().method() === 'OPTIONS'
+    ? r.fulfill({ status: 200, body: 'ok' })
+    : r.fulfill({ status: 502, contentType: 'text/html', body: '<html>Bad gateway</html>' }));
+  await page.locator('#st-walkin').click();
+  await page.locator('#wi-first').fill('Walt');
+  await page.locator('#wi-last').fill('Walkin');
+  await page.locator('#wi-save').click();
+  await expect(page.locator('#wi-err')).toHaveText('The walk-in was not added. Try again.');
+});
+
+test('a walk-in answered after switching event stays out of the new event', async ({ page }) => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  await open(page, { role: 'lead' });
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'lead' }), myEventsRow({ role: 'lead', event_id: OTHER, name: 'Other Summit' })]);
+  let release: () => void = () => {};
+  const held = new Promise<void>(res => { release = res; });
+  await page.route(/\/functions\/v1\/checkin-add-walk-in/, async r => {
+    if (r.request().method() === 'OPTIONS') { await r.fulfill({ status: 200, body: 'ok' }); return; }
+    await held;
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, attendee: {
+      id: 'a0000000-0000-4000-8000-000000000009', event_id: EVENT_ID, first_name: 'Walt', last_name: 'Walkin', email: null,
+      company: null, ticket_type: 'attendee', qr_token: 'tok-walt', checked_in_at: null, badge_printed_at: null } }) });
+  });
+  const answered = page.waitForResponse(r => r.url().includes('/functions/v1/checkin-add-walk-in') && r.request().method() === 'POST');
+  await page.locator('#st-walkin').click();
+  await page.locator('#wi-first').fill('Walt');
+  await page.locator('#wi-last').fill('Walkin');
+  await page.locator('#wi-save').click();
+  await page.keyboard.press('Escape');
+  await page.locator('#st-switch').click();
+  await page.locator('.ck-ev', { hasText: 'Other Summit' }).click();
+  await expect(page.locator('#station')).toBeVisible();
+  await expect(page.locator('#st-event')).toHaveText('Other Summit');
+  release();
+  await answered;
+  // The button resets in the same turn that would have added the row.
+  await expect(page.locator('#wi-save')).toHaveText('Add to the list');
+  const names = await page.evaluate(() => (window as unknown as { S: { roster: { first_name: string }[] } }).S.roster.map(a => a.first_name));
+  expect(names).not.toContain('Walt');
+  await expect(page.locator('#party')).not.toContainText('Walt Walkin');
+});
+
+test('a forbidden undo refreshes an open search list', async ({ page }) => {
+  const roster = [ANA, { ...BEN }];
+  await open(page, { role: 'crew', roster, scanResult: (i) => {
+    if (i.action === 'checkin') { roster[1].checked_in_at = FIXED_NOW.toISOString(); return 'ok'; }
+    return 'forbidden';
+  } });
+  const synced = page.waitForResponse(r => r.url().includes('/functions/v1/checkin-record-scans'));
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await synced;
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-undo').click();
+  await expect(page.locator('#verdict')).toContainText('Ask a desk lead to undo this check-in.');
+  await expect(page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.pill-in')).toBeVisible();
+  await expect(page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-undo')).toHaveText('Undo check-in');
+});
+
+test('a viewer with no event in the link is pointed to the dashboard', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'viewer' })]);
+  await page.goto('/cuedeck-checkin.html');
+  await expect(page.locator('#pk-list')).toHaveText('Your role on these events is Viewer. Open the dashboard from your events page.');
+  await expect(page.locator('#pk-list a')).toHaveAttribute('href', '/checkin');
+});
+
+test('someone with no events at all still reads that they have none', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', []);
+  await page.goto('/cuedeck-checkin.html');
+  await expect(page.locator('#pk-list')).toHaveText('You have no check-in events yet.');
+});
+
+test('closing the walk-in form puts the cursor back in the scan field', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await page.locator('#st-walkin').click();
+  await expect(page.locator('#wi-first')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#scan')).toBeFocused({ timeout: 1000 });
+  // Read in the same turn as the close: the desk must hand focus back
+  // itself, not wait for the browser or the 5-second backstop.
+  await page.locator('#st-walkin').click();
+  await expect(page.locator('#wi-first')).toBeFocused();
+  const focused = await page.evaluate(() => { document.getElementById('wi-close')!.click(); return document.activeElement && document.activeElement.id; });
+  expect(focused).toBe('scan');
 });

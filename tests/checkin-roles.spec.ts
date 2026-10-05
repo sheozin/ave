@@ -68,6 +68,18 @@ describe('browser copy agrees with the server', () => {
       expect(browser.can('organizer', k)).toBe(false);
     }
   });
+  it('browser can() works without Object.hasOwn (Safari before 15.4)', () => {
+    const hasOwn = Object.hasOwn;
+    try {
+      // @ts-expect-error simulating an older desk tablet
+      delete Object.hasOwn;
+      expect(browser.can('lead', 'walk_in')).toBe(true);
+      expect(browser.can('crew', 'walk_in')).toBe(false);
+      expect(browser.can('organizer', 'constructor')).toBe(false);
+    } finally {
+      Object.hasOwn = hasOwn;
+    }
+  });
   for (const [perm] of TABLE) {
     for (const role of [...ROLES, null, 'api_consumer']) {
       it(`can(${role}, ${perm})`, () => {

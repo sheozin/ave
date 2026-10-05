@@ -606,6 +606,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <!-- ── STATION ─────────────────────────────────── -->
 <div id="station">
   <div class="ck-test" id="st-test" hidden></div>
+  <div class="ck-test" id="st-notice" hidden></div>
   <header class="ck-header">
     <div class="ck-hd-main">
       <div class="ck-hd-eyebrow">Check-in desk</div>
@@ -841,10 +842,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
-  import { effectiveRole, can, mayUndo, ownCheckins, roleLabel } from '/checkin-roles.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
-  // The five-role table for the classic script below (tests/checkin-roles.spec.ts).
-  window.CK_ROLES = { effectiveRole, can, mayUndo, ownCheckins, roleLabel };
 </script>
 <script>
 // ═══════════════════════════════════════════════════
@@ -1150,7 +1148,14 @@ async function flushOutbox() {
         const a = S.roster.find(x => x.id === p.attendee_id);
         if (a && !a.checked_in_at && p.prev_checked_in_at) { a.checked_in_at = p.prev_checked_in_at; restored.push(a); }
       });
-      if (restored.length) { await idbPutAll(STORE_ROSTER, restored); renderParty(); renderCount(); }
+      if (restored.length) {
+        await idbPutAll(STORE_ROSTER, restored);
+        renderParty();
+        renderCount();
+        // An open results list still shows them as undone.
+        const q = scanInput.value;
+        if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
+      }
       // commitParty counted every queued check-in against the test cap.
       // Take back the ones the server did not apply, then, if it said the
       // cap is reached, believe it. The reconcile below re-reads the
@@ -1300,6 +1305,60 @@ function scheduleFlush() {
 if (!KIOSK) scheduleFlush();
 
 // ═══════════════════════════════════════════════════
+// ROLES MODULE
+// The five-role table (/checkin-roles.js, tests/checkin-roles.spec.ts),
+// loaded apart from checkin-window.js so one failing never takes the
+// other down. A desk at a live event must open even if this file does
+// not arrive: one retry, a time limit on each try, then a fallback that
+// fails closed. The fallback lets anyone with a desk role search, check
+// in and undo their own check-ins, and hides every lead control (walk-ins,
+// kiosks, undoing a colleague). The server enforces roles either way.
+// ═══════════════════════════════════════════════════
+const ROLES_TRY_MS = 6000;
+let rolesFailed = false;
+
+const ROLES_FALLBACK = {
+  effectiveRole(opRole, isOwner) {
+    if (isOwner || opRole === 'owner') return 'owner';
+    return opRole === 'organizer' || opRole === 'lead' || opRole === 'crew' || opRole === 'viewer' ? opRole : null;
+  },
+  can(role, perm) { return !!role && role !== 'viewer' && (perm === 'desk' || perm === 'dashboard'); },
+  mayUndo(role, attendee, own) {
+    if (!attendee || !attendee.checked_in_at || !ROLES_FALLBACK.can(role, 'desk') || !own) return false;
+    const mine = Date.parse(own.get(attendee.id));
+    const current = Date.parse(attendee.checked_in_at);
+    return !Number.isNaN(mine) && !Number.isNaN(current) && mine === current;
+  },
+  ownCheckins() { return new Map(); },
+  roleLabel(role) { return role; },
+};
+
+// The browser remembers a module URL that failed, so the retry asks for
+// a fresh URL or it would only replay the first failure.
+function importRolesOnce(attempt) {
+  let timer;
+  const late = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timed out')), ROLES_TRY_MS); });
+  const url = attempt ? '/checkin-roles.js?retry=' + Date.now() : '/checkin-roles.js';
+  return Promise.race([import(url), late]).finally(() => clearTimeout(timer));
+}
+
+async function loadRoles() {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const m = await importRolesOnce(attempt);
+      window.CK_ROLES = { effectiveRole: m.effectiveRole, can: m.can, mayUndo: m.mayUndo, ownCheckins: m.ownCheckins, roleLabel: m.roleLabel };
+      return;
+    } catch (err) {
+      console.error('checkin: roles module did not load', err);
+    }
+  }
+  rolesFailed = true;
+  window.CK_ROLES = ROLES_FALLBACK;
+}
+// Settles within two tries' time limit whatever the network does.
+const rolesReady = KIOSK ? Promise.resolve() : loadRoles();
+
+// ═══════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1402,6 +1461,7 @@ async function signOut() {
 // ═══════════════════════════════════════════════════
 async function showPicker() {
   showScreen('loading');
+  await rolesReady;
   const note = document.getElementById('pk-note');
   const list = document.getElementById('pk-list');
   note.style.display = 'none';
@@ -1426,7 +1486,16 @@ async function showPicker() {
   if (!rows.length) {
     const empty = document.createElement('div');
     empty.className = 'ck-empty';
-    empty.textContent = 'You have no check-in events yet.';
+    // Viewers never work a desk; their numbers are on the dashboard.
+    const viewerOnly = (mine || []).some(r => r.status && R.effectiveRole(r.role, r.is_owner) === 'viewer');
+    if (viewerOnly) {
+      const a = document.createElement('a');
+      a.href = '/checkin';
+      a.textContent = 'Open the dashboard from your events page.';
+      empty.append('Your role on these events is Viewer. ', a);
+    } else {
+      empty.textContent = 'You have no check-in events yet.';
+    }
     list.appendChild(empty);
     showScreen('picker');
     return;
@@ -1530,6 +1599,9 @@ function renderStation() {
   document.getElementById('st-kiosk').style.display = R.can(S.role, 'kiosk') ? '' : 'none';
   document.getElementById('st-walkin').style.display = R.can(S.role, 'walk_in') ? '' : 'none';
   document.getElementById('st-dash').href = '/checkin/dashboard?event=' + encodeURIComponent(S.event.id);
+  const notice = document.getElementById('st-notice');
+  notice.textContent = rolesFailed ? 'Some desk controls did not load. Reload when the connection is steady.' : '';
+  notice.hidden = !rolesFailed;
   resetDesk();
   renderCount();
   renderPendingCount();
@@ -2797,8 +2869,13 @@ function openWalkIn() {
   document.getElementById('wi-first').focus();
 }
 
+// Idempotent: also called by Escape and by showScreen(). Hands focus back
+// to the scan field, as closeKioskSetup does, so the next scan lands.
 function closeWalkIn() {
-  document.getElementById('walkin').style.display = 'none';
+  const host = document.getElementById('walkin');
+  if (host.style.display === 'none') return;
+  host.style.display = 'none';
+  if (stationVisible()) scanInput.focus();
 }
 
 // C0 controls, DEL, C1 controls and the bidi marks and overrides.
@@ -2831,20 +2908,24 @@ async function submitWalkIn(e) {
   if (error) {
     // The function answers every refusal (deleted event, email already on
     // the list, not a desk lead, test limit) with a sentence to show as is.
-    // No readable body means the request never got an answer.
-    let msg = 'Could not reach the server, so the walk-in was not added. Check the connection and try again.';
+    // No HTTP status means the request was aborted or never answered: the
+    // server may have added the row before the answer was lost, so do not
+    // claim it was not added.
+    let msg = 'The server did not answer, so the walk-in may or may not have been added. Search for the name before adding it again.';
     if (error.context && typeof error.context.status === 'number') msg = 'The walk-in was not added. Try again.';
     try {
       if (error.context && typeof error.context.json === 'function') {
         const b = await error.context.json();
         if (b && typeof b.error === 'string' && b.error) msg = b.error;
       }
-    } catch (_) { /* unreadable body: keep the connection message */ }
+    } catch (_) { /* unreadable body: keep the message above */ }
     err.textContent = msg;
     return;
   }
   const a = data && data.attendee;
   if (!a) { err.textContent = 'The walk-in was not added. Try again.'; return; }
+  // The operator switched event (or signed out) while this was in flight.
+  if (!S.event || a.event_id !== S.event.id) return;
   S.roster.push(a);
   await idbPutAll(STORE_ROSTER, [a]);
   renderCount();
