@@ -4259,12 +4259,39 @@ async function pairDisplayByCode(code) {
 }
 
 // ── QR Code modal ──────────────────────────────────────────
-function showQR(displayUrl, displayName) {
+// The display link carries the display's key (#id=…&s=…), so the QR code is
+// drawn in the browser. It must never be sent to a QR web service.
+const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+const QR_LIB_SRI = 'sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1';
+let _qrLib = null;
+function loadQrLib() {
+  if (window.qrcode) return Promise.resolve();
+  if (!_qrLib) {
+    _qrLib = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = QR_LIB; s.integrity = QR_LIB_SRI; s.crossOrigin = 'anonymous';
+      s.onload = resolve;
+      s.onerror = () => { _qrLib = null; reject(new Error('QR library failed to load')); };
+      document.head.appendChild(s);
+    });
+  }
+  return _qrLib;
+}
+async function showQR(displayUrl, displayName) {
   document.getElementById('qr-display-name').textContent = displayName;
-  // Use qrserver.com — free, no library needed, handles long URLs
-  const qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&ecc=L&data=' + encodeURIComponent(displayUrl);
-  document.getElementById('qr-img').src = qrSrc;
+  const img = document.getElementById('qr-img');
+  img.src = '';
   document.getElementById('qr-modal').style.display = 'flex';
+  try {
+    await loadQrLib();
+    const qr = window.qrcode(0, 'M');
+    qr.addData(displayUrl);
+    qr.make();
+    img.src = qr.createDataURL(6, 2);
+  } catch (e) {
+    closeQR();
+    pushToast('Could not draw the QR code. Use Copy link or pair with a code instead.', 'error');
+  }
 }
 function closeQR() {
   document.getElementById('qr-modal').style.display = 'none';
