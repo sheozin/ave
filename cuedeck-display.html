@@ -402,7 +402,8 @@ let _secret     = null;
 let _pollTimer  = null;
 let _pollBusy   = false;
 let _pollFails  = 0;
-let _booted     = false;
+let _booted     = false;   // true once the first render has succeeded
+let _fallback   = null;    // saved pairing to try if the link's id/key fail
 
 const LS_ID     = 'cuedeck_display_id';
 const LS_SECRET = 'cuedeck_display_secret';
@@ -430,8 +431,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const id     = get('id');
   const secret = get('s');
-  const url = get('url') || SUPABASE_URL;   // fall back to hardcoded
-  const key = get('key') || SUPABASE_ANON_KEY;
+  // Always the built-in project. A url/key in the link is ignored: a crafted
+  // link could otherwise send this screen's saved key to another host.
+  const url = SUPABASE_URL;
+  const key = SUPABASE_ANON_KEY;
 
   // Previously paired display (expires after 30 days)
   let savedId     = localStorage.getItem(LS_ID);
@@ -448,6 +451,10 @@ window.addEventListener('DOMContentLoaded', () => {
   let bootId = null, bootSecret = null;
   if (id && secret)                                     { bootId = id;      bootSecret = secret; }
   else if (savedId && savedSecret && (!id || id === savedId)) { bootId = savedId; bootSecret = savedSecret; }
+  // If the link's pair fails, a different saved pair is tried before pairing.
+  if (bootId && savedId && savedSecret && (bootId !== savedId || bootSecret !== savedSecret)) {
+    _fallback = { id: savedId, secret: savedSecret };
+  }
 
   if (id) document.getElementById('su-id').value = id;
   // Pre-fill hidden inputs so tests can read them back
@@ -602,10 +609,12 @@ function bootDisplay(id, secret) {
 }
 
 // First successful feed: show the frame and start the local timers.
+// _booted is set only after the first render succeeds; if it throws, the
+// next poll comes back here instead of waiting for the data to change.
 async function startDisplay(feed) {
-  _booted = true;
   applyFeed(feed);
   saveCreds(_displayId, _secret);
+  _fallback = null;
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('display').style.display = 'flex';
@@ -615,17 +624,29 @@ async function startDisplay(feed) {
   // runs inside a poll, so an unbounded wait would stop the feed.
   await Promise.race([initAudioUnlock(), new Promise(r => setTimeout(r, 1500))]);
 
-  _tick = setInterval(tick, 1000);
+  if (!_tick) _tick = setInterval(tick, 1000);
   tick();
   render();
   startSequence();  // Begin cycling if display has a sequence playlist
+  _booted = true;
 }
 
 // The feed returned NULL: the display was deleted or its key no longer
-// matches. Forget it and go back to the pairing screen.
+// matches. Forget that pair (only if it is the saved one) and try the saved
+// pair if the failed one came from a link; otherwise go back to pairing.
 function unpaired() {
+  if (localStorage.getItem(LS_ID) === _displayId && localStorage.getItem(LS_SECRET) === _secret) {
+    forgetCreds();
+  }
+  const fb = _fallback;
+  _fallback = null;
+  if (fb && !_booted) {
+    // Drop the stale id/key from the address so a reload does not retry it.
+    try { history.replaceState(null, '', window.location.pathname); } catch (_) {}
+    bootDisplay(fb.id, fb.secret);
+    return;
+  }
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-  forgetCreds();
   _displayId = _secret = null;
   window.location.replace(window.location.pathname);
 }
@@ -683,6 +704,7 @@ function applyFeed(feed) {
   const sponsors = feed.sponsors || [];
   const sessionsChanged = JSON.stringify(sessions) !== JSON.stringify(S.sessions);
   const sponsorsChanged = JSON.stringify(sponsors) !== JSON.stringify(S.sponsors);
+  const eventChanged    = JSON.stringify(feed.event || null) !== JSON.stringify(S.event);
 
   D = feed.display;
   S.event    = feed.event || null;
@@ -701,7 +723,7 @@ function applyFeed(feed) {
     if (JSON.stringify(D?.sequence) !== JSON.stringify(prevD?.sequence)) _seqIdx = 0;
     render();
     startSequence();
-  } else if (sessionsChanged) {
+  } else if (sessionsChanged || eventChanged) {
     render();
   } else if (sponsorsChanged && activeMode() === 'sponsors') {
     render();
