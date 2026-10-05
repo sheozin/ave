@@ -11,7 +11,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:7230';
+const BASE = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 
 /** Allow clicks through the loading overlay without real auth. */
 async function bypassOverlay(page: Page) {
@@ -75,8 +75,9 @@ test.describe('Session modal: structure', () => {
   test('SM05 session modal has room and speaker fields', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#smv-room')).toBeAttached();
-    await expect(page.locator('#smv-spk')).toBeAttached();
-    await expect(page.locator('#smv-co')).toBeAttached();
+    // speaker and company live in the speakers list (one row to start)
+    await expect(page.locator('#smv-people')).toBeAttached();
+    await expect(page.locator('#smv-p-add')).toBeAttached();
   });
 
   test('SM06 session modal has notes textarea', async ({ page }) => {

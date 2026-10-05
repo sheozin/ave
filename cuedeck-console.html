@@ -1100,6 +1100,60 @@
     .ev-modal-actions button.primary { background:#1d4ed8;border-color:#2563eb;color:#fff; }
     .ev-modal-actions button.danger  { background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.35);color:#F87171; }
     .ev-modal-actions button:hover { filter:brightness(1.15); }
+
+    /* ── SESSION MODAL ── */
+    #sess-modal .smv-card { max-width:700px;max-height:92vh;padding:0;gap:0;overflow:hidden; }
+    #sess-modal .smv-head { padding:20px 24px 12px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border); }
+    #sess-modal .smv-tpl { display:flex;gap:8px;align-items:center; }
+    #sess-modal .smv-tpl select { flex:1;min-width:0;padding:5px 8px;font-size:11px; }
+    #sess-modal .smv-body { flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 24px 16px;display:flex;flex-direction:column;gap:16px; }
+    #sess-modal .smv-sec { display:flex;flex-direction:column;gap:8px; }
+    #sess-modal .smv-sec-title { font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);padding-top:8px; }
+    #sess-modal .smv-sec-hint { font-weight:400;letter-spacing:0;text-transform:none; }
+    #sess-modal .smv-row { display:flex;gap:8px; }
+    #sess-modal .smv-row-end { align-items:flex-end; }
+    #sess-modal .smv-row label { min-width:0; }
+    #sess-modal .smv-grow { flex:1 1 0; }
+    #sess-modal .smv-num { flex:0 0 72px; }
+    #sess-modal label input, #sess-modal label select { width:100%;box-sizing:border-box; }
+    #sess-modal .smv-duration { flex:0 0 150px;font-size:12px;color:var(--text-muted);padding-bottom:9px; }
+    #sess-modal .smv-duration.bad { color:var(--red); }
+    #sess-modal .smv-people-head, #sess-modal .smv-person { display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1.2fr) 112px 92px;gap:8px;align-items:center; }
+    #sess-modal .smv-people-head { font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted); }
+    #sess-modal #smv-people { display:flex;flex-direction:column;gap:8px; }
+    #sess-modal .smv-person input, #sess-modal .smv-person select { width:100%;box-sizing:border-box;min-width:0; }
+    #sess-modal .smv-p-ctl { display:flex;gap:4px;justify-content:flex-end; }
+    #sess-modal .smv-p-ctl button { width:28px;height:30px;padding:0;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--text-muted);cursor:pointer;font-size:12px;font-family:inherit; }
+    #sess-modal .smv-p-ctl button:hover { color:var(--text-primary);border-color:var(--blue); }
+    #sess-modal .smv-p-ctl button:disabled { opacity:.3;cursor:default;border-color:var(--border);color:var(--text-muted); }
+    #sess-modal .smv-btn { padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:var(--input-bg);color:var(--text-primary);cursor:pointer;font-size:11px;font-family:inherit;white-space:nowrap; }
+    #sess-modal .smv-btn:hover { border-color:var(--blue); }
+    #sess-modal .smv-chips { display:flex;flex-wrap:wrap;gap:8px;align-items:center; }
+    #sess-modal .smv-chip { position:relative;display:inline-flex;flex-direction:row;cursor:pointer;text-transform:none;letter-spacing:0; }
+    #sess-modal .smv-chip input { position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer; }
+    #sess-modal .smv-chip span { padding:6px 12px;border-radius:999px;border:1px solid var(--border);background:var(--input-bg);color:var(--text-muted);font-size:12px;transition:all .15s; }
+    #sess-modal .smv-chip input:checked + span { background:rgba(59,130,246,.18);border-color:var(--blue);color:var(--text-primary); }
+    #sess-modal .smv-chip input:checked + span::before { content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blue);margin-right:6px;vertical-align:middle; }
+    #sess-modal .smv-chip input:focus-visible + span { box-shadow:0 0 0 3px rgba(59,130,246,.25); }
+    #sess-modal .smv-mics { flex-direction:row;align-items:center;gap:8px;margin-left:auto;text-transform:none;letter-spacing:0;font-size:12px; }
+    #sess-modal .smv-mics input { width:64px; }
+    #sess-modal textarea { resize:vertical;min-height:60px;width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;outline:none; }
+    #sess-modal .smv-foot { padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface); }
+    #sess-modal .smv-foot .ev-modal-actions { margin:0 0 0 auto; }
+    #sess-modal .smv-error { color:var(--red);font-size:11px;flex:1;min-width:0; }
+    @media (max-width:560px) {
+      #sess-modal .smv-card { min-width:0;max-width:calc(100vw - 24px); }
+      #sess-modal .smv-row { flex-direction:column; }
+      #sess-modal .smv-num { flex:none; }
+      #sess-modal .smv-duration { flex:none;padding:0; }
+      #sess-modal .smv-head, #sess-modal .smv-body, #sess-modal .smv-foot { padding-left:16px;padding-right:16px; }
+      #sess-modal .smv-people-head { display:none; }
+      #sess-modal .smv-person { grid-template-columns:1fr 1fr;padding:8px;border:1px solid var(--border);border-radius:8px; }
+      #sess-modal .smv-p-ctl { justify-content:flex-start; }
+      #sess-modal .smv-mics { margin-left:0; }
+      #sess-modal .smv-foot { flex-direction:column;align-items:stretch; }
+      #sess-modal .smv-foot .ev-modal-actions { margin:0; }
+    }
     #evm-error { color:var(--red);font-size:11px;min-height:14px; }
     .ev-edit-btn { background:none;border:none;color:#94a3b8;cursor:pointer;font-size:10px;padding:0 3px;opacity:.7;font-family:inherit;vertical-align:middle;transition:opacity .12s; }
     .ev-edit-btn:hover { opacity:1;color:var(--text); }
@@ -2387,68 +2441,81 @@
 <!-- SESSION MODAL -->
 <div id="sess-modal" class="ev-modal-backdrop" style="display:none"
      onclick="if(event.target===this)closeSessModal()">
-  <div class="ev-modal-card" style="max-width:480px">
-    <div class="ev-modal-title" id="sess-modal-title">New Session</div>
-
-    <!-- Session Templates -->
-    <div id="smv-template-bar" style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
-      <select id="smv-tpl-select" onchange="loadSessionTemplate(this.value)" style="flex:1;background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);padding:5px 8px;border-radius:6px;font-size:11px;font-family:inherit">
-        <option value="">— Load template —</option>
-      </select>
-      <button class="abtn abtn-sm btn-blue" onclick="saveSessionTemplate()" style="font-size:10px;white-space:nowrap">Save as Template</button>
-      <button class="abtn abtn-sm btn-grey" onclick="deleteSessionTemplate()" id="smv-tpl-del" style="font-size:10px;display:none">Delete</button>
-    </div>
-
-    <div style="display:flex;gap:8px">
-      <label style="width:64px">#<input id="smv-sort" type="number" min="1" step="1"></label>
-      <label style="flex:1">Title<input id="smv-title" type="text" required></label>
-    </div>
-
-    <div style="display:flex;gap:8px">
-      <label style="flex:1">Type
-        <select id="smv-type">
-          <option>Keynote</option><option>Panel</option><option>Break</option>
-          <option>Workshop</option><option>Other</option>
+  <div class="ev-modal-card smv-card">
+    <div class="smv-head">
+      <div class="ev-modal-title" id="sess-modal-title">New Session</div>
+      <!-- Session templates (add mode only) -->
+      <div id="smv-template-bar" class="smv-tpl">
+        <select id="smv-tpl-select" onchange="loadSessionTemplate(this.value)">
+          <option value="">Load template</option>
         </select>
-      </label>
-      <label style="flex:1">Room<input id="smv-room" type="text"></label>
+        <button type="button" class="smv-btn" onclick="saveSessionTemplate()">Save as template</button>
+        <button type="button" class="smv-btn" onclick="deleteSessionTemplate()" id="smv-tpl-del" style="display:none">Delete</button>
+      </div>
     </div>
 
-    <div style="display:flex;gap:8px">
-      <label style="flex:1">Speaker<input id="smv-spk" type="text"></label>
-      <label style="flex:1">Company<input id="smv-co"  type="text"></label>
+    <div class="smv-body">
+      <section class="smv-sec">
+        <div class="smv-sec-title">Session</div>
+        <div class="smv-row">
+          <label class="smv-num">#<input id="smv-sort" type="number" min="1" step="1"></label>
+          <label class="smv-grow">Title<input id="smv-title" type="text" required></label>
+        </div>
+        <div class="smv-row">
+          <label class="smv-grow">Type
+            <select id="smv-type">
+              <option>Keynote</option><option>Panel</option><option>Break</option>
+              <option>Workshop</option><option>Other</option>
+            </select>
+          </label>
+          <label class="smv-grow">Room<input id="smv-room" type="text"></label>
+        </div>
+      </section>
+
+      <section class="smv-sec">
+        <div class="smv-sec-title">Speakers</div>
+        <div class="smv-people-head" aria-hidden="true">
+          <span>Name</span><span>Company</span><span>Role</span><span></span>
+        </div>
+        <div id="smv-people"></div>
+        <div><button type="button" id="smv-p-add" class="smv-btn" onclick="smvPeopleAdd()">Add speaker</button></div>
+      </section>
+
+      <section class="smv-sec">
+        <div class="smv-sec-title">Timing</div>
+        <div class="smv-row smv-row-end">
+          <label class="smv-grow">Start<input id="smv-start" type="time" required oninput="smvDuration()"></label>
+          <label class="smv-grow">End<input id="smv-end" type="time" required oninput="smvDuration()"></label>
+          <div id="smv-duration" class="smv-duration"></div>
+        </div>
+      </section>
+
+      <section class="smv-sec">
+        <div class="smv-sec-title">Production</div>
+        <div class="smv-chips">
+          <label class="smv-chip"><input type="checkbox" id="smv-anchor"><span>Anchor</span></label>
+          <label class="smv-chip"><input type="checkbox" id="smv-rec"><span>Recording</span></label>
+          <label class="smv-chip"><input type="checkbox" id="smv-stream"><span>Streaming</span></label>
+          <label class="smv-chip"><input type="checkbox" id="smv-remote"><span>Remote</span></label>
+          <label class="smv-chip"><input type="checkbox" id="smv-interp"><span>Interpretation</span></label>
+          <label class="smv-mics">Mics<input id="smv-mics" type="number" min="0" max="20" step="1"></label>
+        </div>
+      </section>
+
+      <section class="smv-sec">
+        <div class="smv-sec-title">Notes <span class="smv-sec-hint">operator only</span></div>
+        <textarea id="smv-notes" rows="3" placeholder="Tech rider, cue notes, special instructions"></textarea>
+      </section>
     </div>
 
-    <div style="display:flex;gap:8px">
-      <label style="flex:1">Planned Start<input id="smv-start" type="time" required></label>
-      <label style="flex:1">Planned End<input id="smv-end" type="time" required></label>
+    <div class="smv-foot">
+      <div id="smv-error" class="smv-error"></div>
+      <div class="ev-modal-actions">
+        <button onclick="closeSessModal()">Cancel</button>
+        <button id="smv-del" class="danger" style="display:none" onclick="deleteSession()">Delete</button>
+        <button class="primary" onclick="submitSessModal()">Save</button>
+      </div>
     </div>
-
-    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim)">
-      <label class="sm-chk"><input type="checkbox" id="smv-anchor"> anchor</label>
-      <label class="sm-chk"><input type="checkbox" id="smv-rec">    recording</label>
-      <label class="sm-chk"><input type="checkbox" id="smv-stream"> streaming</label>
-      <label class="sm-chk"><input type="checkbox" id="smv-remote"> remote</label>
-      <label class="sm-chk"><input type="checkbox" id="smv-interp"> interpretation</label>
-      <label class="sm-chk" style="display:flex;align-items:center;gap:4px">
-        mics <input id="smv-mics" type="number" min="0" max="20" step="1"
-                    style="width:44px;padding:2px 5px">
-      </label>
-    </div>
-
-    <label>Notes <span style="font-size:10px;color:var(--dim)">(operator-only)</span>
-      <textarea id="smv-notes" rows="3" placeholder="Tech rider, cue notes, special instructions…"
-        style="resize:vertical;min-height:60px;width:100%;background:var(--surface);border:1px solid var(--border);
-               color:var(--text);border-radius:6px;padding:8px 10px;font-size:12px;font-family:inherit;
-               outline:none;transition:border-color .15s"></textarea>
-    </label>
-
-    <div class="ev-modal-actions">
-      <button onclick="closeSessModal()">Cancel</button>
-      <button id="smv-del" class="danger" style="display:none" onclick="deleteSession()">Delete</button>
-      <button class="primary" onclick="submitSessModal()">Save</button>
-    </div>
-    <div id="smv-error" style="color:var(--red);font-size:11px;min-height:14px"></div>
   </div>
 </div>
 
@@ -5038,6 +5105,7 @@ async function handleCSVImport(file) {
   const cRoom  = col('room','location','hall','venue');
   const cType  = col('type','format','category');
   const cNotes = col('notes','note','instructions','tech rider');
+  const cMod   = col('moderator');
   if (cTitle === -1 || cStart === -1 || cEnd === -1) {
     pushToast(t('toast.csvNeeds'), 'error'); return;
   }
@@ -5048,11 +5116,24 @@ async function handleCSVImport(file) {
     const row = lines[i].split(',');
     const title = cell(row, cTitle), start = cell(row, cStart), end = cell(row, cEnd);
     if (!title || !start || !end) continue;
+    // With a moderator column: moderator plus the speaker cell's names, split
+    // on ";" or " / " (never commas: "Smith, Jr."). Rows without a moderator
+    // keep the single speaker. No moderator column: people is not sent.
+    let csvPeople;
+    if (cMod !== -1) {
+      const mod = cell(row, cMod);
+      csvPeople = !mod ? [] : [
+        { name: mod, company: null, role: 'moderator' },
+        ...(cell(row, cSpk) || '').split(/\s*;\s*|\s+\/\s+/).map(n => n.trim()).filter(Boolean)
+          .map(name => ({ name, company: null, role: 'speaker' })),
+      ];
+    }
     sessions.push({
       event_id: S.event.id, title, status: 'PLANNED', version: 0,
       planned_start: start, planned_end: end, scheduled_start: start, scheduled_end: end,
       sort_order: maxSort + i,
-      speaker: cell(row, cSpk), room: cell(row, cRoom),
+      speaker: csvPeople?.length ? peopleSummary(csvPeople) : cell(row, cSpk), room: cell(row, cRoom),
+      ...(csvPeople ? { people: csvPeople } : {}),
       type: cell(row, cType) || 'Other', notes: cell(row, cNotes),
       cumulative_delay: 0, delay_minutes: 0, speaker_arrived: false,
       actual_start: null, actual_end: null,
@@ -5481,7 +5562,10 @@ async function submitEvModal() {
       if (error) { errEl.textContent = error.message; return; }
 
       const seedId = document.getElementById('evm-seed').value;
-      if (seedId) await seedSessions(seedId, ev.id);
+      if (seedId) {
+        try { await seedSessions(seedId, ev.id); }
+        catch (e) { pushToast(`Event created, but copying sessions failed: ${e.message}`, 'error'); }
+      }
 
       // Per-event usage is counted by trg_leod_events_count_perevent_usage
       // (migration 060). The client update this replaced was silently
@@ -5560,9 +5644,12 @@ async function deactivateEvent() {
 }
 
 async function seedSessions(fromEventId, toEventId) {
-  const { data: sessions } = await sb
+  const { data: sessions, error: selErr } = await sb
     .from('leod_sessions').select('*').eq('event_id', fromEventId).order('sort_order');
+  if (selErr) throw new Error(selErr.message);
   if (!sessions?.length) return 0;
+  // Columns copied only when the source rows have them (people needs 082).
+  const opt = (s, k) => (s[k] !== undefined ? { [k]: s[k] } : {});
 
   const inserts = sessions.map(({ id: _id, ...s }) => ({
     event_id:         toEventId,
@@ -5571,6 +5658,12 @@ async function seedSessions(fromEventId, toEventId) {
     type:             s.type,
     speaker:          s.speaker,
     company:          s.company,
+    ...opt(s, 'people'),
+    ...opt(s, 'notes'),
+    ...opt(s, 'mic_type'),
+    ...opt(s, 'slides'),
+    ...opt(s, 'video_file'),
+    ...opt(s, 'checks'),
     room:             s.room,
     is_anchor:        s.is_anchor,
     planned_start:    s.planned_start,
@@ -5592,7 +5685,8 @@ async function seedSessions(fromEventId, toEventId) {
     actual_end:       null,
   }));
 
-  await sb.from('leod_sessions').insert(inserts);
+  const { error: insErr } = await sb.from('leod_sessions').insert(inserts);
+  if (insErr) throw new Error(insErr.message);
   return inserts.length;
 }
 
@@ -5617,7 +5711,7 @@ function refreshTemplateDropdown() {
   sel.textContent = '';
   const defaultOpt = document.createElement('option');
   defaultOpt.value = '';
-  defaultOpt.textContent = '— Load template —';
+  defaultOpt.textContent = 'Load template';
   sel.appendChild(defaultOpt);
   tpls.forEach((t, i) => {
     const opt = document.createElement('option');
@@ -5677,6 +5771,107 @@ function deleteSessionTemplate() {
   pushToast(`Template "${name}" deleted`, 'info');
 }
 
+// ── Session people (082) ──────────────────────────────
+// leod_sessions.people: ordered [{ name, company, role }]. When a session has
+// people, speaker/company still get a readable summary so every reader of
+// speaker (stage views, agents, exports, emails) keeps working.
+const PEOPLE_ROLES = [['speaker', 'Speaker'], ['moderator', 'Moderator'], ['panelist', 'Panelist']];
+
+function peopleSummary(people) {
+  const mods = people.filter(p => p.role === 'moderator').map(p => `${p.name} (moderator)`);
+  const rest = people.filter(p => p.role !== 'moderator').map(p => p.name);
+  return [...mods, ...rest].join(', ');
+}
+// The shared company when every person has the same one, else null.
+function peopleCompany(people) {
+  const cos = new Set(people.map(p => p.company || null));
+  return cos.size === 1 ? [...cos][0] : null;
+}
+
+function smvPeopleRow(p = {}) {
+  const row = document.createElement('div');
+  row.className = 'smv-person';
+  const name = document.createElement('input');
+  name.className = 'smv-p-name'; name.type = 'text'; name.placeholder = 'Name';
+  name.setAttribute('aria-label', 'Name'); name.value = p.name || '';
+  const co = document.createElement('input');
+  co.className = 'smv-p-co'; co.type = 'text'; co.placeholder = 'Company';
+  co.setAttribute('aria-label', 'Company'); co.value = p.company || '';
+  const role = document.createElement('select');
+  role.className = 'smv-p-role'; role.setAttribute('aria-label', 'Role');
+  for (const [v, label] of PEOPLE_ROLES) {
+    const o = document.createElement('option'); o.value = v; o.textContent = label; role.appendChild(o);
+  }
+  role.value = PEOPLE_ROLES.some(([v]) => v === p.role) ? p.role : 'speaker';
+  const ctl = document.createElement('div');
+  ctl.className = 'smv-p-ctl';
+  const btn = (cls, text, label, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.textContent = text;
+    b.title = label; b.setAttribute('aria-label', label);
+    b.onclick = fn; return b;
+  };
+  ctl.append(
+    btn('smv-p-up',   '↑', 'Move up',   () => { if (row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling); smvPeopleSync(); }),
+    btn('smv-p-down', '↓', 'Move down', () => { if (row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); smvPeopleSync(); }),
+    btn('smv-p-del',  '×', 'Remove',    () => { row.remove(); smvPeopleSync(); }),
+  );
+  row.append(name, co, role, ctl);
+  return row;
+}
+
+// Always at least one (empty) row; first/last rows cannot move further.
+function smvPeopleSync() {
+  const box = document.getElementById('smv-people');
+  if (!box.children.length) box.appendChild(smvPeopleRow());
+  const rows = [...box.children];
+  rows.forEach((r, i) => {
+    r.querySelector('.smv-p-up').disabled   = i === 0;
+    r.querySelector('.smv-p-down').disabled = i === rows.length - 1;
+  });
+}
+
+function smvPeopleSet(people) {
+  const box = document.getElementById('smv-people');
+  box.textContent = '';
+  for (const p of people || []) box.appendChild(smvPeopleRow(p));
+  smvPeopleSync();
+}
+
+function smvPeopleAdd() {
+  const row = smvPeopleRow();
+  document.getElementById('smv-people').appendChild(row);
+  smvPeopleSync();
+  row.querySelector('.smv-p-name').focus();
+}
+
+// Rows in order; blank rows dropped. A row with a company but no name is
+// refused (null), except as the only row, where it is the old company-only
+// session and keeps saving as company.
+function smvPeopleRead() {
+  const rows = [...document.querySelectorAll('#smv-people .smv-person')].map(row => ({
+    name:    row.querySelector('.smv-p-name').value.trim(),
+    company: row.querySelector('.smv-p-co').value.trim() || null,
+    role:    row.querySelector('.smv-p-role').value,
+  })).filter(p => p.name || p.company);
+  if (rows.length === 1 && !rows[0].name) return { people: [], company: rows[0].company };
+  if (rows.some(p => !p.name)) return null;
+  return { people: rows, company: null };
+}
+
+// Live "Duration: 45 min" under Timing; red when end is not after start.
+function smvDuration() {
+  const el = document.getElementById('smv-duration');
+  const st = document.getElementById('smv-start').value;
+  const en = document.getElementById('smv-end').value;
+  if (!st || !en) { el.textContent = ''; el.classList.remove('bad'); return; }
+  const mins = (h) => parseInt(h.slice(0, 2), 10) * 60 + parseInt(h.slice(3, 5), 10);
+  const d = mins(en) - mins(st);
+  if (d <= 0) { el.textContent = 'Ends before it starts'; el.classList.add('bad'); return; }
+  el.classList.remove('bad');
+  el.textContent = `Duration: ${d >= 60 ? `${Math.floor(d / 60)} h ${d % 60 ? `${d % 60} min` : ''}`.trim() : `${d} min`}`;
+}
+
 function openSessModal(mode, sessionId) {
   sessModalMode = mode;
   sessModalId   = sessionId || null;
@@ -5689,10 +5884,17 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-title').value  = '';
     document.getElementById('smv-type').value   = 'Keynote';
     document.getElementById('smv-room').value   = '';
-    document.getElementById('smv-spk').value    = '';
-    document.getElementById('smv-co').value     = '';
-    document.getElementById('smv-start').value  = '';
-    document.getElementById('smv-end').value    = '';
+    smvPeopleSet([]);
+    // Start where the latest session ends; end 30 min later (same day).
+    const lastEnd = S.sessions.map(x => (x.planned_end || '').substring(0, 5))
+      .filter(hm => /^\d{2}:\d{2}$/.test(hm)).sort().pop() || '';
+    let defEnd = '';
+    if (lastEnd) {
+      const m = Math.min(23 * 60 + 59, parseInt(lastEnd.slice(0, 2), 10) * 60 + parseInt(lastEnd.slice(3), 10) + 30);
+      defEnd = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    }
+    document.getElementById('smv-start').value  = lastEnd;
+    document.getElementById('smv-end').value    = defEnd;
     document.getElementById('smv-anchor').checked = false;
     document.getElementById('smv-rec').checked    = false;
     document.getElementById('smv-stream').checked = false;
@@ -5711,8 +5913,10 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-title').value  = s.title      || '';
     document.getElementById('smv-type').value   = s.type       || 'Keynote';
     document.getElementById('smv-room').value   = s.room       || '';
-    document.getElementById('smv-spk').value    = s.speaker    || '';
-    document.getElementById('smv-co').value     = s.company    || '';
+    // A session with a people list loads it; an older single-speaker session
+    // loads its speaker/company as the first row.
+    smvPeopleSet(Array.isArray(s.people) && s.people.length ? s.people
+      : (s.speaker || s.company) ? [{ name: s.speaker || '', company: s.company || '', role: 'speaker' }] : []);
     document.getElementById('smv-start').value  = (s.planned_start || '').substring(0, 5);
     document.getElementById('smv-end').value    = (s.planned_end   || '').substring(0, 5);
     document.getElementById('smv-anchor').checked = !!s.is_anchor;
@@ -5725,6 +5929,7 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-del').style.display = '';
     document.getElementById('smv-template-bar').style.display = 'none';
   }
+  smvDuration();
   document.getElementById('sess-modal').style.display = 'flex';
 }
 
@@ -5746,6 +5951,10 @@ async function submitSessModal() {
   if (!title || !start || !end) {
     errEl.textContent = 'Title, planned start and end are required.'; return;
   }
+  if (end <= start) { errEl.textContent = 'The session must end after it starts.'; return; }
+  const read = smvPeopleRead();
+  if (!read) { errEl.textContent = 'Each person needs a name.'; return; }
+  const people = read.people;
 
   const saveBtn = document.querySelector('#sess-modal .ev-modal-actions button.primary');
   saveBtn.disabled = true;
@@ -5755,8 +5964,8 @@ async function submitSessModal() {
     title,
     type:           document.getElementById('smv-type').value,
     room:           document.getElementById('smv-room').value.trim()  || null,
-    speaker:        document.getElementById('smv-spk').value.trim()   || null,
-    company:        document.getElementById('smv-co').value.trim()    || null,
+    speaker:        null,
+    company:        read.company,
     planned_start:  start,
     planned_end:    end,
     sort_order:     parseInt(document.getElementById('smv-sort').value, 10) || 1,
@@ -5768,6 +5977,24 @@ async function submitSessModal() {
     mics:           parseInt(document.getElementById('smv-mics').value, 10) || 0,
     notes:          document.getElementById('smv-notes').value.trim() || null,
   };
+  // One plain speaker saves as speaker/company, exactly like the old single
+  // fields. Two or more people, or any moderator/panelist, save the list plus
+  // a readable summary in speaker. people is only sent when there is a list
+  // or one is being cleared, so plain sessions save as before (and before
+  // 082 is applied).
+  const hadPeople = sessModalMode === 'edit'
+    && (S.sessions.find(x => x.id === sessModalId)?.people || []).length > 0;
+  if (people.length === 1 && people[0].role === 'speaker') {
+    fields.speaker = people[0].name;
+    fields.company = people[0].company;
+    if (hadPeople) fields.people = [];
+  } else if (people.length) {
+    fields.people  = people;
+    fields.speaker = peopleSummary(people);
+    fields.company = peopleCompany(people);
+  } else if (hadPeople) {
+    fields.people = [];
+  }
 
   try {
     if (sessModalMode === 'add') {
@@ -7717,12 +7944,12 @@ async function wizNext() {
       const room = document.getElementById('wiz-sess-room')?.value?.trim() || '';
       const start = document.getElementById('wiz-sess-start')?.value || '09:00';
       const end = document.getElementById('wiz-sess-end')?.value || '09:30';
-      const evId = document.getElementById('ev-select')?.value;
+      const evId = S.event?.id;  // #ev-select no longer exists (pill selector)
       const { error } = await sb.from('leod_sessions').insert({
         event_id: evId, title, speaker, room, company: '',
         planned_start: start + ':00', planned_end: end + ':00',
         scheduled_start: start + ':00', scheduled_end: end + ':00',
-        session_type: 'Keynote', sort_order: 1, status: 'PLANNED',
+        type: 'Keynote', sort_order: 1, status: 'PLANNED',
       });
       if (error) { wizShowError(error.message); return; }
       await loadSnapshot();
@@ -7743,7 +7970,7 @@ async function wizNext() {
       if (!name) { wizShowError('Display name is required.'); return; }
       const mode = document.getElementById('wiz-disp-mode')?.value || 'schedule';
       const orient = document.getElementById('wiz-disp-orient')?.value || 'landscape';
-      const evId = document.getElementById('ev-select')?.value;
+      const evId = S.event?.id;  // #ev-select no longer exists (pill selector)
       const { error } = await sb.from('leod_signage_displays').insert({
         event_id: evId, name, content_mode: mode, orientation: orient, zone_type: 'lobby',
       });
