@@ -7,7 +7,8 @@
     { "source": "/display",       "destination": "/cuedeck-display.html" },
     { "source": "/checkin",       "destination": "/cuedeck-checkin-home.html" },
     { "source": "/checkin/setup", "destination": "/cuedeck-checkin-setup.html" },
-    { "source": "/checkin/desk",  "destination": "/cuedeck-checkin.html" }
+    { "source": "/checkin/desk",  "destination": "/cuedeck-checkin.html" },
+    { "source": "/checkin/dashboard", "destination": "/cuedeck-checkin-dashboard.html" }
   ],
   "redirects": [
     { "source": "/kiosk", "destination": "/checkin/desk?mode=kiosk", "permanent": false }
