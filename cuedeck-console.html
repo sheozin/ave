@@ -3079,13 +3079,14 @@ async function transition(sessionId, toStatus) {
       .eq('id', sessionId).eq('version', prevVer).select('id');
 
     if (!error && !written?.length) {
-      // The version guard matched nothing: someone else changed it first.
+      // Nothing was written: another writer moved the version on, or row
+      // security refused this operator. Either way, reload the real state.
       s.status = prevStatus; s.version = prevVer;
       if (toStatus === 'LIVE')  s.actual_start = null;
       if (toStatus === 'ENDED') s.actual_end   = null;
       renderSessions();
-      pushLog('ERROR', 'Version conflict — direct write matched no row', sessionId);
-      pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+      pushLog('ERROR', 'direct write matched no row (version moved on or not allowed)', sessionId);
+      pushToast('⚠ ' + t('toast.notSaved'), 'warn');
       if (S.event) loadSessions(S.event.id);
       return;
     }
@@ -6664,8 +6665,18 @@ function filterOperators() {
 }
 
 async function approveUser(userId, role) {
-  const { error } = await sb.from('leod_users').update({ role }).eq('id', userId);
-  if (error) { pushToast('Failed: ' + error.message, 'error'); return; }
+  // Another user's role can only be changed by manage-operator (service
+  // role, team-scoped); a direct update is refused by row security and
+  // used to report success anyway.
+  const { error } = await sb.functions.invoke('manage-operator', {
+    body: { user_id: userId, action: 'set_role', role },
+  });
+  if (error) {
+    let why = error.message || 'Unknown error';
+    try { const b = await error.context?.json?.(); if (b?.error) why = b.error; } catch {}
+    pushToast('Failed: ' + why, 'error');
+    return;
+  }
   pushToast(`\u2713 Role set to ${role}`, 'success');
   await refreshUsersModal();
   await loadPendingBadge();
@@ -6676,7 +6687,9 @@ async function manageOperator(userId, action) {
     body: { user_id: userId, action: action },
   });
   if (error) {
-    pushToast('Failed: ' + (error.message || 'Unknown error'), 'error');
+    var why = error.message || 'Unknown error';
+    try { var b = await error.context?.json?.(); if (b && b.error) why = b.error; } catch (_) {}
+    pushToast('Failed: ' + why, 'error');
     return;
   }
   pushToast('\u2713 Operator ' + action + 'd', 'success');

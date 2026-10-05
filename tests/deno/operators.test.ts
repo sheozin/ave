@@ -19,11 +19,15 @@ const OP_OFF   = '20000000-0000-4000-8000-000000000004' // director invited by O
 const STRANGER = '20000000-0000-4000-8000-000000000005' // another tenant's owner
 const THEIR_OP = '20000000-0000-4000-8000-000000000006' // invited by STRANGER
 const NEW_ID   = '20000000-0000-4000-8000-0000000000aa'
+const PENDING  = '20000000-0000-4000-8000-000000000007' // pending, on OWNER's team
 
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 let invited: { email: string; data: Row }[]
 let banned: string[]
+let authAdmin: { method: string; id: string }[]
+// created_at the stubbed invite reports: now (a new account) unless a test says otherwise
+let inviteCreatedAt: string | null = null
 // Which id the next invite creates, and whether that auth user already had a row.
 let inviteAs: { id: string; preexisting?: Row } = { id: NEW_ID }
 let failOn: Record<string, { status: number; body: Row }> = {}
@@ -60,10 +64,14 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     else if (!users.some(u => u.id === inviteAs.id)) {
       users.push({ id: inviteAs.id, email: b.email, role: 'director', invited_by: null, active: true, name: '' })
     }
-    return reply(200, { id: inviteAs.id, email: b.email, aud: 'authenticated' })
+    return reply(200, { id: inviteAs.id, email: b.email, aud: 'authenticated', created_at: inviteCreatedAt ?? new Date().toISOString() })
   }
   const adminUser = url.pathname.match(/^\/auth\/v1\/admin\/users\/(.+)$/)
-  if (adminUser) { banned.push(adminUser[1]); return reply(200, { id: adminUser[1] }) }
+  if (adminUser) {
+    authAdmin.push({ method, id: adminUser[1] })
+    if (method === 'PUT') banned.push(adminUser[1])
+    return reply(200, { id: adminUser[1] })
+  }
 
   const tbl = url.pathname.match(/^\/rest\/v1\/(.+)$/)
   if (!tbl) return reply(404, { message: 'no route' })
@@ -135,6 +143,8 @@ async function call(fn: string, as: string, body: Row): Promise<{ status: number
 function setup() {
   invited = []
   banned = []
+  authAdmin = []
+  inviteCreatedAt = null
   inviteAs = { id: NEW_ID }
   failOn = {}
   tables = {
@@ -145,6 +155,7 @@ function setup() {
       { id: OP_OFF,   email: 'off@x.test',    role: 'director', invited_by: OWNER,    active: false },
       { id: STRANGER, email: 'other@y.test',  role: 'director', invited_by: null,     active: true },
       { id: THEIR_OP, email: 'theirs@y.test', role: 'av',       invited_by: STRANGER, active: true },
+      { id: PENDING,  email: 'pend@x.test',   role: 'pending',  invited_by: OWNER,    active: true },
     ],
     leod_events: [{ id: 'ev-1', created_by: OWNER }, { id: 'ev-2', created_by: STRANGER }],
     leod_event_log: [],
@@ -210,11 +221,21 @@ Deno.test('invite: an auth user who owns events is not turned into an operator',
   assert(user(STRANGER)?.role === 'director' && user(STRANGER)?.invited_by === null, 'owner changed')
 })
 
-Deno.test('invite: a failed row write is a 500, not a success', async () => {
+Deno.test('invite: a failed row write is a 500 and the new auth account is deleted', async () => {
   setup()
   failOn['POST /rest/v1/leod_users'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
   const r = await call('invite-operator', OWNER, { email: 'n@x.test', role: 'stage' })
   assert(r.status === 500, JSON.stringify(r))
+  assert(authAdmin.some(a => a.method === 'DELETE' && a.id === NEW_ID), 'auth user not deleted: ' + JSON.stringify(authAdmin))
+})
+
+Deno.test('invite: a failed row write never deletes an account that existed before the invite', async () => {
+  setup()
+  inviteCreatedAt = '2026-01-01T00:00:00.000Z'
+  failOn['POST /rest/v1/leod_users'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  const r = await call('invite-operator', OWNER, { email: 'n@x.test', role: 'stage' })
+  assert(r.status === 500, JSON.stringify(r))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'deleted an older account: ' + JSON.stringify(authAdmin))
 })
 
 // ── manage-operator ──────────────────────────────────────────────────────────
@@ -267,4 +288,54 @@ Deno.test('manage: an unknown target is refused', async () => {
   setup()
   const r = await call('manage-operator', OWNER, { action: 'suspend', user_id: NEW_ID })
   assert(r.status === 403 || r.status === 404, JSON.stringify(r))
+})
+
+Deno.test('manage: a failed ban is a 500 and the operator row stays', async () => {
+  setup()
+  failOn['PUT /auth/v1/admin/users/' + OP_STAGE] = { status: 500, body: { message: 'auth down' } }
+  const r = await call('manage-operator', OWNER, { action: 'remove', user_id: OP_STAGE })
+  assert(r.status === 500, JSON.stringify(r))
+  assert(String(r.body.error).toLowerCase().includes('ban'), JSON.stringify(r.body))
+  assert(user(OP_STAGE), 'row deleted although the account was not banned')
+})
+
+// ── set_role ─────────────────────────────────────────────────────────────────
+Deno.test('set_role: the owner changes a teammate\'s role and approves a pending one', async () => {
+  setup()
+  let r = await call('manage-operator', OWNER, { action: 'set_role', user_id: OP_STAGE, role: 'av' })
+  assert(r.status === 200 && user(OP_STAGE)?.role === 'av', JSON.stringify(r))
+  r = await call('manage-operator', OWNER, { action: 'set_role', user_id: PENDING, role: 'stage' })
+  assert(r.status === 200 && user(PENDING)?.role === 'stage', JSON.stringify(r))
+})
+
+Deno.test('set_role: an invited director changes a teammate\'s role', async () => {
+  setup()
+  const r = await call('manage-operator', OP_DIR, { action: 'set_role', user_id: OP_STAGE, role: 'director' })
+  assert(r.status === 200 && user(OP_STAGE)?.role === 'director', JSON.stringify(r))
+})
+
+Deno.test('set_role: admin, pending and unknown roles are refused', async () => {
+  for (const role of ['admin', 'pending', 'superuser', '']) {
+    setup()
+    const r = await call('manage-operator', OWNER, { action: 'set_role', user_id: OP_STAGE, role })
+    assert(r.status === 400 && user(OP_STAGE)?.role === 'stage', role + ' ' + JSON.stringify(r))
+  }
+})
+
+Deno.test('set_role: never on the owner, another team, or by stage/deactivated/stranger', async () => {
+  const cases: [string, string][] = [[OP_DIR, OWNER], [STRANGER, OP_STAGE], [OWNER, THEIR_OP], [OP_STAGE, OP_DIR], [OP_OFF, OP_STAGE]]
+  for (const [who, target] of cases) {
+    setup()
+    const before = user(target)?.role
+    const r = await call('manage-operator', who, { action: 'set_role', user_id: target, role: 'director' })
+    assert(r.status === 403, `${who} -> ${target}: ${JSON.stringify(r)}`)
+    assert(user(target)?.role === before, 'role changed')
+  }
+})
+
+Deno.test('set_role: a teammate who owns events is not changed', async () => {
+  setup()
+  tables.leod_events.push({ id: 'ev-3', created_by: OP_STAGE })
+  const r = await call('manage-operator', OWNER, { action: 'set_role', user_id: OP_STAGE, role: 'av' })
+  assert(r.status === 409 && user(OP_STAGE)?.role === 'stage', JSON.stringify(r))
 })

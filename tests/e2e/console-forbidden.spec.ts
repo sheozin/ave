@@ -159,7 +159,9 @@ test('transition fallback: a write that matches no row is a conflict, not a succ
   await setup(page, 500, { error: 'boom' });
   patchReply = { status: 200, body: [] }; // the version guard matched nothing
   await evalPage(page, `S.sessions.find(x => x.id === '${A}').status = 'LIVE'; renderSessions(); transition('${A}', 'ENDED')`);
-  await expect(toasts(page)).toContainText('Updated by another operator');
+  // Neutral: 0 rows can be a version conflict or a refusal by RLS.
+  await expect(toasts(page)).toContainText('Not saved. The session was refreshed.');
+  await expect(toasts(page)).not.toContainText('Version conflict');
   await page.waitForTimeout(300);
   expect(rest.filter(r => r.method === 'POST' && r.url.includes('leod_event_log'))).toEqual([]);
   await expect(page.locator('#undo-bar')).toBeHidden();
@@ -204,4 +206,28 @@ test('clearing a broadcast targets this event and reports a failure', async ({ p
   await expect(toasts(page)).toContainText('row-level security');
   const patch = rest.find(r => r.method === 'PATCH' && r.url.includes('leod_broadcast'))!;
   expect(patch.url).toContain('id=eq.ev-1');
+});
+
+test('changing a role goes through manage-operator, not a direct write', async ({ page }) => {
+  const calls = await setup(page, 200, { ok: true, action: 'set_role', role: 'av' });
+  await evalPage(page, `S.user = { id: 'user-1' }; approveUser('u-2', 'av')`);
+  await expect(toasts(page)).toContainText('Role set to av');
+  const c = calls.filter(x => x.fn === 'manage-operator');
+  expect(c).toHaveLength(1);
+  expect(c[0].body).toMatchObject({ action: 'set_role', user_id: 'u-2', role: 'av' });
+  expect(rest.filter(r => r.method === 'PATCH' && r.url.includes('leod_users'))).toEqual([]);
+});
+
+test('a refused role change says why and does not claim success', async ({ page }) => {
+  await setup(page, 403, { error: 'Forbidden: not an operator on your team' });
+  await evalPage(page, `approveUser('u-2', 'av')`);
+  await expect(toasts(page)).toContainText('not an operator on your team');
+  await expect(toasts(page)).not.toContainText('Role set');
+});
+
+test('a failed remove shows the server reason (e.g. the ban failed)', async ({ page }) => {
+  await setup(page, 500, { error: 'Remove failed: the account could not be banned (auth down)' });
+  await evalPage(page, `manageOperator('u-2', 'remove')`);
+  await expect(toasts(page)).toContainText('could not be banned');
+  await expect(toasts(page)).not.toContainText('Operator removed');
 });

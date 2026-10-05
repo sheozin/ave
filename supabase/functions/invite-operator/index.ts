@@ -12,6 +12,7 @@ const VALID_ROLES = new Set(['director', 'stage', 'av', 'interp', 'reg', 'signag
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
+  const startedAt = Date.now()
 
   // Pre-flight
   if (req.method === 'OPTIONS') {
@@ -127,7 +128,18 @@ Deno.serve(async (req) => {
     invited_by: teamOwner,
   }, { onConflict: 'id' }).select('id')
   if (upsertErr || !saved?.length) {
-    return json(500, { error: `Invite sent but the operator row was not saved: ${upsertErr?.message ?? 'no row'}` })
+    const why = upsertErr?.message ?? 'no row'
+    // Undo the invite, but only for an account this request created: an
+    // older account (an earlier, unconfirmed invite) is never deleted here.
+    const created = Date.parse(String(inviteData.user.created_at ?? ''))
+    if (Number.isFinite(created) && created >= startedAt - 5_000) {
+      const { error: delErr } = await sb.auth.admin.deleteUser(newId)
+      if (delErr) {
+        return json(500, { error: `The operator row was not saved (${why}) and the new account could not be removed (${delErr.message})` })
+      }
+      return json(500, { error: `The operator row was not saved (${why}); the invite was withdrawn` })
+    }
+    return json(500, { error: `Invite sent but the operator row was not saved: ${why}` })
   }
 
   // ── Audit log (best-effort, but a failure is logged) ──────────
