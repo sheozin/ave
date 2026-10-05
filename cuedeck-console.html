@@ -4080,6 +4080,7 @@ function renderSignagePanel() {
           <div class="sp-card-mgmt">
             <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
             ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
+            <button onclick="resetDisplayKey('${esc(d.id)}')" title="Give this display a new key. Its current link and QR code stop working.">Reset key</button>
           </div>
         </div>`;
       }).join('')
@@ -4195,26 +4196,9 @@ async function pairDisplayByCode(code) {
     return;
   }
 
-  // Look up pairing code
-  var { data: pairing, error } = await sb.from('leod_signage_pairing')
-    .select('*')
-    .eq('code', code)
-    .single();
-
-  if (error || !pairing) {
-    pushToast(t('toast.invalidPairing'), 'error');
-    return;
-  }
-  if (new Date(pairing.expires_at) < new Date()) {
-    pushToast(t('toast.codeExpired'), 'error');
-    return;
-  }
-  if (pairing.display_id) {
-    pushToast(t('toast.codeUsed'), 'error');
-    return;
-  }
-
-  // Create a new display
+  // Create a new display, then link the code to it through
+  // display_pair_link (083). The console cannot read pairing rows, so the
+  // function's answer is the only way to know whether the code was valid.
   var displayName = 'Paired Display ' + code.slice(0, 3);
   var { data: display, error: insertErr } = await sb.from('leod_signage_displays')
     .insert({
@@ -4232,18 +4216,45 @@ async function pairDisplayByCode(code) {
     return;
   }
 
-  // Link pairing code to display
-  var { error: linkErr } = await sb.from('leod_signage_pairing')
-    .update({ display_id: display.id, event_id: S.event.id })
-    .eq('code', code);
-  if (linkErr) {
-    pushToast('Failed to link the pairing code: ' + linkErr.message, 'error');
+  var { data: linkResult, error: linkErr } = await sb.rpc('display_pair_link', {
+    p_code: code, p_display_id: display.id,
+  });
+  if (linkErr || linkResult !== 'linked') {
+    // Do not leave an unpaired display behind.
+    var { error: delErr } = await sb.from('leod_signage_displays').delete().eq('id', display.id);
+    if (delErr) console.error('Could not remove the unpaired display:', delErr);
+    var reason = {
+      not_found: t('toast.invalidPairing'),
+      expired:   t('toast.codeExpired'),
+      used:      t('toast.codeUsed'),
+      forbidden: 'You cannot pair a screen to this event.',
+    }[linkResult];
+    pushToast(reason || ('Could not link the pairing code' + (linkErr ? ': ' + linkErr.message : '.')), 'error');
     await loadDisplays(S.event.id);
+    if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
     return;
   }
 
   pushToast('✓ ' + t('toast.displayPaired'), 'success');
   await loadDisplays(S.event.id);
+  if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
+}
+
+// ── Reset a display's key ───────────────────────────────────
+// display_rotate_secret (083) gives the display a new key. The screen holding
+// the old one gets nothing from display_feed and returns to pairing; the
+// display's Launch, QR and Copy link use the new key.
+async function resetDisplayKey(displayId) {
+  if (!confirm("Reset this display's key? The screen will need to be paired again.")) return;
+  const d = S.displays.find(x => x.id === displayId);
+  const { data, error } = await sb.rpc('display_rotate_secret', { p_display_id: displayId });
+  if (error || data !== true) {
+    pushToast('Could not reset the key' + (error ? ': ' + error.message : '.'), 'error');
+    return;
+  }
+  pushToast('Display key reset. Pair the screen again or open its new link.', 'success');
+  pushLog('SIGNAGE', `key reset: ${d?.name || displayId}`, null);
+  if (S.event) await loadDisplays(S.event.id);
   if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
 }
 
