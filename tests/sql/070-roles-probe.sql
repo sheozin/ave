@@ -193,8 +193,8 @@ BEGIN
   IF v_c <> 1 THEN RAISE EXCEPTION 'PROBE FAIL: owner read % purchase rows, want 1', v_c; END IF;
   IF NOT checkin_is_owner(v_ev) THEN RAISE EXCEPTION 'PROBE FAIL: owner is not owner'; END IF;
   SELECT role, is_owner INTO v_role, v_bool FROM checkin_my_events() WHERE event_id = v_ev;
-  IF v_role IS DISTINCT FROM 'organizer' OR v_bool IS DISTINCT FROM true THEN
-    RAISE EXCEPTION 'PROBE FAIL: owner row is (%, %), want (organizer, true) until 073', v_role, v_bool;
+  IF v_role IS DISTINCT FROM 'owner' OR v_bool IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'PROBE FAIL: owner row is (%, %), want (owner, true)', v_role, v_bool;
   END IF;
   v_n := v_n + 3;
   RESET ROLE;
