@@ -23,6 +23,7 @@
 !/cuedeck-agent-3-report-generator.js
 !/checkin-app.css
 !/checkin-window.js
+!/checkin-clock.js
 !/checkin-csv.js
 !/checkin-roles.js
 !/checkin-dashboard.js

@@ -612,6 +612,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <div id="station">
   <div class="ck-test" id="st-test" hidden></div>
   <div class="ck-test" id="st-notice" hidden></div>
+  <div class="ck-test" id="st-clock" hidden></div>
   <header class="ck-header">
     <div class="ck-hd-main">
       <div class="ck-hd-eyebrow">Check-in desk</div>
@@ -879,7 +880,9 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
+  import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
+  window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
 <script>
 // ═══════════════════════════════════════════════════
@@ -909,7 +912,7 @@ let sb = null;
 // in the two inputs because renderParty() replaces every row — a flush
 // reconcile, a tick on a colleague or an undo would otherwise wipe a
 // half-typed name with nobody having touched the editor.
-var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map(), deskId: null, deskLabel: null };  // var → window.S for E2E tests
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map(), deskId: null, deskLabel: null, clockOffset: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
@@ -1321,7 +1324,7 @@ function stopRosterRefresh() {
 
 // The guard above is what keeps the timer and the 'online' event from
 // sending the same batch twice.
-window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); sendHeartbeat(); });
+window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); sendHeartbeat(); if (clockTimer) syncDeskClock(); });
 window.addEventListener('offline', () => { renderPendingCount(); });
 
 // Self-scheduling rather than setInterval so a slow drain cannot stack
@@ -1422,6 +1425,56 @@ function startHeartbeat() {
 function stopHeartbeat() {
   clearInterval(heartbeatTimer);
   heartbeatTimer = null;
+}
+
+// ═══════════════════════════════════════════════════
+// CLOCK
+// scanned_at decides arrival order and the live window, and the server
+// refuses a live check-in stamped more than 5 minutes ahead of its clock.
+// A desk whose clock runs fast would be refused all day, so every stamp
+// uses the server's clock (checkin-clock.js, migration 093). Until the
+// first sync succeeds, or if the module did not load, it is the device
+// clock, exactly as before. The offset belongs to the device, so it is
+// kept across event switches; it is resynced while the desk is open.
+// ═══════════════════════════════════════════════════
+const CLOCK_RESYNC_MS = 10 * 60 * 1000;
+let clockTimer = null, clockSyncing = false;
+
+function deskNowIso() {
+  const C = window.CK_CLOCK;
+  return C ? C.correctedIso(Date.now(), S.clockOffset) : new Date().toISOString();
+}
+
+async function syncDeskClock() {
+  const C = window.CK_CLOCK;
+  if (!C || !sb || clockSyncing || !navigator.onLine) return;
+  clockSyncing = true;
+  try {
+    const samples = [];
+    for (let i = 0; i < 3; i++) {
+      const sentAt = Date.now();
+      const { data, error } = await sb.rpc('checkin_server_now');
+      const receivedAt = Date.now();
+      if (error) { console.warn('checkin: clock sync failed', error.message); continue; }
+      samples.push({ sentAt, receivedAt, serverMs: Date.parse(data) });
+    }
+    const best = C.bestOffset(samples);
+    if (best) S.clockOffset = best.offsetMs;
+    const box = document.getElementById('st-clock');
+    const text = C.skewNotice(S.clockOffset);
+    box.textContent = text;
+    box.hidden = !text;
+  } finally {
+    clockSyncing = false;
+  }
+}
+function startClockSync() {
+  if (!clockTimer) clockTimer = setInterval(() => { if (!document.hidden) syncDeskClock(); }, CLOCK_RESYNC_MS);
+  syncDeskClock();
+}
+function stopClockSync() {
+  clearInterval(clockTimer);
+  clockTimer = null;
 }
 
 function openDeskRename() {
@@ -1579,11 +1632,11 @@ function showScreen(name) {
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
   if (name === 'signin') siCap();
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
-  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); startHeartbeat(); startDeskAlerts(); holdFocus(); }
+  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); startHeartbeat(); startDeskAlerts(); startClockSync(); holdFocus(); }
   // Leaving the desk takes the kiosk modal with it. Switching event or
   // signing out must not leave a live pairing code on a screen that is
   // no longer the desk it was minted from.
-  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); stopHeartbeat(); stopDeskAlerts(); }
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); stopHeartbeat(); stopDeskAlerts(); stopClockSync(); }
 }
 
 // ═══════════════════════════════════════════════════
@@ -2183,7 +2236,7 @@ async function printBadges(attendees) {
 
   window.print();
 
-  const now = new Date().toISOString();
+  const now = deskNowIso();
   for (const a of attendees) {
     a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
     badgeStale.delete(a.id);       // this badge carries the current spelling
@@ -2201,7 +2254,7 @@ async function printBadges(attendees) {
 // The optimistic roster write is what lets a second scan of the same
 // badge answer 'already checked in' instantly with no network at all.
 async function commitParty(attendees, opts) {
-  const now = new Date().toISOString();   // canonical UTC — replay order compares these as strings
+  const now = deskNowIso();   // canonical UTC — replay order compares these as strings
   for (const a of attendees) {
     const item = {
       client_id: crypto.randomUUID(),
@@ -2259,7 +2312,7 @@ async function undoCheckin(attendee) {
     client_id: crypto.randomUUID(),
     attendee_id: a.id,
     event_id: S.event.id,
-    scanned_at: new Date().toISOString(),
+    scanned_at: deskNowIso(),
     action: 'undo',
     prev_checked_in_at: prev,
     operator_id: S.user ? S.user.id : null,
@@ -2302,7 +2355,7 @@ function deskBlockReason(n) {
     return { title: 'Test check-ins used up',
              text: 'This event is in test mode and has ' + Math.max(0, P.TEST_CAP - S.testUsed) + ' of ' + P.TEST_CAP + ' test check-ins left. Go live to keep checking people in.' };
   }
-  if (S.status === 'live' && !P.isWithinWindow(new Date().toISOString(), S.eventDate, S.eventTz)) {
+  if (S.status === 'live' && !P.isWithinWindow(deskNowIso(), S.eventDate, S.eventTz)) {
     const w = P.checkinWindow(S.eventDate, S.eventTz);
     // No window means the event's date or timezone is unusable. The
     // server refuses those scans as outside_window too, so say so here

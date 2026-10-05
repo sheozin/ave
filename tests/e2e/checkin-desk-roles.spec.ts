@@ -9,12 +9,13 @@ const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'B
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
   heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string;
-  alerts?: (args: Record<string, unknown>) => unknown };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [] }: Opts) {
+  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
   await rpc(page, 'checkin_recent_alerts', alerts);
+  if (serverNow) await rpc(page, 'checkin_server_now', serverNow);
   await rpc(page, 'checkin_my_events', [myEventsRow({ role, is_owner: isOwner, status })]);
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status }]);
   await table(page, 'leod_checkin_attendees', roster);
@@ -611,5 +612,28 @@ test('desk staff never see alerts and never ask for them', async ({ page }) => {
 test('a lead with no alerts sees no empty box', async ({ page }) => {
   await open(page, { role: 'lead' });
   await expect(page.locator('#st-alerts')).toBeHidden();
+});
+
+// ── Clock (desk stamps use the server's clock) ──
+test('a desk whose clock is 10 minutes slow stamps check-ins with the server time and says so', async ({ page }) => {
+  let sent: { scanned_at?: string }[] = [];
+  // FIXED_NOW is the device clock; the server is 10 minutes ahead of it.
+  const serverIso = new Date(FIXED_NOW.getTime() + 10 * 60000).toISOString();
+  await open(page, { role: 'lead', serverNow: () => serverIso });
+  await fn(page, 'checkin-record-scans', (b) => { sent = b.items as { scanned_at?: string }[];
+    return { body: { ok: true, errors: [], results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }; });
+  await expect(page.locator('#st-clock')).toHaveText("This device's clock is 10 minutes slow. Check-in times use the server's clock instead.");
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await expect.poll(() => sent.length).toBeGreaterThan(0);
+  const stamped = Date.parse(sent[0].scanned_at as string);
+  expect(Math.abs(stamped - Date.parse(serverIso))).toBeLessThan(5000);
+});
+
+test('without a clock reply the desk keeps the device clock and shows no notice', async ({ page }) => {
+  await open(page, { role: 'crew' });
+  await expect(page.locator('#station')).toBeVisible();
+  await expect(page.locator('#st-clock')).toBeHidden();
 });
 
