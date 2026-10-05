@@ -133,8 +133,8 @@ Deno.serve(async (req) => {
 
   // Comp owner: go live through the same lock + test-data cleanup as a
   // paid go-live (no-op when already live). Going live is the owner's act
-  // alone (roles ruling 1): anyone else's first setup or settings save on
-  // a complimentary event leaves it in test.
+  // alone (roles ruling 1) and only on a bare call: a settings save
+  // (anyone's) or anyone else's first setup leaves it in test.
   if (comp === 'go_live') {
     const { error: liveErr } = await sb.rpc('checkin_mark_comp_live', { p_event_id: event_id })
     if (liveErr) {

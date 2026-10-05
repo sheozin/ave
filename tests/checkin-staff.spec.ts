@@ -3,19 +3,11 @@
 // supabase/functions/_shared/checkin-roles.ts; these are its organizer cases.
 import { describe, it, expect } from 'vitest';
 import { removeVerdict } from '../supabase/functions/_shared/checkin-roles.ts';
+import { normalizeInviteEmail, likeEscape as likeSafe } from '../supabase/functions/_shared/checkin-gates.ts';
 
 type Op = { user_id: string; role: 'organizer' | 'lead' | 'crew' | 'viewer' };
 
 const canRemove = (target: string, ownerId: string | null, ops: Op[]) => removeVerdict('organizer', target, ownerId, ops);
-
-function normalizeInviteEmail(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const e = raw.trim().toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254 ? e : null;
-}
-
-// Mirrors the LIKE-escape applied before ilike in the existing-user lookup.
-const likeSafe = (email: string) => email.replace(/[\\%_]/g, (m) => '\\' + m);
 
 describe('canRemove', () => {
   const ops: Op[] = [{ user_id: 'owner', role: 'organizer' }, { user_id: 'co', role: 'organizer' }, { user_id: 'crew1', role: 'crew' }];
@@ -31,11 +23,28 @@ describe('normalizeInviteEmail', () => {
   it('lowercases and trims', () => { expect(normalizeInviteEmail('  Ana@Example.COM ')).toBe('ana@example.com'); });
   it('rejects garbage', () => { expect(normalizeInviteEmail('not an email')).toBeNull(); });
   it('rejects non-strings', () => { expect(normalizeInviteEmail(42)).toBeNull(); });
+  // PostgREST reads '*' in an ilike pattern as '%', with no escape for it.
+  it('refuses a * anywhere', () => {
+    for (const e of ['*@example.com', 'a*@example.com', 'a@*.com', 'a@example.*']) expect(normalizeInviteEmail(e)).toBeNull();
+  });
+  it('keeps _ and %, which are legal in real addresses', () => {
+    expect(normalizeInviteEmail('a_b@example.com')).toBe('a_b@example.com');
+    expect(normalizeInviteEmail('a%b@example.com')).toBe('a%b@example.com');
+  });
 });
 
 describe('likeSafe', () => {
   it('escapes backslash, percent and underscore', () => { expect(likeSafe('a_b%c\\d@x.com')).toBe('a\\_b\\%c\\\\d@x.com'); });
   it('leaves ordinary addresses alone', () => { expect(likeSafe('ana@example.com')).toBe('ana@example.com'); });
+  // The escaped pattern, read as Postgres LIKE reads it, matches only itself.
+  it('a_b@example.com does not match axb@example.com once escaped', () => {
+    const like = (pattern: string, v: string) => new RegExp('^' + pattern.replace(/\\(.)|([%_])|([^\\%_])/g,
+      (_m, esc, wild, ch) => esc !== undefined ? esc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        : wild ? (wild === '%' ? '.*' : '.') : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) + '$', 'i').test(v);
+    expect(like('a_b@example.com', 'axb@example.com')).toBe(true); // why the escape exists
+    expect(like(likeSafe('a_b@example.com'), 'axb@example.com')).toBe(false);
+    expect(like(likeSafe('a_b@example.com'), 'A_B@example.com')).toBe(true);
+  });
 });
 
 // Mirrors the existing-grant decision, subject sanitizer and rate-limit predicate.

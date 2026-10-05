@@ -15,7 +15,7 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { TEST_CAP } from '../_shared/checkin-policy.ts'
 import { isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
-import { ARCHIVED, functionGate } from '../_shared/checkin-gates.ts'
+import { ARCHIVED, functionGate, likeEscape } from '../_shared/checkin-gates.ts'
 import { normalizeWalkIn } from '../_shared/checkin-walk-in.ts'
 
 const COLS = 'id,event_id,first_name,last_name,email,company,ticket_type,qr_token,checked_in_at,badge_printed_at'
@@ -69,9 +69,8 @@ Deno.serve(async (req) => {
   // Same key the import dedupes on: email, case-insensitive, per event.
   // The unique index (event_id, lower(email)) still decides a race below.
   if (parsed.row.email) {
-    const likeSafe = parsed.row.email.replace(/[\\%_]/g, (m) => '\\' + m)
     const { data: dup, error: dupErr } = await sb.from('leod_checkin_attendees')
-      .select('id').eq('event_id', event_id).ilike('email', likeSafe).limit(1)
+      .select('id').eq('event_id', event_id).ilike('email', likeEscape(parsed.row.email)).limit(1)
     if (dupErr) return json({ error: dupErr.message }, 500)
     if (dup && dup.length) return json(ALREADY, 409)
   }

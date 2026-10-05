@@ -129,6 +129,14 @@ describe('compGoLiveDecision', () => {
   it('settings save by an organizer: proceed in test', () => {
     expect(compGoLiveDecision({ ...base, role: 'organizer', hasSettings: true })).toBe('proceed');
   });
+  // A settings toggle never goes live, the owner's included: only the
+  // explicit "Turn on live check-in" call (no settings) does.
+  it('settings save by the owner: proceed in test', () => {
+    expect(compGoLiveDecision({ ...base, role: 'owner', hasSettings: true })).toBe('proceed');
+  });
+  it('settings save by the owner with no entitlement row yet: proceed in test', () => {
+    expect(compGoLiveDecision({ ...base, role: 'owner', hasSettings: true, existingStatus: null })).toBe('proceed');
+  });
 });
 
 // ── checkin-invite-staff ────────────────────────────────────────────

@@ -16,6 +16,12 @@ describe('normalizeWalkIn', () => {
     expect(normalizeWalkIn({ first_name: 'A', last_name: '  ' })).toEqual({ ok: false, error: 'First and last name are required' });
     expect(normalizeWalkIn({})).toEqual({ ok: false, error: 'First and last name are required' });
   });
+  it('refuses a * in the email, which the duplicate lookup would read as a wildcard', () => {
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: '*@example.com' })).toEqual({ ok: false, error: 'That email address does not look right' });
+  });
+  it('accepts _ in the email', () => {
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: 'a_b@example.com' })).toMatchObject({ ok: true, row: { email: 'a_b@example.com' } });
+  });
   it('rejects a malformed email', () => {
     expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: 'not an email' })).toEqual({ ok: false, error: 'That email address does not look right' });
   });

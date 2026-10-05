@@ -39,8 +39,22 @@ type World = {
 }
 let world: World
 
-// eq, in and ilike (as a case-insensitive equality on the LIKE-escaped
-// value) are the filters the handlers use; anything else is ignored.
+// ilike as PostgREST and Postgres run it: PostgREST turns every '*' into
+// '%' (there is no escaping a '*'), then LIKE reads '\' as the escape,
+// '%' as any run and '_' as any one character, ignoring case.
+function ilikeMatch(pattern: string, value: string): boolean {
+  const p = pattern.replace(/\*/g, '%')
+  const lit = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  let re = ''
+  for (let i = 0; i < p.length; i++) {
+    const c = p[i]
+    if (c === '\\' && i + 1 < p.length) re += lit(p[++i])
+    else re += c === '%' ? '.*' : c === '_' ? '.' : lit(c)
+  }
+  return new RegExp('^' + re + '$', 'is').test(value)
+}
+
+// eq, in and ilike are the filters the handlers use; anything else is ignored.
 function rowFilter(url: URL): (r: Row) => boolean {
   const tests: ((r: Row) => boolean)[] = []
   for (const [k, v] of url.searchParams) {
@@ -49,8 +63,8 @@ function rowFilter(url: URL): (r: Row) => boolean {
       const set = v.slice(4, -1).split(',').map(x => x.replace(/^"|"$/g, ''))
       tests.push(r => set.includes(String(r[k])))
     } else if (v.startsWith('ilike.')) {
-      const want = v.slice(6).replace(/\\(.)/g, '$1').toLowerCase()
-      tests.push(r => String(r[k] ?? '').toLowerCase() === want)
+      const pattern = v.slice(6)
+      tests.push(r => ilikeMatch(pattern, String(r[k] ?? '')))
     }
   }
   return (r: Row) => tests.every(t => t(r))
@@ -278,6 +292,12 @@ Deno.test('comp: the owner goes live', async () => {
   setup('owner', { comp: true, ent: { checkin_core: true, status: 'test' } })
   const r = await call('checkin-enable-event', { event_id: EVENT })
   assert(r.status === 200 && compLive(), JSON.stringify(r))
+})
+Deno.test('comp: a settings toggle by the owner stays in test', async () => {
+  setup('owner', { comp: true, ent: { checkin_core: true, status: 'test' } })
+  const r = await call('checkin-enable-event', { event_id: EVENT, settings: { self_registration: true } })
+  assert(r.status === 200 && r.body.status === 'test', JSON.stringify(r))
+  assert(!compLive(), 'comp go-live ran on a settings toggle')
 })
 Deno.test('comp: a non-owner organizer asking to go live is refused with not_owner', async () => {
   setup('organizer', { comp: true, ent: { checkin_core: true, status: 'test' } })
@@ -508,6 +528,24 @@ Deno.test(`${IS} invite: someone already on the event with another role is a 409
   staffSetup('organizer')
   const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'lead@stub.test', role: 'crew' })
   assert(r.status === 409 && r.body.code === 'already_on_event' && opRole(LEAD) === 'lead', JSON.stringify(r))
+})
+
+// PostgREST reads '*' in an ilike pattern as '%', so '*@domain' would find
+// whoever has an address there and grant them the role.
+Deno.test(`${IS} invite: an address with '*' is refused and grants nobody`, async () => {
+  staffSetup('organizer')
+  world.tables.leod_users.push({ id: NEW_USER, email: 'someone@solo.test', name: 'Solo', active: true })
+  world.authUsers![NEW_USER] = { id: NEW_USER, email: 'someone@solo.test', email_confirmed_at: '2026-01-01T00:00:00Z', last_sign_in_at: '2026-01-02T00:00:00Z', aud: 'authenticated' }
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: '*@solo.test', role: 'crew' })
+  assert(r.status === 400, JSON.stringify(r))
+  assert(opRole(NEW_USER) === null && world.invites!.length === 0, 'granted anyway')
+})
+Deno.test(`${IS} invite: '_' in an address is literal and does not match another account`, async () => {
+  staffSetup('organizer')
+  world.tables.leod_users.push({ id: NEW_USER, email: 'axb@solo.test', name: 'Axb', active: true })
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'a_b@solo.test', role: 'crew' })
+  assert(r.status === 200, JSON.stringify(r))
+  assert(world.invites!.length === 1 && world.invites![0].email === 'a_b@solo.test', JSON.stringify(world.invites))
 })
 
 // remove
@@ -806,6 +844,19 @@ Deno.test(`${WI}: an email already on the event (any case) is a 409 already_regi
   const r = await call(WI, { ...BODY[WI], email: 'EWA@example.COM' })
   assert(r.status === 409 && r.body.code === 'already_registered', JSON.stringify(r))
   assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: an address with '*' is refused`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'ewa@example.com', source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], email: '*@example.com' })
+  assert(r.status === 400 && r.body.code === 'invalid', JSON.stringify(r))
+  assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: '_' in an address is literal and does not match another guest`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'axb@example.com', source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], email: 'a_b@example.com' })
+  assert(r.status === 200, JSON.stringify(r))
 })
 Deno.test(`${WI}: the same email on another event is fine`, async () => {
   walkSetup('test')

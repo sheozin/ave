@@ -19,15 +19,9 @@ import { corsHeaders }  from '../_shared/cors.ts'
 import { sendEmail }    from '../_shared/resend.ts'
 import { isUuid, loadCallerRole, removeVerdict, GRANT_ROLES, type GrantRole } from '../_shared/checkin-roles.ts'
 import {
-  archivedVerdict, archiveVerdict, inviteRoleVerdict, removeResponse, staffGate, transferVerdict, visibleStaff,
-  type GateVerdict,
+  archivedVerdict, archiveVerdict, inviteRoleVerdict, likeEscape, normalizeInviteEmail, removeResponse, staffGate,
+  transferVerdict, visibleStaff, type GateVerdict,
 } from '../_shared/checkin-gates.ts'
-
-function normalizeInviteEmail(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const e = raw.trim().toLowerCase()
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254 ? e : null
-}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -185,9 +179,8 @@ Deno.serve(async (req) => {
   }
 
   const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
-  const likeSafe = email.replace(/[\\%_]/g, (m) => '\\' + m)
   const { data: existing, error: exErr } = await sb.from('leod_users')
-    .select('id').ilike('email', likeSafe).maybeSingle()
+    .select('id').ilike('email', likeEscape(email)).maybeSingle()
   if (exErr) return json({ error: exErr.message }, 500)
 
   // Every invite that will send something is counted first, so a failed

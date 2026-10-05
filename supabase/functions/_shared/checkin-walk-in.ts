@@ -2,6 +2,8 @@
 // Validation for a desk walk-in (roles ruling 7). Pure, so vitest can
 // import it; tests/checkin-walk-in.spec.ts.
 
+import { EMAIL_RE } from './checkin-gates.ts'
+
 export type WalkIn = {
   first_name: string
   last_name: string
@@ -25,7 +27,7 @@ export function normalizeWalkIn(body: Record<string, unknown>): { ok: true; row:
   if (!first || !last) return { ok: false, error: 'First and last name are required' }
   if (first.length > 120 || last.length > 120) return { ok: false, error: 'A name is too long' }
   const email = clean(body.email)
-  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+  if (email && (email.length > 254 || !EMAIL_RE.test(email))) {
     return { ok: false, error: 'That email address does not look right' }
   }
   const company = clean(body.company)

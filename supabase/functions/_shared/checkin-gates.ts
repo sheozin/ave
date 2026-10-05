@@ -45,11 +45,13 @@ export function enableEventGate(caller: Caller, isAdmin: boolean): GateVerdict {
 }
 
 // checkin-enable-event on a complimentary owner's event. Going live is the
-// owner's act alone, admins included (roles ruling 1). A bare call (no
-// settings) on an event already in test is a go-live request, so anyone
-// else is refused rather than answered with a 200 that changes nothing.
-// A first setup (no entitlement row yet) or a settings save proceeds and
-// leaves the event in test.
+// owner's act alone, admins included (roles ruling 1), and only through
+// the explicit go-live call: a bare call (no settings). A settings save
+// proceeds and leaves the event in test, whoever makes it, so toggling a
+// kiosk option never takes an event live as a side effect. A bare call
+// on an event already in test from anyone but the owner is refused rather
+// than answered with a 200 that changes nothing. A first setup (no
+// entitlement row yet) by anyone else proceeds in test.
 export type CompDecision = 'go_live' | 'refuse' | 'proceed'
 export function compGoLiveDecision(args: {
   isComp: boolean
@@ -58,9 +60,25 @@ export function compGoLiveDecision(args: {
   hasSettings: boolean
 }): CompDecision {
   if (!args.isComp) return 'proceed'
+  if (args.hasSettings) return 'proceed'
   if (can(args.role, 'go_live')) return 'go_live'
   if (args.existingStatus === 'test' && !args.hasSettings) return 'refuse'
   return 'proceed'
+}
+
+// ── email lookups ───────────────────────────────────────────────────
+// Both email lookups use ilike so case does not matter. PostgREST reads
+// '*' in an ilike pattern as '%' and offers no escape for it, so an
+// address containing '*' is refused outright ('*@domain' would find
+// whoever has an address there). '%' and '_' are LIKE wildcards but legal
+// in real addresses, so they (and the escape character) are escaped.
+export const EMAIL_RE = /^[^\s@*]+@[^\s@*]+\.[^\s@*]+$/
+export const likeEscape = (s: string): string => s.replace(/[\\%_]/g, (m) => '\\' + m)
+
+export function normalizeInviteEmail(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const e = raw.trim().toLowerCase()
+  return EMAIL_RE.test(e) && e.length <= 254 ? e : null
 }
 
 // ── checkin-invite-staff ────────────────────────────────────────────
