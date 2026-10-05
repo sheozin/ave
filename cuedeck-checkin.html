@@ -142,7 +142,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 .ck-sync.clear{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
 .ck-sync.wait{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
-.ck-hd-actions{flex:none;display:flex;gap:8px}
+.ck-hd-actions{flex:none;display:flex;flex-wrap:wrap;gap:8px;max-width:100%}
 .ck-body{flex:1;padding:32px 24px;display:flex;justify-content:center;align-items:flex-start}
 .ck-panel{
   width:100%;max-width:720px;background:var(--sf);border:1px solid var(--bd);
@@ -623,6 +623,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
            a control that always returns 403 for crew is worse than one
            that is not there: it reads as a broken product rather than as
            a permission they do not have. -->
+      <button class="ck-quiet" type="button" id="st-desk" title="Rename this desk">This desk</button>
       <button class="ck-quiet" type="button" id="st-walkin" style="display:none">Add walk-in</button>
       <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Set up a kiosk</button>
       <a class="ck-quiet" id="st-dash" href="#">Dashboard</a>
@@ -872,7 +873,7 @@ let sb = null;
 // in the two inputs because renderParty() replaces every row — a flush
 // reconcile, a tick on a colleague or an undo would otherwise wipe a
 // half-typed name with nobody having touched the editor.
-var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map() };  // var → window.S for E2E tests
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map(), deskId: null, deskLabel: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
@@ -1097,6 +1098,7 @@ async function flushOutbox() {
         body: {
           event_id: chunk.eventId,
           scan_point_id: S.scanPointId ?? null,
+          desk_id: deskId(),
           items: chunk.items.map(({ client_id, attendee_id, scanned_at, action, prev_checked_in_at }) =>
             ({ client_id, attendee_id, scanned_at, action, prev_checked_in_at })),
         },
@@ -1188,6 +1190,7 @@ async function flushOutbox() {
       // test limit) was never this person's to undo; re-read from the verdicts.
       S.own = window.CK_ROLES.ownCheckins(await idbGetAll(STORE_OUTBOX), S.user && S.user.id, S.event.id);
       await reconcileRoster();
+      sendHeartbeat();   // report the emptied queue now, not in up to 30 s
       // Only meaningful once the roster carries the server's answer:
       // the note quotes the checked_in_at the undo lost to.
       if (refusedUndos.length) showRefusedUndo(refusedUndos);
@@ -1282,7 +1285,7 @@ function stopRosterRefresh() {
 
 // The guard above is what keeps the timer and the 'online' event from
 // sending the same batch twice.
-window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); });
+window.addEventListener('online',  () => { renderPendingCount(); flushOutbox(); sendHeartbeat(); });
 window.addEventListener('offline', () => { renderPendingCount(); });
 
 // Self-scheduling rather than setInterval so a slow drain cannot stack
@@ -1303,6 +1306,87 @@ function scheduleFlush() {
 // nothing, and has no operator JWT to flush under. Not started there,
 // rather than started and left spinning against an empty store.
 if (!KIOSK) scheduleFlush();
+
+// ═══════════════════════════════════════════════════
+// DESK IDENTITY AND HEARTBEAT (event-day spec, feature 1)
+// A browser desk is otherwise anonymous: scans carry the operator, not
+// the laptop. Each desk keeps one random id in localStorage, sends it
+// with every batch, and reports in every 30 s (and on reconnect) with the
+// size of its queue, so the dashboard can say Online, Offline since, or
+// Syncing, and prove that an offline gap lost nothing.
+// Runs only while the station is on screen (never on the kiosk, the
+// picker or after sign-out), and never reads the roles module: the
+// server checks the role, and the desk must report in under the fallback.
+// ═══════════════════════════════════════════════════
+const DESK_KEY = 'ck_desk_id';
+const DESK_LABEL_MAX = 40;          // leod_checkin_desks.label CHECK
+const HEARTBEAT_EVERY = 30000;
+const HEARTBEAT_TIMEOUT_MS = 10000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+let heartbeatTimer = null;
+
+function deskId() {
+  if (S.deskId) return S.deskId;
+  let id = null;
+  try { id = localStorage.getItem(DESK_KEY); } catch (_) { /* storage blocked: one id for this page load */ }
+  if (!id || !UUID_RE.test(id)) {
+    id = crypto.randomUUID();
+    try { localStorage.setItem(DESK_KEY, id); } catch (_) { /* as above */ }
+  }
+  S.deskId = id;
+  return id;
+}
+
+function renderDeskLabel() {
+  document.getElementById('st-desk').textContent = S.deskLabel || 'This desk';
+}
+
+// True when the server took the report. A missed heartbeat only makes the
+// dashboard say "Offline since", which is then true, so it never throws
+// and never holds up a check-in: callers do not await it.
+async function sendHeartbeat(label) {
+  try {
+    if (!heartbeatTimer || !navigator.onLine || !S.event || !S.role || S.role === 'viewer') return false;
+    const eventId = S.event.id;
+    const pending = (await idbGetAll(STORE_OUTBOX)).filter(p => !p.synced && p.event_id === eventId).length;
+    // The desk may have switched event or signed out during the read.
+    if (!heartbeatTimer || !S.event || S.event.id !== eventId) return false;
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), HEARTBEAT_TIMEOUT_MS);
+    const { data, error } = await sb.rpc('checkin_desk_heartbeat', {
+      p_event_id: eventId, p_desk_id: deskId(), p_label: label || null, p_pending_count: pending,
+    }).abortSignal(ctrl.signal);
+    clearTimeout(timer);
+    if (error) { console.error('checkin: heartbeat failed', error.message); return false; }
+    if (!S.event || S.event.id !== eventId) return false;
+    if (typeof data === 'string' && data) { S.deskLabel = data; renderDeskLabel(); }
+    return true;
+  } catch (err) {
+    console.error('checkin: heartbeat failed', err);
+    return false;
+  }
+}
+
+function startHeartbeat() {
+  if (heartbeatTimer) return;
+  heartbeatTimer = setInterval(() => { sendHeartbeat(); }, HEARTBEAT_EVERY);
+  sendHeartbeat();
+}
+function stopHeartbeat() {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+async function renameDesk() {
+  const typed = window.prompt('Name this desk, for example "Desk 2" or "VIP desk".', S.deskLabel || '');
+  if (typed == null) return;
+  // Tabs and line breaks become spaces first, then the walk-in form's
+  // control and bidi set goes, as for any name another screen will show.
+  const name = typed.replace(/[\t\n\r]/g, ' ').replace(WALKIN_CONTROL, '').replace(/\s+/g, ' ').trim().slice(0, DESK_LABEL_MAX).trim();
+  if (!name) return;
+  if (!navigator.onLine) { showVerdict('dup', 'Renaming needs a connection', 'Try again when the desk is back online.'); return; }
+  if (!(await sendHeartbeat(name))) showVerdict('bad', 'The desk name was not saved', 'Try again in a moment.');
+}
 
 // ═══════════════════════════════════════════════════
 // ROLES MODULE
@@ -1378,6 +1462,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // lobby screen never carries any of it.
   document.getElementById('st-kiosk').addEventListener('click', openKioskSetup);
   document.getElementById('st-walkin').addEventListener('click', openWalkIn);
+  document.getElementById('st-desk').addEventListener('click', renameDesk);
   document.getElementById('wi-close').addEventListener('click', closeWalkIn);
   document.getElementById('wi-form').addEventListener('submit', submitWalkIn);
   document.getElementById('walkin').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeWalkIn(); });
@@ -1409,11 +1494,11 @@ function showScreen(name) {
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
   if (name === 'signin') siCap();
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
-  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); holdFocus(); }
+  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); startHeartbeat(); holdFocus(); }
   // Leaving the desk takes the kiosk modal with it. Switching event or
   // signing out must not leave a live pairing code on a screen that is
   // no longer the desk it was minted from.
-  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); }
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); stopHeartbeat(); }
 }
 
 // ═══════════════════════════════════════════════════
@@ -1563,6 +1648,8 @@ async function openEvent(eventId, ev, role) {
 
   S.event = ev ? { id: eventId, name: ev.name, date: ev.date } : { id: eventId, name: null, date: null };
   S.role  = window.CK_ROLES.effectiveRole(role, !!(ev && ev.is_owner));
+  S.deskLabel = null;   // a label belongs to (event, desk); the next heartbeat fills it
+  renderDeskLabel();
   S.status   = ent.status === 'live' ? 'live' : 'test';
   S.testUsed = ev && typeof ev.test_used === 'number' ? ev.test_used : 0;
   S.eventDate = ev ? ev.date : null;

@@ -7,10 +7,12 @@ const ANA = { id: 'a0000000-0000-4000-8000-000000000001', event_id: EVENT_ID, fi
   company: 'Contoso Demo', ticket_type: 'attendee', qr_token: 'tok-ana', checked_in_at: '2026-10-18T08:30:00.000Z', badge_printed_at: null };
 const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'Ben', email: 'ben@cuedeck-test.io', company: 'Fabrikam Demo', qr_token: 'tok-ben', checked_in_at: null };
 
-type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[] };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN] }: Opts) {
+type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
+  heartbeat?: (args: Record<string, unknown>) => unknown };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1' }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', heartbeat);
   await rpc(page, 'checkin_my_events', [myEventsRow({ role })]);
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
   await table(page, 'leod_checkin_attendees', roster);
@@ -342,4 +344,134 @@ test('closing the walk-in form puts the cursor back in the scan field', async ({
   await expect(page.locator('#wi-first')).toBeFocused();
   const focused = await page.evaluate(() => { document.getElementById('wi-close')!.click(); return document.activeElement && document.activeElement.id; });
   expect(focused).toBe('scan');
+});
+
+test('the desk reports in with a stable desk id and shows its label', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await open(page, { role: 'crew', heartbeat: (args) => { beats.push(args); return 'Desk 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  const deskId = await page.evaluate(() => localStorage.getItem('ck_desk_id'));
+  expect(deskId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(beats[0]).toEqual({ p_event_id: EVENT_ID, p_desk_id: deskId, p_label: null, p_pending_count: 0 });
+
+  const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  expect((await req).postDataJSON().desk_id).toBe(deskId);
+});
+
+test('renaming the desk sends the new label', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await open(page, { role: 'lead', heartbeat: (args) => { beats.push(args); return (args.p_label as string) || 'Desk 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  page.once('dialog', d => d.accept('VIP desk'));
+  await page.locator('#st-desk').click();
+  await expect(page.locator('#st-desk')).toHaveText('VIP desk');
+  expect(beats.some(b => b.p_label === 'VIP desk')).toBe(true);
+});
+
+test('a viewer never sends a heartbeat', async ({ page }) => {
+  let beats = 0;
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'viewer' })]);
+  await rpc(page, 'checkin_desk_heartbeat', () => { beats++; return 'Desk 1'; });
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await page.waitForURL(/\/checkin\/dashboard\?event=/);
+  expect(beats).toBe(0);
+});
+
+// Beyond the plan (Task 14 controller context).
+test('a failing heartbeat never stops a check-in, and the next tick retries', async ({ page }) => {
+  let beats = 0;
+  await page.clock.install({ time: FIXED_NOW });
+  await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', () => { beats++; return { message: 'boom' }; }, 500);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'crew' })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await table(page, 'leod_checkin_attendees', [ANA, BEN]);
+  await fn(page, 'checkin-record-scans', (b) => ({ body: { ok: true, errors: [],
+    results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }));
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await expect(page.locator('#station')).toBeVisible();
+  await expect.poll(() => beats).toBe(1);
+  await expect(page.locator('#st-desk')).toHaveText('This desk');
+  const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await expect(page.locator('#verdict')).toContainText('Ben Probe is checked in');
+  await page.clock.runFor(16000);   // the flush timer
+  await req;
+  const after = beats;              // the settled flush reports in too
+  await page.clock.runFor(30000);
+  await expect.poll(() => beats).toBeGreaterThan(after);
+});
+
+test('switching event stops the old desk heartbeat and starts one for the new event', async ({ page }) => {
+  const OTHER = '33333333-3333-4333-8333-333333333333';
+  const beats: Record<string, unknown>[] = [];
+  await page.clock.install({ time: FIXED_NOW });
+  await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', (a) => { beats.push(a); return a.p_event_id === OTHER ? 'Desk 4' : 'Desk 1'; });
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'lead' }), myEventsRow({ role: 'lead', event_id: OTHER, name: 'Other Summit' })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await table(page, 'leod_checkin_attendees', [ANA, BEN]);
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  await page.locator('#st-switch').click();
+  await expect(page.locator('#picker')).toBeVisible();
+  const n = beats.length;
+  await page.clock.runFor(65000);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.clock.runFor(1000);
+  await page.waitForTimeout(500);
+  expect(beats.length).toBe(n);   // nothing sent from the picker, not even on reconnect
+  await page.locator('.ck-ev', { hasText: 'Other Summit' }).click();
+  await expect(page.locator('#st-desk')).toHaveText('Desk 4');
+  await page.clock.runFor(65000);
+  await expect.poll(() => beats.length).toBeGreaterThanOrEqual(n + 3);
+  expect(beats.slice(n).every(b => b.p_event_id === OTHER)).toBe(true);
+});
+
+test('a desk whose storage is blocked keeps one in-memory desk id', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await page.addInitScript(() => {
+    const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (k) { if (k === 'ck_desk_id') throw new Error('SecurityError'); return get.call(this, k); };
+    Storage.prototype.setItem = function (k, v) { if (k === 'ck_desk_id') throw new Error('QuotaExceededError'); return set.call(this, k, v); };
+  });
+  await open(page, { role: 'crew', heartbeat: (a) => { beats.push(a); return 'Desk 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  const deskId = (await req).postDataJSON().desk_id;
+  expect(deskId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  await expect.poll(() => beats.length).toBeGreaterThanOrEqual(2);
+  expect(beats.every(b => b.p_desk_id === deskId)).toBe(true);
+});
+
+test('a desk label is shown as text, and a rename is cleaned, trimmed and capped at 40', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await open(page, { role: 'lead', heartbeat: (a) => { beats.push(a); return (a.p_label as string) || '<b>Desk</b> 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('<b>Desk</b> 1');
+  await expect(page.locator('#st-desk b')).toHaveCount(0);
+  page.once('dialog', d => d.accept('   Main \u202E  entrance\tdesk ' + 'x'.repeat(60) + '  '));
+  await page.locator('#st-desk').click();
+  const want = ('Main entrance desk ' + 'x'.repeat(60)).slice(0, 40);
+  await expect(page.locator('#st-desk')).toHaveText(want);
+  expect(beats.at(-1)!.p_label).toBe(want);
+});
+
+test('a kiosk never sends a desk heartbeat', async ({ page }) => {
+  let beats = 0;
+  await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', () => { beats++; return 'Desk 1'; });
+  await page.goto('/cuedeck-checkin.html?mode=kiosk');
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForTimeout(500);
+  expect(beats).toBe(0);
 });
