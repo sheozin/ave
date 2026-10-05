@@ -11,8 +11,28 @@ export function addMinutes(timeStr: string, mins: number): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}:${String(s ?? 0).padStart(2, '0')}`
 }
 
+// ── Restart ──────────────────────────────────────────────────────────────────
+// A restart puts a session that already ran back to READY and clears its run
+// (actual_start, actual_end), so the next go-live stamps a fresh start and the
+// stage timer counts the full length again. The schedule is not the run:
+// scheduled_start/end, delay_minutes and cumulative_delay come from apply-delay
+// shifting the programme and are left alone. set-overrun only changes status.
+// LIVE, HOLD, OVERRUN and ENDED have always started; CALLING and READY count
+// only when they still carry an actual_start (e.g. HOLD -> CALLING). Same
+// rule as canRestartSession in cuedeck-console.html.
+const ALWAYS_STARTED = ['LIVE', 'HOLD', 'OVERRUN', 'ENDED']
+const STARTED_IF_STAMPED = ['CALLING', 'READY']
+export function canRestart(session: { status: string; actual_start: string | null }): boolean {
+  if (ALWAYS_STARTED.includes(session.status)) return true
+  return STARTED_IF_STAMPED.includes(session.status) && !!session.actual_start
+}
+
 // ── Shared transition runner ─────────────────────────────────────────────────
-export async function runTransition(req: Request, toStatus: string): Promise<Response> {
+export async function runTransition(
+  req: Request,
+  toStatus: string,
+  opts: { reset?: boolean } = {},
+): Promise<Response> {
   const cors = corsHeaders(req)
 
   // Pre-flight
@@ -102,6 +122,15 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     )
   }
 
+  // Restart is refused before the command is registered, so a refusal leaves
+  // no PENDING row behind.
+  if (opts.reset && !canRestart(session)) {
+    return new Response(
+      JSON.stringify({ error: 'NOT_RESTARTABLE', status: session.status }),
+      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
+    )
+  }
+
   // ── Register command as PENDING ──────────────────────────────────────────
   // UNIQUE constraint on command_id prevents race conditions.
   if (command_id) {
@@ -110,7 +139,7 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
       .insert({
         command_id,
         session_id,
-        fn_name:     `transition_${toStatus.toLowerCase()}`,
+        fn_name:     opts.reset ? 'restart_session' : `transition_${toStatus.toLowerCase()}`,
         operator_id: user.id,
         status:      'PENDING',
       })
@@ -133,13 +162,18 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
   }
   if (toStatus === 'LIVE' && !session.actual_start) upd.actual_start = now
   if (toStatus === 'ENDED') upd.actual_end = now
+  if (opts.reset) {
+    upd.actual_start = null
+    upd.actual_end = null
+  }
 
   // Write session (with version guard)
-  const { error: upErr } = await sb
+  const { data: written, error: upErr } = await sb
     .from('leod_sessions')
     .update(upd)
     .eq('id', session_id)
     .eq('version', version)
+    .select('id')
 
   if (upErr) {
     // Mark command rejected (best-effort)
@@ -150,6 +184,21 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
         .then(() => {}).catch(() => {})
     }
     return new Response(upErr.message, { status: 500, headers: cors })
+  }
+
+  // No row matched: another writer bumped the version after our check.
+  // Same answer as the version check above, so the console handles it alike.
+  if (!written || written.length === 0) {
+    if (command_id) {
+      await sb.from('leod_commands')
+        .update({ status: 'REJECTED', error: 'Version conflict', resolved_at: now })
+        .eq('command_id', command_id)
+        .then(() => {}).catch(() => {})
+    }
+    return new Response(
+      JSON.stringify({ error: 'Version conflict' }),
+      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
+    )
   }
 
   const resultPayload = { ok: true, status: toStatus, version: version + 1 }
@@ -171,7 +220,11 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     to_status:      toStatus,
     operator_id:    user.id,
     operator_role:  operator_role ?? null,
-    payload:        { command_id, via: 'edge-function' },
+    payload:        opts.reset
+      ? { command_id, via: 'edge-function', restart: true,
+          previous_actual_start: session.actual_start ?? null,
+          previous_actual_end: session.actual_end ?? null }
+      : { command_id, via: 'edge-function' },
     server_time_ms: Date.now(),
   }).then(() => {}).catch(() => {})
 
