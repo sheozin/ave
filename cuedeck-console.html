@@ -2352,6 +2352,19 @@
   </div>
 </div>
 
+<!-- RESTART SESSION CONFIRM -->
+<div id="restart-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeRestartModal()">
+  <div class="ev-modal-card">
+    <div class="ev-modal-title" id="restart-modal-title"></div>
+    <div id="restart-modal-session" style="font-size:12px;font-weight:600;color:var(--text-primary)"></div>
+    <div id="restart-modal-body" style="font-size:12px;color:var(--text-muted);line-height:1.5"></div>
+    <div class="ev-modal-actions">
+      <button id="restart-modal-no" onclick="closeRestartModal()"></button>
+      <button id="restart-modal-yes" class="danger" onclick="confirmRestart()"></button>
+    </div>
+  </div>
+</div>
+
 <!-- BROADCAST BAR -->
 <div id="bc-bar">
   <label>BROADCAST</label>
@@ -2854,13 +2867,26 @@ async function executeUndo() {
   if (!_undoState) return;
   const { sessionId, prevStatus } = _undoState;
   dismissUndo();
-  // Revert to previous status via direct DB write
-  const { error } = await sb.from('leod_sessions')
-    .update({ status: prevStatus, actual_end: null })
-    .eq('id', sessionId);
+  // Only an ENDED/CANCELLED session can be undone; anything else means it
+  // moved on (restart, another operator) and undo would overwrite that.
+  const cur = S.sessions.find(x => x.id === sessionId);
+  if (!cur || !['ENDED','CANCELLED'].includes(cur.status)) {
+    pushToast(t('toast.nothingToUndo'), 'warn'); return;
+  }
+  // Revert to previous status via direct DB write, guarded by version
+  const ver = cur.version;
+  const { data, error } = await sb.from('leod_sessions')
+    .update({ status: prevStatus, actual_end: null, version: ver + 1 })
+    .eq('id', sessionId).eq('version', ver)
+    .select('id');
   if (error) { pushToast(`Undo failed: ${error.message}`, 'error'); return; }
-  const s = S.sessions.find(x => x.id === sessionId);
-  if (s) { s.status = prevStatus; s.actual_end = null; renderSessions(); }
+  if (!data || data.length === 0) {
+    pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+    if (S.event) loadSessions(S.event.id);
+    return;
+  }
+  const s = cur;
+  s.status = prevStatus; s.actual_end = null; s.version = ver + 1; renderSessions();
   pushToast(`Reverted to ${prevStatus}`, 'success');
   pushLog('UNDO', `reverted to ${prevStatus}`, sessionId);
 }
@@ -3000,6 +3026,88 @@ async function transition(sessionId, toStatus) {
   if (success && (toStatus === 'ENDED' || toStatus === 'CANCELLED')) {
     const sess = S.sessions.find(x => x.id === sessionId);
     offerUndo(sessionId, prevStatus, sess?.title || 'Session');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// RESTART SESSION: back to READY with actual_start/actual_end cleared,
+// so the timer runs the full length again at the next go-live.
+// The restart-session Edge Function owns the rule (see canRestart in
+// _shared/transition.ts); this only decides when to show the button.
+// ═══════════════════════════════════════════════════
+function canRestartSession(s) {
+  if (!(ROLE_WRITE[S.role] || []).includes('READY')) return false;
+  if (s.status === 'PLANNED' || s.status === 'CANCELLED') return false;
+  return !!s.actual_start || ['LIVE','HOLD','OVERRUN','ENDED'].includes(s.status);
+}
+
+let _restartTarget = null;
+function openRestartModal(sessionId) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s || !canRestartSession(s)) return;
+  // Remember what was confirmed: realtime may change the session while the modal is open.
+  _restartTarget = { id: sessionId, version: s.version, status: s.status };
+  document.getElementById('restart-modal-title').textContent   = t('confirm.restartTitle');
+  document.getElementById('restart-modal-session').textContent = s.title || '';
+  document.getElementById('restart-modal-body').textContent    = t('confirm.restartBody');
+  document.getElementById('restart-modal-no').textContent      = t('confirm.restartNo');
+  document.getElementById('restart-modal-yes').textContent     = t('confirm.restartYes');
+  document.getElementById('restart-modal').style.display = 'flex';
+}
+function closeRestartModal() {
+  _restartTarget = null;
+  document.getElementById('restart-modal').style.display = 'none';
+}
+function confirmRestart() {
+  const target = _restartTarget;
+  closeRestartModal();
+  if (!target) return;
+  const s = S.sessions.find(x => x.id === target.id);
+  if (!s || s.status !== target.status) {
+    pushToast('⚠ ' + t('toast.restartStale'), 'warn');
+    return;
+  }
+  restartSession(target.id, target.version);
+}
+
+async function restartSession(sessionId, version) {
+  const s = S.sessions.find(x => x.id === sessionId);
+  if (!s) return;
+  if (!canRestartSession(s)) { pushLog('ERROR', `role ${S.role} cannot restart ${s.status}`, sessionId); return; }
+  const prevVer = version ?? s.version;
+  try {
+    const { data, error } = await sb.functions.invoke('restart-session', {
+      body: { session_id: sessionId, command_id: crypto.randomUUID(), version: prevVer, operator_role: S.role },
+    });
+    if (!error && data?.ok) {
+      s.status = 'READY'; s.actual_start = null; s.actual_end = null;
+      if (typeof data.version === 'number') s.version = data.version;
+      if (_undoState?.sessionId === sessionId) dismissUndo(); // its undo would bring back the old run
+      renderSessions();
+      pushLog('EF', `RESTART → READY via /restart-session ✓`, sessionId);
+      pushToast(`✓ ${t('toast.restarted')}: ${s.title || ''}`, 'success');
+      return;
+    }
+    let errBody = {};
+    try { if (typeof error?.context?.json === 'function') errBody = await error.context.json(); } catch {}
+    if (errBody?.error === 'IN_FLIGHT') return; // realtime confirms the result
+    if (errBody?.error === 'Version conflict') {
+      pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+      if (S.event) loadSessions(S.event.id);
+      return;
+    }
+    if (errBody?.error === 'NOT_RESTARTABLE') {
+      pushLog('ERROR', `restart refused: ${errBody.status ?? ''} not restartable`, sessionId);
+      pushToast('✕ ' + t('toast.notRestartable'), 'error');
+      if (S.event) loadSessions(S.event.id);
+      return;
+    }
+    const why = errBody?.error || error?.message || 'unknown error';
+    pushLog('ERROR', `restart failed: ${why}`, sessionId);
+    pushToast(`✕ ${t('toast.restartFailed')}: ${why}`, 'error');
+  } catch (e) {
+    pushLog('ERROR', `restart failed: ${e?.message ?? e}`, sessionId);
+    pushToast(`✕ ${t('toast.restartFailed')}`, 'error');
   }
 }
 
@@ -3182,6 +3290,7 @@ document.addEventListener('keydown', e => {
       if (openModal.id === 'feedback-modal')  { closeFeedbackModal(); return; }
       if (openModal.id === 'invoice-modal')   { closeInvoiceModal(); return; }
       if (openModal.id === 'billing-modal')   { closeBillingModal(); return; }
+      if (openModal.id === 'restart-modal')   { closeRestartModal(); return; }
     }
     if (typeof isFilterActive === 'function' && isFilterActive()) { clearFilters(); return; }
     return;
@@ -3717,8 +3826,9 @@ function buildButtons(s) {
 
   const canDelay = ROLE_DELAY[S.role] && ['LIVE','OVERRUN','HOLD','READY','CALLING'].includes(s.status);
   const canArrive = (S.role === 'director' || S.role === 'stage') && s.speaker && !['ENDED','CANCELLED'].includes(s.status);
+  const canRestart = canRestartSession(s);
 
-  if (!possible.length && !canDelay && !canArrive) return '';
+  if (!possible.length && !canDelay && !canArrive && !canRestart) return '';
 
   const _btnCfg = getBtnCfg();
   const _btnOvr = getBtnOverride();
@@ -3762,7 +3872,11 @@ function buildButtons(s) {
        </div>`
     : '';
 
-  return `<div class="sc-actions">${btnHtml}${arriveHtml}${delayHtml}${nudgeHtml}</div>`;
+  const restartHtml = canRestart
+    ? `<button class="abtn btn-grey" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
+    : '';
+
+  return `<div class="sc-actions">${btnHtml}${arriveHtml}${restartHtml}${delayHtml}${nudgeHtml}</div>`;
 }
 
 function buildFlags(s) {
