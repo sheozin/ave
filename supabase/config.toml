@@ -24,3 +24,7 @@ verify_jwt = false
 # Called by pg_cron through pg_net; checks its own x-cron-secret (089).
 [functions.checkin-post-event-report]
 verify_jwt = false
+
+# Called by paired scanners with a device key, never a user JWT.
+[functions.checkin-scanner]
+verify_jwt = false

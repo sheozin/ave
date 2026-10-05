@@ -10,16 +10,29 @@
 // Every item produces a scan_events row — including unknown_token and
 // wrong_event — so the audit shows the attempt and the client_id is
 // deduped against the station's retry-on-reconnect.
+//
+// Two callers (scanner Build A, migration 097):
+// - a desk: operator JWT, items carry attendee_id, check-in or undo;
+// - a paired scanner: body.device_key instead of a JWT. A scanner holds
+//   only QR tokens (no ids, names or companies), so its items carry
+//   qr_token and may only check in. Its scans are attributed to the device
+//   (device_id) and never to an invented operator, at the scan point the
+//   device was paired to, which must be switched on (_shared/checkin-scanner.ts).
+//   The reply adds the guest's first name and ticket type for ok/duplicate
+//   results, so the scanner can show who it is while online.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { isWithinWindow } from '../_shared/checkin-policy.ts'
 import { isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
+import { authDevice } from '../_shared/checkin-device.ts'
+import { scanPointRefusal, normalizeToken } from '../_shared/checkin-scanner.ts'
 
 interface Item {
   client_id: string
-  attendee_id: string
+  attendee_id: string     // a scanner sends qr_token instead; resolved below
+  qr_token?: string
   scanned_at: string
   action: 'checkin' | 'undo'
   // Required for action 'undo': the checked_in_at the desk was looking
@@ -77,23 +90,33 @@ Deno.serve(async (req) => {
     })
   }
 
-  const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
-  if (!jwt) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
   const sb = adminClient()
-  const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
-  if (authErr || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
+  const event_id = String(body.event_id || '')
+  const fail = (status: number, error: string) => new Response(JSON.stringify({ error }), {
+    status, headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+
+  // ── Who is calling: a paired scanner, or a signed-in desk operator ──
+  const deviceKey = typeof body.device_key === 'string' ? body.device_key : ''
+  let operatorId: string | null = null
+  let deviceId: string | null = null
+  let deviceScanPoint: string | null = null
+  if (deviceKey) {
+    if (!isUuid(event_id)) return fail(400, 'event_id required')
+    const auth = await authDevice(sb, event_id, deviceKey, 'scanner')
+    if (!auth.ok) return fail(auth.status, auth.error)
+    deviceId = auth.device.id
+    deviceScanPoint = auth.device.scan_point_id
+  } else {
+    const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
+    if (!jwt) return fail(401, 'Unauthorized')
+    const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
+    if (authErr || !user) return fail(401, 'Unauthorized')
+    operatorId = user.id
   }
 
-  const event_id      = String(body.event_id || '')
-  const scan_point_id = body.scan_point_id ? String(body.scan_point_id) : null
+  // A scanner always scans at the point it was paired to, whatever it sends.
+  const scan_point_id = deviceId ? deviceScanPoint : (body.scan_point_id ? String(body.scan_point_id) : null)
   // Which browser desk sent this batch (event-day spec, feature 1). A
   // missing or malformed value is stored as NULL rather than failing the
   // batch: the scans matter more than the label.
@@ -118,11 +141,15 @@ Deno.serve(async (req) => {
   // checkin_role_for_event() cannot be used here (auth.uid() is NULL on a
   // service-role connection), so the caller's role is read with
   // loadCallerRole() from _shared/checkin-roles.ts.
-  const gate = functionGate('checkin-record-scans', await loadCallerRole(sb, event_id, user.id))
-  if (!gate.ok) {
-    return new Response(JSON.stringify(gate.body), {
-      status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
+  // A device was checked against this event above; an operator's role is
+  // checked here.
+  if (operatorId) {
+    const gate = functionGate('checkin-record-scans', await loadCallerRole(sb, event_id, operatorId))
+    if (!gate.ok) {
+      return new Response(JSON.stringify(gate.body), {
+        status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   // Second half of what checkin_role_for_event() would have enforced:
@@ -131,7 +158,7 @@ Deno.serve(async (req) => {
   // without this an event that never enabled check-in could still take
   // scans.
   const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core, status').eq('event_id', event_id).maybeSingle()
+    .select('checkin_core, status, multi_point_scanning, entrance_scanning, session_scanning').eq('event_id', event_id).maybeSingle()
   if (entErr) {
     return new Response(JSON.stringify({ error: entErr.message }), {
       status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -160,7 +187,7 @@ Deno.serve(async (req) => {
   // otherwise fail the insert for every item in the batch.
   if (scan_point_id) {
     const { data: sp, error: spErr } = await sb.from('leod_checkin_scan_points')
-      .select('id').eq('id', scan_point_id).eq('event_id', event_id).maybeSingle()
+      .select('id, kind').eq('id', scan_point_id).eq('event_id', event_id).maybeSingle()
     if (spErr) {
       return new Response(JSON.stringify({ error: spErr.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -171,6 +198,16 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
+    // Door and session scanning are per-event choices (058); a scan at a
+    // point whose kind is switched off is refused with the reason.
+    const refusal = scanPointRefusal(sp.kind, {
+      multi_point_scanning: !!entRow.multi_point_scanning,
+      entrance_scanning: !!entRow.entrance_scanning,
+      session_scanning: !!entRow.session_scanning,
+    })
+    if (refusal) return fail(403, refusal)
+  } else if (deviceId) {
+    return fail(403, 'This scanner is not paired to a scan point. Pair it again from the desk.')
   }
 
   const results: Record<string, string> = {}
@@ -187,7 +224,14 @@ Deno.serve(async (req) => {
       if (cid) results[cid] = 'error'
     }
     if (!it || typeof it !== 'object') { bad('item must be an object'); continue }
-    if (!cid || typeof it.attendee_id !== 'string' || !it.attendee_id) {
+    if (deviceId) {
+      // A scanner sends a token, never an id, and cannot undo.
+      const tok = normalizeToken(String(it.qr_token ?? ''))
+      if (!cid || !tok) { bad('client_id and a valid qr_token are required'); continue }
+      if (it.action !== 'checkin') { bad('A scanner can only check people in'); continue }
+      it.qr_token = tok
+      it.attendee_id = ''
+    } else if (!cid || typeof it.attendee_id !== 'string' || !it.attendee_id) {
       bad('client_id and attendee_id are required'); continue
     }
     if (!validTs(it.scanned_at)) { bad('scanned_at must be ISO-8601 with a timezone'); continue }
@@ -201,6 +245,25 @@ Deno.serve(async (req) => {
   // Defense in depth for ordering: a checkin and its later undo arriving
   // in the wrong array order must still apply in time order. Sorted on
   // parsed instants, since offsets may differ between strings.
+  // Scanner tokens -> attendees, in one read. A token not on this event's
+  // list gets a random id, so checkin_apply_scan records the attempt as
+  // unknown_token in the audit like any other.
+  const who: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
+  const whoByAttendee: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
+  if (deviceId && valid.length) {
+    const tokens = [...new Set(valid.map(it => it.qr_token as string))]
+    const { data: rows, error: tokErr } = await sb.from('leod_checkin_attendees')
+      .select('id, qr_token, first_name, ticket_type').eq('event_id', event_id).in('qr_token', tokens)
+    if (tokErr) return fail(500, tokErr.message)
+    const byToken = new Map<string, { id: string; first_name: string | null; ticket_type: string | null }>()
+    for (const r of rows ?? []) byToken.set(r.qr_token, r)
+    for (const it of valid) {
+      const hit = byToken.get(it.qr_token as string)
+      it.attendee_id = hit ? hit.id : crypto.randomUUID()
+      if (hit) whoByAttendee[hit.id] = { first_name: hit.first_name, ticket_type: hit.ticket_type }
+    }
+  }
+
   const ordered = valid.sort((a, b) => Date.parse(a.scanned_at) - Date.parse(b.scanned_at))
 
   for (const it of ordered) {
@@ -215,10 +278,11 @@ Deno.serve(async (req) => {
       p_scanned_at: it.scanned_at,
       p_action: it.action,
       p_prev_checked_in_at: it.action === 'undo' ? it.prev_checked_in_at : null,
-      p_operator_id: user.id,
+      p_operator_id: operatorId,
       p_scan_point_id: scan_point_id,
       p_live_time_ok,
-      p_desk_id: desk_id,
+      p_desk_id: deviceId ? null : desk_id,
+      ...(deviceId ? { p_device_id: deviceId } : {}),
     })
     if (error) {
       const clash = 'client_id already used for another event'
@@ -250,9 +314,12 @@ Deno.serve(async (req) => {
       continue
     }
     results[it.client_id] = String(result)
+    if (deviceId && (result === 'ok' || result === 'duplicate') && whoByAttendee[it.attendee_id]) {
+      who[it.client_id] = whoByAttendee[it.attendee_id]
+    }
   }
 
-  return new Response(JSON.stringify({ ok: errors.length === 0, results, errors }), {
+  return new Response(JSON.stringify({ ok: errors.length === 0, results, errors, ...(deviceId ? { who } : {}) }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })
 })

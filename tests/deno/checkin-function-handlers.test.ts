@@ -162,7 +162,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -376,6 +376,142 @@ Deno.test('checkin-record-scans: a malformed or missing desk_id is stored as nul
     assert(r.status === 200, JSON.stringify(r))
     const c = world.rpcCalls.find(x => x.name === 'checkin_apply_scan')
     assert(c && c.args.p_desk_id === null, JSON.stringify(world.rpcCalls))
+  }
+})
+
+// ── record-scans: paired scanner (Build A, migration 097) ──────────
+const SCAN_KEY = 'k'.repeat(64)
+const DEV = 'aaaaaaaa-0000-4000-8000-000000000001'
+const DOOR = 'aaaaaaaa-0000-4000-8000-000000000002'
+const ROOM = 'aaaaaaaa-0000-4000-8000-000000000003'
+const TOKEN = 'tok0123456789abcdef0123456789abcd'
+async function sha256(s: string) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
+  return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('')
+}
+async function setupScanner(o: { ent?: Row; point?: string; revoked?: boolean; kind?: string } = {}) {
+  setup('none', { ent: { checkin_core: true, status: 'test', multi_point_scanning: false, entrance_scanning: true, session_scanning: false, ...(o.ent ?? {}) } })
+  world.tables.leod_checkin_scan_points = [
+    { id: DOOR, event_id: EVENT, name: 'Main door', kind: 'entrance' },
+    { id: ROOM, event_id: EVENT, name: 'Hall B', kind: 'interior' },
+  ]
+  world.tables.leod_checkin_devices = [{ id: DEV, event_id: EVENT, kind: o.kind ?? 'scanner', scan_point_id: o.point ?? DOOR,
+    api_key_hash: await sha256(SCAN_KEY), revoked_at: o.revoked ? '2026-10-01T00:00:00Z' : null }]
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, qr_token: TOKEN, first_name: 'Ewa', ticket_type: 'VIP' }]
+  world.rpcResult.checkin_apply_scan = 'ok'
+}
+const scanTok = (qr_token = TOKEN, action = 'checkin') => ({ client_id: crypto.randomUUID(), qr_token, scanned_at: new Date().toISOString(), action })
+
+Deno.test('checkin-record-scans scanner: a token checks in at the paired point, attributed to the device', async () => {
+  await setupScanner()
+  const item = scanTok('  ' + TOKEN + '\n')
+  // scan_point_id in the body is ignored: a scanner scans where it was paired.
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, scan_point_id: ROOM, items: [item] })
+  assert(r.status === 200, JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_apply_scan')
+  assert(c && c.args.p_attendee_id === ATT && c.args.p_device_id === DEV && c.args.p_operator_id === null
+    && c.args.p_scan_point_id === DOOR && c.args.p_desk_id === null, JSON.stringify(c))
+  const who = (r.body.who as Row)[item.client_id] as Row
+  assert(who && who.first_name === 'Ewa' && who.ticket_type === 'VIP', JSON.stringify(r.body))
+  assert(world.tables.leod_checkin_devices[0].last_seen_at, 'last_seen_at not stamped')
+})
+Deno.test('checkin-record-scans scanner: an unknown token is recorded as an attempt, with no name back', async () => {
+  await setupScanner()
+  world.rpcResult.checkin_apply_scan = 'unknown_token'
+  const item = scanTok('nottheright0123456789abcdefghijk')
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [item] })
+  assert(r.status === 200, JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_apply_scan')
+  assert(c && c.args.p_attendee_id !== ATT && typeof c.args.p_attendee_id === 'string', JSON.stringify(c))
+  assert(!(item.client_id in (r.body.who as Row)), JSON.stringify(r.body))
+})
+Deno.test('checkin-record-scans scanner: wrong key, revoked device or a kiosk key are refused', async () => {
+  for (const o of [{ key: 'x'.repeat(64) }, { revoked: true }, { kind: 'kiosk' }]) {
+    await setupScanner(o as Row)
+    const r = await call('checkin-record-scans', { event_id: EVENT, device_key: (o as Row).key ?? SCAN_KEY, items: [scanTok()] })
+    assert(r.status === 401, JSON.stringify([o, r]))
+    assert(!world.rpcCalls.some(x => x.name === 'checkin_apply_scan'), 'scan applied')
+  }
+})
+Deno.test('checkin-record-scans scanner: door scanning off is refused with the reason', async () => {
+  await setupScanner({ ent: { entrance_scanning: false } })
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  assert(r.status === 403 && String(r.body.error).startsWith('Door scanning is switched off'), JSON.stringify(r))
+})
+Deno.test('checkin-record-scans scanner: a session room needs the plan and the setting', async () => {
+  await setupScanner({ point: ROOM, ent: { session_scanning: true } })
+  let r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  assert(r.status === 403 && String(r.body.error).startsWith('Session scanning is not included'), JSON.stringify(r))
+  await setupScanner({ point: ROOM, ent: { multi_point_scanning: true, session_scanning: true } })
+  r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  assert(r.status === 200, JSON.stringify(r))
+})
+Deno.test('checkin-record-scans scanner: cannot undo and cannot send an attendee id', async () => {
+  await setupScanner()
+  const undo = scanTok(TOKEN, 'undo')
+  const byId = { client_id: crypto.randomUUID(), attendee_id: ATT, scanned_at: new Date().toISOString(), action: 'checkin' }
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [undo, byId] })
+  assert((r.body.results as Row)[undo.client_id] === 'error' && (r.body.results as Row)[byId.client_id] === 'error', JSON.stringify(r.body))
+  assert(!world.rpcCalls.some(x => x.name === 'checkin_apply_scan'), 'scan applied')
+})
+
+// ── scanner pairing (098) and checkin-scanner ───────────────────────
+Deno.test('checkin-kiosk-pair: a scanner code needs a scan point that is on, not self-registration', async () => {
+  setup('lead', { ent: { checkin_core: true, status: 'test', self_registration: false, entrance_scanning: true, session_scanning: false, multi_point_scanning: false } })
+  world.tables.leod_checkin_scan_points = [{ id: DOOR, event_id: EVENT, name: 'Main door', kind: 'entrance' }, { id: ROOM, event_id: EVENT, name: 'Hall B', kind: 'interior' }]
+  let r = await call('checkin-kiosk-pair', { action: 'mint', event_id: EVENT, label: 'Door phone', device_kind: 'scanner' })
+  assert(r.status === 400 && String(r.body.error).startsWith('Choose the door'), JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'mint', event_id: EVENT, label: 'Room phone', device_kind: 'scanner', scan_point_id: ROOM })
+  assert(r.status === 403 && String(r.body.error).startsWith('Session scanning is not included'), JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'mint', event_id: EVENT, label: 'Door phone', device_kind: 'scanner', scan_point_id: DOOR })
+  assert(r.status === 200 && r.body.device_kind === 'scanner', JSON.stringify(r))
+  const row = (world.tables.leod_checkin_kiosk_pairing ?? [])[0]
+  assert(row && row.device_kind === 'scanner' && row.scan_point_id === DOOR, JSON.stringify(row))
+  // A kiosk mint still needs self-registration.
+  r = await call('checkin-kiosk-pair', { action: 'mint', event_id: EVENT, label: 'Lobby' })
+  assert(r.status === 403, JSON.stringify(r))
+})
+Deno.test('checkin-kiosk-pair: claiming a scanner code makes a scanner device at its scan point', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test', self_registration: false, entrance_scanning: true } })
+  world.tables.leod_checkin_scan_points = [{ id: DOOR, event_id: EVENT, name: 'Main door', kind: 'entrance' }]
+  world.rpcResult.checkin_kiosk_pair_rate_check = true
+  world.rpcResult.checkin_kiosk_claim_pairing = [{ event_id: EVENT, label: 'Door phone', device_kind: 'scanner', scan_point_id: DOOR }]
+  const r = await call('checkin-kiosk-pair', { action: 'claim', code: 'ABCD-EFGH', device_kind: 'scanner' })
+  assert(r.status === 200 && r.body.device_kind === 'scanner' && (r.body.scan_point as Row).name === 'Main door', JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_kiosk_claim_pairing')
+  assert(c && c.args.p_kind === 'scanner', JSON.stringify(c))
+  const dev = world.tables.leod_checkin_devices[0]
+  assert(dev.kind === 'scanner' && dev.scan_point_id === DOOR && typeof dev.api_key_hash === 'string' && dev.api_key_hash !== r.body.device_key, JSON.stringify(dev))
+})
+Deno.test('checkin-kiosk-pair: a kiosk claim asks only for kiosk codes', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test', self_registration: true } })
+  world.rpcResult.checkin_kiosk_pair_rate_check = true
+  world.rpcResult.checkin_kiosk_claim_pairing = [{ event_id: EVENT, label: 'Lobby', device_kind: 'kiosk', scan_point_id: null }]
+  const r = await call('checkin-kiosk-pair', { action: 'claim', code: 'ABCD-EFGH' })
+  assert(r.status === 200 && r.body.device_kind === 'kiosk', JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_kiosk_claim_pairing')
+  assert(c && c.args.p_kind === 'kiosk', JSON.stringify(c))
+  assert(world.tables.leod_checkin_devices[0].kind === 'kiosk', 'kiosk device kind')
+})
+Deno.test('checkin-scanner: config says where it is and whether it may scan', async () => {
+  await setupScanner()
+  let r = await call('checkin-scanner', { action: 'config', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 200 && r.body.allowed === true && (r.body.scan_point as Row).name === 'Main door' && r.body.status === 'test', JSON.stringify(r))
+  await setupScanner({ ent: { entrance_scanning: false } })
+  r = await call('checkin-scanner', { action: 'config', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 200 && r.body.allowed === false && String(r.body.reason).startsWith('Door scanning is switched off'), JSON.stringify(r))
+})
+Deno.test('checkin-scanner: tokens are tokens only', async () => {
+  await setupScanner()
+  const r = await call('checkin-scanner', { action: 'tokens', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 200 && JSON.stringify(r.body.tokens) === JSON.stringify([TOKEN]), JSON.stringify(r))
+  assert(!JSON.stringify(r.body).includes('Ewa') && !JSON.stringify(r.body).includes(ATT), 'leaked more than tokens')
+})
+Deno.test('checkin-scanner: a user session, a wrong key or a revoked device gets nothing', async () => {
+  for (const o of [{ key: '' }, { key: 'y'.repeat(64) }, { revoked: true }]) {
+    await setupScanner(o as Row)
+    const r = await call('checkin-scanner', { action: 'tokens', event_id: EVENT, device_key: (o as Row).key ?? SCAN_KEY })
+    assert(r.status === 401 && !r.body.tokens, JSON.stringify([o, r]))
   }
 })
 

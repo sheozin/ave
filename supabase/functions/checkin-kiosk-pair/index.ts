@@ -42,6 +42,16 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
+import { scanPointRefusal } from '../_shared/checkin-scanner.ts'
+
+// Scanner Build A (migration 098): a code pairs either a kiosk (default,
+// so the kiosk page's calls are unchanged) or a door/session scanner bound
+// to one scan point. The scan point must belong to the event and its kind
+// must be switched on, checked at mint AND at claim: pairing a scanner to a
+// room whose scanning is off must fail now, not at the first guest.
+type DeviceKind = 'kiosk' | 'scanner'
+const asKind = (v: unknown): DeviceKind | null => (v === undefined || v === null || v === '' || v === 'kiosk') ? 'kiosk' : v === 'scanner' ? 'scanner' : null
+const ENT_COLS = 'checkin_core, self_registration, multi_point_scanning, entrance_scanning, session_scanning'
 
 // ── Pairing code ──────────────────────────────────────────────────
 // The same 32-symbol alphabet cuedeck-display.html's
@@ -164,6 +174,12 @@ Deno.serve(async (req) => {
     if (!event_id || !label) {
       return json({ error: 'Missing event_id or label' }, 400)
     }
+    const device_kind = asKind(body.device_kind)
+    if (!device_kind) return json({ error: 'device_kind must be kiosk or scanner' }, 400)
+    const scan_point_id = device_kind === 'scanner' ? String(body.scan_point_id || '') : null
+    if (device_kind === 'scanner' && !scan_point_id) {
+      return json({ error: 'Choose the door or room this scanner is for' }, 400)
+    }
 
     // Owner, organizer or desk lead (checkin-roles.ts 'kiosk').
     const gate = functionGate('checkin-kiosk-pair', await loadCallerRole(sb, event_id, user.id))
@@ -177,12 +193,12 @@ Deno.serve(async (req) => {
     // named organizer looking at their own console, so the two
     // failures are worth telling apart.
     const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
-      .select('checkin_core, self_registration').eq('event_id', event_id).maybeSingle()
+      .select(ENT_COLS).eq('event_id', event_id).maybeSingle()
     if (entErr) return json({ error: entErr.message }, 500)
     if (!entRow?.checkin_core) {
       return json({ error: 'Check-in is not enabled for this event' }, 403)
     }
-    if (!entRow.self_registration) {
+    if (device_kind === 'kiosk' && !entRow.self_registration) {
       return json({ error: 'Self-registration is not enabled for this event' }, 403)
     }
 
@@ -191,13 +207,26 @@ Deno.serve(async (req) => {
     // At 32^8 against a few hundred rows it will not happen; the retry
     // is here so that if it ever does, the organizer sees a working
     // button instead of an error nobody can reproduce.
+    if (device_kind === 'scanner') {
+      const { data: sp, error: spErr } = await sb.from('leod_checkin_scan_points')
+        .select('id, kind').eq('id', scan_point_id).eq('event_id', event_id).maybeSingle()
+      if (spErr) return json({ error: spErr.message }, 500)
+      if (!sp) return json({ error: 'That scan point is not part of this event' }, 400)
+      const refusal = scanPointRefusal(sp.kind, {
+        multi_point_scanning: !!entRow.multi_point_scanning,
+        entrance_scanning: !!entRow.entrance_scanning,
+        session_scanning: !!entRow.session_scanning,
+      })
+      if (refusal) return json({ error: refusal }, 403)
+    }
+
     const expires_at = new Date(Date.now() + PAIRING_TTL_MS).toISOString()
     let code = ''
     let lastErr: { code?: string } | null = null
     for (let attempt = 0; attempt < 3; attempt++) {
       code = generatePairingCode()
       const { error } = await sb.from('leod_checkin_kiosk_pairing').insert({
-        code, event_id, label, created_by: user.id, expires_at,
+        code, event_id, label, created_by: user.id, expires_at, device_kind, scan_point_id,
       })
       if (!error) { lastErr = null; break }
       lastErr = error
@@ -212,7 +241,7 @@ Deno.serve(async (req) => {
     // No code, no label, no user id in the log line. The response body
     // is the only place the code appears.
     console.log('checkin-kiosk-pair: minted pairing code for event', event_id)
-    return json({ ok: true, code: formatPairingCode(code), expires_at })
+    return json({ ok: true, code: formatPairingCode(code), expires_at, device_kind })
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -234,13 +263,18 @@ Deno.serve(async (req) => {
 
     const code = normalizeCode(String(body.code || ''))
     if (!code) return json({ error: 'Invalid or expired pairing code' }, 400)
+    // The page says what it is. A code minted for the other kind of device
+    // does not match and reads as invalid, so a scanner code typed into a
+    // kiosk tablet pairs nothing (migration 098).
+    const want = asKind(body.device_kind)
+    if (!want) return json({ error: 'Invalid or expired pairing code' }, 400)
 
     // Burns the code atomically and returns zero rows for every
     // failure — unknown, expired, already claimed. The burn happens
     // BEFORE the device exists, so a code cannot survive a partially
     // completed claim (migration 056 section 6).
     const { data: claimRows, error: claimErr } = await sb.rpc('checkin_kiosk_claim_pairing', {
-      p_code: code,
+      p_code: code, p_kind: want,
     })
     if (claimErr) {
       console.error('checkin-kiosk-pair: claim rpc failed', claimErr.code)
@@ -264,14 +298,35 @@ Deno.serve(async (req) => {
     // will refuse. Checked after so a revoked event still spends the
     // code rather than leaving it live.
     const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
-      .select('checkin_core, self_registration').eq('event_id', claimed.event_id).maybeSingle()
+      .select(ENT_COLS).eq('event_id', claimed.event_id).maybeSingle()
     if (entErr) {
       console.error('checkin-kiosk-pair: entitlement read failed for event', claimed.event_id, entErr.code)
       return json({ error: 'Pairing failed' }, 500)
     }
-    if (!entRow?.checkin_core || !entRow?.self_registration) {
+    if (!entRow?.checkin_core) {
+      return json({ error: 'Check-in is not enabled for this event' }, 403)
+    }
+    if (want === 'kiosk' && !entRow.self_registration) {
       console.warn('checkin-kiosk-pair: claim for event without self-registration', claimed.event_id)
       return json({ error: 'Self-registration is not enabled for this event' }, 403)
+    }
+    let scanPoint: { id: string; name: string; kind: string } | null = null
+    if (want === 'scanner') {
+      const { data: sp, error: spErr } = await sb.from('leod_checkin_scan_points')
+        .select('id, name, kind').eq('id', claimed.scan_point_id).eq('event_id', claimed.event_id).maybeSingle()
+      if (spErr) {
+        console.error('checkin-kiosk-pair: scan point read failed for event', claimed.event_id, spErr.code)
+        return json({ error: 'Pairing failed' }, 500)
+      }
+      if (!sp) return json({ error: 'The scan point for this code was removed. Ask for a new code.' }, 400)
+      // Settings may have changed in the ten minutes since the code was minted.
+      const refusal = scanPointRefusal(sp.kind, {
+        multi_point_scanning: !!entRow.multi_point_scanning,
+        entrance_scanning: !!entRow.entrance_scanning,
+        session_scanning: !!entRow.session_scanning,
+      })
+      if (refusal) return json({ error: refusal }, 403)
+      scanPoint = sp
     }
 
     const device_key = generateDeviceKey()
@@ -283,8 +338,10 @@ Deno.serve(async (req) => {
         // the two kinds must stay separate: a kiosk key lives on a
         // public screen in a lobby, a station key drives the staffed
         // desk, and one kind would make each a credential for the
-        // other. checkin-self-register requires kind === 'kiosk'.
-        kind: 'kiosk',
+        // other. checkin-self-register requires kind === 'kiosk', the
+        // scanner paths kind === 'scanner'.
+        kind: want,
+        scan_point_id: scanPoint ? scanPoint.id : null,
         // Only the digest. The raw key below is returned once and
         // never written anywhere — see this file's header.
         api_key_hash: await sha256Hex(device_key),
@@ -311,7 +368,7 @@ Deno.serve(async (req) => {
       console.error('checkin-kiosk-pair: pairing link update failed, device', device.id, linkErr.code)
     }
 
-    console.log('checkin-kiosk-pair: kiosk paired, device', device.id)
+    console.log('checkin-kiosk-pair:', want, 'paired, device', device.id)
     return json({
       ok: true,
       event_id: claimed.event_id,
@@ -320,6 +377,8 @@ Deno.serve(async (req) => {
       // The only time this value is ever transmitted or exists outside
       // this request.
       device_key,
+      device_kind: want,
+      ...(scanPoint ? { scan_point: { name: scanPoint.name, kind: scanPoint.kind } } : {}),
     })
   }
 
