@@ -322,6 +322,9 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ks-h{font-size:21px;font-weight:700;letter-spacing:-.02em;margin-top:2px;overflow-wrap:anywhere}
 .ks-p{font-size:14px;color:var(--t2);line-height:1.5}
 .ks-lbl{display:block;font-size:12px;font-weight:600;color:var(--t2);margin:22px 0 7px}
+.ks-kinds{display:flex;gap:6px;margin:0 0 14px}
+.ks-kind{flex:1;height:38px;border-radius:10px;border:1px solid var(--bd2,#D2D2D7);background:#fff;font:inherit;font-size:13.5px;font-weight:600;color:var(--t2);cursor:pointer}
+.ks-kind[aria-pressed="true"]{background:var(--t1,#1D1D1F);border-color:var(--t1,#1D1D1F);color:#fff}
 .ks-hint{font-size:13px;color:var(--t2);margin-top:-6px}
 
 /* ★ READ FROM ACROSS A ROOM ★
@@ -631,7 +634,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
            a permission they do not have. -->
       <button class="ck-quiet" type="button" id="st-desk" aria-label="Rename this desk">This desk · Rename</button>
       <button class="ck-quiet" type="button" id="st-walkin" style="display:none">Add walk-in</button>
-      <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Set up a kiosk</button>
+      <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Kiosk or scanner</button>
       <a class="ck-quiet" id="st-dash" href="#">Dashboard</a>
       <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
     </div>
@@ -3259,22 +3262,60 @@ function closeKioskSetup() {
 // The label is required by the function, and it is worth asking for
 // rather than defaulting: it is what the kiosk prints across its own
 // header and what tells two tablets apart in a device list at 07:00.
+// What is being paired (scanner Build A, migration 098): a self-registration
+// kiosk tablet, or a phone that scans QR codes at one door or session room.
+// Kept across "Create another code" so a run of door phones stays quick.
+let ksKind = 'kiosk';
+let ksPoint = '';
+
 function ksAsk(prefill, problem) {
   ksStopTimer();
-  document.getElementById('ks-title').textContent = 'Set up a kiosk';
+  const scanner = ksKind === 'scanner';
+  document.getElementById('ks-title').textContent = scanner ? 'Set up a door scanner' : 'Set up a kiosk';
 
   const body = document.getElementById('ks-body');
   body.replaceChildren();
 
+  const kinds = document.createElement('div');
+  kinds.className = 'ks-kinds';
+  kinds.setAttribute('role', 'group');
+  kinds.setAttribute('aria-label', 'What are you pairing?');
+  for (const [k, text] of [['kiosk', 'Kiosk tablet'], ['scanner', 'Door scanner phone']]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ks-kind';
+    b.textContent = text;
+    b.setAttribute('aria-pressed', String(ksKind === k));
+    b.addEventListener('click', () => { if (ksKind !== k) { ksKind = k; ksAsk('', ''); } });
+    kinds.appendChild(b);
+  }
+  body.appendChild(kinds);
+
   const p = document.createElement('div');
   p.className = 'ks-p';
-  p.textContent = 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
+  p.textContent = scanner
+    ? 'Choose where the phone will scan and name it, then read the code to whoever is holding the phone.'
+    : 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
   body.appendChild(p);
+
+  if (scanner) {
+    const plbl = document.createElement('label');
+    plbl.className = 'ks-lbl';
+    plbl.setAttribute('for', 'ks-point');
+    plbl.textContent = 'Where it scans';
+    body.appendChild(plbl);
+    const sel = document.createElement('select');
+    sel.className = 'ck-input';
+    sel.id = 'ks-point';
+    sel.addEventListener('change', () => { ksPoint = sel.value; });
+    body.appendChild(sel);
+    ksLoadPoints(sel);
+  }
 
   const lbl = document.createElement('label');
   lbl.className = 'ks-lbl';
   lbl.setAttribute('for', 'ks-label');
-  lbl.textContent = 'Name this kiosk';
+  lbl.textContent = scanner ? 'Name this phone' : 'Name this kiosk';
   body.appendChild(lbl);
 
   const input = document.createElement('input');
@@ -3284,7 +3325,7 @@ function ksAsk(prefill, problem) {
   input.maxLength = KIOSK_LABEL_MAX;
   input.autocomplete = 'off';
   input.spellcheck = false;
-  input.placeholder = 'Lobby left';
+  input.placeholder = scanner ? 'Main door phone' : 'Lobby left';
   input.value = prefill;
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); mintPairingCode(); }
@@ -3293,7 +3334,9 @@ function ksAsk(prefill, problem) {
 
   const hint = document.createElement('div');
   hint.className = 'ks-hint';
-  hint.textContent = 'This shows across the top of the kiosk screen, so use something you would say out loud. "Main entrance", "Lobby left".';
+  hint.textContent = scanner
+    ? 'This shows on the phone and in the list below, so use something you would say out loud.'
+    : 'This shows across the top of the kiosk screen, so use something you would say out loud. "Main entrance", "Lobby left".';
   body.appendChild(hint);
 
   const err = document.createElement('div');
@@ -3314,6 +3357,41 @@ function ksAsk(prefill, problem) {
   body.appendChild(acts);
 
   ksDevices(body);
+}
+
+// The event's scan points for the scanner picker. RLS (048) lets organizers,
+// leads and crew read them; doors and rooms are added in Setup.
+async function ksLoadPoints(sel) {
+  sel.replaceChildren();
+  const loading = document.createElement('option');
+  loading.textContent = 'Loading…';
+  sel.appendChild(loading);
+  sel.disabled = true;
+  let rows = null, error = null;
+  try {
+    ({ data: rows, error } = await sb.from('leod_checkin_scan_points')
+      .select('id, name, kind').eq('event_id', S.event.id).order('sort_order').order('name'));
+  } catch (thrown) { error = thrown; }
+  if (!sel.isConnected) return;
+  sel.replaceChildren();
+  if (error || !Array.isArray(rows)) {
+    console.error('checkin: scan points failed', error && error.code);
+    const o = document.createElement('option'); o.textContent = 'Could not load the doors and rooms'; sel.appendChild(o);
+    return;
+  }
+  if (!rows.length) {
+    const o = document.createElement('option'); o.textContent = 'No doors or rooms yet: add them in Setup, Kiosk & scanners'; sel.appendChild(o);
+    return;
+  }
+  for (const r of rows) {
+    const o = document.createElement('option');
+    o.value = r.id;
+    o.textContent = r.name + (r.kind === 'interior' ? ' (session room)' : ' (door)');
+    sel.appendChild(o);
+  }
+  sel.disabled = false;
+  if (!rows.some(r => r.id === ksPoint)) ksPoint = rows[0].id;
+  sel.value = ksPoint;
 }
 
 // ── THE PAIRED KIOSKS ──────────────────────────────────────────────
@@ -3353,7 +3431,7 @@ async function ksDevices(host) {
   wrap.className = 'ks-devs';
   const h = document.createElement('div');
   h.className = 'ks-devs-h';
-  h.textContent = 'Kiosks paired to this event';
+  h.textContent = 'Kiosks and scanners paired to this event';
   wrap.appendChild(h);
   const list = document.createElement('div');
   list.id = 'ks-dev-list';
@@ -3366,7 +3444,8 @@ async function ksDevices(host) {
     ({ data: rows, error } = await sb.from('leod_checkin_devices')
       .select(KIOSK_DEV_COLS)
       .eq('event_id', S.event.id)
-      .eq('kind', 'kiosk')
+      // Scanners too: a phone left on a chair has to be revocable from here.
+      .in('kind', ['kiosk', 'scanner'])
       .order('created_at', { ascending: false }));
   } catch (thrown) {
     error = thrown;
@@ -3423,12 +3502,12 @@ function ksDeviceRow(row) {
   // A label is NOT NULL in the table, but this row came off the wire and
   // an empty string would render as a nameless card the organizer cannot
   // tell from the next one.
-  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : 'Unnamed kiosk';
+  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : (row.kind === 'scanner' ? 'Unnamed scanner' : 'Unnamed kiosk');
   main.appendChild(name);
 
   const meta = document.createElement('div');
   meta.className = 'ks-dev-meta';
-  meta.textContent = 'Paired ' + ksWhen(row.created_at);
+  meta.textContent = (row.kind === 'scanner' ? 'Scanner, paired ' : 'Kiosk, paired ') + ksWhen(row.created_at);
   main.appendChild(meta);
   el.appendChild(main);
 
@@ -3614,10 +3693,16 @@ async function mintPairingCode() {
   if (!input || !btn || btn.disabled) return;
 
   const label = input.value.trim().slice(0, KIOSK_LABEL_MAX);
+  const scanner = ksKind === 'scanner';
   err.textContent = '';
   if (!label) {
-    err.textContent = 'Give the kiosk a name first, so you can tell it apart from the next one.';
+    err.textContent = scanner ? 'Give the phone a name first, so you can tell it apart from the next one.'
+      : 'Give the kiosk a name first, so you can tell it apart from the next one.';
     input.focus();
+    return;
+  }
+  if (scanner && !ksPoint) {
+    err.textContent = 'Choose the door or room this phone will scan at. Add them in Setup, Kiosk & scanners.';
     return;
   }
   // A pairing code can only come from the server, so an offline desk is
@@ -3634,7 +3719,9 @@ async function mintPairingCode() {
   let data = null, error = null;
   try {
     ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
-      body: { action: 'mint', event_id: S.event.id, label },
+      body: scanner
+        ? { action: 'mint', event_id: S.event.id, label, device_kind: 'scanner', scan_point_id: ksPoint }
+        : { action: 'mint', event_id: S.event.id, label },
     }));
   } catch (thrown) {
     error = thrown;
@@ -3649,7 +3736,9 @@ async function mintPairingCode() {
     const reason = await ksReason(error);
     btn.disabled = false;
     btn.textContent = 'Create a pairing code';
-    err.textContent = ksFailureMessage(status, reason);
+    // Scanning refusals are already written for a person ("Door scanning
+    // is switched off ... Ask the organizer ..."), so they are shown as sent.
+    err.textContent = (status === 403 && reason.includes('scanning')) ? ksLastReason : ksFailureMessage(status, reason);
     return;
   }
 
@@ -3663,11 +3752,13 @@ async function mintPairingCode() {
 // That couples this to those strings, so the match below is a loose
 // substring unique to each, and anything unmatched still lands on a
 // message a person can act on rather than on silence.
+let ksLastReason = '';
 async function ksReason(error) {
+  ksLastReason = '';
   try {
     if (error && error.context && typeof error.context.json === 'function') {
       const body = await error.context.json();
-      if (body && typeof body.error === 'string') return body.error.toLowerCase();
+      if (body && typeof body.error === 'string') { ksLastReason = body.error; return body.error.toLowerCase(); }
     }
   } catch (ignored) { /* an unreadable body is simply no reason */ }
   return '';
@@ -3711,7 +3802,8 @@ function ksFailureMessage(status, reason) {
 function ksCode(code, expiresAt, label) {
   ksStopTimer();
   ksLabel = label;
-  document.getElementById('ks-title').textContent = 'Read this code to the kiosk';
+  const scanner = ksKind === 'scanner';
+  document.getElementById('ks-title').textContent = scanner ? 'Enter this code on the phone' : 'Read this code to the kiosk';
 
   const body = document.getElementById('ks-body');
   body.replaceChildren();
@@ -3744,15 +3836,16 @@ function ksCode(code, expiresAt, label) {
 
   const facts = document.createElement('div');
   facts.className = 'ks-facts';
-  ksFact(facts, 'Once only. ',
-    'The first screen that enters it is paired and the code is spent. It will not work on a second tablet.');
+  ksFact(facts, 'Once only. ', scanner
+    ? 'The first phone that enters it is paired and the code is spent. It will not work on a second phone.'
+    : 'The first screen that enters it is paired and the code is spent. It will not work on a second tablet.');
   ksFact(facts, 'Nothing is stuck if you lose it. ',
     'The code cannot be looked up again by anyone, including us. If it is gone or it runs out, create another and read that one out instead.');
-  ksFact(facts, 'On the tablet: ',
+  ksFact(facts, scanner ? 'On the phone: ' : 'On the tablet: ',
     'open this address, then type the code into the box.');
   const url = document.createElement('div');
   url.className = 'ks-url';
-  url.textContent = location.origin + location.pathname + '?mode=kiosk';
+  url.textContent = scanner ? location.origin + '/checkin/scan' : location.origin + location.pathname + '?mode=kiosk';
   facts.appendChild(url);
   body.appendChild(facts);
 

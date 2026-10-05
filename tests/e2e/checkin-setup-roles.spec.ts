@@ -230,3 +230,34 @@ test('a failed alert save shows the server message', async ({ page }) => {
   await expect(page.locator('#al-err')).toHaveText('Only the event owner or an organizer can choose alert ticket types');
 });
 
+// ── Door and session scanners in Setup (scanner Build A) ──
+test('an organizer turns door scanning on and adds a door; session scanning says it is not included', async ({ page }) => {
+  let setArgs: Record<string, unknown> = {};
+  const inserted: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'kiosk', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', multi_point_scanning: false, entrance_scanning: false, session_scanning: false }]);
+    await table(page, 'leod_checkin_scan_points', [{ id: 'sp1', name: 'Main door', kind: 'entrance', sort_order: 1 }]);
+    await rpc(page, 'checkin_scan_point_counts', [{ name: 'Main door', kind: 'entrance', scans: 9, people: 7 }]);
+    await rpc(page, 'checkin_set_scanning', (a) => { setArgs = a; return { entrance_scanning: true, session_scanning: false, multi_point_scanning: false }; });
+    await page.route(/\/rest\/v1\/leod_checkin_scan_points/, async (r) => {
+      if (r.request().method() === 'POST') { inserted.push(r.request().postDataJSON()); return r.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify([{ id: 'sp2' }]) }); }
+      return r.fallback();
+    });
+  });
+  await expect(page.locator('#sc-body tr')).toHaveCount(1);
+  await expect(page.locator('#sc-body tr').first()).toContainText('7');
+  await expect(page.locator('#sc-sess')).toBeDisabled();
+  await expect(page.locator('#sc-sess-p')).toContainText('Not included for this event');
+  await expect(page.locator('#sc-kind option[value="interior"]')).toBeDisabled();
+  await page.locator('#sc-door').evaluate((el: HTMLInputElement) => el.click());
+  await expect.poll(() => setArgs.p_entrance).toBe(true);
+  expect(setArgs.p_session).toBeNull();
+  await page.locator('#sc-name').fill('Side  door');
+  await page.locator('#sc-add-btn').click();
+  await expect.poll(() => inserted.length).toBe(1);
+  const row = (Array.isArray(inserted[0]) ? inserted[0][0] : inserted[0]) as Record<string, unknown>;
+  expect(row.name).toBe('Side door');
+  expect(row.kind).toBe('entrance');
+  expect(String(row.code)).toMatch(/^SIDEDOOR-[A-Z0-9]{4}$/);
+});
+

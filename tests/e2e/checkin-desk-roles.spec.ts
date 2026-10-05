@@ -637,3 +637,54 @@ test('without a clock reply the desk keeps the device clock and shows no notice'
   await expect(page.locator('#st-clock')).toBeHidden();
 });
 
+// ── Pairing a door scanner (scanner Build A) ──
+const SP_DOOR = 'aaaaaaaa-0000-4000-8000-0000000000d1';
+const SP_ROOM = 'aaaaaaaa-0000-4000-8000-0000000000d2';
+
+test('a lead pairs a door scanner to a scan point and sees scanners in the device list', async ({ page }) => {
+  let minted: Record<string, unknown> = {};
+  await open(page, { role: 'lead' });
+  await table(page, 'leod_checkin_scan_points', [{ id: SP_DOOR, name: 'Main door', kind: 'entrance' }, { id: SP_ROOM, name: 'Hall B', kind: 'interior' }]);
+  await table(page, 'leod_checkin_devices', [
+    { id: 'dev-1', label: 'Lobby tablet', kind: 'kiosk', last_seen_at: null, created_at: '2026-10-18T07:00:00Z', revoked_at: null },
+    { id: 'dev-2', label: 'Door phone', kind: 'scanner', last_seen_at: null, created_at: '2026-10-18T07:30:00Z', revoked_at: null },
+  ]);
+  await fn(page, 'checkin-kiosk-pair', (b) => { minted = b; return { body: { ok: true, code: 'ABCD-EFGH', expires_at: new Date(FIXED_NOW.getTime() + 600000).toISOString(), device_kind: 'scanner' } }; });
+  await page.locator('#st-kiosk').click();
+  await expect(page.locator('#ks-dev-list')).toContainText('Scanner, paired');
+  await expect(page.locator('#ks-dev-list')).toContainText('Kiosk, paired');
+  await page.locator('.ks-kind', { hasText: 'Door scanner phone' }).click();
+  await expect(page.locator('#ks-title')).toHaveText('Set up a door scanner');
+  await expect(page.locator('#ks-point option')).toHaveText(['Main door (door)', 'Hall B (session room)']);
+  await page.locator('#ks-point').selectOption(SP_ROOM);
+  await page.locator('#ks-label').fill('Hall B phone');
+  await page.locator('#ks-mint').click();
+  await expect(page.locator('#ks-title')).toHaveText('Enter this code on the phone');
+  expect(minted).toEqual({ action: 'mint', event_id: EVENT_ID, label: 'Hall B phone', device_kind: 'scanner', scan_point_id: SP_ROOM });
+  await expect(page.locator('.ks-url')).toHaveText(/\/checkin\/scan$/);
+});
+
+test('a scanning refusal from the server is shown as written', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await table(page, 'leod_checkin_scan_points', [{ id: SP_DOOR, name: 'Main door', kind: 'entrance' }]);
+  await table(page, 'leod_checkin_devices', []);
+  await fn(page, 'checkin-kiosk-pair', () => ({ status: 403, body: { error: 'Door scanning is switched off for this event. Ask the organizer to turn it on in Setup, or check people in at the desk.' } }));
+  await page.locator('#st-kiosk').click();
+  await page.locator('.ks-kind', { hasText: 'Door scanner phone' }).click();
+  await page.locator('#ks-label').fill('Door phone');
+  await page.locator('#ks-mint').click();
+  await expect(page.locator('#ks-err')).toHaveText(/^Door scanning is switched off for this event/);
+});
+
+test('with no scan points the scanner form says where to add them', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await table(page, 'leod_checkin_scan_points', []);
+  await table(page, 'leod_checkin_devices', []);
+  await page.locator('#st-kiosk').click();
+  await page.locator('.ks-kind', { hasText: 'Door scanner phone' }).click();
+  await expect(page.locator('#ks-point option')).toHaveText(['No doors or rooms yet: add them in Setup, Kiosk & scanners']);
+  await page.locator('#ks-label').fill('Door phone');
+  await page.locator('#ks-mint').click();
+  await expect(page.locator('#ks-err')).toContainText('Choose the door or room');
+});
+

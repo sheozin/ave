@@ -1,0 +1,48 @@
+// tests/checkin-scanner-page.spec.ts
+// The scanner page's pure logic (checkin-scanner.js), and parity of its
+// cooldown and token rules with the server copy in _shared/checkin-scanner.ts.
+import { describe, it, expect } from 'vitest';
+import * as page from '../checkin-scanner.js';
+import * as server from '../supabase/functions/_shared/checkin-scanner.ts';
+
+describe('parity with the server copy', () => {
+  it('same cooldown', () => {
+    expect(page.COOLDOWN_MS).toBe(server.COOLDOWN_MS);
+  });
+  it('same token decisions', () => {
+    for (const raw of ['  abc12345\n', 'abc', 'a b c d e f g h', 'x'.repeat(200), 'x'.repeat(201), 'https://e.x/?q=1', 'tok0123456789abcdef0123456789abcd', '']) {
+      expect(page.normalizeToken(raw)).toBe(server.normalizeToken(raw));
+    }
+  });
+  it('same cooldown decisions over a sequence', () => {
+    const a = new Map<string, number>(), b = new Map<string, number>();
+    const seq: [string, number][] = [['A', 0], ['A', 100], ['B', 200], ['A', 4000], ['A', 4100], ['B', 9000]];
+    expect(seq.map(([t, n]) => page.shouldAccept(a, t, n))).toEqual(seq.map(([t, n]) => server.shouldAccept(b, t, n)));
+  });
+});
+
+describe('verdictFor', () => {
+  it('names the guest when the server sent one', () => {
+    expect(page.verdictFor('ok', { first_name: 'Ewa', ticket_type: 'VIP' })).toEqual({ tone: 'ok', title: 'Checked in', text: 'Ewa · VIP' });
+    expect(page.verdictFor('duplicate', { first_name: 'Ewa', ticket_type: null }).text).toBe('Ewa. Let them through if it is the same person.');
+  });
+  it('without a name, still a clear instruction', () => {
+    expect(page.verdictFor('ok', undefined).text).toBe('Welcome in.');
+    expect(page.verdictFor('unknown_token', undefined)).toEqual({ tone: 'stop', title: 'Not on the list', text: 'Send them to the desk.' });
+    expect(page.verdictFor('queued', undefined).tone).toBe('wait');
+  });
+  it('anything unexpected is a stop, never a green', () => {
+    expect(page.verdictFor('error', undefined).tone).toBe('stop');
+    expect(page.verdictFor('something new', undefined).tone).toBe('stop');
+  });
+});
+
+describe('settle', () => {
+  const box = [{ client_id: 'a' }, { client_id: 'b' }, { client_id: 'c' }];
+  it('drops what the server answered, keeps errors and unanswered', () => {
+    expect(page.settle(box, { a: 'ok', b: 'error' }).map(x => x.client_id)).toEqual(['b', 'c']);
+  });
+  it('no results keeps everything', () => {
+    expect(page.settle(box, null)).toHaveLength(3);
+  });
+});

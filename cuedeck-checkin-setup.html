@@ -29,6 +29,11 @@
 .search{flex:1;min-width:200px;height:36px;border:1px solid var(--bd2);border-radius:10px;background:var(--wm);padding:0 12px;font-size:13px}
 .chip{height:36px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--t1);color:#fff}
+.sc-h{margin:26px 0 4px;font-size:15px;letter-spacing:-.2px}
+.sc-p{margin:0 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
+.sc-tbl{margin-top:12px}
+.sc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.sc-add .search{flex:1;min-width:160px}
 .al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .al-opts label{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;background:var(--pg);color:var(--t1);cursor:pointer}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -80,7 +85,7 @@
     <button class="st" data-step="details"><span class="dot">1</span>Event details</button>
     <button class="st" data-step="attendees"><span class="dot">2</span>Attendees<small id="n-att"></small></button>
     <button class="st" data-step="staff"><span class="dot">3</span>Desk staff<small id="n-staff"></small></button>
-    <button class="st" data-step="kiosk"><span class="dot">4</span>Kiosk &amp; badges</button>
+    <button class="st" data-step="kiosk"><span class="dot">4</span>Kiosk &amp; scanners</button>
     <button class="st" data-step="qr"><span class="dot">5</span>QR emails</button>
     <button class="st golive" data-step="golive"><span class="dot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span id="gl-rail">Go live</span><small id="gl-rail-price" data-price></small></button>
   </aside>
@@ -147,11 +152,23 @@
   </section>
 
   <section class="panel" id="p-kiosk" hidden>
-    <div class="ph"><div><h2>Kiosk &amp; badges</h2><p>How walk-ins and badges work at this event.</p></div></div>
-    <div class="toggle"><div><b>Self-registration kiosk</b><p>Walk-ins can register themselves on a paired tablet. Pair one from the desk with "Set up a kiosk".</p></div><label class="sw"><input type="checkbox" data-set="self_registration"><span></span></label></div>
+    <div class="ph"><div><h2>Kiosk &amp; scanners</h2><p>Walk-ins, badges and door scanning at this event.</p></div></div>
+    <div class="toggle"><div><b>Self-registration kiosk</b><p>Walk-ins can register themselves on a paired tablet. Pair one from the desk with "Kiosk or scanner".</p></div><label class="sw"><input type="checkbox" data-set="self_registration"><span></span></label></div>
     <div class="toggle"><div><b>Kiosk prints badges</b><p>Print a badge straight after a walk-in registers at the kiosk.</p></div><label class="sw"><input type="checkbox" data-set="kiosk_self_print"><span></span></label></div>
     <div class="toggle"><div><b>Email QR codes on import</b><p>New guests get their QR code as soon as they are imported. Only once the event is live.</p></div><label class="sw"><input type="checkbox" data-set="auto_send_qr_email"><span></span></label></div>
     <div class="err" id="set-err"></div>
+    <h3 class="sc-h">Door scanners</h3>
+    <p class="sc-p">A phone at a door scans guests' QR codes and checks them in, without a desk. Pair a phone from the desk with "Kiosk or scanner". It keeps only the list of codes, never names, so a phone left on a chair gives nothing away.</p>
+    <div class="toggle"><div><b>Door scanning</b><p>Scanner phones can check people in at the doors below.</p></div><label class="sw"><input type="checkbox" id="sc-door"><span></span></label></div>
+    <div class="toggle" id="sc-sess-row"><div><b>Session scanning</b><p id="sc-sess-p">Scanner phones at session rooms record who attended each session.</p></div><label class="sw"><input type="checkbox" id="sc-sess"><span></span></label></div>
+    <div class="err" id="sc-err"></div>
+    <table class="tbl sc-tbl"><thead><tr><th>Door or room</th><th>Kind</th><th class="hide-sm">People scanned</th><th></th></tr></thead><tbody id="sc-body"></tbody></table>
+    <p class="small" id="sc-empty" hidden>No doors or rooms yet. Add the first one below.</p>
+    <form id="sc-add" class="sc-add">
+      <input class="search" id="sc-name" maxlength="60" placeholder="Main door" aria-label="Name of the door or room" autocomplete="off">
+      <select class="search" id="sc-kind" aria-label="Kind" style="flex:none"><option value="entrance">Door</option><option value="interior">Session room</option></select>
+      <button class="btn btn-s" id="sc-add-btn">Add</button>
+    </form>
   </section>
 
   <section class="panel" id="p-qr" hidden>
@@ -613,7 +630,100 @@ async function removeStaff(s) {
 }
 
 // ── 4. kiosk & badges ────────────────────────────────────
-function renderKiosk() { document.querySelectorAll('[data-set]').forEach(i => i.checked = !!ENT[i.dataset.set]); }
+function renderKiosk() {
+  document.querySelectorAll('[data-set]').forEach(i => i.checked = !!ENT[i.dataset.set]);
+  renderScanning();
+  loadScanPoints();
+}
+
+// ── door and session scanners (scanner Build A, migrations 097, 098) ──
+// Settings go through checkin_set_scanning: clients cannot write the
+// entitlement row (069). Session scanning needs the admin-set plan flag
+// multi_point_scanning; without it the switch is off, disabled and says why,
+// so it reads as a plan limit and not a bug.
+let SCAN_POINTS = [], SCAN_COUNTS = new Map();
+function renderScanning() {
+  const multi = !!ENT.multi_point_scanning;
+  $('sc-door').checked = !!ENT.entrance_scanning;
+  $('sc-sess').checked = multi && !!ENT.session_scanning;
+  $('sc-sess').disabled = !multi;
+  $('sc-sess-p').textContent = multi
+    ? 'Scanner phones at session rooms record who attended each session.'
+    : 'Not included for this event. Write to support@cuedeck.io to add session scanning.';
+  const inter = $('sc-kind').querySelector('option[value="interior"]');
+  inter.disabled = !multi;
+  if (!multi && $('sc-kind').value === 'interior') $('sc-kind').value = 'entrance';
+}
+async function saveScanning(which, el) {
+  $('sc-err').textContent = ''; el.disabled = true;
+  const { data, error } = await sb.rpc('checkin_set_scanning', {
+    p_event_id: EVENT_ID,
+    p_entrance: which === 'door' ? el.checked : null,
+    p_session: which === 'session' ? el.checked : null,
+  });
+  el.disabled = false;
+  if (error) { el.checked = !el.checked; $('sc-err').textContent = error.message; renderScanning(); return; }
+  Object.assign(ENT, data);
+  renderScanning();
+}
+$('sc-door').addEventListener('change', () => saveScanning('door', $('sc-door')));
+$('sc-sess').addEventListener('change', () => saveScanning('session', $('sc-sess')));
+
+async function loadScanPoints() {
+  const [{ data: pts, error: pErr }, { data: counts, error: cErr }] = await Promise.all([
+    sb.from('leod_checkin_scan_points').select('id, name, kind, sort_order').eq('event_id', EVENT_ID).order('sort_order').order('name'),
+    sb.rpc('checkin_scan_point_counts', { p_event_id: EVENT_ID }),
+  ]);
+  if (pErr) { $('sc-err').textContent = 'Could not load the doors and rooms: ' + pErr.message; return; }
+  SCAN_POINTS = pts || [];
+  // Counts are by name (the RPC carries no ids); a failed count read only
+  // blanks the column, it does not hide the list.
+  SCAN_COUNTS = new Map(cErr ? [] : (counts || []).map(c => [c.name + '|' + c.kind, c.people]));
+  renderScanPoints();
+}
+function renderScanPoints() {
+  const body = $('sc-body'); body.replaceChildren();
+  for (const sp of SCAN_POINTS) {
+    const tr = el('tr');
+    const n = SCAN_COUNTS.get(sp.name + '|' + sp.kind);
+    const del = el('button', 'btn btn-s', 'Remove'); del.type = 'button';
+    del.onclick = () => removeScanPoint(sp, del);
+    const tdDel = el('td'); tdDel.style.textAlign = 'right'; tdDel.appendChild(del);
+    tr.append(el('td', null, sp.name), el('td', null, sp.kind === 'interior' ? 'Session room' : 'Door'),
+              el('td', 'hide-sm', n == null ? '' : String(n)), tdDel);
+    body.appendChild(tr);
+  }
+  $('sc-empty').hidden = SCAN_POINTS.length > 0;
+}
+// The code only has to be unique within the event (UNIQUE (event_id, code)).
+function scanCode(name) {
+  const base = name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'POINT';
+  return base + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+$('sc-add').addEventListener('submit', async (e) => {
+  e.preventDefault(); $('sc-err').textContent = '';
+  const name = $('sc-name').value.trim().replace(/\s+/g, ' ');
+  if (!name) { $('sc-err').textContent = 'Name the door or room first.'; return; }
+  if (SCAN_POINTS.some(p => p.name.toLowerCase() === name.toLowerCase())) { $('sc-err').textContent = 'There is already one called ' + name + '.'; return; }
+  $('sc-add-btn').disabled = true;
+  const { data, error } = await sb.from('leod_checkin_scan_points')
+    .insert({ event_id: EVENT_ID, name, code: scanCode(name), kind: $('sc-kind').value, sort_order: SCAN_POINTS.length + 1 })
+    .select('id');
+  $('sc-add-btn').disabled = false;
+  // RLS refuses by returning no row: require it back.
+  if (error || !data || !data.length) { $('sc-err').textContent = 'Could not add it: ' + (error ? error.message : 'not allowed for your role'); return; }
+  $('sc-name').value = '';
+  await loadScanPoints();
+});
+async function removeScanPoint(sp, btn) {
+  $('sc-err').textContent = ''; btn.disabled = true;
+  // Scans keep their history (scan_point_id becomes empty); a scanner paired
+  // here stops scanning until it is paired somewhere else.
+  const { data, error } = await sb.from('leod_checkin_scan_points').delete().eq('id', sp.id).eq('event_id', EVENT_ID).select('id');
+  btn.disabled = false;
+  if (error || !data || !data.length) { $('sc-err').textContent = 'Could not remove it: ' + (error ? error.message : 'not allowed for your role'); return; }
+  await loadScanPoints();
+}
 document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', async () => {
   $('set-err').textContent = ''; i.disabled = true;
   const { data, error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: EVENT_ID, settings: { [i.dataset.set]: i.checked } } });

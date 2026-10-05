@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1D1D1F">
+<title>CueDeck door scanner</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+html,body{background:#111113;color:#F5F5F7;min-height:100%}
+.sx{max-width:520px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;min-height:100vh}
+.sx-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.sx-ev{font-size:13px;color:#A1A1A6;overflow-wrap:anywhere}
+.sx-pt{font-size:20px;font-weight:700;letter-spacing:-.3px;overflow-wrap:anywhere}
+.sx-pill{font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;white-space:nowrap;background:#2C2C2E;color:#D1D1D6}
+.sx-pill.test{background:#4A3300;color:#FFD27A}
+.sx-net{font-size:12.5px;color:#A1A1A6}
+.sx-net b{color:#F5F5F7}
+.sx-cam{position:relative;border-radius:18px;overflow:hidden;background:#000;aspect-ratio:3/4;display:grid;place-items:center}
+.sx-cam video{width:100%;height:100%;object-fit:cover}
+.sx-frame{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.75);border-radius:16px;pointer-events:none}
+.sx-start{width:100%;height:56px;border-radius:14px;border:0;background:#0071E3;color:#fff;font:inherit;font-size:17px;font-weight:700;cursor:pointer}
+.sx-start[disabled]{opacity:.5}
+.sx-v{border-radius:18px;padding:18px;min-height:96px}
+.sx-v h2{margin:0 0 4px;font-size:26px;letter-spacing:-.5px}
+.sx-v p{margin:0;font-size:16px;line-height:1.4}
+.sx-v.ok{background:#0F3D22;color:#C7F5D6}
+.sx-v.warn{background:#4A3300;color:#FFE2A8}
+.sx-v.stop{background:#4D1414;color:#FFD0D0}
+.sx-v.wait{background:#2C2C2E;color:#E5E5EA}
+.sx-v.idle{background:#1C1C1E;color:#A1A1A6}
+.sx-man{display:flex;gap:8px}
+.sx-man input{flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid #3A3A3C;background:#1C1C1E;color:#F5F5F7;padding:0 12px;font:inherit;font-size:15px}
+.sx-man button,.sx-btn{height:44px;border-radius:12px;border:0;background:#2C2C2E;color:#F5F5F7;font:inherit;font-weight:600;padding:0 14px;cursor:pointer}
+.sx-note{font-size:13px;color:#A1A1A6;line-height:1.5}
+.sx-err{font-size:14px;color:#FF9F9F;line-height:1.45}
+.sx-err:empty{display:none}
+.sx-block{border-radius:14px;padding:14px;background:#4D1414;color:#FFD0D0;font-size:15px;line-height:1.45}
+.sx-pair h1{margin:28px 0 8px;font-size:28px;letter-spacing:-.6px}
+.sx-code{width:100%;height:60px;border-radius:14px;border:1px solid #3A3A3C;background:#1C1C1E;color:#F5F5F7;text-align:center;font:inherit;font-size:28px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}
+.sx-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sx-link{background:none;border:0;color:#A1A1A6;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="sx">
+  <!-- Pairing: no device key on this phone yet -->
+  <section class="sx-pair" id="pair" hidden>
+    <h1>Pair this phone</h1>
+    <p class="sx-note">At the check-in desk, an organizer or desk lead taps <b>Kiosk or scanner</b>, chooses <b>Door scanner phone</b> and reads you a code. Type it here.</p>
+    <form id="pair-form" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+      <input class="sx-code" id="pair-code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-label="Pairing code">
+      <button class="sx-start" id="pair-btn">Pair</button>
+    </form>
+    <div class="sx-err" id="pair-err"></div>
+  </section>
+
+  <!-- Scanning -->
+  <section id="scan" hidden style="display:flex;flex-direction:column;gap:12px;flex:1">
+    <div class="sx-top">
+      <div><div class="sx-pt" id="pt-name"></div><div class="sx-ev" id="ev-name"></div></div>
+      <span class="sx-pill" id="mode-pill"></span>
+    </div>
+    <div class="sx-net" id="net"></div>
+    <div class="sx-block" id="blocked" hidden></div>
+    <div class="sx-cam" id="cam" hidden><video id="video" playsinline muted></video><div class="sx-frame"></div></div>
+    <button class="sx-start" id="start" type="button">Start scanning</button>
+    <div class="sx-v idle" id="verdict" role="status" aria-live="assertive"><h2 id="v-title">Ready</h2><p id="v-text">Point the camera at a guest's QR code.</p></div>
+    <form class="sx-man" id="man-form" autocomplete="off">
+      <input id="man-code" placeholder="Or type the code from the email" aria-label="QR code" spellcheck="false" autocapitalize="off">
+      <button id="man-btn">Check</button>
+    </form>
+    <div class="sx-err" id="scan-err"></div>
+    <div class="sx-foot">
+      <span class="sx-note" id="dev-label"></span>
+      <button class="sx-link" id="unpair" type="button">Unpair this phone</button>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+// The door/session scanner (scanner Build A, spec
+// docs/superpowers/specs/2026-08-18-checkin-scanner-device-design.md).
+// No user session: a device key from pairing, kept in localStorage. The only
+// guest data on the phone is the list of QR tokens (checkin-scanner
+// 'tokens'); names come back per scan, online, from checkin-record-scans.
+// Every node is built with textContent.
+import { shouldAccept, normalizeToken, verdictFor, settle } from '/checkin-scanner.js';
+import { correctedIso } from '/checkin-clock.js';
+
+const FN = 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/';
+const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+const STORE = 'cuedeck.scanner.v1';           // { device_key, event_id, label }
+const TOKENS = 'cuedeck.scanner.tokens.v1';   // { event_id, tokens: [...] }
+const OUTBOX = 'cuedeck.scanner.outbox.v1';   // [{ client_id, qr_token, scanned_at, action }]
+const REFRESH_MS = 5 * 60 * 1000, FLUSH_MS = 10000, DETECT_MS = 180, CHUNK = 200;
+
+const $ = (id) => document.getElementById(id);
+const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v ?? d; } catch { return d; } };
+const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { console.warn('scanner: storage write failed', e && e.name); } };
+const drop = (...ks) => ks.forEach(k => { try { localStorage.removeItem(k); } catch { /* nothing stored */ } });
+
+let DEV = read(STORE, null);
+let tokenSet = new Set();
+let clockOffset = null, allowed = false, flushing = false;
+const seen = new Map();
+
+async function call(fn, body) {
+  const r = await fetch(FN + fn, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify(body) });
+  let data = null;
+  try { data = await r.json(); } catch { /* empty body */ }
+  return { status: r.status, data };
+}
+
+// A revoked or unknown key: wipe everything this phone holds, guest codes
+// included (spec, Security), and go back to pairing.
+function forget(message) {
+  stopCamera();
+  drop(STORE, TOKENS, OUTBOX);
+  DEV = null; tokenSet = new Set();
+  showPair(message || '');
+}
+
+// ── pairing ──────────────────────────────────────────────
+function showPair(message) {
+  $('scan').hidden = true; $('pair').hidden = false;
+  $('pair-err').textContent = message;
+  $('pair-code').focus();
+}
+$('pair-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const code = $('pair-code').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  $('pair-err').textContent = '';
+  if (code.length !== 8) { $('pair-err').textContent = 'The code has 8 letters and numbers, like ABCD-EFGH.'; return; }
+  $('pair-btn').disabled = true; $('pair-btn').textContent = 'Pairing…';
+  let res;
+  try { res = await call('checkin-kiosk-pair', { action: 'claim', code, device_kind: 'scanner' }); }
+  catch { res = { status: 0, data: null }; }
+  $('pair-btn').disabled = false; $('pair-btn').textContent = 'Pair';
+  const d = res.data || {};
+  if (res.status !== 200 || !d.ok || typeof d.device_key !== 'string') {
+    $('pair-err').textContent = res.status === 0 ? 'No connection. Pairing needs the internet once; connect and try again.'
+      : res.status === 429 ? 'Too many tries. Wait a few minutes, then try again.'
+      : (d.error || 'That code did not work. Ask for a new one.');
+    return;
+  }
+  // Pairing to a new event or point starts clean: no codes or queued scans
+  // from a previous pairing survive (spec, Security).
+  drop(TOKENS, OUTBOX);
+  DEV = { device_key: d.device_key, event_id: d.event_id, label: d.label };
+  write(STORE, DEV);
+  $('pair-code').value = '';
+  await showScan();
+});
+
+// ── scanning screen ─────────────────────────────────────
+async function showScan() {
+  $('pair').hidden = true; $('scan').hidden = false;
+  $('dev-label').textContent = DEV.label ? 'This phone: ' + DEV.label : '';
+  tokenSet = new Set((read(TOKENS, {}).event_id === DEV.event_id && read(TOKENS, {}).tokens) || []);
+  renderNet();
+  await refresh();
+  flush();
+}
+
+async function refresh() {
+  if (!DEV || !navigator.onLine) { renderNet(); return; }
+  let cfg;
+  try { cfg = await call('checkin-scanner', { action: 'config', event_id: DEV.event_id, device_key: DEV.device_key }); }
+  catch { renderNet(); return; }
+  if (cfg.status === 401) { forget('This phone was unpaired from the desk. Ask for a new code to pair it again.'); return; }
+  if (cfg.status !== 200) { $('scan-err').textContent = (cfg.data && cfg.data.error) || 'Could not reach CueDeck. Scanning still works on the saved list.'; renderNet(); return; }
+  $('scan-err').textContent = '';
+  const c = cfg.data;
+  const srv = Date.parse(c.server_now);
+  if (Number.isFinite(srv)) clockOffset = srv - Date.now();
+  $('pt-name').textContent = c.scan_point.name + (c.scan_point.kind === 'interior' ? ' (session)' : '');
+  $('ev-name').textContent = c.event.name;
+  $('mode-pill').textContent = c.status === 'test' ? 'Test mode' : 'Live';
+  $('mode-pill').className = 'sx-pill' + (c.status === 'test' ? ' test' : '');
+  allowed = !!c.allowed;
+  $('blocked').hidden = allowed;
+  $('blocked').textContent = c.reason || '';
+  $('start').disabled = !allowed;
+  if (!allowed) { stopCamera(); return; }
+  try {
+    const t = await call('checkin-scanner', { action: 'tokens', event_id: DEV.event_id, device_key: DEV.device_key });
+    if (t.status === 200 && Array.isArray(t.data.tokens)) {
+      tokenSet = new Set(t.data.tokens);
+      write(TOKENS, { event_id: DEV.event_id, tokens: t.data.tokens });
+    } else if (t.status === 401) { forget('This phone was unpaired from the desk. Ask for a new code to pair it again.'); return; }
+  } catch { /* keep the saved list */ }
+  renderNet();
+}
+
+function renderNet() {
+  const n = read(OUTBOX, []).length;
+  const net = $('net'); net.replaceChildren();
+  const b = document.createElement('b'); b.textContent = navigator.onLine ? 'Online' : 'Offline';
+  net.append(b, document.createTextNode(' · ' + tokenSet.size + ' codes on this phone' + (n ? ' · ' + n + ' waiting to send' : '')));
+}
+
+function show(v) {
+  const box = $('verdict');
+  box.className = 'sx-v ' + v.tone;
+  $('v-title').textContent = v.title;
+  $('v-text').textContent = v.text;
+  if (navigator.vibrate) navigator.vibrate(v.tone === 'ok' ? 60 : v.tone === 'stop' ? [80, 60, 80] : 30);
+}
+
+// One code from the camera or the box.
+async function handle(raw, fromCamera) {
+  if (!allowed) return;
+  const tok = normalizeToken(raw);
+  if (!tok) { if (!fromCamera) show(verdictFor('not_listed')); return; }
+  if (!shouldAccept(seen, tok, Date.now())) return;
+  // Offline the phone can only say whether the code is on the list; the
+  // server decides first scan or repeat (spec, Offline model).
+  if (!tokenSet.has(tok)) { show(verdictFor('not_listed')); }
+  const item = { client_id: crypto.randomUUID(), qr_token: tok, scanned_at: correctedIso(Date.now(), clockOffset), action: 'checkin' };
+  write(OUTBOX, [...read(OUTBOX, []), item]);
+  renderNet();
+  if (!navigator.onLine) { if (tokenSet.has(tok)) show(verdictFor('queued')); return; }
+  // One fresh item on its own gets the guest's name back (record-scans).
+  const res = await send([item]);
+  if (res && res.results && item.client_id in res.results) {
+    const r = res.results[item.client_id];
+    if (r !== 'error') show(verdictFor(r, res.who && res.who[item.client_id]));
+    else if (tokenSet.has(tok)) show(verdictFor('queued'));
+  } else if (tokenSet.has(tok)) {
+    show(verdictFor('queued'));
+  }
+}
+
+async function send(items) {
+  let r;
+  try { r = await call('checkin-record-scans', { event_id: DEV.event_id, device_key: DEV.device_key, items }); }
+  catch { return null; }
+  if (r.status === 401) { forget('This phone was unpaired from the desk. Ask for a new code to pair it again.'); return null; }
+  if (r.status === 403) { allowed = false; $('blocked').hidden = false; $('blocked').textContent = (r.data && r.data.error) || 'Scanning is not allowed here right now.'; $('start').disabled = true; stopCamera(); return null; }
+  if (r.status !== 200 || !r.data) return null;
+  write(OUTBOX, settle(read(OUTBOX, []), r.data.results));
+  renderNet();
+  return r.data;
+}
+
+// Offline scans go out in chunks once the connection is back.
+async function flush() {
+  if (flushing || !DEV || !navigator.onLine) return;
+  flushing = true;
+  try {
+    let box = read(OUTBOX, []);
+    while (box.length && DEV) {
+      const before = box.length;
+      const res = await send(box.slice(0, CHUNK));
+      box = read(OUTBOX, []);
+      if (!res || box.length >= before) break;   // nothing settled: try again later
+    }
+  } finally { flushing = false; renderNet(); }
+}
+
+// ── camera and decoder ───────────────────────────────────
+// Native BarcodeDetector where it exists (Android Chrome); everywhere else,
+// iOS included, the barcode-detector ponyfill (ZXing-C++ in WebAssembly),
+// the provisional choice in the spec, loaded only when scanning starts.
+let stream = null, detector = null, timer = null, wake = null;
+async function makeDetector() {
+  if ('BarcodeDetector' in window) {
+    try {
+      const f = await window.BarcodeDetector.getSupportedFormats();
+      if (f.includes('qr_code')) return new window.BarcodeDetector({ formats: ['qr_code'] });
+    } catch { /* fall through to the ponyfill */ }
+  }
+  await new Promise((ok, bad) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/iife/ponyfill.js';
+    s.onload = ok; s.onerror = () => bad(new Error('decoder did not load'));
+    document.head.appendChild(s);
+  });
+  const api = window.BarcodeDetectionAPI;
+  if (!api || !api.BarcodeDetector) throw new Error('decoder missing');
+  return new api.BarcodeDetector({ formats: ['qr_code'] });
+}
+async function startCamera() {
+  $('scan-err').textContent = '';
+  $('start').disabled = true; $('start').textContent = 'Starting…';
+  try {
+    detector = detector || await makeDetector();
+    // Permission is asked here, when the operator chose to scan (spec, Security).
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const v = $('video'); v.srcObject = stream; await v.play();
+    $('cam').hidden = false; $('start').hidden = true;
+    try { wake = await navigator.wakeLock?.request('screen'); } catch { /* the screen may dim; scanning still works */ }
+    timer = setInterval(async () => {
+      if (!stream || v.readyState < 2) return;
+      try {
+        const codes = await detector.detect(v);
+        for (const c of codes) handle(c.rawValue, true);
+      } catch { /* one bad frame */ }
+    }, DETECT_MS);
+  } catch (e) {
+    stopCamera();
+    $('scan-err').textContent = e && e.name === 'NotAllowedError'
+      ? 'The camera is blocked for this page. Allow it in the browser settings, or type codes in the box.'
+      : 'The camera could not start (' + ((e && e.message) || 'unknown') + '). You can still type codes in the box.';
+  } finally {
+    $('start').disabled = !allowed; $('start').textContent = 'Start scanning';
+  }
+}
+function stopCamera() {
+  clearInterval(timer); timer = null;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  try { wake && wake.release(); } catch { /* already released */ }
+  wake = null;
+  $('cam').hidden = true; $('start').hidden = false;
+}
+$('start').addEventListener('click', startCamera);
+$('man-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = $('man-code').value; $('man-code').value = '';
+  seen.delete(normalizeToken(v) || '');   // a Map: typing the same code twice on purpose is allowed
+  handle(v, false);
+});
+
+// Unpair is two taps, never a confirm() dialog.
+let unpairArmed = 0;
+$('unpair').addEventListener('click', () => {
+  if (Date.now() - unpairArmed < 4000) { forget('This phone is unpaired. Ask at the desk for a code to pair it again.'); return; }
+  unpairArmed = Date.now();
+  $('unpair').textContent = 'Tap again to unpair';
+  setTimeout(() => { $('unpair').textContent = 'Unpair this phone'; }, 4000);
+});
+
+window.addEventListener('online', () => { renderNet(); refresh().then(flush); });
+window.addEventListener('offline', renderNet);
+setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+setInterval(() => { if (!document.hidden) flush(); }, FLUSH_MS);
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); });
+
+if (DEV && DEV.device_key && DEV.event_id) showScan(); else showPair('');
+</script>
+</body>
+</html>
