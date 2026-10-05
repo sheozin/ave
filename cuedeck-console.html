@@ -2694,6 +2694,12 @@ async function loadSnapshot(eventId) {
   if (typeof refreshChecklist === 'function') refreshChecklist();
 }
 
+// Reload after a refused or conflicting write. The call sites used this name
+// but it was never defined, so "refreshing" threw a ReferenceError instead.
+function loadSessions(eventId) {
+  return loadSnapshot(eventId).catch((e) => pushLog('ERROR', `reload failed: ${e?.message ?? e}`));
+}
+
 async function loadBroadcast(eventId) {
   const { data } = await sb
     .from('leod_broadcast').select('*').eq('event_id', eventId).single();
@@ -2976,6 +2982,16 @@ async function transition(sessionId, toStatus) {
           success = true;
           return;
         }
+        if (error.context?.status === 403 || errBody?.error === 'Forbidden') {
+          // The server refused this operator for this event: no direct write.
+          s.status = prevStatus; s.version = prevVer;
+          if (toStatus === 'LIVE')  s.actual_start = null;
+          if (toStatus === 'ENDED') s.actual_end   = null;
+          renderSessions();
+          pushLog('ERROR', `${toStatus} refused by the server (403)`, sessionId);
+          pushToast('✕ ' + t('toast.forbidden'), 'error');
+          return;
+        }
         // Other EF errors fall through to direct DB attempt
       }
     } catch { /* network error — fall through */ }
@@ -3019,7 +3035,7 @@ async function transition(sessionId, toStatus) {
         operator_role: S.role,
         payload: { command_id: cmdId, client: 'console' },
         server_time_ms: correctedNow(),
-      }).catch((e) => { pushLog('WARN', `event_log write failed: ${e?.message ?? e}`, sessionId); });
+      }).then(({ error: logErr }) => { if (logErr) pushLog('WARN', `event_log write failed: ${logErr.message}`, sessionId); });
     }
   }
 
@@ -3097,6 +3113,11 @@ async function restartSession(sessionId, version) {
       if (S.event) loadSessions(S.event.id);
       return;
     }
+    if (error?.context?.status === 403 || errBody?.error === 'Forbidden') {
+      pushLog('ERROR', 'restart refused by the server (403)', sessionId);
+      pushToast('✕ ' + t('toast.forbidden'), 'error');
+      return;
+    }
     if (errBody?.error === 'NOT_RESTARTABLE') {
       pushLog('ERROR', `restart refused: ${errBody.status ?? ''} not restartable`, sessionId);
       pushToast('✕ ' + t('toast.notRestartable'), 'error');
@@ -3134,6 +3155,11 @@ async function applyDelay(sessionId, minutes) {
         pushToast('⚠ Another delay is being applied — wait and retry', 'warn');
         return;
       }
+      if (error.context?.status === 403 || errBody?.error === 'Forbidden') {
+        pushLog('ERROR', `delay refused by the server (403)`, sessionId);
+        pushToast('✕ ' + t('toast.forbidden'), 'error');
+        return;
+      }
     }
   } catch { /* fall through */ }
 
@@ -3156,12 +3182,22 @@ async function applyDelay(sessionId, minutes) {
   }
   renderSessions();
 
-  // Write cascade to DB (best-effort)
-  for (const s of affected) {
+  // Write cascade to DB. supabase-js resolves with { error } instead of
+  // throwing, so every write is checked and a failure is shown, not dropped.
+  const results = await Promise.all(affected.map(s =>
     sb.from('leod_sessions').update({
       scheduled_start: s.scheduled_start, scheduled_end: s.scheduled_end,
       cumulative_delay: s.cumulative_delay, delay_minutes: s.delay_minutes,
-    }).eq('id', s.id).then(() => {}).catch((e) => { pushLog('WARN', `delay cascade write failed: ${e?.message ?? e}`, s.id); });
+    }).eq('id', s.id).select('id')
+      .then(({ data, error }) => error ? (error.message || 'write failed') : (data?.length ? null : 'no row updated'))
+      .catch((e) => e?.message ?? String(e))
+  ));
+  const failed = results.filter(Boolean).length;
+  if (failed) {
+    results.forEach((why, i) => { if (why) pushLog('ERROR', `delay cascade write failed: ${why}`, affected[i].id); });
+    pushToast(`✕ ${t('toast.delayFailed')} (${failed}/${affected.length})`, 'error');
+    if (S.event) loadSessions(S.event.id);
+    return;
   }
   pushLog('DELAY', `+${minutes}min cascaded → ${affected.length} sessions`, sessionId);
   pushToast(`✓ Delay applied — ${affected.length} session${affected.length === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
@@ -3674,11 +3710,20 @@ async function resetAllDelays() {
   }
   renderSessions();
 
-  for (const s of toReset) {
+  const results = await Promise.all(toReset.map(s =>
     sb.from('leod_sessions').update({
       scheduled_start: s.planned_start, scheduled_end: s.planned_end,
       cumulative_delay: 0, delay_minutes: 0,
-    }).eq('id', s.id).then(() => {}).catch((e) => { pushLog('WARN', `delay reset write failed: ${e?.message ?? e}`, s.id); });
+    }).eq('id', s.id).select('id')
+      .then(({ data, error }) => error ? (error.message || 'write failed') : (data?.length ? null : 'no row updated'))
+      .catch((e) => e?.message ?? String(e))
+  ));
+  const failed = results.filter(Boolean).length;
+  if (failed) {
+    results.forEach((why, i) => { if (why) pushLog('ERROR', `delay reset write failed: ${why}`, toReset[i].id); });
+    pushToast(`✕ ${t('toast.delayResetFailed')} (${failed}/${toReset.length})`, 'error');
+    if (S.event) loadSessions(S.event.id);
+    return;
   }
   pushLog('DELAY', `reset · ${toReset.length} sessions cleared`, null);
 }
