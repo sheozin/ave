@@ -4074,7 +4074,7 @@ function renderSignagePanel() {
             <div class="sp-disp-actions">
               <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">▶ Launch</a>
               <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
-              <button class="id-btn" onclick="copyAndIdentifyDisplay('${esc(d.id)}')" title="Copy display UUID and flash screen">📋 Copy ID</button>
+              <button class="id-btn" onclick="copyAndIdentifyDisplay('${esc(d.id)}')" title="Copy the display link and flash the screen">📋 Copy link</button>
             </div>
           </div>
           <div class="sp-card-mgmt">
@@ -4168,9 +4168,9 @@ function renderSignagePanel() {
 
   <div class="sp-section sp-info-footer">
     <span class="sp-section-title">DISPLAY URL FORMAT</span>
-    Displays connect via:<br>
-    <code>cuedeck-display.html?url=SUPABASE_URL&amp;key=ANON_KEY&amp;id=DISPLAY_ID</code><br>
-    Open in any browser -- supports landscape &amp; portrait. Heartbeat every 30s.
+    Displays connect via their own link:<br>
+    <code>/display#id=DISPLAY_ID&amp;s=DISPLAY_KEY</code><br>
+    Use Launch, QR or Copy link on a display card, or pair a screen with its code. Treat the link like a password: anyone with it can show this display's programme.
   </div>`;
 
   // Restore pairing code input value after re-render
@@ -4233,9 +4233,14 @@ async function pairDisplayByCode(code) {
   }
 
   // Link pairing code to display
-  await sb.from('leod_signage_pairing')
+  var { error: linkErr } = await sb.from('leod_signage_pairing')
     .update({ display_id: display.id, event_id: S.event.id })
     .eq('code', code);
+  if (linkErr) {
+    pushToast('Failed to link the pairing code: ' + linkErr.message, 'error');
+    await loadDisplays(S.event.id);
+    return;
+  }
 
   pushToast('✓ ' + t('toast.displayPaired'), 'success');
   await loadDisplays(S.event.id);
@@ -4263,7 +4268,9 @@ function buildDisplayUrl(d) {
   const base = isLocal
     ? loc.href.replace(/cuedeck-console(\.html)?.*$/, 'cuedeck-display.html')
     : loc.origin + '/display';
-  return base.split('?')[0].split('#')[0] + '#id=' + encodeURIComponent(d.id);
+  // s = the display's own key: display_feed() only answers id + key pairs.
+  return base.split('?')[0].split('#')[0] + '#id=' + encodeURIComponent(d.id)
+    + (d.display_secret ? '&s=' + encodeURIComponent(d.display_secret) : '');
 }
 
 function launchDisplay(url) {
@@ -4894,16 +4901,18 @@ async function identifyDisplay(displayId) {
 
 // ── Copy & Identify Display ──────────────────────────
 function copyAndIdentifyDisplay(displayId) {
-  // Copy UUID to clipboard
+  // Copy the display link (id + key) to clipboard; the display page's manual
+  // entry accepts it
+  var d = S.displays.find(function(x) { return x.id === displayId; });
   var ta = document.createElement('textarea');
-  ta.value = displayId;
+  ta.value = d ? buildDisplayUrl(d) : displayId;
   ta.style.position = 'fixed';
   ta.style.left = '-9999px';
   document.body.appendChild(ta);
   ta.select();
   document.execCommand('copy');
   document.body.removeChild(ta);
-  pushToast('Display ID copied — screen will flash', 'success');
+  pushToast('Display link copied. The screen will flash.', 'success');
   // Also flash the display to identify it
   identifyDisplay(displayId);
 }

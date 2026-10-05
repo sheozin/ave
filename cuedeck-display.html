@@ -67,7 +67,7 @@ body{
   position:fixed;bottom:52px;left:50%;transform:translateX(-50%);
   background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);
   border-radius:8px;padding:8px 20px;font-size:12px;color:#fbbf24;
-  letter-spacing:.08em;z-index:500;display:none;
+  letter-spacing:.08em;z-index:10000;display:none;
   animation:blink .9s infinite;
 }
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
@@ -332,9 +332,9 @@ body.is-live #display{
       </div>
       <div id="pairing-timer" style="margin-top:16px;font-size:10px;color:#4b5563"></div>
       <div style="margin-top:24px;border-top:1px solid #1e293b;padding-top:16px">
-        <div style="font-size:10px;color:#4b5563;margin-bottom:6px">Or enter Display ID manually:</div>
+        <div style="font-size:10px;color:#4b5563;margin-bottom:6px">Or paste the display link from the console:</div>
         <div style="display:flex;gap:8px;justify-content:center">
-          <input id="manual-display-id" type="text" placeholder="Display UUID" style="background:#0f172a;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:11px;width:200px;text-align:center;font-family:monospace;outline:none">
+          <input id="manual-display-id" type="text" placeholder="Display link" style="background:#0f172a;border:1px solid #334155;color:#e5e7eb;padding:6px 10px;border-radius:6px;font-size:11px;width:200px;text-align:center;font-family:monospace;outline:none">
           <button onclick="manualBoot()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#60a5fa;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-family:inherit">Connect</button>
         </div>
       </div>
@@ -380,14 +380,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 // STATE
 // ═══════════════════════════════════════════════════
 let sb    = null;
-var D     = null;  // display row from leod_signage_displays  (var → window.D for E2E tests)
+var D     = null;  // display row from display_feed  (var → window.D for E2E tests)
 var S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null }; // var → window.S
-let _chan  = null;
 let _tick  = null;
-let _heartbeat   = null;
 let _sponsorIdx  = 0;
 let _sponsorTimer = null;
-let _retries     = 0;
 let _seqIdx      = 0;      // current slide index in sequence playlist
 let _seqTimer    = null;   // setTimeout handle for sequence advance
 let _tlAnimTimer = null;   // timeline scroll animation frame id
@@ -396,8 +393,34 @@ let _tlPageIdx   = 0;      // timeline current page index
 let _pgPageTimer = null;   // programme paginate interval
 let _pgPageIdx   = 0;      // programme current page index
 
+// Feed polling: one display_feed call every 2 s replaces table reads,
+// realtime, heartbeat and clock sync. The display reads nothing else.
+const POLL_MS        = 2000;
+const FAILS_FOR_BANNER = 3;
+let _displayId  = null;
+let _secret     = null;
+let _pollTimer  = null;
+let _pollBusy   = false;
+let _pollFails  = 0;
+let _booted     = false;
+
+const LS_ID     = 'cuedeck_display_id';
+const LS_SECRET = 'cuedeck_display_secret';
+const LS_AT     = 'cuedeck_display_paired_at';
+
+function saveCreds(id, secret) {
+  localStorage.setItem(LS_ID, id);
+  localStorage.setItem(LS_SECRET, secret);
+  localStorage.setItem(LS_AT, String(Date.now()));
+}
+function forgetCreds() {
+  localStorage.removeItem(LS_ID);
+  localStorage.removeItem(LS_SECRET);
+  localStorage.removeItem(LS_AT);
+}
+
 // ═══════════════════════════════════════════════════
-// BOOT FROM URL PARAMS
+// BOOT FROM URL PARAMS / SAVED PAIRING
 // ═══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
   // Try hash params first (works with file://), then query params (works with http://)
@@ -405,36 +428,40 @@ window.addEventListener('DOMContentLoaded', () => {
   const fromQuery = new URLSearchParams(window.location.search);
   const get = k => fromHash.get(k) || fromQuery.get(k);
 
-  const id  = get('id');
+  const id     = get('id');
+  const secret = get('s');
   const url = get('url') || SUPABASE_URL;   // fall back to hardcoded
   const key = get('key') || SUPABASE_ANON_KEY;
 
-  // Check localStorage for previously paired display (expires after 30 days)
-  let savedId = localStorage.getItem('cuedeck_display_id');
-  const savedAt = localStorage.getItem('cuedeck_display_paired_at');
+  // Previously paired display (expires after 30 days)
+  let savedId     = localStorage.getItem(LS_ID);
+  let savedSecret = localStorage.getItem(LS_SECRET);
+  const savedAt   = localStorage.getItem(LS_AT);
   const PAIRING_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
   if (savedId && savedAt && (Date.now() - Number(savedAt)) > PAIRING_EXPIRY_MS) {
-    localStorage.removeItem('cuedeck_display_id');
-    localStorage.removeItem('cuedeck_display_paired_at');
-    savedId = null;
+    forgetCreds();
+    savedId = savedSecret = null;
   }
 
-  const bootId = id || savedId;
+  // A link carries id + s. An old link (id only) still works if this screen
+  // already holds the secret for that display.
+  let bootId = null, bootSecret = null;
+  if (id && secret)                                     { bootId = id;      bootSecret = secret; }
+  else if (savedId && savedSecret && (!id || id === savedId)) { bootId = savedId; bootSecret = savedSecret; }
 
-  if (bootId) document.getElementById('su-id').value = bootId;
-  // Pre-fill hidden inputs so connectDisplay() and tests can read them back
+  if (id) document.getElementById('su-id').value = id;
+  // Pre-fill hidden inputs so tests can read them back
   document.getElementById('su-url').value = url;
   document.getElementById('su-key').value = key;
 
-  // Auto-boot if we have a display ID (from URL or localStorage)
+  sb = supabase.createClient(url, key);
   if (bootId) {
-    _bootedFromLocalStorage = !id && !!savedId;
-    document.getElementById('setup').style.display = 'none';
-    document.getElementById('loading').style.display = 'flex';
-    bootDisplay(url, key, bootId);
+    bootDisplay(bootId, bootSecret);
   } else {
-    // No ID anywhere — initialize Supabase client and show pairing code flow
-    sb = supabase.createClient(url, key);
+    if (id) {
+      document.getElementById('su-err').textContent =
+        'This display link is out of date. Pair the screen with the code below, or copy the link from the console again.';
+    }
     startPairing();
   }
 
@@ -443,18 +470,6 @@ window.addEventListener('DOMContentLoaded', () => {
     navigator.serviceWorker.register('/display-sw.js').catch(() => {});
   }
 });
-
-async function connectDisplay() {
-  const url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
-  const key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
-  const id  = document.getElementById('su-id').value.trim();
-  const err = document.getElementById('su-err');
-  err.textContent = '';
-  if (!id) { err.textContent = 'Display ID is required.'; return; }
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('loading').style.display = 'flex';
-  await bootDisplay(url, key, id);
-}
 
 // ═══════════════════════════════════════════════════
 // PAIRING CODE
@@ -468,192 +483,229 @@ function generatePairingCode() {
   return code.slice(0, 3) + '-' + code.slice(3);
 }
 
+// 32 hex chars from the CSPRNG. Only this screen knows it, so only this
+// screen can collect the secret once the console links the code.
+function generateNonce() {
+  var b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, function(x) { return x.toString(16).padStart(2, '0'); }).join('');
+}
+
 var _pairingPollInterval = null;
 var _pairingTimerInterval = null;
 
-async function startPairing() {
-  var code = generatePairingCode();
-  var rawCode = code.replace('-', '');
-  var expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+function stopPairing() {
+  if (_pairingPollInterval) { clearInterval(_pairingPollInterval); _pairingPollInterval = null; }
+  if (_pairingTimerInterval) { clearInterval(_pairingTimerInterval); _pairingTimerInterval = null; }
+}
 
-  // Store in pairing table (uses a placeholder event_id — console will set the real one)
-  var { error } = await sb.from('leod_signage_pairing').insert({
-    code: rawCode,
-    event_id: '00000000-0000-0000-0000-000000000000',
-    expires_at: expiresAt,
-  });
-  if (error) {
-    console.error('Failed to create pairing code:', error);
-    // Fall back to manual mode — just show the code as unavailable
+async function startPairing() {
+  stopPairing();
+  var nonce = generateNonce();
+  var code = null, rawCode = null;
+
+  // A taken code returns false; try a few fresh ones.
+  for (var attempt = 0; attempt < 3 && !rawCode; attempt++) {
+    var candidate = generatePairingCode();
+    try {
+      var { data, error } = await sb.rpc('display_pair_start', {
+        p_code: candidate.replace('-', ''), p_nonce: nonce,
+      });
+      if (!error && data === true) { code = candidate; rawCode = candidate.replace('-', ''); }
+      else if (error) console.error('Failed to create pairing code:', error);
+    } catch (e) { console.error('Failed to create pairing code:', e); }
+  }
+  if (!rawCode) {
     document.getElementById('pairing-code').textContent = '---';
-    document.getElementById('pairing-status').textContent = 'Pairing unavailable — use manual entry below';
+    document.getElementById('pairing-status').textContent = 'Pairing unavailable. Retrying shortly.';
     document.getElementById('pairing-status').style.color = '#6b7280';
+    setTimeout(function() { if (!_displayId) startPairing(); }, 10_000);
     return;
   }
 
   document.getElementById('pairing-code').textContent = code;
+  document.getElementById('pairing-status').textContent = 'Waiting for connection...';
+  document.getElementById('pairing-status').style.color = '#34d399';
 
   // Countdown timer
   var endTime = Date.now() + 5 * 60 * 1000;
   var timerEl = document.getElementById('pairing-timer');
-  if (_pairingTimerInterval) clearInterval(_pairingTimerInterval);
   _pairingTimerInterval = setInterval(function() {
     var remaining = Math.max(0, endTime - Date.now());
     var min = Math.floor(remaining / 60000);
     var sec = Math.floor((remaining % 60000) / 1000);
     timerEl.textContent = 'Code expires in ' + min + ':' + (sec < 10 ? '0' : '') + sec;
     if (remaining <= 0) {
-      clearInterval(_pairingTimerInterval);
-      clearInterval(_pairingPollInterval);
-      timerEl.textContent = 'Code expired — generating new code...';
+      stopPairing();
+      timerEl.textContent = 'Code expired. Generating a new code...';
       setTimeout(startPairing, 1000);
     }
   }, 1000);
 
-  // Poll for pairing confirmation every 2 seconds
-  if (_pairingPollInterval) clearInterval(_pairingPollInterval);
+  // Poll for the link every 2 seconds
   _pairingPollInterval = setInterval(async function() {
-    var { data } = await sb.from('leod_signage_pairing')
-      .select('display_id')
-      .eq('code', rawCode)
-      .single();
-    if (data && data.display_id) {
-      clearInterval(_pairingPollInterval);
-      clearInterval(_pairingTimerInterval);
+    var data = null;
+    try {
+      var res = await sb.rpc('display_pair_poll', { p_code: rawCode, p_nonce: nonce });
+      data = res.data;
+    } catch (_) { return; }
+    if (data && data.display_id && data.secret) {
+      stopPairing();
       document.getElementById('pairing-status').textContent = 'Connected!';
       document.getElementById('pairing-status').style.color = '#34d399';
       document.getElementById('pairing-timer').textContent = '';
-      var url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
-      var key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
-      setTimeout(function() {
-        document.getElementById('setup').style.display = 'none';
-        document.getElementById('loading').style.display = 'flex';
-        bootDisplay(url, key, data.display_id);
-      }, 500);
+      saveCreds(data.display_id, data.secret);
+      setTimeout(function() { bootDisplay(data.display_id, data.secret); }, 500);
     }
   }, 2000);
 }
 
+// Manual fallback: paste the display link the console shows (…/display#id=…&s=…).
 function manualBoot() {
-  var id = document.getElementById('manual-display-id').value.trim();
-  if (!id) { document.getElementById('su-err').textContent = 'Display ID is required.'; return; }
-  if (_pairingPollInterval) clearInterval(_pairingPollInterval);
-  if (_pairingTimerInterval) clearInterval(_pairingTimerInterval);
-  var url = document.getElementById('su-url').value.trim() || SUPABASE_URL;
-  var key = document.getElementById('su-key').value.trim() || SUPABASE_ANON_KEY;
-  document.getElementById('setup').style.display = 'none';
-  document.getElementById('loading').style.display = 'flex';
-  bootDisplay(url, key, id);
+  var raw = document.getElementById('manual-display-id').value.trim();
+  var err = document.getElementById('su-err');
+  if (!raw) { err.textContent = 'Paste the display link from the console.'; return; }
+  var hashPart = raw.indexOf('#') >= 0 ? raw.slice(raw.indexOf('#') + 1)
+               : raw.indexOf('?') >= 0 ? raw.slice(raw.indexOf('?') + 1)
+               : raw;
+  var p = new URLSearchParams(hashPart);
+  var id = p.get('id'), secret = p.get('s');
+  if (!id || !secret) {
+    err.textContent = 'That link has no display key. Copy the full link from the console.';
+    return;
+  }
+  err.textContent = '';
+  stopPairing();
+  saveCreds(id, secret);
+  bootDisplay(id, secret);
 }
 
 function disconnectDisplay() {
-  // Clear saved display and reload to show pairing screen
-  localStorage.removeItem('cuedeck_display_id');
-  if (_chan) { sb.removeChannel(_chan); _chan = null; }
+  // Forget this screen's pairing and reload to show the pairing screen
+  forgetCreds();
+  if (_pollTimer) clearInterval(_pollTimer);
   if (_tick) clearInterval(_tick);
-  if (_heartbeat) clearInterval(_heartbeat);
   window.location.replace(window.location.pathname);
 }
 
 // ═══════════════════════════════════════════════════
 // BOOT SEQUENCE
 // ═══════════════════════════════════════════════════
-var _bootedFromLocalStorage = false;
+function bootDisplay(id, secret) {
+  _displayId = id;
+  _secret    = secret;
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(pollFeed, POLL_MS);
+  return pollFeed();
+}
 
-async function bootDisplay(url, key, id) {
+// First successful feed: show the frame and start the local timers.
+async function startDisplay(feed) {
+  _booted = true;
+  applyFeed(feed);
+  saveCreds(_displayId, _secret);
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('display').style.display = 'flex';
+
+  // Try to unlock audio for video sponsors before the first render. Bounded:
+  // AudioContext.resume() can stay pending without a user gesture, and this
+  // runs inside a poll, so an unbounded wait would stop the feed.
+  await Promise.race([initAudioUnlock(), new Promise(r => setTimeout(r, 1500))]);
+
+  _tick = setInterval(tick, 1000);
+  tick();
+  render();
+  startSequence();  // Begin cycling if display has a sequence playlist
+}
+
+// The feed returned NULL: the display was deleted or its key no longer
+// matches. Forget it and go back to the pairing screen.
+function unpaired() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  forgetCreds();
+  _displayId = _secret = null;
+  window.location.replace(window.location.pathname);
+}
+
+function setBanner(on) {
+  const banner = document.getElementById('reconnect-banner');
+  if (banner) banner.style.display = on ? 'block' : 'none';
+}
+
+async function pollFeed() {
+  if (!_displayId || !_secret || _pollBusy) return;
+  _pollBusy = true;
   try {
-    sb = supabase.createClient(url, key);
-
-    // 1. Sync clock
-    await syncClock();
-
-    // 2. Load display config
-    const { data: disp, error: dErr } = await sb.from('leod_signage_displays')
-      .select('*').eq('id', id).single();
-    if (dErr || !disp) throw new Error(dErr?.message || 'Display not found');
-    D = disp;
-
-    // Apply orientation to body
-    if (D.orientation === 'portrait') document.body.classList.add('portrait');
-
-    // 3. Load event
-    const { data: ev } = await sb.from('leod_events')
-      .select('*').eq('id', D.event_id).single();
-    S.event = ev;
-
-    // 3b. Apply custom branding from event
-    if (ev) {
-      if (ev.brand_color) document.documentElement.style.setProperty('--brand', ev.brand_color);
-      if (ev.client_logo) S.clientLogo = ev.client_logo;
-      if (ev.client_name) S.clientName = ev.client_name;
+    const t0 = Date.now();
+    const { data, error } = await sb.rpc('display_feed', { p_display_id: _displayId, p_secret: _secret });
+    const t1 = Date.now();
+    if (error) {
+      // A malformed id can never succeed; anything else may be transient.
+      if (error.code === '22P02') { unpaired(); return; }
+      throw error;
     }
+    if (!data) { unpaired(); return; }
 
-    // 4. Load sessions
-    const { data: sessions } = await sb.from('leod_sessions')
-      .select('*').eq('event_id', D.event_id).order('sort_order');
-    S.sessions = sessions || [];
+    _pollFails = 0;
+    setBanner(false);
+    // Server clock offset, corrected for half the round trip
+    const serverMs = new Date(data.server_time).getTime();
+    if (!isNaN(serverMs)) S.clockOffset = serverMs - t1 + (t1 - t0) / 2;
 
-    // 5. Load sponsors (if needed)
-    const { data: sponsors } = await sb.from('leod_signage_sponsors')
-      .select('*').eq('event_id', D.event_id).eq('active', true)
-      .order('sort_order').order('name');
-    S.sponsors = sponsors || [];
-
-    // 6. Subscribe to changes
-    subscribeAll();
-
-    // 7. Show display
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('display').style.display = 'flex';
-
-    // 8. Try to unlock audio for video sponsors (await before first render)
-    await initAudioUnlock();
-
-    // 9. Start clock tick
-    _tick = setInterval(tick, 1000);
-    tick();
-
-    // 9. Start heartbeat (update last_seen_at every 30s)
-    sendHeartbeat();
-    _heartbeat = setInterval(sendHeartbeat, 30_000);
-
-    // 10. Resync clock every 5 min
-    setInterval(syncClock, 300_000);
-
-    // Save display ID + pairing timestamp for auto-reconnect (expires after 30 days)
-    localStorage.setItem('cuedeck_display_id', id);
-    localStorage.setItem('cuedeck_display_paired_at', String(Date.now()));
-
-    render();
-    startSequence();  // Begin cycling if display has a sequence playlist
+    if (!_booted) await startDisplay(data);
+    else applyFeed(data);
   } catch (e) {
-    // If auto-reconnect from localStorage failed, clear saved ID and fall back to pairing
-    var wasLocalStorage = localStorage.getItem('cuedeck_display_id') === id;
-    if (wasLocalStorage) localStorage.removeItem('cuedeck_display_id');
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('setup').style.display = 'flex';
-    document.getElementById('su-err').textContent = `Connection failed: ${e.message}`;
-    // Only auto-start pairing if we booted from localStorage (not URL params)
-    if (_bootedFromLocalStorage && !_pairingPollInterval) {
-      if (!sb) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-      startPairing();
-    }
+    // Network or server error: keep whatever is on screen and keep polling.
+    _pollFails++;
+    if (_pollFails >= FAILS_FOR_BANNER) setBanner(true);
+  } finally {
+    _pollBusy = false;
   }
 }
 
-// ═══════════════════════════════════════════════════
-// CLOCK SYNC
-// ═══════════════════════════════════════════════════
-async function syncClock() {
-  try {
-    const t0 = Date.now();
-    const { data } = await sb.from('leod_clock').select('server_time').eq('id', 'master').single();
-    const t1 = Date.now();
-    if (!data) return;
-    const rtt = t1 - t0;
-    const serverMs = new Date(data.server_time).getTime();
-    S.clockOffset = serverMs - t1 + rtt / 2;
-  } catch { /* continue with local time */ }
+// Display fields that change without anything visible changing.
+function displayShape(d) {
+  if (!d) return '';
+  const { last_seen_at, global_override, ...rest } = d;
+  return JSON.stringify(rest);
+}
+
+// Apply a feed and re-render only what changed, so carousels, scrolls and
+// sequences are not restarted every poll.
+function applyFeed(feed) {
+  const prevD        = D;
+  const prevIdentify = prevD?.global_override?.type === 'identify';
+  const displayChanged  = displayShape(feed.display) !== displayShape(prevD);
+  const sessions = feed.sessions || [];
+  const sponsors = feed.sponsors || [];
+  const sessionsChanged = JSON.stringify(sessions) !== JSON.stringify(S.sessions);
+  const sponsorsChanged = JSON.stringify(sponsors) !== JSON.stringify(S.sponsors);
+
+  D = feed.display;
+  S.event    = feed.event || null;
+  S.sessions = sessions;
+  S.sponsors = sponsors;
+
+  if (S.event?.brand_color) document.documentElement.style.setProperty('--brand', S.event.brand_color);
+  document.body.classList.toggle('portrait', D?.orientation === 'portrait');
+
+  if (!_booted || !prevD) return;  // first render happens in startDisplay
+
+  if (D?.global_override?.type === 'identify' && !prevIdentify) flashIdentify();
+
+  if (displayChanged) {
+    // Reset sequence index if playlist changed remotely
+    if (JSON.stringify(D?.sequence) !== JSON.stringify(prevD?.sequence)) _seqIdx = 0;
+    render();
+    startSequence();
+  } else if (sessionsChanged) {
+    render();
+  } else if (sponsorsChanged && activeMode() === 'sponsors') {
+    render();
+  }
 }
 
 function correctedNow() { return Date.now() + (S.clockOffset || 0); }
@@ -661,82 +713,6 @@ function correctedNow() { return Date.now() + (S.clockOffset || 0); }
 function correctedHMS() {
   const d = new Date(correctedNow());
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-}
-
-// ═══════════════════════════════════════════════════
-// REALTIME
-// ═══════════════════════════════════════════════════
-function subscribeAll() {
-  if (_chan) _chan.unsubscribe();
-  _chan = sb.channel('display-' + D.id)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_sessions',
-        filter: `event_id=eq.${D.event_id}` }, p => {
-      if (p.eventType === 'DELETE') {
-        S.sessions = S.sessions.filter(s => s.id !== p.old.id);
-      } else {
-        const idx = S.sessions.findIndex(s => s.id === p.new.id);
-        if (idx >= 0) S.sessions[idx] = p.new; else S.sessions.push(p.new);
-        S.sessions.sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
-      }
-      render();
-    })
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'leod_signage_displays',
-        filter: `id=eq.${D.id}` }, p => {
-      if (p.new?.global_override?.type === 'identify') flashIdentify();
-      const prevSeq = JSON.stringify(D?.sequence);
-      D = p.new;
-      // Reset sequence index if playlist changed remotely
-      if (JSON.stringify(D.sequence) !== prevSeq) _seqIdx = 0;
-      render();
-      startSequence();
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_sponsors',
-        filter: `event_id=eq.${D.event_id}` }, p => {
-      if (p.eventType === 'DELETE') {
-        S.sponsors = S.sponsors.filter(s => s.id !== p.old.id);
-      } else {
-        const idx = S.sponsors.findIndex(s => s.id === p.new.id);
-        if (idx >= 0) S.sponsors[idx] = p.new; else S.sponsors.push(p.new);
-        S.sponsors.sort((a,b) => (a.sort_order||0) - (b.sort_order||0));
-      }
-      if (activeMode() === 'sponsors') render();
-    })
-    .subscribe(status => {
-      const banner = document.getElementById('reconnect-banner');
-      if (status === 'SUBSCRIBED') {
-        _retries = 0;
-        if (banner) banner.style.display = 'none';
-      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        if (banner) banner.style.display = 'block';
-        scheduleReconnect();
-      }
-    });
-}
-
-function scheduleReconnect() {
-  const delay = Math.min(1000 * 2 ** _retries, 30_000) + Math.random() * 500;
-  _retries++;
-  setTimeout(async () => {
-    try {
-      await syncClock();
-      const { data: sessions } = await sb.from('leod_sessions')
-        .select('*').eq('event_id', D.event_id).order('sort_order');
-      S.sessions = sessions || [];
-      const { data: disp } = await sb.from('leod_signage_displays').select('*').eq('id', D.id).single();
-      if (disp) D = disp;
-      subscribeAll();
-      render();
-    } catch { scheduleReconnect(); }
-  }, delay);
-}
-
-// ═══════════════════════════════════════════════════
-// HEARTBEAT
-// ═══════════════════════════════════════════════════
-async function sendHeartbeat() {
-  if (!D?.id || !sb) return;
-  await sb.from('leod_signage_displays')
-    .update({ last_seen_at: new Date().toISOString() }).eq('id', D.id);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1802,19 +1778,11 @@ function flashIdentify() {
   setTimeout(() => { el.style.display  = 'none'; }, 900);
 }
 
-// Handle device wake-up (laptop lid open)
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && sb) {
-    await syncClock();
-    if (_chan?.state !== 'joined') { _retries = 0; scheduleReconnect(); }  // reset backoff on wake
-    else {
-      const { data: sessions } = await sb.from('leod_sessions')
-        .select('*').eq('event_id', D.event_id).order('sort_order');
-      S.sessions = sessions || [];
-      render();
-    }
-  }
+// Handle device wake-up (laptop lid open) and network return: poll now
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') pollFeed();
 });
+window.addEventListener('online', () => pollFeed());
 </script>
 </body>
 </html>

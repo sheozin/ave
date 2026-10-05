@@ -33,8 +33,8 @@ const POLICIES: Policy[] = [
   // leod_users (own row only)
   { table: 'leod_users',            role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_users',            role: 'authenticated',  ops: ['SELECT'],                        condition: 'own_row' },
-  // leod_signage_displays (anon: SELECT + heartbeat UPDATE only)
-  { table: 'leod_signage_displays', role: 'anon',           ops: ['SELECT', 'UPDATE'],              condition: 'always' },
+  // leod_signage_displays (anon: none since 080; the display page reads through display_feed())
+  { table: 'leod_signage_displays', role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_signage_displays', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
   // leod_signage_sponsors (anon: SELECT only)
   { table: 'leod_signage_sponsors', role: 'anon',           ops: ['SELECT'],                        condition: 'always' },
@@ -75,11 +75,11 @@ describe('RLS: anon role — read-only on core tables', () => {
 });
 
 describe('RLS: anon role — signage tables', () => {
-  it('08 anon can SELECT leod_signage_displays (display page reads config)', () => {
-    expect(canDo('anon', 'leod_signage_displays', 'SELECT')).toBe(true);
+  it('08 anon CANNOT SELECT leod_signage_displays (rows carry display_secret; page uses display_feed)', () => {
+    expect(canDo('anon', 'leod_signage_displays', 'SELECT')).toBe(false);
   });
-  it('09 anon can UPDATE leod_signage_displays (heartbeat last_seen_at)', () => {
-    expect(canDo('anon', 'leod_signage_displays', 'UPDATE')).toBe(true);
+  it('09 anon CANNOT UPDATE leod_signage_displays (display_feed is the heartbeat)', () => {
+    expect(canDo('anon', 'leod_signage_displays', 'UPDATE')).toBe(false);
   });
   it('10 anon CANNOT INSERT leod_signage_displays', () => {
     expect(canDo('anon', 'leod_signage_displays', 'INSERT')).toBe(false);
