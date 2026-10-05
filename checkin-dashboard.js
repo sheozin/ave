@@ -5,7 +5,7 @@
 // return null or a "not yet" message. tests/checkin-dashboard.spec.ts.
 // Design: docs/superpowers/specs/2026-10-04-checkin-roles-design.md (dashboard)
 //         docs/superpowers/specs/2026-10-04-checkin-event-day-intelligence-design.md (features 1-3)
-import { checkinWindow } from './checkin-window.js';
+import { isValidTimeZone } from './checkin-window.js';
 
 export const BUCKET_S = 900;
 export const MAX_BUCKETS = 96;              // one day of 15-minute bars
@@ -17,9 +17,11 @@ const SUSTAIN_MIN = 10;
 const CLOSE_SHARE = 0.9;
 
 export function fmtClock(ms, timeZone) {
+  const at = new Date(ms);
+  if (!Number.isFinite(at.getTime())) return '';
   const opts = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
-  try { return new Intl.DateTimeFormat('en-GB', { ...opts, timeZone }).format(new Date(ms)); }
-  catch { return new Intl.DateTimeFormat('en-GB', opts).format(new Date(ms)); }
+  if (isValidTimeZone(timeZone)) return new Intl.DateTimeFormat('en-GB', { ...opts, timeZone }).format(at);
+  return new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: 'UTC' }).format(at) + ' UTC';
 }
 
 export function pct(n, d) { return d > 0 ? Math.round((100 * n) / d) : null; }
@@ -163,7 +165,7 @@ export function gapLines(ops, timeZone) {
 // Staffing advice (feature 2) from measured inputs only.
 // "Now" is the server's generated_at, never the device clock; nowMs is only
 // a fallback for a response without it.
-export function paceMessages({ stats, nowMs, eventStartMs }) {
+export function paceMessages({ stats, nowMs, eventStartMs, timeZone }) {
   const gen = stats && stats.generated_at ? Date.parse(stats.generated_at) : NaN;
   if (Number.isFinite(gen)) nowMs = gen;
   const ops = stats && stats.ops;
@@ -175,7 +177,7 @@ export function paceMessages({ stats, nowMs, eventStartMs }) {
   if (!measured.length) {
     return [{ tone: 'info', text: 'Desk speed appears once a desk has checked people in for 5 minutes.' }];
   }
-  const online = new Set((ops.desks || []).filter(x => deskState(x).kind !== 'offline').map(x => x.k));
+  const online = new Set((ops.desks || []).filter(x => deskState(x, timeZone).kind !== 'offline').map(x => x.k));
   const live = measured.filter(sp => online.has(sp.k));
   const capacity = live.reduce((sum, sp) => sum + deskSpeed(sp), 0);
   const out = [];
@@ -201,19 +203,31 @@ export function paceMessages({ stats, nowMs, eventStartMs }) {
   return out;
 }
 
-function addDays(ymd, n) {
-  const [y, m, dd] = ymd.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, dd + n)).toISOString().slice(0, 10);
+function tzOffsetMs(at, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(at);
+  const get = (t) => Number(parts.find(p => p.type === t).value);
+  return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'))
+    - Math.floor(at.getTime() / 1000) * 1000;
 }
 
-// The event's start as a UTC instant. checkinWindow(d, tz).opensAt is local
-// midnight of d minus 7 days, so asking for d plus 7 gives midnight of d,
-// with the same DST handling the check-in window already has.
+// The event's start as a UTC instant. The local wall-clock time is resolved
+// directly (not as midnight plus elapsed minutes), so a DST change earlier
+// on the same day cannot shift it.
 export function eventStartUtc(eventDate, startTime, timeZone) {
   const m = /^(\d{2}):(\d{2})/.exec(String(startTime || ''));
-  if (!m || typeof eventDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return null;
-  if (addDays(eventDate, 0) !== eventDate) return null;
-  const w = checkinWindow(addDays(eventDate, 7), timeZone);
-  if (!w) return null;
-  return new Date(w.opensAt.getTime() + (Number(m[1]) * 60 + Number(m[2])) * 60000);
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(eventDate || ''));
+  if (!m || !dm || !isValidTimeZone(timeZone)) return null;
+  const [y, mo, d, hh, mi] = [dm[1], dm[2], dm[3], m[1], m[2]].map(Number);
+  if (hh > 23 || mi > 59) return null;
+  const guess = Date.UTC(y, mo - 1, d, hh, mi);
+  const check = new Date(guess);
+  if (check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) return null;
+  const off1 = tzOffsetMs(new Date(guess), timeZone);
+  let t = guess - off1;
+  const off2 = tzOffsetMs(new Date(t), timeZone);
+  if (off2 !== off1) t = guess - off2;
+  return new Date(t);
 }

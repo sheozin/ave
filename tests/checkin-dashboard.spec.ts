@@ -21,6 +21,10 @@ describe('fmtClock and pct', () => {
     expect(d.fmtClock(T0 * 1000, WAW)).toBe('10:00');
     expect(d.fmtClock(T0 * 1000, 'Asia/Kolkata')).toBe('13:30');
   });
+  it('an invalid zone formats in UTC and says so; an invalid date is empty', () => {
+    expect(d.fmtClock(T0 * 1000, 'Not/AZone')).toBe('08:00 UTC');
+    expect(d.fmtClock(NaN, WAW)).toBe('');
+  });
   it('never divides by zero', () => {
     expect(d.pct(45, 120)).toBe(38);
     expect(d.pct(0, 0)).toBeNull();
@@ -241,6 +245,13 @@ describe('eventStartUtc', () => {
     expect(d.eventStartUtc('2026-10-26', '09:00:00', 'Europe/Warsaw')!.toISOString()).toBe('2026-10-26T08:00:00.000Z');
     expect(d.eventStartUtc('2026-11-12', '18:30', 'Africa/Cairo')!.toISOString()).toBe('2026-11-12T16:30:00.000Z');
     expect(d.eventStartUtc('2026-11-20', '09:15', 'Asia/Kolkata')!.toISOString()).toBe('2026-11-20T03:45:00.000Z');
+  });
+  it('is right on the day the clocks change', () => {
+    expect(d.eventStartUtc('2026-10-25', '09:00', 'Europe/Warsaw')!.toISOString()).toBe('2026-10-25T08:00:00.000Z');
+    expect(d.eventStartUtc('2026-03-29', '09:00', 'Europe/Warsaw')!.toISOString()).toBe('2026-03-29T07:00:00.000Z');
+    expect(d.eventStartUtc('2026-10-30', '09:00', 'Africa/Cairo')!.toISOString()).toBe('2026-10-30T07:00:00.000Z');
+    expect(d.eventStartUtc('2026-10-29', '09:00', 'Africa/Cairo')!.toISOString()).toBe('2026-10-29T06:00:00.000Z');
+    expect(d.eventStartUtc('2026-09-27', '09:00', 'Pacific/Auckland')!.toISOString()).toBe('2026-09-26T20:00:00.000Z');
   });
   it('null for anything it cannot read', () => {
     expect(d.eventStartUtc('2026-02-31', '09:00', 'Europe/Warsaw')).toBeNull();
