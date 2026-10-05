@@ -582,3 +582,239 @@ test.describe('Display: pairing', () => {
   });
 
 });
+
+// ── SESSION PEOPLE ─────────────────────────────────────────────────────────
+
+const PANEL_PEOPLE = [
+  { name: 'Jane Smith', company: 'Contoso',   role: 'moderator' },
+  { name: 'Ahmed Ali',  company: 'Fabrikam',  role: 'speaker' },
+  { name: 'Sara Lee',   company: 'Northwind', role: 'panelist' },
+];
+
+function feedWithPeople(people: unknown[], mode = 'schedule', speaker: string | null = 'Jane Smith (moderator), Ahmed Ali, Sara Lee') {
+  const f = makeFeed({ display: { content_mode: mode } });
+  Object.assign(f.sessions[0] as Record<string, unknown>, { title: 'Panel: future of MICE', speaker, company: null, people });
+  return f;
+}
+
+test.describe('Display: session people', () => {
+
+  test('40 schedule shows the moderator line and the speakers', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Panel: future of MICE');
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by Jane Smith · Contoso');
+    await expect(page.locator('.d-people-list')).toHaveText('Ahmed Ali · Fabrikam, Sara Lee · Northwind');
+    await expect(page.locator('.d-speaker')).toHaveCount(0);
+  });
+
+  test('41 stage timer shows the moderator line and the speakers', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE, 'stage-timer') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Panel: future of MICE');
+    await expect(page.locator('.st-people-mod')).toHaveText('Moderated by Jane Smith · Contoso');
+    await expect(page.locator('.st-people-list')).toHaveText('Ahmed Ali · Fabrikam, Sara Lee · Northwind');
+    await expect(page.locator('.st-speaker')).toHaveCount(0);
+  });
+
+  test('42 a session without people still shows speaker and company', async ({ page }) => {
+    await mockSupabase(page);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-speaker')).toHaveText('Jane Smith · Acme');
+    await expect(page.locator('.d-people-mod')).toHaveCount(0);
+  });
+
+  test('43 stage timer without people still shows speaker', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-speaker')).toHaveText('Jane Smith');
+  });
+
+  test('44 names with markup render as text', async ({ page }) => {
+    const people = [
+      { name: '<b>Bold</b> Mod', company: '<i>Co</i>', role: 'moderator' },
+      { name: '<img src=x onerror="window.__xss=1">Eve', company: null, role: 'speaker' },
+    ];
+    await mockSupabase(page, { feed: () => feedWithPeople(people) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by <b>Bold</b> Mod · <i>Co</i>');
+    await expect(page.locator('.d-people-list')).toHaveText('<img src=x onerror="window.__xss=1">Eve');
+    await expect(page.locator('.d-people b, .d-people i, .d-people img')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
+  });
+
+  test('45 a long panel caps the visible names and says how many more', async ({ page }) => {
+    const people = [{ name: 'Mod One', company: null, role: 'moderator' },
+      ...Array.from({ length: 8 }, (_, i) => ({ name: `Panelist ${i + 1}`, company: null, role: 'panelist' }))];
+    await mockSupabase(page, { feed: () => feedWithPeople(people) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by Mod One');
+    await expect(page.locator('.d-people-list')).toHaveText(
+      'Panelist 1, Panelist 2, Panelist 3, Panelist 4, Panelist 5, Panelist 6 +2 more');
+  });
+
+  test('46 timeline shows a one line people summary', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE, 'timeline', null) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.tl-row').first().locator('.tl-meta span').first())
+      .toHaveText('Jane Smith (moderator), Ahmed Ali, Sara Lee');
+  });
+
+  test('47 an empty people array behaves exactly as before', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople([], 'schedule', 'Solo Speaker') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-speaker')).toHaveText('Solo Speaker');
+    await expect(page.locator('.d-people')).toHaveCount(0);
+  });
+
+});
+
+// ── SESSION PEOPLE: LONG NAMES AND SMALL SCREENS ─────────────────────────────
+
+const LONG_PERSON = { name: 'H.E. Dr. Mohamed Abdel-Rahman El-Sayed',
+  company: 'Ministry of Tourism and Antiquities, Arab Republic of Egypt', role: 'speaker' };
+const BIG_PANEL = [
+  { name: 'Jane Smith', company: 'Contoso', role: 'moderator' },
+  LONG_PERSON,
+  { name: 'Ahmed Ali', company: 'Fabrikam', role: 'panelist' },
+  { name: 'Sara Lee', company: 'Northwind', role: 'panelist' },
+  { name: 'Omar Said', company: 'Egyptian Tourism Authority', role: 'panelist' },
+  { name: 'Lina Haddad', company: 'Marriott International', role: 'panelist' },
+  { name: 'Karim Mostafa', company: 'AVE Events', role: 'panelist' },
+  { name: 'Nour El-Din', company: 'GTR', role: 'panelist' },
+];
+
+async function personOverflow(page: Page, sel: string) {
+  return page.evaluate((s) => {
+    const els = [...document.querySelectorAll(s)];
+    return { count: els.length, over: els.filter(e => e.getBoundingClientRect().right > window.innerWidth + 0.5
+      || e.getBoundingClientRect().left < -0.5).map(e => e.textContent) };
+  }, sel);
+}
+
+for (const [w, h] of [[1080, 1920], [1280, 720]] as const) {
+  test.describe(`Display: long names at ${w}x${h}`, () => {
+    test.use({ viewport: { width: w, height: h } });
+
+    test(`48 schedule keeps every person on screen (${w}x${h})`, async ({ page }) => {
+      await mockSupabase(page, { feed: () => feedWithPeople([{ ...LONG_PERSON, role: 'moderator' }, ...BIG_PANEL.slice(1)]) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.d-people-mod')).toContainText('Ministry of Tourism');
+      const r = await personOverflow(page, '.d-people-person');
+      expect(r.count).toBe(7);
+      expect(r.over).toEqual([]);
+    });
+
+    test(`49 stage timer keeps every person on screen (${w}x${h})`, async ({ page }) => {
+      await mockSupabase(page, { feed: () => feedWithPeople(BIG_PANEL, 'stage-timer') });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.st-people-list')).toContainText('Ministry of Tourism');
+      const r = await personOverflow(page, '.st-people-person');
+      expect(r.count).toBe(7);
+      expect(r.over).toEqual([]);
+    });
+  });
+}
+
+test.describe('Display: small landscape screen', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('50 a big panel still leaves NEXT SESSION on screen at 1280x720', async ({ page }) => {
+    // a two-line title plus the full panel: before the max-height rule this
+    // pushed the next session's time below 720 px
+    await mockSupabase(page, { feed: () => {
+      const f = feedWithPeople(BIG_PANEL);
+      (f.sessions[0] as Record<string, unknown>).title = 'Panel: the future of MICE and business events in North Africa';
+      return f;
+    } });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-list')).toBeVisible();
+    for (const sel of ['.d-next-lbl', '.d-next-title', '.d-next-time']) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box, sel).not.toBeNull();
+      expect(box!.y + box!.height, sel).toBeLessThanOrEqual(720);
+    }
+  });
+});
+
+test.describe('Display: stage timer next line', () => {
+
+  test('51 next and standby lines cap the people at 3 names plus +N', async ({ page }) => {
+    const f = makeFeed({ display: { content_mode: 'stage-timer' } });
+    Object.assign(f.sessions[1] as Record<string, unknown>, { title: 'Panel B', speaker: 'ignored', people: BIG_PANEL });
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-next')).toHaveText(
+      'NEXT: Panel B · Jane Smith (moderator), H.E. Dr. Mohamed Abdel-Rahman El-Sayed, Ahmed Ali +5');
+  });
+
+  test('52 standby line uses the same cap', async ({ page }) => {
+    const f = makeFeed({ display: { content_mode: 'stage-timer' } });
+    (f.sessions[0] as Record<string, unknown>).status = 'ENDED';
+    Object.assign(f.sessions[1] as Record<string, unknown>, { title: 'Panel B', people: BIG_PANEL.slice(0, 5) });
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-standby-session')).toHaveText(
+      'Panel B · Jane Smith (moderator), H.E. Dr. Mohamed Abdel-Rahman El-Sayed, Ahmed Ali +2');
+  });
+
+});
+
+// ── STAGE TIMER STANDBY: REAL EVENT DATE ──────────────────────────────────
+
+// Event in Africa/Cairo (UTC+3 on 12 Oct 2026); next session 09:00 local = 06:00Z.
+// The display's clock follows the feed's server_time, so that fixes "now".
+function standbyFeed(nowIso: string | null, event: Record<string, unknown> | null = { date: '2026-10-12', timezone: 'Africa/Cairo' }) {
+  const f = makeFeed({ display: { content_mode: 'stage-timer' },
+    event: { name: 'GTR North Africa 2026', brand_color: '#3b82f6', ...(event || {}) } });
+  if (nowIso) f.server_time = nowIso;
+  f.sessions = [
+    { id: 'n1', sort_order: 1, title: 'Opening', speaker: 'Jane Smith', company: null, room: 'Hall A',
+      status: 'PLANNED', planned_start: '09:00:00', planned_end: '09:30:00',
+      scheduled_start: '09:00:00', scheduled_end: '09:30:00', actual_start: null },
+  ];
+  return f;
+}
+
+test.describe('Display: stage timer counts to the real event start', () => {
+  test.use({ timezoneId: 'UTC' });
+
+  test('53 a week ahead shows the start day and event-local time', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-05T12:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('Mon 12 Oct, 09:00');
+    await expect(page.locator('#st-standby-label')).toHaveText('STARTS');
+    await page.waitForTimeout(1500); // the 1 s tick keeps the same text
+    await expect(page.locator('#st-standby-countdown')).toHaveText('Mon 12 Oct, 09:00');
+  });
+
+  test('54 two hours ahead counts down with hours', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T04:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(02:00:00|01:59:5\d)$/);
+    await expect(page.locator('#st-standby-label')).toHaveText('NEXT UP IN');
+    await page.waitForTimeout(1500);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(02:00:00|01:59:[45]\d)$/);
+  });
+
+  test('55 ten minutes ahead counts down in minutes', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T05:50:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(10:00|09:5\d)$/);
+  });
+
+  test('56 past the start and not started says STARTING NOW', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T06:05:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('STARTING NOW');
+    await page.waitForTimeout(1500);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('STARTING NOW');
+  });
+
+  test('57 a feed without date and timezone keeps the old time-of-day countdown', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed(null, null) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-label')).toHaveText('NEXT UP IN');
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^\d{2,}:\d{2}$/);
+  });
+});

@@ -346,7 +346,17 @@ $('f-pass').addEventListener('submit', async (e) => {
 });
 
 // ── signed in ───────────────────────────────────────────
+// Return path after sign-in, e.g. from the post-event report email. Only a
+// check-in page for one event id is accepted, so the parameter can never
+// send anyone off-site or to an arbitrary path.
+function safeNext() {
+  const n = new URLSearchParams(location.search).get('next');
+  return n && /^\/checkin\/(report|dashboard|setup|desk)\?event=[0-9a-f-]{36}$/i.test(n) ? n : null;
+}
+
 async function enter(user) {
+  const nxt = safeNext();
+  if (nxt) { location.replace(nxt); return; }
   ME = user;
   const { data: me, error } = await sb.from('leod_users').select('role, name').eq('id', user.id).maybeSingle();
   if (error) console.error('checkin home: profile read failed', error.message);
@@ -471,9 +481,11 @@ function card(r) {
   const go = (label, cls, href) => { const a = el('a', 'btn ' + cls, label); a.href = href; acts.appendChild(a); };
   const setup = '/checkin/setup?event=' + r.event_id, desk = '/checkin/desk?event=' + r.event_id;
   const dash = '/checkin/dashboard?event=' + r.event_id;
+  const report = '/checkin/report?event=' + r.event_id;
   // Viewers read numbers only: one button, to the dashboard.
   if (role === 'viewer') {
     if (r.state !== 'none') go('View dashboard', 'btn-p', dash);
+    if (r.state === 'ended') go('Report', 'btn-s', report);
     c.appendChild(acts);
     return c;
   }
@@ -495,6 +507,7 @@ function card(r) {
   } else if (r.state === 'ended' && org) {
     go('View attendance', 'btn-s', setup + '&step=attendees');
   }
+  if (r.state === 'ended' && can(role, 'report')) go('Report', 'btn-p', report);
   if (r.state !== 'none') {
     if (role === 'lead') go('Desk staff', 'btn-s', setup + '&step=staff');
     go('Dashboard', 'btn-s', dash);
