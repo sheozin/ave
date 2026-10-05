@@ -14,7 +14,7 @@ export type Permission =
   | 'go_live' | 'transfer_owner' | 'archive_event'
   | 'edit_details' | 'manage_guests' | 'test_setup' | 'export' | 'invite_any'
   | 'invite_crew' | 'kiosk' | 'walk_in' | 'undo_any' | 'desk_health'
-  | 'company_board' | 'alerts'
+  | 'company_board' | 'alerts' | 'report'
   | 'desk' | 'dashboard'
 
 export const ROLES: CheckinRole[] = ['owner', 'organizer', 'lead', 'crew', 'viewer']
@@ -39,6 +39,7 @@ export const GRANTS: Record<Permission, CheckinRole[]> = {
   desk_health: LEADS,            // desk panel and staffing advice (people data)
   company_board: LEADS,          // company arrival board (company names)
   alerts: LEADS,                 // VIP arrival alerts (guest names)
+  report: ['owner', 'organizer', 'viewer'],  // post-event report; leads run the day, not the review
   desk: ['owner', 'organizer', 'lead', 'crew'],
   dashboard: ['owner', 'organizer', 'lead', 'crew', 'viewer'],
 }

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check-in report</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+.crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
+.crumb a{color:var(--t2);text-decoration:none}.crumb b{color:var(--t1);font-weight:600}
+.banner{margin:20px 28px 0;padding:12px 16px;border-radius:12px;background:var(--amsf);border:1px solid var(--ambd);color:var(--am);font-size:13px}
+.banner b{color:#7A4700}
+.rep{max-width:1040px;margin:0 auto;padding:20px 28px 40px}
+.rep h1{margin:0 0 4px;font-size:26px;letter-spacing:-.5px;overflow-wrap:anywhere}
+.meta-line{font-size:13px;color:var(--t2);margin:0 0 18px}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.tile{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);min-width:0}
+.tile span{display:block;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em}
+.tile b{display:block;font-size:30px;letter-spacing:-1px;margin-top:6px}
+.tile small{display:block;font-size:12.5px;color:var(--t2);margin-top:2px}
+.card{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}
+.card p{margin:0;font-size:13.5px;line-height:1.6;color:var(--t1)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid #F0F0F3}
+.tbl td{padding:10px;border-bottom:1px solid #F5F5F7;overflow-wrap:anywhere}
+.tbl td.n,.tbl th.n{text-align:right;font-variant-numeric:tabular-nums}
+.empty{font-size:13px;color:var(--t2)}
+#page-err:empty,#err:empty{display:none}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.rep{padding:16px}.banner{margin:16px 16px 0}.nav{padding:14px 16px;flex-wrap:wrap;gap:10px}.crumb{display:none}}
+@media print{.nav,.no-print{display:none!important}body{background:#fff}.tile,.card{box-shadow:none;border:1px solid #E5E5EA}}
+</style>
+</head>
+<body>
+<p class="small" id="page-loading" style="margin:40px auto;text-align:center">Loading the report…</p>
+<div class="err" id="page-err" style="margin:16px 28px"></div>
+
+<div id="full" hidden>
+  <nav class="nav">
+    <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
+    <div class="nav-r">
+      <a class="btn btn-s" id="dash-link" href="#">Dashboard</a>
+      <button class="btn btn-s" id="print" type="button">Print</button>
+    </div>
+  </nav>
+  <div class="banner" id="banner" hidden><b>Test mode.</b> These numbers are from test check-ins and are cleared when the event goes live.</div>
+  <main class="rep">
+    <h1 id="ev-name"></h1>
+    <p class="meta-line" id="meta"></p>
+    <div class="err" id="err"></div>
+    <section class="tiles" aria-label="Totals">
+      <div class="tile"><span>Checked in</span><b id="t-in"></b><small id="t-turn"></small></div>
+      <div class="tile"><span>Did not arrive</span><b id="t-no"></b><small>on the guest list</small></div>
+      <div class="tile"><span>Walk-ins</span><b id="t-walk"></b><small>kiosk and desk</small></div>
+      <div class="tile"><span>Busiest 15 minutes</span><b id="t-peak"></b><small id="t-peak-s"></small></div>
+    </section>
+    <section class="card" aria-label="Arrivals">
+      <h2>Arrivals</h2>
+      <p id="span"></p>
+    </section>
+    <section class="card" aria-label="By ticket type">
+      <h2>By ticket type</h2>
+      <table class="tbl"><thead><tr><th>Ticket type</th><th class="n">Registered</th><th class="n">Checked in</th><th class="n">Did not arrive</th><th class="n">Turnout</th></tr></thead><tbody id="tt-body"></tbody></table>
+      <p class="empty" id="tt-empty" hidden>No guests on the list.</p>
+    </section>
+    <section class="card" aria-label="Desks">
+      <h2>Desks</h2>
+      <table class="tbl"><thead><tr><th>Desk</th><th class="n">Check-ins</th><th class="n">Busiest 15 minutes</th></tr></thead><tbody id="desk-body"></tbody></table>
+      <p class="empty" id="desk-empty" hidden>No desk checked anyone in.</p>
+      <p id="offline" style="margin-top:12px"></p>
+    </section>
+    <section class="card" id="co-card" hidden aria-label="Companies with people missing">
+      <h2>Companies with people missing</h2>
+      <table class="tbl"><thead><tr><th>Company</th><th class="n">Arrived</th><th class="n">Did not arrive</th></tr></thead><tbody id="co-body"></tbody></table>
+      <p class="empty" id="co-empty" hidden>Every company on the list had everyone arrive.</p>
+    </section>
+    <p class="meta-line" id="updated"></p>
+  </main>
+</div>
+
+<script type="module">
+import { effectiveRole, can } from '/checkin-roles.js';
+import { reportTiles, offlineLine, deskRows, ticketRows } from '/checkin-report.js';
+
+const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+sb.auth.onAuthStateChange((event) => { if (event === 'SIGNED_OUT') location.replace('/checkin'); });
+const $ = (id) => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const EVENT_ID = new URLSearchParams(location.search).get('event');
+const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const td = (x, n) => el('td', n ? 'n' : null, x == null ? '' : String(x));
+
+function render(r) {
+  const tz = r.event.timezone;
+  $('banner').hidden = r.status !== 'test';
+  $('crumb-ev').textContent = r.event.name;
+  $('ev-name').textContent = r.event.name;
+  document.title = r.event.name + ' check-in report';
+  $('meta').textContent = [fmtDate(r.event.date), r.event.venue, tz.replace(/_/g, ' ')].filter(Boolean).join(' · ');
+  const t = reportTiles(r, tz);
+  $('t-in').textContent = t.checkedIn + ' of ' + t.registered;
+  $('t-turn').textContent = t.turnout === null ? 'No guests on the list' : t.turnout + '% turnout';
+  $('t-no').textContent = String(t.noShows);
+  $('t-walk').textContent = String(t.walkIns);
+  $('t-peak').textContent = String(t.peakN);
+  $('t-peak-s').textContent = t.peakRange || 'No arrivals';
+  $('span').textContent = t.firstLast
+    ? 'First arrival to last: ' + t.firstLast + ' (' + t.span + ').'
+    : 'Nobody checked in.';
+
+  const tt = ticketRows(r);
+  $('tt-body').replaceChildren(...tt.map(x => { const tr = el('tr'); tr.append(td(x.ticketType), td(x.registered, 1), td(x.checkedIn, 1), td(x.noShows, 1), td(x.turnout === null ? '' : x.turnout + '%', 1)); return tr; }));
+  $('tt-empty').hidden = tt.length > 0;
+
+  const desks = deskRows(r);
+  $('desk-body').replaceChildren(...desks.map(x => { const tr = el('tr'); tr.append(td(x.label), td(x.checkins, 1), td(x.busiest, 1)); return tr; }));
+  $('desk-empty').hidden = desks.length > 0;
+  $('offline').textContent = offlineLine(r);
+
+  // The server sends companies only to the owner and organizers; a viewer's
+  // report never has the key, so the card stays hidden.
+  const co = Array.isArray(r.companies) ? r.companies : null;
+  $('co-card').hidden = !co;
+  if (co) {
+    $('co-body').replaceChildren(...co.map(x => { const tr = el('tr'); tr.append(td(x.company), td(x.arrived + ' of ' + x.expected, 1), td(x.expected - x.arrived, 1)); return tr; }));
+    $('co-empty').hidden = co.length > 0;
+  }
+  $('updated').textContent = 'Generated ' + new Date(r.generated_at).toLocaleString('en-GB', { timeZone: tz, dateStyle: 'medium', timeStyle: 'short' }) + ' (' + tz.replace(/_/g, ' ') + ').';
+}
+
+(async () => {
+  if (!EVENT_ID) { location.replace('/checkin'); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { location.replace('/checkin?next=' + encodeURIComponent('/checkin/report?event=' + EVENT_ID)); return; }
+  try {
+    const { data: evs, error: evErr } = await sb.rpc('checkin_my_events');
+    if (evErr) throw new Error(evErr.message);
+    const ev = (evs || []).find(x => x.event_id === EVENT_ID);
+    if (!ev) throw new Error('This event is not in your check-in events.');
+    if (!can(effectiveRole(ev.role, ev.is_owner), 'report')) throw new Error('The report is for the event owner, organizers and viewers.');
+    const { data, error } = await sb.rpc('checkin_event_report', { p_event_id: EVENT_ID });
+    if (error) throw new Error(error.message);
+    $('page-loading').hidden = true;
+    $('full').hidden = false;
+    $('dash-link').href = '/checkin/dashboard?event=' + encodeURIComponent(EVENT_ID);
+    render(data);
+  } catch (e) {
+    $('page-loading').hidden = true;
+    $('page-err').textContent = 'Could not open this report: ' + e.message;
+  }
+})();
+$('print').addEventListener('click', () => window.print());
+</script>
+</body>
+</html>

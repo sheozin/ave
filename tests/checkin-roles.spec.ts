@@ -27,6 +27,7 @@ const TABLE: [server.Permission, Role[]][] = [
   ['desk_health',    ['owner', 'organizer', 'lead']],
   ['company_board',  ['owner', 'organizer', 'lead']],
   ['alerts',         ['owner', 'organizer', 'lead']],
+  ['report',         ['owner', 'organizer', 'viewer']],
   ['desk',           ['owner', 'organizer', 'lead', 'crew']],
   ['dashboard',      ['owner', 'organizer', 'lead', 'crew', 'viewer']],
 ];

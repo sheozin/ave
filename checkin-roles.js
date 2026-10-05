@@ -25,6 +25,7 @@ export const GRANTS = {
   desk_health: LEADS,
   company_board: LEADS,
   alerts: LEADS,
+  report: ['owner', 'organizer', 'viewer'],
   desk: ['owner', 'organizer', 'lead', 'crew'],
   dashboard: ['owner', 'organizer', 'lead', 'crew', 'viewer'],
 };
