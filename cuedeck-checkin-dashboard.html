@@ -45,6 +45,9 @@
 .msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin-bottom:8px;background:var(--acsf);color:var(--ac)}
 .msg.warn{background:var(--amsf);color:var(--am)}
 .gaps{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+.cb-f{display:flex;gap:6px;flex-wrap:wrap}
+.chip{height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--t1);color:#fff}
 @media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.dash{padding:16px}.banner{margin:16px 16px 0}.nav{padding:14px 16px;flex-wrap:wrap;gap:10px}.crumb{display:none}.nav-r{gap:6px}.nav-r .btn{padding:0 10px}}
 </style>
 </head>
@@ -82,6 +85,21 @@
       <ul class="gaps" id="gaps"></ul>
       <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
     </section>
+    <section class="ops" id="alerts" hidden aria-label="Arrival alerts">
+      <h2>Arrival alerts</h2>
+      <ul class="gaps" id="alert-list" aria-live="polite"></ul>
+      <p class="meta-line" id="alert-empty" hidden></p>
+    </section>
+    <section class="ops" id="board" hidden aria-label="Companies">
+      <h2>Companies</h2>
+      <div class="cb-f" role="group" aria-label="Filter companies">
+        <button class="chip" type="button" data-cb="all" aria-pressed="true">All</button>
+        <button class="chip" type="button" data-cb="missing" aria-pressed="false">Not here yet</button>
+        <button class="chip" type="button" data-cb="partly" aria-pressed="false">Partly here</button>
+      </div>
+      <table class="tbl"><thead><tr><th>Company</th><th>Arrived</th><th>Still missing</th><th>Last arrival</th></tr></thead><tbody id="cb-body"></tbody></table>
+      <p class="meta-line" id="cb-empty" hidden></p>
+    </section>
     <section class="charts">
       <div class="chart wide"><h2>Arrivals over time</h2><div class="cv"><canvas id="c-arrivals" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div></div>
       <div class="chart"><h2>Registration status</h2><div class="cv"><canvas id="c-status" role="img" aria-label="Checked in against still expected"></canvas></div></div>
@@ -112,7 +130,7 @@ import { effectiveRole, can } from '/checkin-roles.js';
 import {
   tiles, arrivalSeries, statusDoughnut, ticketBars, sourceBars, qrBars,
   arrivalRate, fmtRate, clientView, fmtClock, BUCKET_S, PACE_MIN_CHECKINS,
-  deskRows, gapLines, paceMessages, eventStartUtc,
+  deskRows, gapLines, paceMessages, eventStartUtc, companyRows, alertLine,
 } from '/checkin-dashboard.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
@@ -123,6 +141,7 @@ let timer = null;
 sb.auth.onAuthStateChange((event) => {
   if (event !== 'SIGNED_OUT') return;
   clearInterval(timer);
+  if (alertChan) sb.removeChannel(alertChan);
   location.replace('/checkin');
 });
 const $ = (id) => document.getElementById(id);
@@ -133,6 +152,7 @@ const REFRESH_MS = 30000;
 // The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
 const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
 let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false;
+let CB_FILTER = 'all', BOARD = null, alertChan = null;
 const charts = {};
 
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -261,6 +281,62 @@ function renderClient(s) {
   upsertChart('c-client', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone), true));
 }
 
+// Company arrival board (event-day spec, feature 4): owner, organizer
+// and lead. The server refuses everyone else; the role test only keeps
+// the panel from showing an error to people it was never for.
+function renderBoard() {
+  const body = $('cb-body'); body.replaceChildren();
+  const rows = companyRows(BOARD, CB_FILTER, EV.timezone);
+  for (const r of rows) {
+    const tr = el('tr');
+    tr.append(el('td', null, r.company), el('td', null, r.arrived + ' of ' + r.expected),
+              el('td', null, String(r.missing)), el('td', null, r.last || 'None yet'));
+    body.appendChild(tr);
+  }
+  $('cb-empty').hidden = rows.length > 0;
+  $('cb-empty').textContent = !BOARD || !BOARD.length ? 'No guest on the list has a company.'
+    : CB_FILTER === 'missing' ? 'Every company has someone here.'
+    : CB_FILTER === 'partly' ? 'No company is partly here.' : '';
+}
+async function loadBoard() {
+  if (!can(ROLE, 'company_board')) return;
+  const { data, error } = await sb.rpc('checkin_company_board', { p_event_id: EVENT_ID });
+  $('board').hidden = false;
+  // A failed refresh keeps the last good table and says so underneath.
+  if (error) { $('cb-empty').hidden = false; $('cb-empty').textContent = 'Could not refresh companies: ' + error.message; return; }
+  BOARD = data; renderBoard();
+}
+
+// VIP arrival alerts (feature 5): owner, organizer and lead.
+async function loadAlerts() {
+  if (!can(ROLE, 'alerts')) return;
+  const { data, error } = await sb.rpc('checkin_recent_alerts', { p_event_id: EVENT_ID });
+  $('alerts').hidden = false;
+  if (error) { $('alert-empty').hidden = false; $('alert-empty').textContent = 'Could not refresh alerts: ' + error.message; return; }
+  const list = data || [];
+  $('alert-list').replaceChildren(...list.map(a => el('li', null, alertLine(a, EV.timezone))));
+  $('alert-empty').hidden = list.length > 0;
+  $('alert-empty').textContent = can(ROLE, 'edit_details')
+    ? 'No alerts yet. Choose the ticket types to watch in Setup, Event details.'
+    : 'No alerts yet. An organizer chooses the ticket types to watch.';
+}
+
+// Realtime is the fast path; refresh() reloads both every 30 seconds, so
+// a dead socket costs latency, not alerts. The payload is ignored: rows
+// carry ids only, and the RPC re-checks the role before sending names.
+function subscribeAlerts() {
+  if (!can(ROLE, 'alerts') || alertChan) return;
+  alertChan = sb.channel('ck-alerts-' + EVENT_ID)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leod_checkin_alerts', filter: 'event_id=eq.' + EVENT_ID },
+        () => { loadAlerts(); loadBoard(); })
+    .subscribe();
+}
+document.querySelectorAll('[data-cb]').forEach(b => b.addEventListener('click', () => {
+  CB_FILTER = b.dataset.cb;
+  document.querySelectorAll('[data-cb]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderBoard();
+}));
+
 async function refresh() {
   if (busy) return;
   busy = true;
@@ -277,7 +353,7 @@ async function refresh() {
     errEl.textContent = '';
     shown = true;
     const closed = isWindowClosed(EV.date, EV.timezone, new Date(now));
-    if (CLIENT) renderClient(data); else renderFull(data, closed);
+    if (CLIENT) renderClient(data); else { renderFull(data, closed); loadBoard(); loadAlerts(); }
     $(CLIENT ? 'cl-upd' : 'updated').textContent = 'Updated ' + fmtClock(now, EV.timezone) + '. Refreshes every 30 seconds.';
   } finally {
     busy = false;
@@ -307,6 +383,7 @@ async function refresh() {
     $('desk-link').href = '/checkin/desk?event=' + q;
   }
   await refresh();
+  if (!CLIENT) subscribeAlerts();
   timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 })();

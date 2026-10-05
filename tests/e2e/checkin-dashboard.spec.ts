@@ -258,3 +258,81 @@ test('the client view chart is readable across a room', async ({ page }) => {
   expect(sizes.y).toBeGreaterThanOrEqual(16);
   expect(sizes.y2).toBeGreaterThanOrEqual(16);
 });
+
+// ── Company board and arrival alerts (event-day spec, features 4 and 5) ──
+const BOARD = [
+  { company: 'Acme', expected: 3, arrived: 1, last_arrival_at: '2026-10-18T08:05:00Z' },
+  { company: 'Zeta <b>Corp</b>', expected: 2, arrived: 0, last_arrival_at: null },
+  { company: 'Solo', expected: 1, arrived: 1, last_arrival_at: '2026-10-18T08:10:00Z' },
+];
+const ALERTS = [
+  { id: 'a2', created_at: '2026-10-18T08:07:00Z', name: 'Ewa Sample', company: 'Contoso Demo', ticket_type: 'Speaker', desk_label: 'Desk 2', still_in: true },
+  { id: 'a1', created_at: '2026-10-18T08:01:00Z', name: 'Jan Undone', company: null, ticket_type: 'VIP', desk_label: null, still_in: false },
+];
+
+// Routes registered later win, and signedIn() installs a catch-all 404,
+// so these mocks go in after it (open() above has no hook for extras).
+async function openWith(page, role: string, board: unknown, alerts: unknown, boardStatus = 200) {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role })]);
+  await rpc(page, 'checkin_event_stats', STATS({ role }));
+  await rpc(page, 'checkin_company_board', board, boardStatus);
+  await rpc(page, 'checkin_recent_alerts', alerts);
+  await page.goto(URL_);
+}
+
+test('an organizer sees the company board, sorted by the server, with both filters', async ({ page }) => {
+  await openWith(page, 'organizer', BOARD, []);
+  await expect(page.locator('#board')).toBeVisible();
+  const rows = page.locator('#cb-body tr');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toContainText('Acme');
+  await expect(rows.nth(0)).toContainText('1 of 3');
+  await expect(rows.nth(0)).toContainText('10:05');
+  // Company names are text, never markup.
+  await expect(rows.nth(1).locator('td').first()).toHaveText('Zeta <b>Corp</b>');
+  await expect(rows.nth(1)).toContainText('None yet');
+  await page.locator('[data-cb="missing"]').click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0)).toContainText('Zeta');
+  await page.locator('[data-cb="partly"]').click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.nth(0)).toContainText('Acme');
+});
+
+test('an organizer sees arrival alerts, undone ones marked', async ({ page }) => {
+  await openWith(page, 'organizer', [], ALERTS);
+  const items = page.locator('#alert-list li');
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toHaveText('10:07 Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2');
+  await expect(items.nth(1)).toHaveText('10:01 Jan Undone (VIP) checked in, since undone');
+  await expect(page.locator('#cb-empty')).toHaveText('No guest on the list has a company.');
+});
+
+test('no alerts yet tells an organizer where to choose ticket types', async ({ page }) => {
+  await openWith(page, 'organizer', [], []);
+  await expect(page.locator('#alert-empty')).toHaveText('No alerts yet. Choose the ticket types to watch in Setup, Event details.');
+});
+
+test('desk staff get neither the board nor alerts, and never ask', async ({ page }) => {
+  let asked = 0;
+  await openWith(page, 'crew', () => { asked++; return BOARD; }, () => { asked++; return ALERTS; });
+  await expect(page.locator('#full')).toBeVisible();
+  await expect(page.locator('#t-reg')).toHaveText('120');
+  await expect(page.locator('#board')).toBeHidden();
+  await expect(page.locator('#alerts')).toBeHidden();
+  expect(asked).toBe(0);
+});
+
+test('a lead sees the board and the alerts', async ({ page }) => {
+  await openWith(page, 'lead', BOARD, ALERTS);
+  await expect(page.locator('#board')).toBeVisible();
+  await expect(page.locator('#alert-list li')).toHaveCount(2);
+  await expect(page.locator('#alert-empty')).toBeHidden();
+});
+
+test('a failed board call says so instead of an empty table', async ({ page }) => {
+  await openWith(page, 'organizer', { message: 'boom' }, [], 500);
+  await expect(page.locator('#cb-empty')).toContainText('Could not refresh companies');
+});
