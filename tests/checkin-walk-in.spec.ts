@@ -1,0 +1,32 @@
+// tests/checkin-walk-in.spec.ts
+import { describe, it, expect } from 'vitest';
+import { normalizeWalkIn } from '../supabase/functions/_shared/checkin-walk-in.ts';
+
+describe('normalizeWalkIn', () => {
+  it('trims and collapses spaces, defaults the ticket type', () => {
+    expect(normalizeWalkIn({ first_name: '  Ewa ', last_name: 'Sample  Two', company: ' Contoso  Demo ' })).toEqual({
+      ok: true, row: { first_name: 'Ewa', last_name: 'Sample Two', email: null, company: 'Contoso Demo', ticket_type: 'attendee' },
+    });
+  });
+  it('keeps the email as typed after trimming', () => {
+    const r = normalizeWalkIn({ first_name: 'A', last_name: 'B', email: ' Ewa@Example.com ' });
+    expect(r).toEqual({ ok: true, row: { first_name: 'A', last_name: 'B', email: 'Ewa@Example.com', company: null, ticket_type: 'attendee' } });
+  });
+  it('requires both names', () => {
+    expect(normalizeWalkIn({ first_name: 'A', last_name: '  ' })).toEqual({ ok: false, error: 'First and last name are required' });
+    expect(normalizeWalkIn({})).toEqual({ ok: false, error: 'First and last name are required' });
+  });
+  it('rejects a malformed email', () => {
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: 'not an email' })).toEqual({ ok: false, error: 'That email address does not look right' });
+  });
+  it('rejects over-long fields', () => {
+    expect(normalizeWalkIn({ first_name: 'x'.repeat(121), last_name: 'B' })).toEqual({ ok: false, error: 'A name is too long' });
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', company: 'x'.repeat(201) })).toEqual({ ok: false, error: 'The company name is too long' });
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', ticket_type: 'x'.repeat(61) })).toEqual({ ok: false, error: 'The ticket type is too long' });
+  });
+  it('ignores non-string values', () => {
+    expect(normalizeWalkIn({ first_name: 'A', last_name: 'B', email: 42, company: ['x'] })).toEqual({
+      ok: true, row: { first_name: 'A', last_name: 'B', email: null, company: null, ticket_type: 'attendee' },
+    });
+  });
+});

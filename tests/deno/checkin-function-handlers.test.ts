@@ -123,7 +123,9 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
       if (dup) { if ((headers.get('Prefer') ?? '').includes('merge-duplicates')) Object.assign(dup, r); continue }
       rows.push({ id: crypto.randomUUID(), ...r })
     }
-    return reply(201, (headers.get('Prefer') ?? '').includes('return=representation') ? list : undefined)
+    if (!(headers.get('Prefer') ?? '').includes('return=representation')) return reply(201, undefined)
+    const out = list.map(r => rows.find(x => x.event_id === r.event_id && Object.keys(r).every(k => x[k] === r[k])) ?? r)
+    return reply(201, (headers.get('Accept') ?? '').includes('vnd.pgrst.object+json') && out.length === 1 ? out[0] : out)
   }
   if (method === 'PATCH') {
     const patch = JSON.parse(String(init?.body ?? '{}'))
@@ -146,7 +148,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -196,6 +198,7 @@ const ALLOWED: Record<string, Who[]> = {
   'checkin-send-qr-emails': ['owner', 'organizer'],
   'checkin-kiosk-pair': ['owner', 'organizer', 'lead'],
   'checkin-record-scans': ['owner', 'organizer', 'lead', 'crew'],
+  'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
 }
 const BODY: Record<string, Row> = {
   'checkin-create-checkout': { event_id: EVENT },
@@ -203,6 +206,7 @@ const BODY: Record<string, Row> = {
   'checkin-send-qr-emails': { event_id: EVENT },
   'checkin-kiosk-pair': { action: 'mint', event_id: EVENT, label: 'Lobby' },
   'checkin-record-scans': { event_id: EVENT, items: [] },
+  'checkin-add-walk-in': { event_id: EVENT, first_name: 'Ewa', last_name: 'Sample' },
 }
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -307,7 +311,7 @@ Deno.test('comp: a settings save by an admin who is not the owner proceeds witho
 })
 
 // ── reads that used to hide a database fault ────────────────────────
-for (const fn of ['checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair']) {
+for (const fn of ['checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-add-walk-in']) {
   Deno.test(`${fn}: a database error reading the entitlement is a 500`, async () => {
     setup('owner'); world.failTable = 'leod_checkin_entitlements'
     const r = await call(fn, BODY[fn])
@@ -743,4 +747,121 @@ Deno.test('checkin-create-checkout: an archived event is a 409 archived, before 
     assert(r.status === 409 && r.body.code === 'archived' && r.body.error === 'This event was deleted.', JSON.stringify(r))
     assert(offHost.length === 0, 'network call to ' + offHost.join(','))
   } finally { Deno.env.delete('CHECKIN_PRICE_ID') }
+})
+
+// ── checkin-add-walk-in ─────────────────────────────────────────────
+const WI = 'checkin-add-walk-in'
+const walkIns = () => (world.tables.leod_checkin_attendees ?? []).filter(a => a.source === 'walk_in')
+function walkSetup(status: 'test' | 'live', used = 3) {
+  setup('lead', { ent: { checkin_core: true, status } })
+  world.rpcResult.checkin_test_usage = used
+}
+Deno.test(`${WI}: a lead adds a test-mode walk-in, is_test, source walk_in`, async () => {
+  walkSetup('test')
+  const r = await call(WI, { event_id: EVENT, first_name: ' Ewa ', last_name: 'Sample', email: 'Ewa@Example.com', company: 'Contoso' })
+  assert(r.status === 200 && r.body.ok === true, JSON.stringify(r))
+  const a = r.body.attendee as Row
+  assert(a.first_name === 'Ewa' && a.email === 'Ewa@Example.com' && a.ticket_type === 'attendee' && typeof a.qr_token === 'string' && typeof a.id === 'string', JSON.stringify(a))
+  const rows = walkIns()
+  assert(rows.length === 1 && rows[0].is_test === true && rows[0].event_id === EVENT, JSON.stringify(rows))
+  assert(world.rpcCalls.some(c => c.name === 'checkin_test_usage' && c.args.p_event_id === EVENT), 'test usage not read')
+})
+Deno.test(`${WI}: a live event writes is_test false and skips the test cap`, async () => {
+  walkSetup('live', 999)
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 200, JSON.stringify(r))
+  assert(walkIns()[0].is_test === false, JSON.stringify(walkIns()))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_test_usage'), 'test usage read on a live event')
+})
+Deno.test(`${WI}: test mode at the cap is a 403 test_cap and nothing is written`, async () => {
+  walkSetup('test', 25)
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 403 && r.body.code === 'test_cap', JSON.stringify(r))
+  assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: test mode one below the cap is allowed`, async () => {
+  walkSetup('test', 24)
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 200, JSON.stringify(r))
+})
+Deno.test(`${WI}: an unreadable test usage is a 500 and nothing is written`, async () => {
+  walkSetup('test'); world.rpcResult.checkin_test_usage = null
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 500 && walkIns().length === 0, JSON.stringify(r))
+})
+Deno.test(`${WI}: an archived event is a 409 archived`, async () => {
+  walkSetup('test'); world.tables.leod_events[0].active = false
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 409 && r.body.code === 'archived' && r.body.error === 'This event was deleted.', JSON.stringify(r))
+  assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: check-in not enabled is a 403`, async () => {
+  setup('lead', { ent: { checkin_core: false, status: 'test' } })
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 403 && r.body.code === 'forbidden', JSON.stringify(r))
+})
+Deno.test(`${WI}: an email already on the event (any case) is a 409 already_registered`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'ewa@example.com', source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], email: 'EWA@example.COM' })
+  assert(r.status === 409 && r.body.code === 'already_registered', JSON.stringify(r))
+  assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: the same email on another event is fine`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: OTHER, email: 'ewa@example.com', source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], email: 'ewa@example.com' })
+  assert(r.status === 200, JSON.stringify(r))
+})
+Deno.test(`${WI}: a unique violation on insert (race) is a 409 already_registered`, async () => {
+  walkSetup('test')
+  const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    if (urlOf(input).includes('/rest/v1/leod_checkin_attendees') && method === 'POST') {
+      return Promise.resolve(reply(409, { code: '23505', message: 'duplicate key value violates unique constraint' }))
+    }
+    return real(input, init)
+  }) as typeof fetch, () => call(WI, { ...BODY[WI], email: 'ewa@example.com' }))
+  assert(r.status === 409 && r.body.code === 'already_registered', JSON.stringify(r))
+})
+Deno.test(`${WI}: any other insert error is a 500`, async () => {
+  walkSetup('test')
+  const r = await withFetch(real => ((input: Request | URL | string, init?: RequestInit) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    if (urlOf(input).includes('/rest/v1/leod_checkin_attendees') && method === 'POST') {
+      return Promise.resolve(reply(500, { code: 'XX000', message: 'stub' }))
+    }
+    return real(input, init)
+  }) as typeof fetch, () => call(WI, BODY[WI]))
+  assert(r.status === 500, JSON.stringify(r))
+})
+for (const table of ['leod_events', 'leod_users', 'leod_checkin_attendees']) {
+  Deno.test(`${WI}: a database error reading ${table} is a 500`, async () => {
+    walkSetup('test'); world.failTable = table
+    const r = await call(WI, { ...BODY[WI], email: 'ewa@example.com' })
+    assert(r.status === 500, `${table}: ${r.status} ${JSON.stringify(r.body)}`)
+  })
+}
+for (const [label, extra] of [
+  ['missing last name', { last_name: ' ' }],
+  ['malformed email', { email: 'not an email' }],
+  ['long company', { company: 'x'.repeat(201) }],
+  ['long ticket type', { ticket_type: 'x'.repeat(61) }],
+] as [string, Row][]) {
+  Deno.test(`${WI}: ${label} is a 400 invalid`, async () => {
+    walkSetup('test')
+    const r = await call(WI, { ...BODY[WI], ...extra })
+    assert(r.status === 400 && r.body.code === 'invalid', JSON.stringify(r))
+    assert(walkIns().length === 0, 'written anyway')
+  })
+}
+Deno.test(`${WI}: a bad event id is a 400`, async () => {
+  walkSetup('test')
+  const r = await call(WI, { ...BODY[WI], event_id: 'nope' })
+  assert(r.status === 400, JSON.stringify(r))
+})
+Deno.test(`${WI}: an inactive account is a 403`, async () => {
+  walkSetup('test'); world.tables.leod_users[0].active = false
+  const r = await call(WI, BODY[WI])
+  assert(r.status === 403 && walkIns().length === 0, JSON.stringify(r))
 })

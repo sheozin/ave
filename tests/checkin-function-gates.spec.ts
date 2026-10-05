@@ -70,6 +70,7 @@ const ALLOWED: Record<GatedFunction, Who[]> = {
   'checkin-send-qr-emails': ['owner', 'organizer'],
   'checkin-kiosk-pair': ['owner', 'organizer', 'lead'],
   'checkin-record-scans': ['owner', 'organizer', 'lead', 'crew'],
+  'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
 };
 
 describe('functionGate', () => {
@@ -86,6 +87,9 @@ describe('functionGate', () => {
   it('create-checkout refuses with code not_owner', () => {
     const v = functionGate('checkin-create-checkout', { role: 'organizer', error: null });
     expect(v.ok === false && v.body).toEqual(NOT_OWNER);
+  });
+  it('walk-in refusal carries code forbidden', () => {
+    expect(FUNCTION_GATES['checkin-add-walk-in'].forbidden).toEqual({ error: 'Only an organizer or a desk lead can add a walk-in', code: 'forbidden' });
   });
   it('kiosk refusal keeps the word the desk maps to its kiosk note', () => {
     expect(FUNCTION_GATES['checkin-kiosk-pair'].forbidden.error.toLowerCase()).toContain('organizer');
@@ -285,6 +289,11 @@ describe('handlers route through the shared gates', () => {
     expect(s.indexOf('await logInvite()')).toBeGreaterThan(0);
     expect(s.indexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
     expect(s.lastIndexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
+  });
+  it('checkin-add-walk-in refuses an archived event before the insert', () => {
+    const s = src('checkin-add-walk-in');
+    expect(s).toContain('if (ev.active === false) return json({ ...ARCHIVED }, 409)');
+    expect(s.indexOf('ev.active === false')).toBeLessThan(s.indexOf(".from('leod_checkin_attendees')"));
   });
   it('checkin-create-checkout refuses an archived event', () => {
     const s = src('checkin-create-checkout');

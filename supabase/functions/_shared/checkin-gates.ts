@@ -20,6 +20,7 @@ export const FUNCTION_GATES = {
   // "who can set up a kiosk" note, so keep that word in the message.
   'checkin-kiosk-pair': { perm: 'kiosk', forbidden: { error: 'Forbidden, organizers and desk leads only' } },
   'checkin-record-scans': { perm: 'desk', forbidden: { error: 'Forbidden, desk roles only' } },
+  'checkin-add-walk-in': { perm: 'walk_in', forbidden: { error: 'Only an organizer or a desk lead can add a walk-in', code: 'forbidden' } },
 } as const satisfies Record<string, { perm: Permission; forbidden: GateBody }>
 
 export type GatedFunction = keyof typeof FUNCTION_GATES
