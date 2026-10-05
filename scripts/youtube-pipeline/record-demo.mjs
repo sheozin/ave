@@ -784,8 +784,8 @@ const EPISODES = {
 
       // 1:36.65 "a room name, a speaker, their company" — type speaker + company
       { at: 97, fn: async (page) => {
-        await smoothType(page, '#smv-spk', 'Sarah Chen', 'Speaker', 100);
-        await smoothType(page, '#smv-co', 'Nexovate', 'Company', 100);
+        await smoothType(page, '#smv-people .smv-person:first-child .smv-p-name', 'Sarah Chen', 'Speaker', 100);
+        await smoothType(page, '#smv-people .smv-person:first-child .smv-p-co', 'Nexovate', 'Company', 100);
         // Hover room field — it's next
         const roomEl = page.locator('#smv-room');
         const box = await roomEl.boundingBox().catch(() => null);
@@ -1061,7 +1061,7 @@ const EPISODES = {
           await smoothMoveTo(page, tBox.x + tBox.width / 2, tBox.y + tBox.height / 2);
           await page.waitForTimeout(600);
         }
-        const spkEl = page.locator('#smv-spk');
+        const spkEl = page.locator('#smv-people .smv-person:first-child .smv-p-name');
         const sBox = await spkEl.boundingBox().catch(() => null);
         if (sBox) {
           await smoothMoveTo(page, sBox.x + sBox.width / 2, sBox.y + sBox.height / 2);
