@@ -121,7 +121,7 @@ body{
 .d-people{max-width:90vw;margin:0 auto 28px}
 .d-people-mod{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.75);font-weight:500;margin-bottom:.35em}
 .d-people-list{font-size:clamp(13px,2.1vw,24px);color:rgba(255,255,255,.6);font-weight:400;line-height:1.4}
-.d-people-person{display:inline-block;max-width:100%}
+.d-people-person{display:inline-block;max-width:100%;overflow-wrap:anywhere}
 .d-people-more{white-space:nowrap;color:rgba(255,255,255,.4)}
 @media (max-height:800px){
   .d-people{margin-bottom:16px}
@@ -318,7 +318,7 @@ body.is-live #display{
 .st-people{margin-top:.3em;text-align:center;max-width:90%}
 .st-people-mod{font-size:clamp(12px,1.8vw,28px);color:#9ca3af}
 .st-people-list{font-size:clamp(11px,1.5vw,24px);color:#6b7280;margin-top:.2em;line-height:1.35}
-.st-people-person{display:inline-block;max-width:100%}
+.st-people-person{display:inline-block;max-width:100%;overflow-wrap:anywhere}
 .st-people-more{white-space:nowrap;color:#4b5563}
 .st-next{font-size:clamp(10px,1.3vw,16px);color:#374151;margin-top:1.8em;letter-spacing:.07em;text-align:center}
 .st-standby-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:.5em}
@@ -853,12 +853,12 @@ function updateStageTimerInPlace() {
   if (sbCd) {
     const nx = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
     if (nx) {
-      const sb = standbyCountdown(nx);
-      sbCd.textContent = sb.value;
+      const cd = standbyCountdown(nx);
+      sbCd.textContent = cd.value;
       const lab = document.getElementById('st-standby-label');
       const sub = document.getElementById('st-standby-lbl');
-      if (lab) lab.textContent = sb.label;
-      if (sub) sub.textContent = sb.sub;
+      if (lab) lab.textContent = cd.label;
+      if (sub) sub.textContent = cd.sub;
     }
   }
 
@@ -1341,11 +1341,11 @@ function renderStageTimer() {
         <div class="st-standby-session">${esc(S.event?.name || '')}</div>
       </div>`;
     }
-    const sb = standbyCountdown(next);
+    const cd = standbyCountdown(next);
     return `<div class="st-standby-wrap fade-in">
-      <div id="st-standby-label" class="st-standby-label">${esc(sb.label)}</div>
-      <div id="st-standby-countdown" class="st-standby-countdown">${esc(sb.value)}</div>
-      <div id="st-standby-lbl" class="st-standby-lbl">${esc(sb.sub)}</div>
+      <div id="st-standby-label" class="st-standby-label">${esc(cd.label)}</div>
+      <div id="st-standby-countdown" class="st-standby-countdown">${esc(cd.value)}</div>
+      <div id="st-standby-lbl" class="st-standby-lbl">${esc(cd.sub)}</div>
       <div class="st-standby-session">${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next, 3))}` : ''}</div>
     </div>`;
   }

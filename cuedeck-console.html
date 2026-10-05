@@ -5737,7 +5737,7 @@ function openSessModal(mode, sessionId) {
     smvPeopleSet([]);
     // Start where the latest session ends; end 30 min later (same day).
     const lastEnd = S.sessions.map(x => (x.planned_end || '').substring(0, 5))
-      .filter(t => /^\d{2}:\d{2}$/.test(t)).sort().pop() || '';
+      .filter(hm => /^\d{2}:\d{2}$/.test(hm)).sort().pop() || '';
     let defEnd = '';
     if (lastEnd) {
       const m = Math.min(23 * 60 + 59, parseInt(lastEnd.slice(0, 2), 10) * 60 + parseInt(lastEnd.slice(3), 10) + 30);
