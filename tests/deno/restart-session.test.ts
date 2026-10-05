@@ -116,6 +116,9 @@ function setup(session: Row) {
     }],
     leod_commands: [],
     leod_event_log: [],
+    // The caller owns the event (runTransition checks membership).
+    leod_events: [{ id: EVENT, created_by: USER }],
+    leod_users: [{ id: USER, role: 'director', invited_by: null, active: true }],
   }
 }
 const sess = () => tables.leod_sessions[0]
