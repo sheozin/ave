@@ -2373,7 +2373,7 @@
 <!-- SESSION MODAL -->
 <div id="sess-modal" class="ev-modal-backdrop" style="display:none"
      onclick="if(event.target===this)closeSessModal()">
-  <div class="ev-modal-card" style="max-width:480px">
+  <div class="ev-modal-card" style="max-width:480px;max-height:92vh;overflow-y:auto">
     <div class="ev-modal-title" id="sess-modal-title">New Session</div>
 
     <!-- Session Templates -->
@@ -2400,9 +2400,20 @@
       <label style="flex:1">Room<input id="smv-room" type="text"></label>
     </div>
 
-    <div style="display:flex;gap:8px">
+    <div id="smv-spk-row" style="display:flex;gap:8px">
       <label style="flex:1">Speaker<input id="smv-spk" type="text"></label>
       <label style="flex:1">Company<input id="smv-co"  type="text"></label>
+    </div>
+    <div id="smv-people-use-row" style="font-size:11px;color:var(--dim);margin-top:-6px">
+      <a href="#" id="smv-people-use" onclick="smvPeopleUseList();return false" style="color:var(--blue)">Use a people list</a>
+      for a moderator and several speakers or panelists
+    </div>
+    <div id="smv-people-wrap" style="display:none;flex-direction:column;gap:6px">
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase">People
+        <span id="smv-people-note" style="text-transform:none;letter-spacing:0;color:var(--dim)">Using the people list</span>
+      </div>
+      <div id="smv-people" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div><button type="button" id="smv-p-add" class="abtn abtn-sm btn-grey" onclick="smvPeopleAdd()" style="font-size:10px">Add person</button></div>
     </div>
 
     <div style="display:flex;gap:8px">
@@ -4861,6 +4872,7 @@ async function handleCSVImport(file) {
   const cRoom  = col('room','location','hall','venue');
   const cType  = col('type','format','category');
   const cNotes = col('notes','note','instructions','tech rider');
+  const cMod   = col('moderator');
   if (cTitle === -1 || cStart === -1 || cEnd === -1) {
     pushToast(t('toast.csvNeeds'), 'error'); return;
   }
@@ -4871,11 +4883,24 @@ async function handleCSVImport(file) {
     const row = lines[i].split(',');
     const title = cell(row, cTitle), start = cell(row, cStart), end = cell(row, cEnd);
     if (!title || !start || !end) continue;
+    // With a moderator column: moderator plus the speaker cell's names, split
+    // on ";" or " / " (never commas: "Smith, Jr."). Rows without a moderator
+    // keep the single speaker. No moderator column: people is not sent.
+    let csvPeople;
+    if (cMod !== -1) {
+      const mod = cell(row, cMod);
+      csvPeople = !mod ? [] : [
+        { name: mod, company: null, role: 'moderator' },
+        ...(cell(row, cSpk) || '').split(/\s*;\s*|\s+\/\s+/).map(n => n.trim()).filter(Boolean)
+          .map(name => ({ name, company: null, role: 'speaker' })),
+      ];
+    }
     sessions.push({
       event_id: S.event.id, title, status: 'PLANNED', version: 0,
       planned_start: start, planned_end: end, scheduled_start: start, scheduled_end: end,
       sort_order: maxSort + i,
-      speaker: cell(row, cSpk), room: cell(row, cRoom),
+      speaker: csvPeople?.length ? peopleSummary(csvPeople) : cell(row, cSpk), room: cell(row, cRoom),
+      ...(csvPeople ? { people: csvPeople } : {}),
       type: cell(row, cType) || 'Other', notes: cell(row, cNotes),
       cumulative_delay: 0, delay_minutes: 0, speaker_arrived: false,
       actual_start: null, actual_end: null,
@@ -5394,6 +5419,7 @@ async function seedSessions(fromEventId, toEventId) {
     type:             s.type,
     speaker:          s.speaker,
     company:          s.company,
+    ...(s.people !== undefined ? { people: s.people } : {}),  // absent before 082
     room:             s.room,
     is_anchor:        s.is_anchor,
     planned_start:    s.planned_start,
@@ -5500,6 +5526,97 @@ function deleteSessionTemplate() {
   pushToast(`Template "${name}" deleted`, 'info');
 }
 
+// ── Session people (082) ──────────────────────────────
+// leod_sessions.people: ordered [{ name, company, role }]. When a session has
+// people, speaker/company still get a readable summary so every reader of
+// speaker (stage views, agents, exports, emails) keeps working.
+const PEOPLE_ROLES = [['moderator', 'Moderator'], ['speaker', 'Speaker'], ['panelist', 'Panelist']];
+
+function peopleSummary(people) {
+  const mods = people.filter(p => p.role === 'moderator').map(p => `${p.name} (moderator)`);
+  const rest = people.filter(p => p.role !== 'moderator').map(p => p.name);
+  return [...mods, ...rest].join(', ');
+}
+// The shared company when every person has the same one, else null.
+function peopleCompany(people) {
+  const cos = new Set(people.map(p => p.company || null));
+  return cos.size === 1 ? [...cos][0] : null;
+}
+
+function smvPeopleRow(p = {}) {
+  const row = document.createElement('div');
+  row.className = 'smv-person';
+  row.style.cssText = 'display:flex;gap:4px;align-items:center';
+  const name = document.createElement('input');
+  name.className = 'smv-p-name'; name.type = 'text'; name.placeholder = 'Name';
+  name.value = p.name || ''; name.style.cssText = 'flex:1.3;min-width:0';
+  const co = document.createElement('input');
+  co.className = 'smv-p-co'; co.type = 'text'; co.placeholder = 'Company';
+  co.value = p.company || ''; co.style.cssText = 'flex:1;min-width:0';
+  const role = document.createElement('select');
+  role.className = 'smv-p-role'; role.style.cssText = 'flex:0 0 auto;padding:7px 4px';
+  for (const [v, label] of PEOPLE_ROLES) {
+    const o = document.createElement('option'); o.value = v; o.textContent = label; role.appendChild(o);
+  }
+  role.value = PEOPLE_ROLES.some(([v]) => v === p.role) ? p.role : 'speaker';
+  const btn = (cls, text, title, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = `abtn abtn-sm btn-grey ${cls}`; b.textContent = text; b.title = title;
+    b.style.cssText = 'padding:0 6px;font-size:11px';
+    b.onclick = fn; return b;
+  };
+  const up   = btn('smv-p-up',   '↑', 'Move up',   () => { if (row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling); });
+  const down = btn('smv-p-down', '↓', 'Move down', () => { if (row.nextElementSibling) row.parentNode.insertBefore(row.nextElementSibling, row); });
+  const del  = btn('smv-p-del',  '×', 'Remove',    () => { row.remove(); smvPeopleSync(); });
+  row.append(name, co, role, up, down, del);
+  return row;
+}
+
+// Show the people list when it has rows, the single speaker fields when not.
+function smvPeopleSync() {
+  const has = document.getElementById('smv-people').children.length > 0;
+  document.getElementById('smv-spk-row').style.display        = has ? 'none' : 'flex';
+  document.getElementById('smv-people-use-row').style.display = has ? 'none' : '';
+  document.getElementById('smv-people-wrap').style.display    = has ? 'flex' : 'none';
+}
+
+function smvPeopleSet(people) {
+  const box = document.getElementById('smv-people');
+  box.textContent = '';
+  for (const p of people || []) box.appendChild(smvPeopleRow(p));
+  smvPeopleSync();
+}
+
+function smvPeopleAdd() {
+  const row = smvPeopleRow();
+  document.getElementById('smv-people').appendChild(row);
+  smvPeopleSync();
+  row.querySelector('.smv-p-name').focus();
+}
+
+// "Use a people list": the current speaker/company become the first row.
+function smvPeopleUseList() {
+  smvPeopleSet([{
+    name:    document.getElementById('smv-spk').value.trim(),
+    company: document.getElementById('smv-co').value.trim(),
+    role:    'speaker',
+  }]);
+  document.getElementById('smv-people').querySelector('.smv-p-name').focus();
+}
+
+// Rows in order; blank rows dropped. Returns null if a row has no name but
+// has a company (the operator meant someone).
+function smvPeopleRead() {
+  const out = [];
+  for (const row of document.querySelectorAll('#smv-people .smv-person')) {
+    const name    = row.querySelector('.smv-p-name').value.trim();
+    const company = row.querySelector('.smv-p-co').value.trim() || null;
+    if (!name) { if (company) return null; continue; }
+    out.push({ name, company, role: row.querySelector('.smv-p-role').value });
+  }
+  return out;
+}
+
 function openSessModal(mode, sessionId) {
   sessModalMode = mode;
   sessModalId   = sessionId || null;
@@ -5514,6 +5631,7 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-room').value   = '';
     document.getElementById('smv-spk').value    = '';
     document.getElementById('smv-co').value     = '';
+    smvPeopleSet([]);
     document.getElementById('smv-start').value  = '';
     document.getElementById('smv-end').value    = '';
     document.getElementById('smv-anchor').checked = false;
@@ -5536,6 +5654,7 @@ function openSessModal(mode, sessionId) {
     document.getElementById('smv-room').value   = s.room       || '';
     document.getElementById('smv-spk').value    = s.speaker    || '';
     document.getElementById('smv-co').value     = s.company    || '';
+    smvPeopleSet(Array.isArray(s.people) ? s.people : []);
     document.getElementById('smv-start').value  = (s.planned_start || '').substring(0, 5);
     document.getElementById('smv-end').value    = (s.planned_end   || '').substring(0, 5);
     document.getElementById('smv-anchor').checked = !!s.is_anchor;
@@ -5569,6 +5688,8 @@ async function submitSessModal() {
   if (!title || !start || !end) {
     errEl.textContent = 'Title, planned start and end are required.'; return;
   }
+  const people = smvPeopleRead();
+  if (!people) { errEl.textContent = 'Each person needs a name.'; return; }
 
   const saveBtn = document.querySelector('#sess-modal .ev-modal-actions button.primary');
   saveBtn.disabled = true;
@@ -5591,6 +5712,17 @@ async function submitSessModal() {
     mics:           parseInt(document.getElementById('smv-mics').value, 10) || 0,
     notes:          document.getElementById('smv-notes').value.trim() || null,
   };
+  // people is only sent when there is a list, or when one is being cleared,
+  // so plain sessions save exactly as before (and before 082 is applied).
+  const hadPeople = sessModalMode === 'edit'
+    && (S.sessions.find(x => x.id === sessModalId)?.people || []).length > 0;
+  if (people.length) {
+    fields.people  = people;
+    fields.speaker = peopleSummary(people);
+    fields.company = peopleCompany(people);
+  } else if (hadPeople) {
+    fields.people = [];
+  }
 
   try {
     if (sessModalMode === 'add') {
