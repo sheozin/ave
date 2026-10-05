@@ -13,23 +13,24 @@ interface Policy {
   table: string;
   role: Role;
   ops: Op[];
-  condition: 'always' | 'own_row' | 'bucket_match' | 'never';
+  condition: 'always' | 'own_row' | 'bucket_match' | 'never' | 'event_member';
 }
 
 // Mirrors what auth-setup.sql establishes (production state, after anon write removal)
 const POLICIES: Policy[] = [
   // leod_sessions
   { table: 'leod_sessions',         role: 'anon',          ops: ['SELECT'],                        condition: 'always' },
-  { table: 'leod_sessions',         role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
-  // leod_event_log
-  { table: 'leod_event_log',        role: 'anon',           ops: ['SELECT'],                        condition: 'always' },
-  { table: 'leod_event_log',        role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
-  // leod_broadcast
-  { table: 'leod_broadcast',        role: 'anon',           ops: ['SELECT'],                        condition: 'always' },
-  { table: 'leod_broadcast',        role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
-  // leod_clock
+  // writes (095): owner or active invited director/stage/av of the event (cuedeck_event_role)
+  { table: 'leod_sessions',         role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'event_member' },
+  // leod_event_log (095): members read and append; no anon, no UPDATE/DELETE
+  { table: 'leod_event_log',        role: 'anon',           ops: [],                                condition: 'never' },
+  { table: 'leod_event_log',        role: 'authenticated',  ops: ['SELECT','INSERT'],               condition: 'event_member' },
+  // leod_broadcast (095): members only, one row per event; the display page does not read it
+  { table: 'leod_broadcast',        role: 'anon',           ops: [],                                condition: 'never' },
+  { table: 'leod_broadcast',        role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'event_member' },
+  // leod_clock (095): read-only for clients; get_server_clock() (SECURITY DEFINER) writes it
   { table: 'leod_clock',            role: 'anon',           ops: ['SELECT'],                        condition: 'always' },
-  { table: 'leod_clock',            role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
+  { table: 'leod_clock',            role: 'authenticated',  ops: ['SELECT'],                        condition: 'always' },
   // leod_users (own row only)
   { table: 'leod_users',            role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_users',            role: 'authenticated',  ops: ['SELECT'],                        condition: 'own_row' },
@@ -172,5 +173,28 @@ describe('Dev policy guard — anon write policies must not be in production', (
 
   it('27 production policy model does NOT include anon INSERT on leod_event_log', () => {
     expect(canDo('anon', 'leod_event_log', 'INSERT')).toBe(false);
+  });
+});
+
+describe('095: event-scoped writes', () => {
+  it('28 authenticated CANNOT UPDATE or DELETE leod_event_log', () => {
+    expect(canDo('authenticated', 'leod_event_log', 'UPDATE')).toBe(false);
+    expect(canDo('authenticated', 'leod_event_log', 'DELETE')).toBe(false);
+  });
+  it('29 nobody client-side writes leod_clock', () => {
+    for (const op of ['INSERT', 'UPDATE', 'DELETE'] as Op[]) {
+      expect(canDo('authenticated', 'leod_clock', op)).toBe(false);
+      expect(canDo('anon', 'leod_clock', op)).toBe(false);
+    }
+  });
+  it('30 anon CANNOT read leod_broadcast or leod_event_log', () => {
+    expect(canDo('anon', 'leod_broadcast', 'SELECT')).toBe(false);
+    expect(canDo('anon', 'leod_event_log', 'SELECT')).toBe(false);
+  });
+  it('31 session, log and broadcast writes are event-scoped, not open to any signed-in user', () => {
+    for (const table of ['leod_sessions', 'leod_event_log', 'leod_broadcast']) {
+      const p = POLICIES.find(x => x.table === table && x.role === 'authenticated')!;
+      expect(p.condition).toBe('event_member');
+    }
   });
 });
