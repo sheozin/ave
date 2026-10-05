@@ -9,6 +9,8 @@ DECLARE
   v_reg    uuid := gen_random_uuid();   -- reg invited by v_owner (no session writes)
   v_dead   uuid := gen_random_uuid();   -- director invited by v_owner, deactivated
   v_other  uuid := gen_random_uuid();   -- unrelated account, owns v_ev2
+  v_pend   uuid := gen_random_uuid();   -- signs up, self-inserts a pending row
+  v_stage  uuid := gen_random_uuid();   -- stage invited by v_owner
   v_ev     uuid;
   v_ev2    uuid;
   v_sid    uuid;
@@ -19,14 +21,18 @@ DECLARE
 BEGIN
   INSERT INTO auth.users (id, email, aud, role)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated'
-    FROM unnest(ARRAY[v_owner, v_dir, v_av, v_reg, v_dead, v_other]) AS u;
+    FROM unnest(ARRAY[v_owner, v_dir, v_av, v_reg, v_dead, v_other, v_pend, v_stage]) AS u;
+  -- v_pend has no leod_users row of its own yet (the signup trigger may have
+  -- made one; remove it so the self-insert path is what is tested)
+  DELETE FROM leod_users WHERE id = v_pend;
   INSERT INTO leod_users (id, email, role, invited_by, active) VALUES
     (v_owner, 'probe-' || v_owner || '@cuedeck-test.io', 'director', NULL,    true),
     (v_dir,   'probe-' || v_dir   || '@cuedeck-test.io', 'director', v_owner, true),
     (v_av,    'probe-' || v_av    || '@cuedeck-test.io', 'av',       v_owner, true),
     (v_reg,   'probe-' || v_reg   || '@cuedeck-test.io', 'reg',      v_owner, true),
     (v_dead,  'probe-' || v_dead  || '@cuedeck-test.io', 'director', v_owner, false),
-    (v_other, 'probe-' || v_other || '@cuedeck-test.io', 'director', NULL,    true)
+    (v_other, 'probe-' || v_other || '@cuedeck-test.io', 'director', NULL,    true),
+    (v_stage, 'probe-' || v_stage || '@cuedeck-test.io', 'stage',    v_owner, true)
   ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, invited_by = EXCLUDED.invited_by, active = EXCLUDED.active;
 
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
@@ -35,6 +41,44 @@ BEGIN
   VALUES ('Probe 095 other', current_date + 30, '09:00', '18:00', v_other) RETURNING id INTO v_ev2;
   INSERT INTO leod_sessions (event_id, sort_order, title, planned_start, planned_end, scheduled_start, scheduled_end)
   VALUES (v_ev, 1, 'Probe session', '09:00', '09:30', '09:00', '09:30') RETURNING id INTO v_sid;
+
+  -- 0. a self-inserted pending row cannot name an owner; a plain one can be inserted
+  v_failed := false;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_pend, 'role', 'authenticated')::text, true);
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    INSERT INTO leod_users (id, email, role, invited_by) VALUES (v_pend, 'probe-' || v_pend || '@cuedeck-test.io', 'pending', v_owner);
+  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+  END;
+  RESET ROLE;
+  IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 0: pending row with invited_by accepted'; END IF;
+  SET LOCAL ROLE authenticated;
+  INSERT INTO leod_users (id, email, role) VALUES (v_pend, 'probe-' || v_pend || '@cuedeck-test.io', 'pending');
+  RESET ROLE;
+  -- even if such a row existed (made by hand), 'pending' is not a member role
+  PERFORM set_config('request.jwt.claims', '', true);   -- as the database, past leod_users_guard_privileged
+  UPDATE leod_users SET invited_by = v_owner WHERE id = v_pend;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_pend, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  IF cuedeck_event_role(v_ev) IS NOT NULL THEN RESET ROLE; RAISE EXCEPTION 'PROBE FAIL 0: pending got a role'; END IF;
+  SELECT count(*) INTO v_n FROM leod_event_log WHERE event_id = v_ev;
+  RESET ROLE;
+  IF v_n <> 0 THEN RAISE EXCEPTION 'PROBE FAIL 0: pending reads % log rows', v_n; END IF;
+  FOR v_r IN SELECT * FROM (VALUES
+      ('INSERT INTO leod_event_log (event_id, action) VALUES ($1, ''PROBE_PEND'')'),
+      ('INSERT INTO leod_broadcast (id, event_id, message, priority) VALUES ($1::text, $1, ''x'', ''info'')'),
+      ('INSERT INTO leod_reports (event_id, report_data) VALUES ($1, ''{}'')')) AS x(stmt)
+  LOOP
+    v_failed := false;
+    BEGIN
+      SET LOCAL ROLE authenticated;
+      EXECUTE v_r.stmt USING v_ev;
+    EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+    END;
+    RESET ROLE;
+    IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 0: pending ran %', v_r.stmt; END IF;
+  END LOOP;
+  v_checks := v_checks + 1;
 
   -- 1. cuedeck_event_role
   FOR v_r IN SELECT * FROM (VALUES (v_owner, 'director'), (v_dir, 'director'), (v_av, 'av'), (v_reg, 'reg'),
@@ -53,7 +97,7 @@ BEGIN
   v_checks := v_checks + 1;
 
   -- 2. sessions: owner, invited director and av write; reg, deactivated and stranger do not
-  FOR v_r IN SELECT * FROM (VALUES (v_owner, 1), (v_dir, 1), (v_av, 1), (v_reg, 0), (v_dead, 0), (v_other, 0)) AS x(uid, expected)
+  FOR v_r IN SELECT * FROM (VALUES (v_owner, 1), (v_dir, 1), (v_stage, 1), (v_av, 1), (v_reg, 0), (v_dead, 0), (v_other, 0), (v_pend, 0)) AS x(uid, expected)
   LOOP
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
     SET LOCAL ROLE authenticated;
@@ -78,6 +122,32 @@ BEGIN
   END;
   RESET ROLE;
   IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 2: stranger inserted a session'; END IF;
+  -- stage and av update but cannot insert or delete (director only)
+  FOR v_r IN SELECT * FROM (VALUES (v_stage), (v_av)) AS x(uid)
+  LOOP
+    v_failed := false;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
+    BEGIN
+      SET LOCAL ROLE authenticated;
+      INSERT INTO leod_sessions (event_id, sort_order, title, planned_start, planned_end, scheduled_start, scheduled_end)
+      VALUES (v_ev, 4, 'By crew', '12:00', '12:30', '12:00', '12:30');
+    EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+    END;
+    RESET ROLE;
+    IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 2: % inserted a session', v_r.uid; END IF;
+    SET LOCAL ROLE authenticated;
+    DELETE FROM leod_sessions WHERE id = v_sid;
+    GET DIAGNOSTICS v_n = ROW_COUNT;
+    RESET ROLE;
+    IF v_n <> 0 THEN RAISE EXCEPTION 'PROBE FAIL 2: % deleted a session', v_r.uid; END IF;
+  END LOOP;
+  -- the invited director deletes the session it inserted
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_dir, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  DELETE FROM leod_sessions WHERE event_id = v_ev AND title = 'By invited director';
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RESET ROLE;
+  IF v_n <> 1 THEN RAISE EXCEPTION 'PROBE FAIL 2: director deleted % sessions', v_n; END IF;
   -- reads unchanged: the stranger still sees nothing, the deactivated operator still reads (scoped_read_sessions)
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_other, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
@@ -169,7 +239,9 @@ BEGIN
   IF v_n <> 0 OR EXISTS (SELECT 1 FROM leod_broadcast WHERE event_id = v_ev AND message = 'hijack') THEN
     RAISE EXCEPTION 'PROBE FAIL 4: stranger read or changed the broadcast';
   END IF;
-  IF has_table_privilege('anon', 'public.leod_broadcast', 'SELECT') OR EXISTS (SELECT 1 FROM leod_broadcast WHERE id = 'global') THEN
+  IF has_table_privilege('anon', 'public.leod_broadcast', 'SELECT') OR EXISTS (SELECT 1 FROM leod_broadcast WHERE id = 'global')
+     OR (SELECT column_default FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'leod_broadcast' AND column_name = 'id') IS NOT NULL THEN
     RAISE EXCEPTION 'PROBE FAIL 4: anon read or global row left';
   END IF;
   v_checks := v_checks + 1;

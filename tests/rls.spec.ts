@@ -16,11 +16,12 @@ interface Policy {
   condition: 'always' | 'own_row' | 'bucket_match' | 'never' | 'event_member';
 }
 
-// Mirrors what auth-setup.sql establishes (production state, after anon write removal)
+// Mirrors the live policies after migration 095 (auth-setup.sql is superseded)
 const POLICIES: Policy[] = [
   // leod_sessions
   { table: 'leod_sessions',         role: 'anon',          ops: ['SELECT'],                        condition: 'always' },
   // writes (095): owner or active invited director/stage/av of the event (cuedeck_event_role)
+  // INSERT/DELETE director only, UPDATE director/stage/av (095)
   { table: 'leod_sessions',         role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'event_member' },
   // leod_event_log (095): members read and append; no anon, no UPDATE/DELETE
   { table: 'leod_event_log',        role: 'anon',           ops: [],                                condition: 'never' },

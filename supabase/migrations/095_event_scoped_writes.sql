@@ -15,11 +15,17 @@
 --                   every tenant's command results readable and writable.
 --   leod_reports    auth_insert_reports: insert for any event.
 --
+-- leod_users auth_insert_own_pending: WITH CHECK (id = auth.uid() AND
+--                   role = 'pending'): a pending row could name any owner
+--                   in invited_by.
+-- leod_broadcast.id had DEFAULT 'global'.
+--
 -- Who is a member: cuedeck_event_role(event_id), SECURITY DEFINER so the
 -- leod_users lookup does not depend on leod_users RLS. 'director' for the
 -- event owner (also when deactivated, as the brief rules), else the
 -- leod_users.role of an operator the owner invited whose active is not
--- false, else NULL. Same rule as eventRole() in
+-- false and whose role is an operator role (never 'pending', 'admin' or
+-- 'checkin_staff'), else NULL. Same rule as eventRole() in
 -- supabase/functions/_shared/transition.ts and rpc_apply_delay (093).
 --
 -- Callers checked 2026-10-05 (grep of every page, script and function):
@@ -29,7 +35,8 @@
 --     resetAllDelays (director, stage), markArrived and nudgeSession
 --     (director, stage), session editor save/delete/reorder, CSV import,
 --     event copy (seedSessions), setup wizard (director). Edge Functions
---     write with the service role. So writes: director, stage, av.
+--     write with the service role. So: UPDATE for director, stage, av;
+--     INSERT and DELETE for director only.
 --     interp, reg and signage have no session write in the console.
 --   leod_event_log writes: cuedeck-console.html transition fallback (now
 --     sends operator_id), cuedeck-agent-1-incident-advisor.js (inserts
@@ -76,7 +83,8 @@ AS $$
                    FROM leod_users u
                   WHERE u.id = auth.uid()
                     AND u.invited_by = e.created_by
-                    AND u.active IS NOT FALSE)
+                    AND u.active IS NOT FALSE
+                    AND u.role IN ('director', 'stage', 'av', 'interp', 'reg', 'signage'))
          END
     FROM leod_events e
    WHERE e.id = p_event_id
@@ -85,18 +93,28 @@ $$;
 REVOKE ALL ON FUNCTION public.cuedeck_event_role(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cuedeck_event_role(uuid) TO authenticated, service_role;
 
+-- leod_users: a self-inserted pending row may not claim a team. Before 095
+-- the check was only (id = auth.uid() AND role = 'pending'), so anyone
+-- could insert a pending row with invited_by = any owner and pass every
+-- "invited_by = created_by" read policy (scoped_read_sessions among them).
+ALTER POLICY auth_insert_own_pending ON public.leod_users
+  WITH CHECK (id = auth.uid() AND role = 'pending' AND invited_by IS NULL);
+
 -- leod_sessions: reads unchanged (scoped_read_sessions, admin_read_all_sessions)
 DROP POLICY IF EXISTS scoped_write_sessions ON public.leod_sessions;
 DROP POLICY IF EXISTS sessions_member_insert ON public.leod_sessions;
 DROP POLICY IF EXISTS sessions_member_update ON public.leod_sessions;
 DROP POLICY IF EXISTS sessions_member_delete ON public.leod_sessions;
+-- INSERT and DELETE: director only (editor, CSV import, event copy, wizard
+-- are director features). UPDATE: director, stage, av (transition
+-- fallback, delay fallback, nudge, mark arrived, undo).
 CREATE POLICY sessions_member_insert ON public.leod_sessions FOR INSERT TO authenticated
-  WITH CHECK (cuedeck_event_role(event_id) IN ('director', 'stage', 'av'));
+  WITH CHECK (cuedeck_event_role(event_id) = 'director');
 CREATE POLICY sessions_member_update ON public.leod_sessions FOR UPDATE TO authenticated
   USING      (cuedeck_event_role(event_id) IN ('director', 'stage', 'av'))
   WITH CHECK (cuedeck_event_role(event_id) IN ('director', 'stage', 'av'));
 CREATE POLICY sessions_member_delete ON public.leod_sessions FOR DELETE TO authenticated
-  USING      (cuedeck_event_role(event_id) IN ('director', 'stage', 'av'));
+  USING      (cuedeck_event_role(event_id) = 'director');
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.leod_sessions FROM anon;
 
 -- leod_event_log: members read and append; nobody signed in edits or deletes
@@ -113,7 +131,8 @@ REVOKE UPDATE, DELETE, TRUNCATE ON public.leod_event_log FROM authenticated;
 REVOKE ALL ON public.leod_event_log FROM anon;
 -- admin_read_all_logs is kept.
 
--- leod_broadcast: one row per event, id = event id
+-- leod_broadcast: one row per event, id = event id (no 'global' default)
+ALTER TABLE public.leod_broadcast ALTER COLUMN id DROP DEFAULT;
 UPDATE public.leod_broadcast b
    SET id = b.event_id::text
  WHERE b.id = 'global'
@@ -580,17 +599,22 @@ BEGIN
   -- authenticated, anon or PUBLIC: it fails when its USING or WITH CHECK
   -- is missing where the command needs it, 'true', or only
   -- auth.role() = 'authenticated'. That is the shape that let any account
-  -- write any event's sessions log, broadcast, clock, commands and
-  -- reports until 095. No leod_* policy found is a failure.
+  -- write any event's log, broadcast, clock, commands and reports until
+  -- 095. Also flagged: an expression that references neither a column
+  -- (VAR) nor a function (FUNCEXPR), e.g. 1 = 1. No leod_* policy found
+  -- is a failure.
   BEGIN
     SELECT count(*),
            array_agg(DISTINCT c.relname || '.' || p.polname) FILTER (WHERE
              (p.polcmd IN ('w', 'd', '*')
               AND (p.polqual IS NULL
-                   OR pg_get_expr(p.polqual, p.polrelid) IN ('true', '(auth.role() = ''authenticated''::text)')))
+                   OR pg_get_expr(p.polqual, p.polrelid) IN ('true', '(auth.role() = ''authenticated''::text)')
+                   OR (p.polqual::text NOT LIKE '%{VAR %' AND p.polqual::text NOT LIKE '%{FUNCEXPR %')))
              OR (p.polcmd IN ('a', 'w', '*')
-                 AND coalesce(pg_get_expr(p.polwithcheck, p.polrelid), pg_get_expr(p.polqual, p.polrelid), 'true')
-                     IN ('true', '(auth.role() = ''authenticated''::text)')))
+                 AND (coalesce(pg_get_expr(p.polwithcheck, p.polrelid), pg_get_expr(p.polqual, p.polrelid), 'true')
+                        IN ('true', '(auth.role() = ''authenticated''::text)')
+                      OR (coalesce(p.polwithcheck, p.polqual)::text NOT LIKE '%{VAR %'
+                          AND coalesce(p.polwithcheck, p.polqual)::text NOT LIKE '%{FUNCEXPR %'))))
       INTO v_total, v_bad
       FROM pg_policy p
       JOIN pg_class c ON c.oid = p.polrelid
