@@ -2893,7 +2893,7 @@ async function submitWalkIn(e) {
   // Control and bidi characters dropped before sending: a name typed at a
   // desk ends up on badges, exports and other people's screens, where a
   // right-to-left override would make it read as something else.
-  const v = (id) => document.getElementById(id).value.replace(WALKIN_CONTROL, '').trim();
+  const v = (id) => document.getElementById(id).value.replace(/[\t\n\r]/g, ' ').replace(WALKIN_CONTROL, '').trim();
   const body = { event_id: S.event.id, first_name: v('wi-first'), last_name: v('wi-last'),
                  email: v('wi-email'), company: v('wi-company'), ticket_type: v('wi-tt') };
   if (!body.first_name || !body.last_name) { err.textContent = 'First and last name are needed.'; return; }

@@ -29,6 +29,11 @@ describe('normalizeWalkIn', () => {
       ok: true, row: { first_name: 'Walt', last_name: 'Walkin', email: null, company: 'Northwind Demo', ticket_type: 'vip' },
     });
   });
+  it('tabs and line breaks separate words instead of vanishing', () => {
+    expect(normalizeWalkIn({ first_name: 'Ewa', last_name: 'Jan\nKowalski', company: 'Contoso\tDemo\r\nLtd' })).toEqual({
+      ok: true, row: { first_name: 'Ewa', last_name: 'Jan Kowalski', email: null, company: 'Contoso Demo Ltd', ticket_type: 'attendee' },
+    });
+  });
   it('a name made only of control characters counts as missing', () => {
     expect(normalizeWalkIn({ first_name: '\u202E\u2069', last_name: 'B' })).toEqual({ ok: false, error: 'First and last name are required' });
   });

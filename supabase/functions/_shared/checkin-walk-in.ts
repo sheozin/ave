@@ -17,7 +17,7 @@ export type WalkIn = {
 // possible caller, so the server strips them too.
 const CONTROL_RE = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
-const clean = (v: unknown): string => (typeof v === 'string' ? v.replace(CONTROL_RE, '').replace(/\s+/g, ' ').trim() : '')
+const clean = (v: unknown): string => (typeof v === 'string' ? v.replace(/[\t\n\r]/g, ' ').replace(CONTROL_RE, '').replace(/\s+/g, ' ').trim() : '')
 
 export function normalizeWalkIn(body: Record<string, unknown>): { ok: true; row: WalkIn } | { ok: false; error: string } {
   const first = clean(body.first_name)
