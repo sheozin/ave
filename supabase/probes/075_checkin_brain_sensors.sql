@@ -1,0 +1,724 @@
+-- ============================================================
+-- Probes for migration 075 (checkin_brain_signals, checkin_guard_results)
+-- ============================================================
+-- Run EACH block below as its own execute_sql call against
+-- sawekpguemzvuvvulfbc. Every block ends in RAISE EXCEPTION, so whatever
+-- it seeded or changed is rolled back.
+--   pass: the call fails with a message starting  PROBE_OK
+--   fail: the call fails with a message starting  PROBE_FAIL, or any
+--         other error
+-- ============================================================
+
+-- S1. Only service_role may execute checkin_brain_signals; anon and
+--     authenticated get permission denied when they call it.
+DO $probe$
+DECLARE
+  f CONSTANT TEXT := 'public.checkin_brain_signals(timestamptz)';
+  r TEXT;
+BEGIN
+  IF has_function_privilege('anon', f, 'EXECUTE') OR has_function_privilege('authenticated', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL anon or authenticated holds EXECUTE on %', f;
+  END IF;
+  IF NOT has_function_privilege('service_role', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL service_role cannot execute %', f;
+  END IF;
+  FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    BEGIN
+      EXECUTE format('SET LOCAL ROLE %I', r);
+      PERFORM public.checkin_brain_signals(now() - interval '1 day');
+      RAISE EXCEPTION 'PROBE_FAIL % executed %', r, f;
+    EXCEPTION WHEN insufficient_privilege THEN
+      NULL;  -- expected; the sub-block rollback also undoes SET LOCAL ROLE
+    END;
+  END LOOP;
+  RAISE EXCEPTION 'PROBE_OK S1 only service_role executes checkin_brain_signals';
+END
+$probe$;
+
+-- S2. Seeded funnel: right count per stage, denominators present,
+--     test-desk stage non-gating, null vs 0 in event_day. Since 079 the
+--     cohort is sign-ups 14 days to 1 day old, independent of p_since, so
+--     the seeded users are 3 days old and the funnel is compared as a
+--     delta against a baseline taken before seeding.
+DO $probe$
+DECLARE
+  u1 UUID := gen_random_uuid();  -- signed up, never confirmed
+  u2 UUID := gen_random_uuid();  -- confirmed, created an event, stopped
+  u3 UUID := gen_random_uuid();  -- all the way: import, test desk, checkout, paid, live
+  u4 UUID := gen_random_uuid();  -- confirmed with an event, but NOT a check-in sign-up
+  e2 UUID := gen_random_uuid();
+  e3 UUID := gen_random_uuid();
+  e4 UUID := gen_random_uuid();
+  a3 UUID := gen_random_uuid();
+  r  JSONB;
+  b  JSONB;
+  bs JSONB;
+  st JSONB;
+  expected JSONB := '{"signed_up":[3,null],"confirmed":[2,3],"created_event":[2,2],"imported_guests":[1,2],"used_test_desk":[1,1],"opened_checkout":[1,1],"paid":[1,1],"went_live":[1,1]}';
+BEGIN
+  b := public.checkin_brain_signals(now());
+  INSERT INTO auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at, aud, role) VALUES
+    (u1, 'probe-075-u1@probe.invalid', '{"signup_source":"checkin"}', NULL,  now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u2, 'probe-075-u2@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u3, 'probe-075-u3@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated'),
+    (u4, 'probe-075-u4@probe.invalid', '{}',                          now(), now() - interval '3 days', 'authenticated', 'authenticated');
+
+  INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via) VALUES
+    (e2, 'probe 075 e2', current_date, '09:00', '18:00', 'UTC', u2, 'checkin'),
+    (e3, 'probe 075 e3', current_date, '09:00', '18:00', 'UTC', u3, 'checkin'),
+    (e4, 'probe 075 e4', current_date, '09:00', '18:00', 'UTC', u4, 'checkin');
+
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at, checkout_session_id, checkout_expires_at)
+  VALUES (e3, 'live', now(), 'cs_probe_075_e3', now() + interval '1 hour');
+
+  INSERT INTO leod_checkin_attendees (id, event_id, first_name, last_name, qr_token, source)
+  VALUES (a3, e3, 'Probe', 'Guest', 'probe-075-' || gen_random_uuid(), 'import');
+
+  INSERT INTO leod_checkin_scan_events (id, event_id, attendee_id, scanned_at, received_at, result, is_test)
+  VALUES (gen_random_uuid(), e3, a3, now(), now(), 'ok', true);
+
+  INSERT INTO leod_checkin_purchases (event_id, buyer_id, stripe_checkout_session_id, paid_at, amount_total, currency)
+  VALUES (e3, u3, 'cs_probe_075_e3', now(), 24900, 'eur');
+
+  r := public.checkin_brain_signals(now());
+
+  FOR st IN SELECT * FROM jsonb_array_elements(r->'funnel'->'stages') LOOP
+    IF NOT (st ? 'of') THEN
+      RAISE EXCEPTION 'PROBE_FAIL stage % has no denominator key', st->>'stage';
+    END IF;
+    SELECT x INTO bs FROM jsonb_array_elements(b->'funnel'->'stages') x WHERE x->>'stage' = st->>'stage';
+    IF (st->>'count')::int - (bs->>'count')::int IS DISTINCT FROM (expected->(st->>'stage')->>0)::int
+       OR (st->>'of')::int - (bs->>'of')::int IS DISTINCT FROM (expected->(st->>'stage')->>1)::int THEN
+      RAISE EXCEPTION 'PROBE_FAIL stage %: got count=% of=% (baseline %), want delta %',
+        st->>'stage', st->'count', st->'of', bs, expected->(st->>'stage');
+    END IF;
+  END LOOP;
+  IF jsonb_array_length(r->'funnel'->'stages') <> 8 THEN
+    RAISE EXCEPTION 'PROBE_FAIL expected 8 stages, got %', jsonb_array_length(r->'funnel'->'stages');
+  END IF;
+
+  -- Event day: exactly the one seeded test scan is inside the window.
+  IF (r->'event_day'->'scans'->>'total')::int <> 1 THEN
+    RAISE EXCEPTION 'PROBE_FAIL event_day scans total %, want 1', r->'event_day'->'scans'->>'total';
+  END IF;
+  IF r->'event_day'->'late_sync' <> '{"count":0,"of":1,"threshold_seconds":60}'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL late_sync %', r->'event_day'->'late_sync';
+  END IF;
+
+  -- null vs 0: forbidden / desks are null until the roles build exists,
+  -- 0 (with a denominator) once it does.
+  IF EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conrelid = 'public.leod_checkin_scan_events'::regclass AND contype = 'c'
+                AND pg_get_constraintdef(oid) LIKE '%''forbidden''%') THEN
+    IF r->'event_day'->'forbidden'->'count' <> '0'::jsonb OR r->'event_day'->'forbidden'->'of' <> '1'::jsonb THEN
+      RAISE EXCEPTION 'PROBE_FAIL forbidden should be 0 of 1, got %', r->'event_day'->'forbidden';
+    END IF;
+  ELSE
+    IF r->'event_day'->'forbidden'->'count' <> 'null'::jsonb THEN
+      RAISE EXCEPTION 'PROBE_FAIL forbidden should be null before the roles build, got %', r->'event_day'->'forbidden';
+    END IF;
+  END IF;
+  IF to_regclass('public.leod_checkin_desks') IS NULL
+     AND r->'event_day'->'desks_pending'->'count' <> 'null'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL desks_pending should be null without leod_checkin_desks, got %', r->'event_day'->'desks_pending';
+  END IF;
+  IF r->'friction'->'captcha_failed'->'count' <> 'null'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL captcha_failed must be null (not measurable), got %', r->'friction'->'captcha_failed';
+  END IF;
+
+  RAISE EXCEPTION 'PROBE_OK S2 funnel %', r->'funnel'->'stages';
+END
+$probe$;
+
+-- S3. Test desk is non-gating and 'unknown' after go-live deleted the
+--     test scans: u went live but has no test scan left.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  r JSONB;
+  st JSONB;
+  bu INT;
+  bc INT;
+  bl INT;
+BEGIN
+  -- Baseline first: since 079 the cohort is sign-ups 1 to 14 days old.
+  r := public.checkin_brain_signals(now());
+  SELECT (s->>'count')::int, (s->>'unknown')::int INTO bc, bu FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'used_test_desk';
+  SELECT (s->>'count')::int INTO bl FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'went_live';
+  INSERT INTO auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at, aud, role)
+  VALUES (u, 'probe-075-s3@probe.invalid', '{"signup_source":"checkin"}', now(), now() - interval '3 days', 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES (e, 'probe 075 s3', current_date + 30, '09:00', '18:00', 'UTC', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at, checkout_session_id, checkout_expires_at)
+  VALUES (e, 'live', now(), 'cs_probe_075_s3', now() + interval '1 hour');
+  INSERT INTO leod_checkin_attendees (event_id, first_name, last_name, qr_token, source)
+  VALUES (e, 'Probe', 'Guest', 'probe-075-' || gen_random_uuid(), 'import');
+  INSERT INTO leod_checkin_purchases (event_id, buyer_id, stripe_checkout_session_id, paid_at)
+  VALUES (e, u, 'cs_probe_075_s3', now());
+
+  r := public.checkin_brain_signals(now());
+  SELECT s INTO st FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'used_test_desk';
+  IF (st->>'count')::int <> bc OR (st->>'unknown')::int <> bu + 1 OR st->'gating' <> 'false'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL used_test_desk % (baseline count % unknown %)', st, bc, bu;
+  END IF;
+  SELECT s INTO st FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'went_live';
+  IF (st->>'count')::int <> bl + 1 THEN
+    RAISE EXCEPTION 'PROBE_FAIL went_live should still count 1 without a test scan, got %', st;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S3 test desk non-gating';
+END
+$probe$;
+
+-- S4. Watchers: a never-run job and an overdue job are 'stale', a job
+--     whose last runs failed is 'failing', a fresh ok job is 'ok', and a
+--     run from an unregistered job is listed.
+DO $probe$
+DECLARE
+  r JSONB;
+  j JSONB;
+  want JSONB := '{"probe_never":"stale","probe_overdue":"stale","probe_failing":"failing","probe_fine":"ok","probe_crashing":"stale"}';
+BEGIN
+  INSERT INTO leod_checkin_jobs (job_name, expected_interval) VALUES
+    ('probe_crashing', interval '1 hour'),
+    ('probe_never',   interval '1 hour'),
+    ('probe_overdue', interval '1 hour'),
+    ('probe_failing', interval '1 hour'),
+    ('probe_fine',    interval '1 hour');
+  INSERT INTO leod_checkin_job_runs (job_name, started_at, finished_at, status) VALUES
+    ('probe_overdue', now() - interval '2 hours',  now() - interval '2 hours', 'ok'),
+    ('probe_failing', now() - interval '50 minutes', now(), 'ok'),
+    ('probe_failing', now() - interval '20 minutes', now(), 'failed'),
+    ('probe_failing', now() - interval '10 minutes', now(), 'failed'),
+    ('probe_fine',    now() - interval '5 minutes',  now(), 'ok'),
+    ('probe_rogue',   now() - interval '5 minutes',  now(), 'ok');
+  -- Started fresh but never finished: only 'running' rows, no success.
+  INSERT INTO leod_checkin_job_runs (job_name, started_at, status) VALUES
+    ('probe_crashing', now() - interval '30 minutes', 'running'),
+    ('probe_crashing', now() - interval '5 minutes',  'running');
+
+  r := public.checkin_brain_signals(now());
+  FOR j IN SELECT * FROM jsonb_array_elements(r->'watchers'->'jobs') LOOP
+    IF want ? (j->>'job') AND j->>'status' <> want->>(j->>'job') THEN
+      RAISE EXCEPTION 'PROBE_FAIL job % status %, want %', j->>'job', j->>'status', want->>(j->>'job');
+    END IF;
+    IF j->>'job' = 'probe_failing' AND (j->>'consecutive_failures')::int <> 2 THEN
+      RAISE EXCEPTION 'PROBE_FAIL probe_failing consecutive_failures %, want 2', j->>'consecutive_failures';
+    END IF;
+  END LOOP;
+  IF NOT (r->'watchers'->'unregistered_runs') ? 'probe_rogue' THEN
+    RAISE EXCEPTION 'PROBE_FAIL probe_rogue not listed as unregistered: %', r->'watchers'->'unregistered_runs';
+  END IF;
+  IF to_regclass('cron.job_run_details') IS NULL AND r->'watchers'->'pg_cron' <> 'null'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL pg_cron should be null when pg_cron is absent, got %', r->'watchers'->'pg_cron';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S4 watchers %', r->'watchers'->'jobs';
+END
+$probe$;
+
+-- S5. p_since in the future is refused, not answered with zeros.
+DO $probe$
+BEGIN
+  PERFORM public.checkin_brain_signals(now() + interval '1 hour');
+  RAISE EXCEPTION 'PROBE_FAIL future p_since accepted';
+EXCEPTION WHEN invalid_parameter_value THEN
+  RAISE EXCEPTION 'PROBE_OK S5 future p_since refused';
+END
+$probe$;
+
+-- S6. A stalled checkout is reported once: opened 30 h ago (inside the
+--     window for p_since = now() - 24h) counts; opened 50 h ago or 2 h
+--     ago does not; a paid one is in the denominator only.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e_in UUID := gen_random_uuid();
+  e_old UUID := gen_random_uuid();
+  e_new UUID := gen_random_uuid();
+  e_paid UUID := gen_random_uuid();
+  base INT;
+  base_of INT;
+  r JSONB;
+BEGIN
+  r := public.checkin_brain_signals(now() - interval '24 hours');
+  base    := (r->'money'->'stalled_checkouts'->>'count')::int;
+  base_of := (r->'money'->'stalled_checkouts'->>'of')::int;
+
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-s6@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via) VALUES
+    (e_in,   'probe 075 s6 in',   current_date + 30, '09:00', '18:00', u, 'checkin'),
+    (e_old,  'probe 075 s6 old',  current_date + 30, '09:00', '18:00', u, 'checkin'),
+    (e_new,  'probe 075 s6 new',  current_date + 30, '09:00', '18:00', u, 'checkin'),
+    (e_paid, 'probe 075 s6 paid', current_date + 30, '09:00', '18:00', u, 'checkin');
+  -- opened = checkout_expires_at - 1 h
+  INSERT INTO leod_checkin_entitlements (event_id, status, checkout_session_id, checkout_expires_at) VALUES
+    (e_in,   'test', 'cs_probe_075_s6_in',   now() - interval '29 hours'),
+    (e_old,  'test', 'cs_probe_075_s6_old',  now() - interval '49 hours'),
+    (e_new,  'test', 'cs_probe_075_s6_new',  now() - interval '1 hour'),
+    (e_paid, 'live', 'cs_probe_075_s6_paid', now() - interval '29 hours');
+  INSERT INTO leod_checkin_purchases (event_id, buyer_id, stripe_checkout_session_id, paid_at)
+  VALUES (e_paid, u, 'cs_probe_075_s6_paid', now() - interval '29 hours');
+
+  r := public.checkin_brain_signals(now() - interval '24 hours');
+  IF (r->'money'->'stalled_checkouts'->>'count')::int - base <> 1
+     OR (r->'money'->'stalled_checkouts'->>'of')::int - base_of <> 2 THEN
+    RAISE EXCEPTION 'PROBE_FAIL stalled_checkouts % (baseline count % of %), want +1 of +2',
+      r->'money'->'stalled_checkouts', base, base_of;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S6 stalled checkout reported once';
+END
+$probe$;
+
+-- S7. Event day uses the event's own time zone: an event whose local
+--     date is today in UTC+14 is included even when its date is
+--     tomorrow in UTC.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  a UUID := gen_random_uuid();
+  r JSONB;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-s7@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES (e, 'probe 075 s7', (now() AT TIME ZONE 'Pacific/Kiritimati')::date, '00:00', '23:59',
+          'Pacific/Kiritimati', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  INSERT INTO leod_checkin_attendees (id, event_id, first_name, last_name, qr_token)
+  VALUES (a, e, 'Probe', 'Guest', 'probe-075-' || gen_random_uuid());
+  INSERT INTO leod_checkin_scan_events (id, event_id, attendee_id, scanned_at, received_at, result)
+  VALUES (gen_random_uuid(), e, a, now(), now() + interval '90 seconds', 'ok');
+
+  r := public.checkin_brain_signals(now());
+  IF (r->'event_day'->'scans'->>'total')::int <> 1 OR r->'event_day'->'late_sync'->'count' <> '1'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL UTC+14 event not in event_day or late sync missed: %', r->'event_day';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S7 event day follows the event time zone';
+END
+$probe$;
+
+-- S8 (079). Scans window on received_at: a scan made offline 5 h ago and
+--     synced 1 h ago is counted for p_since = 2 h ago (scanned before it,
+--     received after it); one received 3 h ago is not.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  a UUID := gen_random_uuid();
+  r JSONB;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-079-s8@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, timezone, created_by, created_via)
+  VALUES (e, 'probe 079 s8', current_date, '00:00', '23:59', 'UTC', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  INSERT INTO leod_checkin_attendees (id, event_id, first_name, last_name, qr_token)
+  VALUES (a, e, 'Probe', 'Guest', 'probe-079-' || gen_random_uuid());
+  INSERT INTO leod_checkin_scan_events (id, event_id, attendee_id, scanned_at, received_at, result) VALUES
+    (gen_random_uuid(), e, a, now() - interval '5 hours', now() - interval '1 hour', 'ok'),
+    (gen_random_uuid(), e, a, now() - interval '5 hours', now() - interval '3 hours', 'ok');
+
+  r := public.checkin_brain_signals(now() - interval '2 hours');
+  IF (r->'event_day'->'scans'->>'total')::int <> 1 OR r->'event_day'->'late_sync'->'count' <> '1'::jsonb THEN
+    RAISE EXCEPTION 'PROBE_FAIL late-synced scan not counted once by received_at: %', r->'event_day';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S8 scans window on received_at';
+END
+$probe$;
+
+-- S9 (079). Funnel cohort is sign-ups 14 days to 1 day old, whatever
+--     p_since is: a sign-up from 2 h ago is excluded, one from 3 days ago
+--     is included, and cohort_window {from, to} is reported. Checked with
+--     p_since 1 h and 7 days back, so a p_since-based cohort fails both
+--     ways (+0 for 1 h, +2 for 7 days).
+DO $probe$
+DECLARE
+  u_new UUID := gen_random_uuid();
+  u_old UUID := gen_random_uuid();
+  b1 INT;
+  b7 INT;
+  n1 INT;
+  n7 INT;
+  r JSONB;
+BEGIN
+  SELECT (s->>'count')::int INTO b1 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '1 hour')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  SELECT (s->>'count')::int INTO b7 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '7 days')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  INSERT INTO auth.users (id, email, raw_user_meta_data, created_at, aud, role) VALUES
+    (u_new, 'probe-079-s9-new@probe.invalid', '{"signup_source":"checkin"}', now() - interval '2 hours', 'authenticated', 'authenticated'),
+    (u_old, 'probe-079-s9-old@probe.invalid', '{"signup_source":"checkin"}', now() - interval '3 days',  'authenticated', 'authenticated');
+
+  SELECT (s->>'count')::int INTO n1 FROM jsonb_array_elements(public.checkin_brain_signals(now() - interval '1 hour')->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  r := public.checkin_brain_signals(now() - interval '7 days');
+  SELECT (s->>'count')::int INTO n7 FROM jsonb_array_elements(r->'funnel'->'stages') s WHERE s->>'stage' = 'signed_up';
+  IF n1 - b1 <> 1 OR n7 - b7 <> 1 THEN
+    RAISE EXCEPTION 'PROBE_FAIL signed_up should grow by exactly 1 (the 3-day-old sign-up) for any p_since: +% (1 h), +% (7 days)', n1 - b1, n7 - b7;
+  END IF;
+  IF (r->'funnel'->'cohort_window'->>'from')::timestamptz IS DISTINCT FROM now() - interval '14 days'
+     OR (r->'funnel'->'cohort_window'->>'to')::timestamptz IS DISTINCT FROM now() - interval '1 day' THEN
+    RAISE EXCEPTION 'PROBE_FAIL cohort_window %', r->'funnel'->'cohort_window';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S9 cohort is 14d to 1d old, window %', r->'funnel'->'cohort_window';
+END
+$probe$;
+
+-- S10 (079). A function created by postgres in public is not executable by
+--      anon or PUBLIC by default; authenticated and service_role still are.
+DO $probe$
+BEGIN
+  CREATE FUNCTION public.admin_zz_probe_default_priv() RETURNS int LANGUAGE sql AS 'select 1';
+  IF has_function_privilege('anon', 'public.admin_zz_probe_default_priv()', 'EXECUTE')
+     OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) x
+                 WHERE p.oid = 'public.admin_zz_probe_default_priv()'::regprocedure AND x.grantee = 0) THEN
+    RAISE EXCEPTION 'PROBE_FAIL new function executable by anon or PUBLIC: %',
+      (SELECT proacl::text FROM pg_proc WHERE oid = 'public.admin_zz_probe_default_priv()'::regprocedure);
+  END IF;
+  IF NOT has_function_privilege('authenticated', 'public.admin_zz_probe_default_priv()', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.admin_zz_probe_default_priv()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL authenticated or service_role lost the default EXECUTE';
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK S10 new public function acl %',
+    (SELECT proacl::text FROM pg_proc WHERE oid = 'public.admin_zz_probe_default_priv()'::regprocedure);
+END
+$probe$;
+
+-- ============================================================
+-- Guard probes (part B). Same rules: one execute_sql per block, pass =
+-- error starting PROBE_OK. Each block breaks one invariant and asserts
+-- that exactly that guard turns ok = false.
+-- ============================================================
+
+-- G-perm. Only service_role may execute checkin_guard_results.
+DO $probe$
+DECLARE
+  f CONSTANT TEXT := 'public.checkin_guard_results()';
+  r TEXT;
+BEGIN
+  IF has_function_privilege('anon', f, 'EXECUTE') OR has_function_privilege('authenticated', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL anon or authenticated holds EXECUTE on %', f;
+  END IF;
+  IF NOT has_function_privilege('service_role', f, 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE_FAIL service_role cannot execute %', f;
+  END IF;
+  FOREACH r IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    BEGIN
+      EXECUTE format('SET LOCAL ROLE %I', r);
+      PERFORM * FROM public.checkin_guard_results();
+      RAISE EXCEPTION 'PROBE_FAIL % executed %', r, f;
+    EXCEPTION WHEN insufficient_privilege THEN
+      NULL;
+    END;
+  END LOOP;
+  RAISE EXCEPTION 'PROBE_OK G-perm only service_role executes checkin_guard_results';
+END
+$probe$;
+
+-- G0. Nine guards (G1 to G7, G9 from 077, G10 from 078), each with a
+--     name, a verdict and a detail.
+DO $probe$
+DECLARE
+  n INT;
+BEGIN
+  SELECT count(*) INTO n FROM public.checkin_guard_results()
+   WHERE guard IS NOT NULL AND ok IS NOT NULL AND detail IS NOT NULL AND checked_at IS NOT NULL;
+  IF n <> 9 THEN
+    RAISE EXCEPTION 'PROBE_FAIL expected 9 complete guard rows, got %', n;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G0 nine guard rows';
+END
+$probe$;
+
+-- G1. A leod_checkin_* table writable by anon.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE TABLE public.leod_checkin_zz_probe (id INT);
+  ALTER TABLE public.leod_checkin_zz_probe ENABLE ROW LEVEL SECURITY;
+  GRANT INSERT ON public.leod_checkin_zz_probe TO anon;
+  CREATE POLICY zz_probe_anon_insert ON public.leod_checkin_zz_probe FOR INSERT TO anon WITH CHECK (true);
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_tables_not_anon_writable';
+  IF g.ok OR g.detail NOT LIKE '%leod_checkin_zz_probe%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G1 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G1 %', g.detail;
+END
+$probe$;
+
+-- G1b. No leod_checkin_* table in scope is a failure, not an all-clear.
+DO $probe$
+DECLARE
+  t TEXT;
+  g RECORD;
+BEGIN
+  FOR t IN SELECT c.relname::text FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace
+            WHERE ns.nspname = 'public' AND c.relkind IN ('r', 'p') AND c.relname LIKE 'leod\_checkin\_%' LOOP
+    EXECUTE format('ALTER TABLE public.%I RENAME TO %I', t, 'zzprobe_' || t);
+  END LOOP;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_tables_not_anon_writable';
+  IF g.ok OR g.detail NOT LIKE '0 leod_checkin_* tables found%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G1b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G1b %', g.detail;
+END
+$probe$;
+
+-- G2. A public table with RLS off.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE TABLE public.zz_probe_rls_off (id INT);
+  -- A project event trigger enables RLS on every new table; switch it off again.
+  ALTER TABLE public.zz_probe_rls_off DISABLE ROW LEVEL SECURITY;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'public_tables_rls_on';
+  IF g.ok OR g.detail NOT LIKE '%zz_probe_rls_off%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G2 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G2 %', g.detail;
+END
+$probe$;
+
+-- G3. leod_config writable by authenticated.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT INSERT ON public.leod_config TO authenticated;
+  CREATE POLICY zz_probe_config_insert ON public.leod_config FOR INSERT TO authenticated WITH CHECK (true);
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'leod_config_not_authenticated_writable';
+  IF g.ok THEN
+    RAISE EXCEPTION 'PROBE_FAIL G3 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G3 %', g.detail;
+END
+$probe$;
+
+-- G4. An operator role outside the allowed set.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g4@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by)
+  VALUES (e, 'probe 075 g4', current_date, '09:00', '18:00', u);  -- auto-grants an organizer row
+  EXECUTE (SELECT 'ALTER TABLE public.leod_checkin_operators DROP CONSTRAINT ' || quote_ident(conname)
+             FROM pg_constraint
+            WHERE conrelid = 'public.leod_checkin_operators'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%role%' LIMIT 1);
+  UPDATE leod_checkin_operators SET role = 'superuser' WHERE event_id = e AND user_id = u;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'checkin_operator_roles_allowed';
+  IF g.ok OR g.detail NOT LIKE '%superuser%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G4 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G4 %', g.detail;
+END
+$probe$;
+
+-- G5. A live event with no purchase and a non-comp owner.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g5@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g5', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.ok OR g.detail NOT LIKE '%' || e::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G5 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G5 %', g.detail;
+END
+$probe$;
+
+-- G5b. The same live event is fine when its owner is a comp account.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g5b@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_checkin_comp_accounts (user_id, note) VALUES (u, 'probe 075');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g5b', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status, went_live_at) VALUES (e, 'live', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.detail LIKE '%' || e::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G5b comp event flagged: %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G5b comp event not flagged';
+END
+$probe$;
+
+-- G6. A paid, unrefunded purchase whose entitlement is still 'test'.
+DO $probe$
+DECLARE
+  u UUID := gen_random_uuid();
+  e UUID := gen_random_uuid();
+  p UUID := gen_random_uuid();
+  g RECORD;
+BEGIN
+  INSERT INTO auth.users (id, email, created_at, aud, role)
+  VALUES (u, 'probe-075-g6@probe.invalid', now(), 'authenticated', 'authenticated');
+  INSERT INTO leod_events (id, name, date, event_start, event_end, created_by, created_via)
+  VALUES (e, 'probe 075 g6', current_date, '09:00', '18:00', u, 'checkin');
+  INSERT INTO leod_checkin_entitlements (event_id, status) VALUES (e, 'test');
+  INSERT INTO leod_checkin_purchases (id, event_id, buyer_id, stripe_checkout_session_id, paid_at)
+  VALUES (p, e, u, 'cs_probe_075_g6', now());
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'purchases_have_entitlement';
+  IF g.ok OR g.detail NOT LIKE '%' || p::text || '%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G6 %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G6 %', g.detail;
+END
+$probe$;
+
+-- G7. A SECURITY DEFINER function without search_path.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE FUNCTION public.zz_probe_secdef() RETURNS INT LANGUAGE sql SECURITY DEFINER AS 'SELECT 1';
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'security_definer_search_path';
+  IF g.ok OR g.detail NOT LIKE '%zz_probe_secdef()%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G7 %', left(row_to_json(g)::text, 500);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G7 flagged zz_probe_secdef';
+END
+$probe$;
+
+-- G8. A guard that throws is ok = false with the error, and the other
+--     guards still run.
+DO $probe$
+DECLARE
+  g RECORD;
+  n INT;
+BEGIN
+  ALTER TABLE public.leod_checkin_comp_accounts RENAME TO leod_checkin_comp_accounts_zz;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'live_events_have_purchase';
+  IF g.ok OR g.detail NOT LIKE 'guard error:%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G8 %', row_to_json(g);
+  END IF;
+  SELECT count(*) INTO n FROM public.checkin_guard_results();
+  IF n <> 9 THEN
+    RAISE EXCEPTION 'PROBE_FAIL G8 only % rows when one guard throws', n;
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G8 %', g.detail;
+END
+$probe$;
+
+-- G9 (077). Admin read RPCs are called as an admin, so a broken statement
+--     AFTER a working admin check is caught, and a Forbidden raised while
+--     impersonating an admin is a failure. Four throwaway functions:
+--       admin_get_zz_probe_after      admin check passes, then an ambiguous
+--                                     unqualified id (42702) further down
+--       admin_list_zz_probe_forbidden raises Forbidden for everyone
+--       admin_get_zz_probe_fine       works; must not be named
+--       admin_get_zz_probe_args(uuid) needs an argument; listed, not failed
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  CREATE FUNCTION public.admin_get_zz_probe_after() RETURNS TABLE (id uuid)
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM leod_users lu WHERE lu.id = auth.uid() AND lu.role = 'admin') THEN
+      RAISE EXCEPTION 'Forbidden';
+    END IF;
+    RETURN QUERY SELECT id FROM leod_users;
+  END $f$;
+  CREATE FUNCTION public.admin_list_zz_probe_forbidden() RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RAISE EXCEPTION 'Forbidden';
+  END $f$;
+  CREATE FUNCTION public.admin_get_zz_probe_fine() RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RETURN 1;
+  END $f$;
+  CREATE FUNCTION public.admin_get_zz_probe_args(p uuid) RETURNS INT
+  LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $f$
+  BEGIN
+    RETURN 1;
+  END $f$;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_read_rpcs_callable';
+  IF g.ok
+     OR g.detail NOT LIKE '%admin_get_zz_probe_after() 42702%'
+     OR g.detail NOT LIKE '%admin_list_zz_probe_forbidden() P0001 Forbidden%'
+     OR g.detail LIKE '%admin_get_zz_probe_fine%'
+     OR g.detail NOT LIKE '%not callable without args:%admin_get_zz_probe_args(p uuid)%'
+     OR g.detail NOT LIKE '2 of %' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G9 %', left(row_to_json(g)::text, 900);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G9 %', g.detail;
+END
+$probe$;
+
+-- G9b. No admin to impersonate is a failure, not an all-clear. Triggers are
+--      bypassed for the demotion so nothing is logged; rolled back anyway.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  SET LOCAL session_replication_role = replica;
+  UPDATE leod_users SET role = 'director' WHERE role = 'admin';
+  SET LOCAL session_replication_role = origin;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_read_rpcs_callable';
+  IF g.ok OR g.detail <> 'no admin user to test as' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G9b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G9b %', g.detail;
+END
+$probe$;
+
+-- G10 (078). Live: no admin_* function is executable by anon or PUBLIC.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF NOT g.ok OR g.detail NOT LIKE '0 of %' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10 live %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10 %', g.detail;
+END
+$probe$;
+
+-- G10b. EXECUTE granted back to anon on one admin_* function is named.
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT EXECUTE ON FUNCTION public.admin_get_stats() TO anon;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF g.ok OR g.detail NOT LIKE '1 of %admin_get_stats()%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10b %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10b %', g.detail;
+END
+$probe$;
+
+-- G10c. A PUBLIC grant is caught too (anon would inherit it).
+DO $probe$
+DECLARE
+  g RECORD;
+BEGIN
+  GRANT EXECUTE ON FUNCTION public.admin_list_users(text,text,text,integer,integer) TO PUBLIC;
+  SELECT * INTO g FROM public.checkin_guard_results() WHERE guard = 'admin_rpcs_not_anon';
+  IF g.ok OR g.detail NOT LIKE '%admin_list_users(%' THEN
+    RAISE EXCEPTION 'PROBE_FAIL G10c %', row_to_json(g);
+  END IF;
+  RAISE EXCEPTION 'PROBE_OK G10c %', g.detail;
+END
+$probe$;
