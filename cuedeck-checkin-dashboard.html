@@ -35,6 +35,16 @@
 .cl .cv{flex:1;min-height:30vh;height:auto;margin-top:4vh}
 .cl-foot{font-size:clamp(14px,1.5vw,22px);color:var(--t2);margin:2vh 0 0}
 #page-err:empty,#err:empty,#cl-err:empty{display:none}
+.ops{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+.ops[hidden]{display:none}
+.ops h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}.ops h3{margin:18px 0 6px;font-size:13.5px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid #F0F0F3}
+.tbl td{padding:10px;border-bottom:1px solid #F5F5F7;overflow-wrap:anywhere}
+.s-online{color:var(--gn);font-weight:600}.s-syncing{color:var(--am);font-weight:600}.s-offline{color:var(--rd);font-weight:600}
+.msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin-bottom:8px;background:var(--acsf);color:var(--ac)}
+.msg.warn{background:var(--amsf);color:var(--am)}
+.gaps{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
 @media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.dash{padding:16px}.banner{margin:16px 16px 0}.nav{padding:14px 16px;flex-wrap:wrap;gap:10px}.crumb{display:none}.nav-r{gap:6px}.nav-r .btn{padding:0 10px}}
 </style>
 </head>
@@ -63,6 +73,15 @@
       <div class="tile"><span>Peak arrivals</span><b id="t-peak"></b><small id="t-peak-s"></small></div>
     </section>
     <p class="meta-line" id="rate"></p>
+    <section class="ops" id="ops" hidden aria-label="Desks and pace">
+      <h2>Desks and pace</h2>
+      <div id="pace"></div>
+      <table class="tbl"><thead><tr><th>Desk</th><th>Who</th><th>Status</th></tr></thead><tbody id="desk-body"></tbody></table>
+      <p class="meta-line" id="desk-empty" hidden>No desk has reported in yet. A desk appears here once it opens this event.</p>
+      <h3>Offline gaps</h3>
+      <ul class="gaps" id="gaps"></ul>
+      <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
+    </section>
     <section class="charts">
       <div class="chart wide"><h2>Arrivals over time</h2><div class="cv"><canvas id="c-arrivals" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div></div>
       <div class="chart"><h2>Registration status</h2><div class="cv"><canvas id="c-status" role="img" aria-label="Checked in against still expected"></canvas></div></div>
@@ -93,18 +112,20 @@ import { effectiveRole, can } from '/checkin-roles.js';
 import {
   tiles, arrivalSeries, statusDoughnut, ticketBars, sourceBars, qrBars,
   arrivalRate, fmtRate, clientView, fmtClock, BUCKET_S, PACE_MIN_CHECKINS,
+  deskRows, gapLines, paceMessages, eventStartUtc,
 } from '/checkin-dashboard.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = (id) => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 const params = new URLSearchParams(location.search);
 const EVENT_ID = params.get('event');
 const REFRESH_MS = 30000;
 // The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
 const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
-let EV = null, ROLE = null, CLIENT = false, busy = false;
+let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, timer = null;
 const charts = {};
 
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -123,13 +144,17 @@ function upsertChart(id, config) {
   charts[id] = new Chart($(id), config);
 }
 
-function arrivalsConfig(series) {
+// big: the client view, shown on a screen across a room.
+function arrivalsConfig(series, big = false) {
+  const tick = big ? { precision: 0, font: { size: 18 } } : { precision: 0 };
+  const opts = big ? { ...BASE, plugins: { legend: { labels: { boxWidth: 18, font: { size: 20 } } } } } : BASE;
   return { type: 'bar', data: { labels: series.labels, datasets: [
     { type: 'bar', label: 'Arrived in these 15 minutes', data: series.bars, backgroundColor: C.ac, borderRadius: 4, yAxisID: 'y' },
     { type: 'line', label: 'Checked in so far', data: series.cumulative, borderColor: C.gn, backgroundColor: C.gn, pointRadius: 0, tension: 0.25, yAxisID: 'y2' },
-  ] }, options: { ...BASE, scales: {
-    y: { beginAtZero: true, ticks: { precision: 0 } },
-    y2: { position: 'right', beginAtZero: true, ticks: { precision: 0 }, grid: { drawOnChartArea: false } },
+  ] }, options: { ...opts, scales: {
+    ...(big ? { x: { ticks: { font: { size: 18 } } } } : {}),
+    y: { beginAtZero: true, ticks: tick },
+    y2: { position: 'right', beginAtZero: true, ticks: tick, grid: { drawOnChartArea: false } },
   } } };
 }
 function statusConfig(d) {
@@ -156,6 +181,34 @@ async function loadEvent() {
   if (!can(ROLE, 'dashboard')) throw new Error('You do not have access to this dashboard.');
   // A viewer only ever gets the client view (event-day spec, feature 3).
   CLIENT = ROLE === 'viewer' || params.get('view') === 'client';
+  const start = eventStartUtc(EV.date, EV.event_start, EV.timezone);
+  START_MS = start ? start.getTime() : null;
+}
+
+// Desk health and staffing (event-day spec, features 1 and 2): owner,
+// organizer and lead only. The server sends ops only to those roles; the
+// role test here keeps the panel hidden even if it ever did not.
+function renderOps(s) {
+  const show = can(ROLE, 'desk_health') && !!s.ops;
+  $('ops').hidden = !show;
+  if (!show) return;
+  const pace = $('pace'); pace.replaceChildren();
+  // paceMessages takes "now" from s.generated_at; Date.now() is only its fallback.
+  for (const m of paceMessages({ stats: s, nowMs: Date.now(), eventStartMs: START_MS, timeZone: EV.timezone })) {
+    pace.appendChild(el('div', 'msg' + (m.tone === 'warn' ? ' warn' : ''), m.text));
+  }
+  const body = $('desk-body'); body.replaceChildren();
+  const rows = deskRows(s.ops, EV.timezone);
+  for (const r of rows) {
+    const tr = el('tr');
+    tr.append(el('td', null, r.label), el('td', null, r.who), el('td', 's-' + r.state.kind, r.state.text));
+    body.appendChild(tr);
+  }
+  $('desk-empty').hidden = rows.length > 0;
+  const list = $('gaps'); list.replaceChildren();
+  const lines = gapLines(s.ops, EV.timezone);
+  for (const line of lines) list.appendChild(el('li', null, line));
+  $('gaps-empty').hidden = lines.length > 0;
 }
 
 function renderFull(s, closed) {
@@ -181,6 +234,7 @@ function renderFull(s, closed) {
   upsertChart('c-ticket', ticketConfig(ticketBars(s)));
   upsertChart('c-source', barsConfig(sourceBars(s), C.ac));
   upsertChart('c-qr', barsConfig(qrBars(s), [C.gn, C.am, C.bd2]));
+  renderOps(s);
 }
 
 function renderClient(s) {
@@ -193,7 +247,7 @@ function renderClient(s) {
   if (v.peak) bits.push('Busiest 15 minutes: ' + v.peak.n + ' arrived from ' + fmtClock(v.peak.t * 1000, EV.timezone) + '.');
   bits.push(v.rate === null ? 'Pace appears after the first 10 check-ins.' : 'Arriving now: ' + fmtRate(v.rate) + ' per minute.');
   $('cl-foot').textContent = bits.join(' ');
-  upsertChart('c-client', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone)));
+  upsertChart('c-client', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone), true));
 }
 
 async function refresh() {
@@ -201,13 +255,16 @@ async function refresh() {
   busy = true;
   try {
     const errEl = CLIENT ? $('cl-err') : $('err');
+    // A failed call leaves the last good numbers on screen; say so once there are some.
+    const fail = (why) => { errEl.textContent = 'Could not refresh the numbers' + (shown ? ' (showing the last update)' : '') + ': ' + why; };
     const { data, error } = await sb.rpc('checkin_event_stats', { p_event_id: EVENT_ID });
-    if (error) { errEl.textContent = 'Could not refresh the numbers: ' + error.message; return; }
+    if (error) { fail(error.message); return; }
     // "Now" is the server's generated_at, never the device clock: a laptop
     // with a wrong clock must not turn Still expected into No-shows.
     const now = Date.parse(data && data.generated_at);
-    if (!Number.isFinite(now)) { errEl.textContent = 'Could not refresh the numbers: the server sent no time.'; return; }
+    if (!Number.isFinite(now)) { fail('the server sent no time.'); return; }
     errEl.textContent = '';
+    shown = true;
     const closed = isWindowClosed(EV.date, EV.timezone, new Date(now));
     if (CLIENT) renderClient(data); else renderFull(data, closed);
     $(CLIENT ? 'cl-upd' : 'updated').textContent = 'Updated ' + fmtClock(now, EV.timezone) + '. Refreshes every 30 seconds.';
@@ -238,8 +295,14 @@ async function refresh() {
     $('desk-link').hidden = !can(ROLE, 'desk');
     $('desk-link').href = '/checkin/desk?event=' + q;
   }
+  // Signed out here or in another tab: stop polling and go back to sign-in.
+  sb.auth.onAuthStateChange((event) => {
+    if (event !== 'SIGNED_OUT') return;
+    clearInterval(timer);
+    location.replace('/checkin');
+  });
   await refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+  timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 })();
 </script>
