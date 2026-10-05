@@ -13,6 +13,10 @@ BEGIN
   -- 1. the guard passes now
   SELECT * INTO v_g FROM checkin_guard_results() WHERE guard = 'sessions_archive_has_every_column';
   IF v_g.ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'PROBE FAIL 1: guard %: %', v_g.ok, v_g.detail; END IF;
+  -- and 092's guard is still there (094 is built on 092's body)
+  IF NOT EXISTS (SELECT 1 FROM checkin_guard_results() WHERE guard = 'checkin_reports_not_parked') THEN
+    RAISE EXCEPTION 'PROBE FAIL 1: checkin_reports_not_parked guard lost';
+  END IF;
   v_checks := v_checks + 1;
 
   -- 2. a full leod_sessions row, as the cron sends it, lands in the archive

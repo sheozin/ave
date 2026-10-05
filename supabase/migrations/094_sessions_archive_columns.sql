@@ -31,10 +31,10 @@
 -- 3. checkin_guard_results: new guard sessions_archive_has_every_column,
 --    by exclusion: any leod_sessions column the archive lacks fails it, so
 --    the next column added to leod_sessions turns it red before the cron
---    breaks. Body copied from live
---    (pg_get_functiondef on 2026-10-05, last written by 086), one block
---    added at the end. Grants unchanged (CREATE OR REPLACE keeps them);
---    restated below.
+--    breaks. Body copied from 092 (live since 2026-10-05 14:30; md5 of
+--    prosrc matched the 092 file), one block (G12) added at the end.
+--    Grants and comment restated as 092 has them. Anyone who rewrites
+--    checkin_guard_results after this must start from 094's body.
 --
 -- Probe: tests/sql/094-sessions-archive-probe.sql
 -- ============================================================
@@ -52,10 +52,11 @@ ON CONFLICT (job_name) DO UPDATE
 
 -- 3. Guard -----------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.checkin_guard_results()
- RETURNS TABLE(guard text, ok boolean, detail text, checked_at timestamp with time zone)
- LANGUAGE plpgsql
- STABLE SECURITY DEFINER
- SET search_path TO 'public'
+RETURNS TABLE (guard TEXT, ok BOOLEAN, detail TEXT, checked_at TIMESTAMPTZ)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
 AS $function$
 #variable_conflict use_column
 DECLARE
@@ -419,7 +420,25 @@ BEGIN
   guard := 'checkin_rpcs_refuse_strangers'; ok := v_ok; detail := v_detail; checked_at := now();
   RETURN NEXT;
 
-  -- G11 (094): leod_sessions_archive has every column leod_sessions has.
+  -- G11 (092): no post-event report is parked. A report is parked after
+  -- five failed sends (owner deleted, no email, address rejected); the
+  -- sender stops retrying it, so without this guard the failure would go
+  -- quiet after the fifth run. Event ids and the last error only.
+  BEGIN
+    SELECT count(*), array_agg(e.event_id::text || ': ' || left(coalesce(e.report_last_error, '?'), 80) ORDER BY e.event_id)
+      INTO v_n, v_bad
+      FROM leod_checkin_entitlements e
+     WHERE e.status = 'live' AND e.report_sent_at IS NULL AND e.report_attempts >= 5;
+    v_ok := v_n = 0;
+    v_detail := CASE WHEN v_ok THEN 'no post-event report is parked'
+                     ELSE v_n || ' report(s) parked after 5 failed sends: ' || array_to_string(v_bad, '; ') END;
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false; v_detail := 'guard error: ' || SQLERRM;
+  END;
+  guard := 'checkin_reports_not_parked'; ok := v_ok; detail := v_detail; checked_at := now();
+  RETURN NEXT;
+
+  -- G12 (094): leod_sessions_archive has every column leod_sessions has.
   -- The nightly archive upserts select('*') rows, so one missing column
   -- fails every run (seq did, from 004 until 094). By exclusion over the
   -- live columns of leod_sessions, so a column added tomorrow is caught.
@@ -454,3 +473,5 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.checkin_guard_results() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.checkin_guard_results() TO service_role;
+COMMENT ON FUNCTION public.checkin_guard_results() IS
+  'AVE Brain nightly guards: one row per guard, ok = false on violation or on guard error. Service role only.';
