@@ -118,6 +118,11 @@ body{
 .d-big-title.live{color:#fff}
 .d-big-title.standby{color:rgba(255,255,255,.5)}
 .d-speaker{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.6);margin-bottom:28px;font-weight:400}
+.d-people{max-width:90vw;margin:0 auto 28px}
+.d-people-mod{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.75);font-weight:500;margin-bottom:.35em}
+.d-people-list{font-size:clamp(13px,2.1vw,24px);color:rgba(255,255,255,.6);font-weight:400;line-height:1.4}
+.d-people-person,.d-people-more{white-space:nowrap}
+.d-people-more{color:rgba(255,255,255,.4)}
 .d-timer{
   font-size:clamp(48px,10vw,120px);font-weight:700;line-height:1;
   letter-spacing:.04em;margin-bottom:10px;
@@ -305,6 +310,11 @@ body.is-live #display{
 .st-progress-fill{height:100%;border-radius:4px;transition:width .95s linear,background-color .4s}
 .st-title{font-size:clamp(18px,3.2vw,52px);font-weight:700;color:#fff;text-align:center;max-width:90%}
 .st-speaker{font-size:clamp(12px,1.8vw,28px);color:#6b7280;margin-top:.3em;text-align:center}
+.st-people{margin-top:.3em;text-align:center;max-width:90%}
+.st-people-mod{font-size:clamp(12px,1.8vw,28px);color:#9ca3af}
+.st-people-list{font-size:clamp(11px,1.5vw,24px);color:#6b7280;margin-top:.2em;line-height:1.35}
+.st-people-person,.st-people-more{white-space:nowrap}
+.st-people-more{color:#4b5563}
 .st-next{font-size:clamp(10px,1.3vw,16px);color:#374151;margin-top:1.8em;letter-spacing:.07em;text-align:center}
 .st-standby-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:.5em}
 .st-standby-label{font-size:clamp(16px,3vw,36px);font-weight:700;letter-spacing:.2em;color:#374151}
@@ -955,7 +965,8 @@ function renderSchedule() {
   return `<div class="fade-in">
     <div class="sc-tag ${tagCls}"><div class="sc-tag-dot"></div>${tagLbl}</div>
     <div class="d-big-title ${lv?'live':''}">${esc(cur?.title || next?.title || '—')}</div>
-    ${cur?.speaker ? `<div class="d-speaker">${esc(cur.speaker)}${cur.company?` · ${esc(cur.company)}`:''}</div>` : ''}
+    ${peopleOf(cur) ? peopleBlock(peopleOf(cur), 'd-people')
+      : cur?.speaker ? `<div class="d-speaker">${esc(cur.speaker)}${cur.company?` · ${esc(cur.company)}`:''}</div>` : ''}
     ${timerHtml}
     ${nextHtml}
   </div>`;
@@ -1323,7 +1334,7 @@ function renderStageTimer() {
       <div class="st-standby-label">NEXT UP IN</div>
       <div id="st-standby-countdown" class="st-standby-countdown">${fmtCountdown(Math.max(0, diff))}</div>
       <div class="st-standby-lbl">TO START</div>
-      <div class="st-standby-session">${esc(next.title)}${next.speaker ? ` &middot; ${esc(next.speaker)}` : ''}</div>
+      <div class="st-standby-session">${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next))}` : ''}</div>
     </div>`;
   }
 
@@ -1361,8 +1372,9 @@ function renderStageTimer() {
       <div id="st-progress-fill" class="st-progress-fill" style="width:${pct}%;background:${color}"></div>
     </div>
     <div class="st-title">${esc(session.title)}</div>
-    ${session.speaker ? `<div class="st-speaker">${esc(session.speaker)}</div>` : ''}
-    ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${next.speaker ? ` &middot; ${esc(next.speaker)}` : ''}</div>` : ''}
+    ${peopleOf(session) ? peopleBlock(peopleOf(session), 'st-people')
+      : session.speaker ? `<div class="st-speaker">${esc(session.speaker)}</div>` : ''}
+    ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next))}` : ''}</div>` : ''}
   </div>`;
 }
 
@@ -1418,7 +1430,7 @@ function renderAgenda(area) {
         ${badge ? `<div class="ag-badge">${badge}</div>` : ''}
         <div class="ag-time">${esc(time)}</div>
         <div class="ag-title">${esc(s.title)}</div>
-        ${s.speaker ? `<div class="ag-speaker">${esc(s.speaker)}</div>` : ''}
+        ${peopleSummary(s) ? `<div class="ag-speaker">${esc(peopleSummary(s))}</div>` : ''}
       </div>`;
     }).join('') || `<div class="ag-card empty">No sessions</div>`;
 
@@ -1466,7 +1478,7 @@ function renderTimeline(area) {
       <div class="tl-body">
         <div class="tl-title">${esc(s.title)}</div>
         <div class="tl-meta">
-          ${s.speaker ? `<span>${esc(s.speaker)}</span>` : ''}
+          ${peopleSummary(s) ? `<span>${esc(peopleSummary(s))}</span>` : ''}
           ${s.room ? `<span>📍 ${esc(s.room)}</span>` : ''}
           ${durMin ? `<span>⏱ ${durMin} min</span>` : ''}
         </div>
@@ -1668,7 +1680,7 @@ function renderProgramme(area) {
           rowsHtml += `<div class="pg-cell${cls}"${pageAttr}>
             ${badgeText ? `<div class="pg-cell-badge${badgeCls}">${badgeText}</div>` : ''}
             <div class="pg-cell-title">${esc(cell.session.title)}</div>
-            ${cell.session.speaker ? `<div class="pg-cell-speaker">${esc(cell.session.speaker)}</div>` : ''}
+            ${peopleSummary(cell.session) ? `<div class="pg-cell-speaker">${esc(peopleSummary(cell.session))}</div>` : ''}
           </div>`;
         } else {
           // Continuation slot — show a subtle indicator
@@ -1723,6 +1735,37 @@ function renderProgrammePage(totalPages) {
 // ═══════════════════════════════════════════════════
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Session people (082): [{ name, company, role: moderator|speaker|panelist }].
+// null unless the session has at least one named person, so sessions without
+// people render exactly as before from speaker/company.
+function peopleOf(s) {
+  const ppl = Array.isArray(s?.people) ? s.people.filter(p => p && String(p.name || '').trim()) : [];
+  return ppl.length ? ppl : null;
+}
+
+// One line, plain text (callers esc() it): "Jane Smith (moderator), Ahmed Ali".
+// Same format the console writes into speaker. Falls back to speaker.
+function peopleSummary(s) {
+  const ppl = peopleOf(s);
+  if (!ppl) return s?.speaker || '';
+  const mods = ppl.filter(p => p.role === 'moderator').map(p => `${p.name} (moderator)`);
+  const rest = ppl.filter(p => p.role !== 'moderator').map(p => p.name);
+  return [...mods, ...rest].join(', ');
+}
+
+const PEOPLE_CAP = 6;  // speakers/panelists shown before "+N more"
+function peopleBlock(ppl, cls) {
+  const person = p => `<span class="${cls}-person">${esc(p.name)}${p.company ? ` · ${esc(p.company)}` : ''}</span>`;
+  const mods = ppl.filter(p => p.role === 'moderator');
+  const rest = ppl.filter(p => p.role !== 'moderator');
+  const shown = rest.slice(0, PEOPLE_CAP);
+  const more = rest.length - shown.length;
+  return `<div class="${cls}">`
+    + (mods.length ? `<div class="${cls}-mod">Moderated by ${mods.map(person).join(', ')}</div>` : '')
+    + (rest.length ? `<div class="${cls}-list">${shown.map(person).join(', ')}${more ? ` <span class="${cls}-more">+${more} more</span>` : ''}</div>` : '')
+    + `</div>`;
 }
 
 function toMs(t) {

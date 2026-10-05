@@ -468,3 +468,89 @@ test.describe('Display: pairing', () => {
   });
 
 });
+
+// ── SESSION PEOPLE ─────────────────────────────────────────────────────────
+
+const PANEL_PEOPLE = [
+  { name: 'Jane Smith', company: 'Contoso',   role: 'moderator' },
+  { name: 'Ahmed Ali',  company: 'Fabrikam',  role: 'speaker' },
+  { name: 'Sara Lee',   company: 'Northwind', role: 'panelist' },
+];
+
+function feedWithPeople(people: unknown[], mode = 'schedule', speaker: string | null = 'Jane Smith (moderator), Ahmed Ali, Sara Lee') {
+  const f = makeFeed({ display: { content_mode: mode } });
+  Object.assign(f.sessions[0] as Record<string, unknown>, { title: 'Panel: future of MICE', speaker, company: null, people });
+  return f;
+}
+
+test.describe('Display: session people', () => {
+
+  test('40 schedule shows the moderator line and the speakers', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Panel: future of MICE');
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by Jane Smith · Contoso');
+    await expect(page.locator('.d-people-list')).toHaveText('Ahmed Ali · Fabrikam, Sara Lee · Northwind');
+    await expect(page.locator('.d-speaker')).toHaveCount(0);
+  });
+
+  test('41 stage timer shows the moderator line and the speakers', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE, 'stage-timer') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Panel: future of MICE');
+    await expect(page.locator('.st-people-mod')).toHaveText('Moderated by Jane Smith · Contoso');
+    await expect(page.locator('.st-people-list')).toHaveText('Ahmed Ali · Fabrikam, Sara Lee · Northwind');
+    await expect(page.locator('.st-speaker')).toHaveCount(0);
+  });
+
+  test('42 a session without people still shows speaker and company', async ({ page }) => {
+    await mockSupabase(page);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-speaker')).toHaveText('Jane Smith · Acme');
+    await expect(page.locator('.d-people-mod')).toHaveCount(0);
+  });
+
+  test('43 stage timer without people still shows speaker', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-speaker')).toHaveText('Jane Smith');
+  });
+
+  test('44 names with markup render as text', async ({ page }) => {
+    const people = [
+      { name: '<b>Bold</b> Mod', company: '<i>Co</i>', role: 'moderator' },
+      { name: '<img src=x onerror="window.__xss=1">Eve', company: null, role: 'speaker' },
+    ];
+    await mockSupabase(page, { feed: () => feedWithPeople(people) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by <b>Bold</b> Mod · <i>Co</i>');
+    await expect(page.locator('.d-people-list')).toHaveText('<img src=x onerror="window.__xss=1">Eve');
+    await expect(page.locator('.d-people b, .d-people i, .d-people img')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
+  });
+
+  test('45 a long panel caps the visible names and says how many more', async ({ page }) => {
+    const people = [{ name: 'Mod One', company: null, role: 'moderator' },
+      ...Array.from({ length: 8 }, (_, i) => ({ name: `Panelist ${i + 1}`, company: null, role: 'panelist' }))];
+    await mockSupabase(page, { feed: () => feedWithPeople(people) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-mod')).toHaveText('Moderated by Mod One');
+    await expect(page.locator('.d-people-list')).toHaveText(
+      'Panelist 1, Panelist 2, Panelist 3, Panelist 4, Panelist 5, Panelist 6 +2 more');
+  });
+
+  test('46 timeline shows a one line people summary', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE, 'timeline', null) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.tl-row').first().locator('.tl-meta span').first())
+      .toHaveText('Jane Smith (moderator), Ahmed Ali, Sara Lee');
+  });
+
+  test('47 an empty people array behaves exactly as before', async ({ page }) => {
+    await mockSupabase(page, { feed: () => feedWithPeople([], 'schedule', 'Solo Speaker') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-speaker')).toHaveText('Solo Speaker');
+    await expect(page.locator('.d-people')).toHaveCount(0);
+  });
+
+});
