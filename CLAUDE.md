@@ -64,7 +64,8 @@ Shared logic in `supabase/functions/_shared/transition.ts`.
 
 **Session transitions:**
 `go-live`, `end-session`, `set-ready`, `hold-stage`, `call-speaker`,
-`cancel-session`, `reinstate`, `apply-delay`, `set-overrun`
+`cancel-session`, `reinstate`, `apply-delay`, `set-overrun`,
+`restart-session` (back to READY with actual_start/actual_end cleared; from LIVE, HOLD, OVERRUN, ENDED, CALLING, or READY that has an actual_start)
 
 **Operators:**
 `invite-operator`, `manage-operator`

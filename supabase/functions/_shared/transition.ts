@@ -11,8 +11,24 @@ export function addMinutes(timeStr: string, mins: number): string {
   return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}:${String(s ?? 0).padStart(2, '0')}`
 }
 
+// ── Restart ──────────────────────────────────────────────────────────────────
+// A restart puts a session that already ran back to READY and clears its run
+// (actual_start, actual_end), so the next go-live stamps a fresh start and the
+// stage timer counts the full length again. The schedule is not the run:
+// scheduled_start/end, delay_minutes and cumulative_delay come from apply-delay
+// shifting the programme and are left alone. set-overrun only changes status.
+const RESTARTABLE = ['LIVE', 'HOLD', 'OVERRUN', 'ENDED', 'CALLING', 'READY']
+export function canRestart(session: { status: string; actual_start: string | null }): boolean {
+  if (!RESTARTABLE.includes(session.status)) return false
+  return session.status !== 'READY' || !!session.actual_start
+}
+
 // ── Shared transition runner ─────────────────────────────────────────────────
-export async function runTransition(req: Request, toStatus: string): Promise<Response> {
+export async function runTransition(
+  req: Request,
+  toStatus: string,
+  opts: { reset?: boolean } = {},
+): Promise<Response> {
   const cors = corsHeaders(req)
 
   // Pre-flight
@@ -102,6 +118,15 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     )
   }
 
+  // Restart is refused before the command is registered, so a refusal leaves
+  // no PENDING row behind.
+  if (opts.reset && !canRestart(session)) {
+    return new Response(
+      JSON.stringify({ error: 'NOT_RESTARTABLE', status: session.status }),
+      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
+    )
+  }
+
   // ── Register command as PENDING ──────────────────────────────────────────
   // UNIQUE constraint on command_id prevents race conditions.
   if (command_id) {
@@ -110,7 +135,7 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
       .insert({
         command_id,
         session_id,
-        fn_name:     `transition_${toStatus.toLowerCase()}`,
+        fn_name:     opts.reset ? 'restart_session' : `transition_${toStatus.toLowerCase()}`,
         operator_id: user.id,
         status:      'PENDING',
       })
@@ -133,6 +158,10 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
   }
   if (toStatus === 'LIVE' && !session.actual_start) upd.actual_start = now
   if (toStatus === 'ENDED') upd.actual_end = now
+  if (opts.reset) {
+    upd.actual_start = null
+    upd.actual_end = null
+  }
 
   // Write session (with version guard)
   const { error: upErr } = await sb
@@ -171,7 +200,11 @@ export async function runTransition(req: Request, toStatus: string): Promise<Res
     to_status:      toStatus,
     operator_id:    user.id,
     operator_role:  operator_role ?? null,
-    payload:        { command_id, via: 'edge-function' },
+    payload:        opts.reset
+      ? { command_id, via: 'edge-function', restart: true,
+          previous_actual_start: session.actual_start ?? null,
+          previous_actual_end: session.actual_end ?? null }
+      : { command_id, via: 'edge-function' },
     server_time_ms: Date.now(),
   }).then(() => {}).catch(() => {})
 
