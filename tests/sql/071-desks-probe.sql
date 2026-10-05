@@ -27,6 +27,9 @@ DECLARE
   v_pend  int;
   v_op    uuid;
   v_test  boolean;
+  v_t4    timestamptz := date_trunc('second', now()) - interval '7 minutes';
+  v_cid   uuid := gen_random_uuid();
+  v_d3    uuid := gen_random_uuid();
 BEGIN
   INSERT INTO auth.users (id, email, aud, role, raw_user_meta_data)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated', '{"checkin_staff":"true"}'::jsonb
@@ -132,6 +135,37 @@ BEGIN
                             p_prev_checked_in_at => NULL, p_operator_id => v_crew, p_scan_point_id => NULL,
                             p_live_time_ok => true) INTO v_r;
   IF v_r <> 'ok' THEN RAISE EXCEPTION 'PROBE FAIL: old call shape gave %', v_r; END IF;
+  v_n := v_n + 1;
+
+  -- ── Fix round 1: clients cannot forge a verdict row ──
+  v_r := checkin_apply_scan(v_ev, gen_random_uuid(), v_a2, v_t4, 'checkin', NULL, v_crew2, NULL, true, v_d2);
+  IF v_r <> 'ok' THEN RAISE EXCEPTION 'PROBE FAIL: re-check-in by second crew gave %', v_r; END IF;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_crew, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  BEGIN
+    INSERT INTO leod_checkin_scan_events (id, event_id, client_id, attendee_id, operator_id, scanned_at, result, is_test)
+    VALUES (gen_random_uuid(), v_ev, gen_random_uuid(), v_a2, v_crew, v_t4, 'ok', false);
+    RAISE EXCEPTION 'PROBE FAIL: crew forged an ok scan row';
+  EXCEPTION WHEN insufficient_privilege THEN v_n := v_n + 1;
+  END;
+  INSERT INTO leod_checkin_scan_events (id, event_id, client_id, attendee_id, operator_id, scanned_at, result, is_test)
+  VALUES (gen_random_uuid(), v_ev, v_cid, NULL, v_crew2, v_t4, 'unknown_token', false);
+  RESET ROLE;
+  SELECT operator_id INTO v_op FROM leod_checkin_scan_events WHERE client_id = v_cid;
+  IF v_op IS DISTINCT FROM v_crew THEN RAISE EXCEPTION 'PROBE FAIL: direct insert kept operator %', v_op; END IF;
+  PERFORM set_config('request.jwt.claims', '', true);
+  v_r := checkin_apply_scan(v_ev, gen_random_uuid(), v_a2, v_t4 + interval '30 seconds', 'undo', v_t4, v_crew, NULL, true, v_d1);
+  IF v_r <> 'forbidden' THEN RAISE EXCEPTION 'PROBE FAIL: crew undo after forge attempt gave %', v_r; END IF;
+  v_n := v_n + 2;
+
+  -- ── Fix round 1: go-live clears test desks only ──
+  INSERT INTO leod_checkin_desks (event_id, desk_id, label, operator_id, is_test)
+  VALUES (v_ev, v_d3, 'Live desk', v_crew, false);
+  UPDATE leod_checkin_entitlements SET status = 'live' WHERE event_id = v_ev;
+  SELECT count(*) INTO v_c FROM leod_checkin_desks WHERE event_id = v_ev AND is_test;
+  IF v_c <> 0 THEN RAISE EXCEPTION 'PROBE FAIL: % test desks survived go-live', v_c; END IF;
+  SELECT count(*) INTO v_c FROM leod_checkin_desks WHERE event_id = v_ev AND NOT is_test;
+  IF v_c <> 1 THEN RAISE EXCEPTION 'PROBE FAIL: go-live left % live desks, expected 1', v_c; END IF;
   v_n := v_n + 1;
 
   RAISE EXCEPTION 'PROBE OK 071: % checks passed (rolled back)', v_n;

@@ -183,3 +183,56 @@ GRANT EXECUTE ON FUNCTION checkin_apply_scan(uuid, uuid, uuid, timestamptz, text
   TO service_role;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Fix round 1 (review)
+-- ── Scan rows written directly by clients carry no verdict ────────
+-- checkin_se_write lets desk roles INSERT into leod_checkin_scan_events,
+-- so without this a crew member could insert their own 'ok' row and
+-- pass the undo-own check above. Verdicts come only from
+-- checkin_apply_scan (service role); a client row is always attributed
+-- to the caller. Live definition read 2026-10-05; the is_test rejection
+-- and the service detection are unchanged.
+CREATE OR REPLACE FUNCTION checkin_guard_scan_insert()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  v_caller TEXT := auth.role();
+BEGIN
+  IF v_caller IS NULL OR v_caller = 'service_role' THEN RETURN NEW; END IF;
+  IF NEW.is_test THEN
+    RAISE EXCEPTION 'is_test may only be set by CueDeck' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF NEW.result IN ('ok', 'undo', 'forbidden', 'duplicate', 'test_cap', 'outside_window') THEN
+    RAISE EXCEPTION 'scan verdicts may only be recorded by CueDeck' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  NEW.operator_id := auth.uid();
+  RETURN NEW;
+END;
+$function$;
+REVOKE ALL ON FUNCTION checkin_guard_scan_insert() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION checkin_guard_scan_insert() TO service_role;
+
+-- ── Test desks are cleared at go-live ─────────────────────────────
+-- Like every other test row, desks reported while the event was in test
+-- do not survive the switch to live.
+CREATE OR REPLACE FUNCTION checkin_clear_test_desks_on_live()
+RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  IF OLD.status = 'test' AND NEW.status = 'live' THEN
+    DELETE FROM leod_checkin_desks WHERE event_id = NEW.event_id AND is_test;
+  END IF;
+  RETURN NULL;
+END;
+$function$;
+REVOKE ALL ON FUNCTION checkin_clear_test_desks_on_live() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION checkin_clear_test_desks_on_live() TO service_role;
+
+DROP TRIGGER IF EXISTS trg_checkin_clear_test_desks_on_live ON leod_checkin_entitlements;
+CREATE TRIGGER trg_checkin_clear_test_desks_on_live
+  AFTER UPDATE OF status ON leod_checkin_entitlements
+  FOR EACH ROW EXECUTE FUNCTION checkin_clear_test_desks_on_live();
