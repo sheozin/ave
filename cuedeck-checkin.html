@@ -1432,7 +1432,7 @@ function stopHeartbeat() {
 // scanned_at decides arrival order and the live window, and the server
 // refuses a live check-in stamped more than 5 minutes ahead of its clock.
 // A desk whose clock runs fast would be refused all day, so every stamp
-// uses the server's clock (checkin-clock.js, migration 093). Until the
+// uses the server's clock (checkin-clock.js, migration 096). Until the
 // first sync succeeds, or if the module did not load, it is the device
 // clock, exactly as before. The offset belongs to the device, so it is
 // kept across event switches; it is resynced while the desk is open.

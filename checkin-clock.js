@@ -2,7 +2,7 @@
 // carries scanned_at from the desk, and the server refuses a live check-in
 // stamped more than 5 minutes ahead of its own clock, so a desk whose clock
 // runs fast would be refused all day. The desk reads the server's now()
-// (checkin_server_now, migration 093) a few times and keeps the offset of
+// (checkin_server_now, migration 096) a few times and keeps the offset of
 // the fastest round trip, as the console's syncClock does.
 // Tested in tests/checkin-clock.spec.ts.
 

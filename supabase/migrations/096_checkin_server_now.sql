@@ -1,4 +1,4 @@
--- 093_checkin_server_now.sql
+-- 096_checkin_server_now.sql (applied 2026-10-05 as 093; renumbered: another 093 landed the same day)
 -- The check-in desk's clock source (checkin-clock.js). get_server_clock,
 -- which the console uses, UPDATEs leod_clock on every call; a room of desks
 -- syncing every few minutes has no reason to write. This reads only.
