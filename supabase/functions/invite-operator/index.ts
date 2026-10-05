@@ -1,6 +1,9 @@
 // invite-operator — Director invites a crew member by email.
 // Creates auth account via inviteUserByEmail (sends Supabase invite email),
-// then inserts a leod_users row with the pre-assigned role (skips pending).
+// then sets the leod_users row the auth trigger (handle_new_auth_user)
+// already created as a self-registered director: role, invited_by, active.
+// The operator joins the caller's team: invited_by is the event owner, also
+// when an invited director sends the invite.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
@@ -46,10 +49,15 @@ Deno.serve(async (req) => {
     })
   }
 
-  // Verify caller is a director
-  const { data: callerRow } = await sb.from('leod_users')
-    .select('role').eq('id', user.id).single()
-  if (!callerRow || callerRow.role !== 'director') {
+  const json = (status: number, payload: unknown) => new Response(JSON.stringify(payload), {
+    status, headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+
+  // Verify caller is an active director
+  const { data: callerRow, error: callerErr } = await sb.from('leod_users')
+    .select('role, invited_by, active').eq('id', user.id).maybeSingle()
+  if (callerErr) return json(500, { error: callerErr.message })
+  if (!callerRow || callerRow.role !== 'director' || callerRow.active === false) {
     return new Response(JSON.stringify({ error: 'Forbidden — directors only' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
@@ -66,9 +74,12 @@ Deno.serve(async (req) => {
     })
   }
 
+  const teamOwner: string = callerRow.invited_by ?? user.id
+
   // ── Check if user already exists ───────────────────────────────
-  const { data: existingUser } = await sb.from('leod_users')
-    .select('id, email, role').eq('email', email).single()
+  const { data: existingUser, error: existingErr } = await sb.from('leod_users')
+    .select('id, email, role').eq('email', email).maybeSingle()
+  if (existingErr) return json(500, { error: existingErr.message })
   if (existingUser) {
     return new Response(
       JSON.stringify({ error: 'User already exists', existing_role: existingUser.role }),
@@ -87,34 +98,52 @@ Deno.serve(async (req) => {
     )
   }
 
-  // ── Create leod_users row with assigned role (skip pending) ───
-  const { error: insertErr } = await sb.from('leod_users').insert({
-    id:         inviteData.user.id,
+  const newId = inviteData.user.id
+
+  // ── Never take over someone else's account ─────────────────────
+  // The auth trigger has normally just created this row as a fresh,
+  // uninvited director. If the account already belongs to another team, or
+  // owns events of its own, an invite must not change its role.
+  const { data: row, error: rowErr } = await sb.from('leod_users')
+    .select('id, invited_by').eq('id', newId).maybeSingle()
+  if (rowErr) return json(500, { error: rowErr.message })
+  if (row?.invited_by && row.invited_by !== teamOwner) {
+    return json(409, { error: 'This account already belongs to another team' })
+  }
+  const { data: owned, error: ownedErr } = await sb.from('leod_events')
+    .select('id').eq('created_by', newId).limit(1)
+  if (ownedErr) return json(500, { error: ownedErr.message })
+  if (owned && owned.length > 0) {
+    return json(409, { error: 'This account owns events and cannot be made an operator' })
+  }
+
+  // ── Set the operator row (upsert: the trigger usually created it) ─
+  const { data: saved, error: upsertErr } = await sb.from('leod_users').upsert({
+    id:         newId,
     email,
     name,
     role,
     active:     true,
-    invited_by: user.id,
-  })
-  if (insertErr) {
-    // Auth account was created but profile row failed — log but don't fail.
-    // Director can still assign role manually via Operators modal.
-    console.error('leod_users insert failed:', insertErr.message)
+    invited_by: teamOwner,
+  }, { onConflict: 'id' }).select('id')
+  if (upsertErr || !saved?.length) {
+    return json(500, { error: `Invite sent but the operator row was not saved: ${upsertErr?.message ?? 'no row'}` })
   }
 
-  // ── Audit log (best-effort) ───────────────────────────────────
-  sb.from('leod_event_log').insert({
+  // ── Audit log (best-effort, but a failure is logged) ──────────
+  const { error: logErr } = await sb.from('leod_event_log').insert({
     event_id:      null,
     session_id:    null,
     action:        'OPERATOR_INVITED',
     operator_id:   user.id,
     operator_role: 'director',
-    payload:       { invited_email: email, assigned_role: role, invited_user_id: inviteData.user.id },
+    payload:       { invited_email: email, assigned_role: role, invited_user_id: newId, team_owner: teamOwner },
     server_time_ms: Date.now(),
-  }).then(() => {}).catch(() => {})
+  })
+  if (logErr) console.error('OPERATOR_INVITED log failed:', logErr.message)
 
   return new Response(
-    JSON.stringify({ ok: true, user_id: inviteData.user.id, role }),
+    JSON.stringify({ ok: true, user_id: newId, role }),
     { headers: { ...cors, 'Content-Type': 'application/json' } },
   )
 })
