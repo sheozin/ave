@@ -1,5 +1,6 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { eventRole, forbidden, ROLE_DELAY } from '../_shared/transition.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -33,6 +34,22 @@ Deno.serve(async (req) => {
   if (!session_id || !minutes) {
     return new Response('Missing session_id or minutes', { status: 400, headers: cors })
   }
+
+  // ── Who may delay ────────────────────────────────────────────────────────
+  // Same rule as runTransition: owner, or an active operator the owner
+  // invited, with a role in ROLE_DELAY. operator_role is only logged.
+  // rpc_apply_delay checks p_operator_id again inside the transaction.
+  const { data: target, error: targetErr } = await sb
+    .from('leod_sessions').select('event_id').eq('id', session_id).maybeSingle()
+  if (targetErr) return new Response(targetErr.message, { status: 500, headers: cors })
+  if (!target) return new Response('Session not found', { status: 404, headers: cors })
+  let role: string | null
+  try {
+    role = await eventRole(sb, user.id, target.event_id)
+  } catch (e) {
+    return new Response((e as Error).message, { status: 500, headers: cors })
+  }
+  if (!role || !ROLE_DELAY[role]) return forbidden(cors)
 
   // ── Idempotency check ────────────────────────────────────────────────────
   // If the client supplies a command_id, check the leod_commands table.
@@ -99,6 +116,8 @@ Deno.serve(async (req) => {
         .eq('command_id', command_id)
         .then(() => {}).catch(() => {})
     }
+    // 42501: rpc_apply_delay re-checked the caller and refused.
+    if (rpcError.code === '42501') return forbidden(cors)
     return new Response(rpcError.message ?? 'Internal error', { status: 500, headers: cors })
   }
 

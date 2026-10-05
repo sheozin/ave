@@ -27,6 +27,41 @@ export function canRestart(session: { status: string; actual_start: string | nul
   return STARTED_IF_STAMPED.includes(session.status) && !!session.actual_start
 }
 
+// ── Who may change a session ─────────────────────────────────────────────────
+// Server copy of ROLE_WRITE / ROLE_DELAY in cuedeck-console.html. OVERRUN is
+// not a button: the console's 1s tick (checkOverrunSessions) sends set-overrun
+// for director, stage and av, so those three may set it. Restart needs READY.
+export const ROLE_WRITE: Record<string, string[]> = {
+  director: ['READY', 'CALLING', 'LIVE', 'HOLD', 'ENDED', 'CANCELLED', 'PLANNED', 'OVERRUN'],
+  stage:    ['READY', 'CALLING', 'LIVE', 'HOLD', 'ENDED', 'OVERRUN'],
+  av:       ['HOLD', 'OVERRUN'],
+}
+export const ROLE_DELAY: Record<string, boolean> = { director: true, stage: true }
+
+// The caller's role in an event, or null when they are not part of it. The
+// owner (leod_events.created_by) counts as director. Anyone else must have
+// been invited by the owner and not be deactivated; their role is the one in
+// leod_users, never the operator_role a request claims. A failed lookup
+// throws, so the caller refuses instead of guessing.
+// deno-lint-ignore no-explicit-any
+export async function eventRole(sb: any, userId: string, eventId: string): Promise<string | null> {
+  const { data: ev, error: evErr } = await sb
+    .from('leod_events').select('created_by').eq('id', eventId).maybeSingle()
+  if (evErr) throw new Error('event lookup failed: ' + evErr.message)
+  if (!ev?.created_by) return null
+  if (ev.created_by === userId) return 'director'
+  const { data: me, error: meErr } = await sb
+    .from('leod_users').select('role, invited_by, active').eq('id', userId).maybeSingle()
+  if (meErr) throw new Error('operator lookup failed: ' + meErr.message)
+  if (!me || me.invited_by !== ev.created_by || me.active === false) return null
+  return me.role ?? null
+}
+
+export const forbidden = (cors: Record<string, string>) =>
+  new Response(JSON.stringify({ error: 'Forbidden' }), {
+    status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+  })
+
 // ── Shared transition runner ─────────────────────────────────────────────────
 export async function runTransition(
   req: Request,
@@ -113,6 +148,17 @@ export async function runTransition(
   if (fetchErr || !session) {
     return new Response('Session not found', { status: 404, headers: cors })
   }
+
+  // Membership and role, before the version check so a refused caller
+  // learns nothing, and before any command row is written.
+  let role: string | null
+  try {
+    role = await eventRole(sb, user.id, session.event_id)
+  } catch (e) {
+    return new Response((e as Error).message, { status: 500, headers: cors })
+  }
+  const need = opts.reset ? 'READY' : toStatus
+  if (!role || !(ROLE_WRITE[role] ?? []).includes(need)) return forbidden(cors)
 
   // Optimistic lock — check version before registering the command
   if (session.version !== version) {

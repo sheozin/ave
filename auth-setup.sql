@@ -1,5 +1,10 @@
 -- ══════════════════════════════════════════════════════════════════
 -- CueDeck — Auth Setup
+-- ⚠ SUPERSEDED by supabase/migrations/ (the live schema is built by the
+-- numbered migrations; the access rules are 095_event_scoped_writes.sql and
+-- later). Do not run this against the live project: it would
+-- re-create policies the migrations replaced. Kept as a historical bootstrap only. Since 095 it no longer
+-- creates the open write policies or the 'global' broadcast default.
 -- Run ONCE in Supabase SQL Editor after:
 --   1. Enabling Email provider in Dashboard → Auth → Providers
 --   2. Running supabase-setup.sql
@@ -27,21 +32,9 @@ DROP POLICY IF EXISTS anon_write_log       ON leod_event_log;
 DROP POLICY IF EXISTS anon_write_broadcast ON leod_broadcast;
 DROP POLICY IF EXISTS anon_write_clock     ON leod_clock;
 
-CREATE POLICY auth_write_sessions  ON leod_sessions  FOR ALL
-  USING  (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY auth_write_log       ON leod_event_log FOR ALL
-  USING  (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY auth_write_broadcast ON leod_broadcast FOR ALL
-  USING  (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY auth_write_clock     ON leod_clock     FOR ALL
-  USING  (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+-- The auth_write_* policies (any signed-in user writes any event) are no
+-- longer created here. Write access is event-scoped:
+-- supabase/migrations/095_event_scoped_writes.sql.
 
 
 -- ══════════════════════════════════════════════════════════════════

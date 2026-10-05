@@ -260,6 +260,10 @@ const CueDeckI18n = (() => {
       'toast.notRestartable': 'This session has not started, so there is nothing to restart',
       'toast.restartStale':   'The session changed while this was open. Nothing was restarted.',
       'toast.versionConflict':'Updated by another operator, refreshing',
+      'toast.notSaved':       'Not saved. The session was refreshed.',
+      'toast.forbidden':      'You are not allowed to change this session in this event',
+      'toast.delayFailed':    'The delay was not saved. Reloading the schedule',
+      'toast.delayResetFailed':'The delay reset was not saved. Reloading the schedule',
       'toast.nothingToUndo':  'Nothing to undo: the session has changed since',
 
       // Onboarding
@@ -537,6 +541,10 @@ const CueDeckI18n = (() => {
       'toast.notRestartable': 'لم تبدأ هذه الجلسة بعد، فلا يوجد ما يُعاد بدؤه',
       'toast.restartStale':   'تغيّرت الجلسة أثناء فتح هذه النافذة. لم تتم إعادة البدء.',
       'toast.versionConflict':'عدّلها مشغّل آخر، جارٍ التحديث',
+      'toast.notSaved':       'لم يُحفظ التغيير. تم تحديث الجلسة.',
+      'toast.forbidden':      'لا تملك صلاحية تغيير هذه الجلسة في هذه الفعالية',
+      'toast.delayFailed':    'لم يُحفظ التأخير. جارٍ إعادة تحميل الجدول',
+      'toast.delayResetFailed':'لم تُحفظ إعادة ضبط التأخير. جارٍ إعادة تحميل الجدول',
       'toast.nothingToUndo':  'لا يوجد ما يمكن التراجع عنه: تغيّرت الجلسة منذ ذلك الحين',
 
       'onboard.welcome':      'مرحباً بك في CueDeck',
@@ -663,6 +671,10 @@ const CueDeckI18n = (() => {
       'toast.notRestartable': 'Ta sesja się nie rozpoczęła, więc nie ma czego zaczynać od nowa',
       'toast.restartStale':   'Sesja zmieniła się, gdy to okno było otwarte. Nic nie zostało rozpoczęte od nowa.',
       'toast.versionConflict':'Zmienione przez innego operatora, odświeżanie',
+      'toast.notSaved':       'Nie zapisano. Sesja została odświeżona.',
+      'toast.forbidden':      'Nie masz uprawnień do zmiany tej sesji w tym wydarzeniu',
+      'toast.delayFailed':    'Opóźnienie nie zostało zapisane. Ponowne wczytywanie harmonogramu',
+      'toast.delayResetFailed':'Reset opóźnień nie został zapisany. Ponowne wczytywanie harmonogramu',
       'toast.nothingToUndo':  'Nie ma czego cofnąć: sesja zmieniła się w międzyczasie',
 
       'toast.refreshed':    'Odświeżono',
@@ -788,6 +800,10 @@ const CueDeckI18n = (() => {
       'toast.notRestartable': 'Diese Session hat nicht begonnen, es gibt nichts neu zu starten',
       'toast.restartStale':   'Die Session hat sich geändert, während dieses Fenster offen war. Nichts wurde neu gestartet.',
       'toast.versionConflict':'Von einem anderen Operator geändert, wird aktualisiert',
+      'toast.notSaved':       'Nicht gespeichert. Die Session wurde aktualisiert.',
+      'toast.forbidden':      'Sie dürfen diese Session in dieser Veranstaltung nicht ändern',
+      'toast.delayFailed':    'Die Verzögerung wurde nicht gespeichert. Zeitplan wird neu geladen',
+      'toast.delayResetFailed':'Das Zurücksetzen der Verzögerung wurde nicht gespeichert. Zeitplan wird neu geladen',
       'toast.nothingToUndo':  'Nichts rückgängig zu machen: Die Session hat sich inzwischen geändert',
 
       'toast.refreshed':    'Aktualisiert',
