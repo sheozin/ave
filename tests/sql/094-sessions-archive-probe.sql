@@ -37,6 +37,16 @@ BEGIN
   END IF;
   v_checks := v_checks + 1;
 
+  -- 2b. a session with an event-log row can be deleted once archived, and
+  --     the log row still names it
+  INSERT INTO leod_event_log (event_id, session_id, action) VALUES (v_ev, v_sid, 'PROBE_094');
+  DELETE FROM leod_sessions WHERE id = v_sid;
+  IF NOT EXISTS (SELECT 1 FROM leod_event_log l JOIN leod_sessions_archive a ON a.id = l.session_id
+                  WHERE l.action = 'PROBE_094' AND l.session_id = v_sid) THEN
+    RAISE EXCEPTION 'PROBE FAIL 2b: log row lost its archived session';
+  END IF;
+  v_checks := v_checks + 1;
+
   -- 3. the guard catches a column the archive lacks, by exclusion
   ALTER TABLE leod_sessions ADD COLUMN probe_094_extra int;
   SELECT * INTO v_g FROM checkin_guard_results() WHERE guard = 'sessions_archive_has_every_column';

@@ -22,6 +22,13 @@
 --   are nullable where the source's are NOT NULL, which accepts every row.
 --
 -- 1. ADD COLUMN seq, people.
+-- 1b. DROP leod_event_log_session_id_fkey. It had no ON DELETE, so the
+--    cron's delete of any session with a log row fails; the first sessions
+--    with log rows reach the 7-day cutoff around 19 Oct. The archive keeps
+--    the session row under the same id, so leod_event_log.session_id still
+--    resolves (against leod_sessions or leod_sessions_archive). Not
+--    replaced with ON DELETE SET NULL/CASCADE: either would destroy the
+--    link or the audit trail the log exists for.
 -- 2. Register the cron in leod_checkin_jobs (075) so checkin_brain_signals
 --    reports it 'failing' (a failed run since the last ok) or 'stale' (no
 --    ok run inside expected_interval + 15 minutes). The cron writes one
@@ -42,6 +49,9 @@
 -- 1. Columns ---------------------------------------------------------------
 ALTER TABLE public.leod_sessions_archive ADD COLUMN IF NOT EXISTS seq    BIGINT;
 ALTER TABLE public.leod_sessions_archive ADD COLUMN IF NOT EXISTS people JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- 1b. Event log keeps pointing at archived sessions ------------------------
+ALTER TABLE public.leod_event_log DROP CONSTRAINT IF EXISTS leod_event_log_session_id_fkey;
 
 -- 2. Job registry ----------------------------------------------------------
 INSERT INTO public.leod_checkin_jobs (job_name, expected_interval, note)

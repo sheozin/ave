@@ -25,6 +25,7 @@ export default async function handler(req: Request) {
 
   let eligible = 0;
   let archived = 0;
+  let deleted = 0;
   let failure: string | null = null;
 
   try {
@@ -43,16 +44,26 @@ export default async function handler(req: Request) {
         .from("leod_sessions_archive")
         .upsert(toArchive.map((s: Record<string, unknown>) => ({ ...s, archived_at: new Date().toISOString() })));
       if (archiveErr) throw new Error(`Archive failed: ${archiveErr.message}`);
+      const ids = toArchive.map((s: Record<string, unknown>) => s.id as string);
+      archived = ids.length;
 
-      // Step 3: Delete originals only after successful archive
-      const ids = toArchive.map((s: Record<string, unknown>) => s.id);
-      const { error: delErr } = await supabase
+      // Step 3: Delete originals only after successful archive. The same
+      // rules as step 1, so a session reopened since the read stays; the
+      // rows deleted must match the rows archived.
+      const { data: gone, error: delErr } = await supabase
         .from("leod_sessions")
         .delete()
-        .in("id", ids);
+        .in("id", ids)
+        .eq("status", "ENDED")
+        .lt("updated_at", cutoff.toISOString())
+        .select("id");
       if (delErr) throw new Error(`Delete failed: ${delErr.message}`);
-
-      archived = ids.length;
+      deleted = gone?.length ?? 0;
+      if (deleted !== archived) {
+        const goneIds = new Set((gone ?? []).map((g: { id: string }) => g.id));
+        const left = ids.filter((id) => !goneIds.has(id));
+        throw new Error(`Deleted ${deleted} of ${archived} archived sessions; still in leod_sessions: ${left.join(", ")}`);
+      }
     }
   } catch (e) {
     failure = e instanceof Error ? e.message : String(e);
@@ -63,12 +74,12 @@ export default async function handler(req: Request) {
     started_at: startedAt,
     finished_at: new Date().toISOString(),
     status: failure ? "failed" : "ok",
-    detail: JSON.stringify({ eligible, archived, cutoff: cutoff.toISOString(), ...(failure ? { error: failure } : {}) }),
+    detail: JSON.stringify({ eligible, archived, deleted, cutoff: cutoff.toISOString(), ...(failure ? { error: failure } : {}) }),
   });
 
   if (failure || runErr) {
     const error = [failure, runErr && `Run log failed: ${runErr.message}`].filter(Boolean).join("; ");
-    return new Response(JSON.stringify({ error, eligible, archived }), {
+    return new Response(JSON.stringify({ error, eligible, archived, deleted }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });

@@ -17,6 +17,7 @@ function builder(table: string, op: string, arg?: unknown) {
     eq: (...f: unknown[]) => { call.filters.push(['eq', ...f]); return b; },
     lt: (...f: unknown[]) => { call.filters.push(['lt', ...f]); return b; },
     in: (...f: unknown[]) => { call.filters.push(['in', ...f]); return b; },
+    select: (cols: string) => { call.filters.push(['select', cols]); return b; },
     then: (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => {
       const a = answers[`${table}.${op}`] ?? { data: null, error: null };
       return Promise.resolve({ data: a.data ?? null, error: a.error ?? null }).then(res, rej);
@@ -60,11 +61,18 @@ describe('session-cleanup cron', () => {
 
   it('archives, deletes, and records an ok run with the counts', async () => {
     answers['leod_sessions.select'] = { data: [{ id: 'a', seq: 4 }, { id: 'b', seq: 9 }] };
+    answers['leod_sessions.delete'] = { data: [{ id: 'a' }, { id: 'b' }] };
     const res = await run();
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, archived: 2 });
     expect(calls.find(c => c.op === 'upsert')?.table).toBe('leod_sessions_archive');
-    expect(calls.find(c => c.op === 'delete')?.filters).toEqual([['in', 'id', ['a', 'b']]]);
+    // The delete repeats the selection rules, so a session reopened since the
+    // read is not deleted, and returns what it deleted.
+    const del = calls.find(c => c.op === 'delete')!;
+    expect(del.filters).toContainEqual(['in', 'id', ['a', 'b']]);
+    expect(del.filters).toContainEqual(['eq', 'status', 'ENDED']);
+    expect(del.filters.find((f: any) => f[0] === 'lt' && f[1] === 'updated_at')).toBeTruthy();
+    expect(del.filters).toContainEqual(['select', 'id']);
     const rows = runRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ job_name: 'session-cleanup', status: 'ok' });
@@ -101,6 +109,28 @@ describe('session-cleanup cron', () => {
     expect(res.status).toBe(500);
     expect(runRows()[0]).toMatchObject({ status: 'failed' });
     expect(runRows()[0].detail).toContain('timeout');
+  });
+
+  it('fewer rows deleted than archived is a failed run with the ids left', async () => {
+    answers['leod_sessions.select'] = { data: [{ id: 'a' }, { id: 'b' }] };
+    answers['leod_sessions.delete'] = { data: [{ id: 'a' }] };
+    const res = await run();
+    expect(res.status).toBe(500);
+    const row = runRows()[0];
+    expect(row).toMatchObject({ status: 'failed' });
+    expect(JSON.parse(row.detail)).toMatchObject({ eligible: 2, archived: 2, deleted: 1 });
+    expect(row.detail).toContain('b');
+  });
+
+  it('a session with event-log rows: the foreign key error is a failed run, not silence', async () => {
+    // Live had leod_event_log_session_id_fkey with no ON DELETE until 094
+    // dropped it; this is what the cron reported while it existed.
+    answers['leod_sessions.select'] = { data: [{ id: 'a' }] };
+    answers['leod_sessions.delete'] = { error: { message: 'update or delete on table "leod_sessions" violates foreign key constraint "leod_event_log_session_id_fkey"' } };
+    const res = await run();
+    expect(res.status).toBe(500);
+    expect(runRows()[0]).toMatchObject({ status: 'failed' });
+    expect(runRows()[0].detail).toContain('leod_event_log_session_id_fkey');
   });
 
   it('a delete failure is a failed run', async () => {
