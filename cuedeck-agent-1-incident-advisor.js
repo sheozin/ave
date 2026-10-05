@@ -276,8 +276,29 @@ const CueDeckIncidentAdvisor = (() => {
   // ═══════════════════════════════════════════════════
   // INIT
   // ═══════════════════════════════════════════════════
+  // leod_event_log has no 'system' or 'details' column (the old insert named
+  // both and never wrote a row): the incident goes in payload. operator_id
+  // is the signed-in user, which 095's insert policy requires.
+  async function _logIncident(action, entry) {
+    try {
+      const { data: auth } = await _opts.supabaseClient.auth.getSession();
+      const { error } = await _opts.supabaseClient.from('leod_event_log').insert({
+        event_id:       _opts.getEventId(),
+        session_id:     null,
+        operator_id:    auth?.session?.user?.id ?? (_opts.getUserId ? _opts.getUserId() : null),
+        operator_role:  _opts.getRole ? _opts.getRole() : null,
+        action,
+        payload:        { system: 'incident-advisor', details: entry },
+        server_time_ms: Date.now()
+      });
+      if (error) console.warn('[CueDeck] Incident Advisor: Supabase log failed:', error.message);
+    } catch (e) {
+      console.warn('[CueDeck] Incident Advisor: Supabase log failed:', e.message);
+    }
+  }
+
   function init(options = {}) {
-    _opts = options; // { supabaseClient, getEventId, getRole, onEscalate }
+    _opts = options; // { supabaseClient, getEventId, getRole, getUserId, onEscalate }
 
     const style = document.createElement('style');
     style.textContent = INCIDENT_ADVISOR_CSS;
@@ -414,18 +435,7 @@ Respond ONLY with valid JSON in this exact format, no markdown:
     incidentLog.push(entry);
 
     if (_opts.supabaseClient && _opts.getEventId) {
-      try {
-        await _opts.supabaseClient.from('leod_event_log').insert({
-          event_id:      _opts.getEventId(),
-          session_id:    null,
-          system:        'incident-advisor',
-          action:        'INCIDENT_RESOLVED',
-          details:       JSON.stringify(entry),
-          operator_role: _opts.getRole ? _opts.getRole() : 'unknown'
-        });
-      } catch (e) {
-        console.warn('[CueDeck] Incident Advisor: Supabase log failed:', e.message);
-      }
+      await _logIncident('INCIDENT_RESOLVED', entry);
     }
 
     _el('ia-resolved-banner').style.display = 'block';
@@ -440,18 +450,7 @@ Respond ONLY with valid JSON in this exact format, no markdown:
     incidentLog.push(entry);
 
     if (_opts.supabaseClient && _opts.getEventId) {
-      try {
-        await _opts.supabaseClient.from('leod_event_log').insert({
-          event_id:      _opts.getEventId(),
-          session_id:    null,
-          system:        'incident-advisor',
-          action:        'INCIDENT_ESCALATED',
-          details:       JSON.stringify(entry),
-          operator_role: _opts.getRole ? _opts.getRole() : 'unknown'
-        });
-      } catch (e) {
-        console.warn('[CueDeck] Incident Advisor: Supabase log failed:', e.message);
-      }
+      await _logIncident('INCIDENT_ESCALATED', entry);
     }
 
     // In-modal banner — no disruptive browser alert()

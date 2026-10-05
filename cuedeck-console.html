@@ -8234,6 +8234,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         supabaseClient: sb,
         getEventId:     () => S.event?.id,
         getRole:        () => S.role,
+        getUserId:      () => S.user?.id,
         onEscalate:     (inc) => {
           // Relay escalation as a CueDeck broadcast so all operators see it
           pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null);
@@ -8243,7 +8244,8 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         supabaseClient: sb,
         getEventId:     () => S.event?.id,
         getEvent:       () => S.event,
-        getSessions:    () => S.sessions
+        getSessions:    () => S.sessions,
+        getUserId:      () => S.user?.id
       });
       CueDeckCueEngine.init([], {
         supabaseClient:     sb,
@@ -8354,13 +8356,15 @@ function ensureAgentsInited() {
     supabaseClient: typeof sb !== 'undefined' ? sb : null,
     getEventId:     () => S?.event?.id || null,
     getRole:        () => S?.role || 'director',
+    getUserId:      () => S?.user?.id || null,
     onEscalate:     (inc) => { try { pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null); } catch(e){} }
   });
   CueDeckReportAgent.init({
     supabaseClient: typeof sb !== 'undefined' ? sb : null,
     getEventId:     () => S?.event?.id || null,
     getEvent:       () => S?.event || null,
-    getSessions:    () => S?.sessions || []
+    getSessions:    () => S?.sessions || [],
+    getUserId:      () => S?.user?.id || null
   });
   CueDeckCueEngine.init([], {
     supabaseClient:     typeof sb !== 'undefined' ? sb : null,

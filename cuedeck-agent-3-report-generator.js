@@ -298,18 +298,19 @@ const CueDeckReportAgent = (() => {
     }
     // Also pull from leod_event_log as fallback (catches entries from previous page loads)
     try {
-      const { data } = await _opts.supabaseClient
+      const { data, error } = await _opts.supabaseClient
         .from('leod_event_log')
         .select('*')
         .eq('event_id', eventId)
-        .eq('system', 'incident-advisor')
+        .eq('payload->>system', 'incident-advisor')
         .in('action', ['INCIDENT_RESOLVED', 'INCIDENT_ESCALATED'])
-        .order('created_at', { ascending: true });
+        .order('ts', { ascending: true });
+      if (error) console.warn('[CueDeck] Report Agent: could not load incidents from DB:', error.message);
 
       if (data && data.length > 0) {
         // Merge: DB entries + in-memory entries (avoid duplicates by resolvedAt timestamp)
         const dbEntries = data.map(row => {
-          const d = JSON.parse(row.details || '{}');
+          const d = (row.payload && row.payload.details) || {};
           return { ...d, operator_role: row.operator_role };
         });
         const seenAt = new Set(incidents.map(i => i.resolvedAt || i.escalatedAt));
@@ -322,7 +323,14 @@ const CueDeckReportAgent = (() => {
       console.warn('[CueDeck] Report Agent: could not load incidents from DB:', e.message);
     }
 
+    let userId = _opts.getUserId ? _opts.getUserId() : null;
+    if (!userId) {
+      try { const { data: auth } = await _opts.supabaseClient.auth.getSession(); userId = auth?.session?.user?.id ?? null; } catch (_) {}
+    }
+
     trigger({
+      eventId,
+      userId,
       eventName: ev?.name  || ev?.title || 'Event',
       client:    ev?.client || '',
       date:      ev?.date   || new Date().toLocaleDateString(),
@@ -401,6 +409,8 @@ PERFORMANCE STATS:
 - Average Bitrate: ${_sanitize(String(eventData.stats?.avgBitrate || ''), 20) || 'N/A'}
 - Uptime: ${_sanitize(String(eventData.stats?.uptimePercent || ''), 10) || 'N/A'}%
 
+Use only the data above. Where a figure is N/A or missing, say it was not recorded; never invent figures, outcomes or praise.
+
 Respond ONLY with valid JSON, no markdown:
 {
   "executiveSummary": "3-4 sentences professional summary suitable for client",
@@ -444,38 +454,62 @@ Respond ONLY with valid JSON, no markdown:
       document.getElementById(id).className = 'ra-thinking-step done';
     });
 
-    // Archive report to database
+    // Archive report to database. supabase-js resolves with { error }
+    // instead of throwing, so the result is read.
+    let archiveError = null;
     if (_opts.supabaseClient && reportData) {
-      _opts.supabaseClient.from('leod_reports').insert({
-        event_id:     eventData.eventId || null,
-        generated_by: eventData.userId  || null,
-        report_data:  reportData
-      }).then(() => {}).catch(e => console.warn('[CueDeck] Report archive failed:', e.message));
+      try {
+        const { error } = await _opts.supabaseClient.from('leod_reports').insert({
+          event_id:     eventData.eventId || null,
+          generated_by: eventData.userId  || null,
+          report_data:  reportData
+        });
+        if (error) archiveError = error.message;
+      } catch (e) { archiveError = e.message; }
+      if (archiveError) console.warn('[CueDeck] Report archive failed:', archiveError);
     }
 
-    setTimeout(() => renderReport(), 600);
+    setTimeout(() => {
+      renderReport();
+      if (archiveError) {
+        document.getElementById('ra-footer-meta').textContent += ' · not archived: ' + archiveError;
+      }
+    }, 600);
   }
 
   // ═══════════════════════════════════════════════════
   // FALLBACK REPORT (no API key / API error)
   // ═══════════════════════════════════════════════════
   function _generateFallback(eventData) {
+    // No AI analysis: state only what CueDeck recorded, and say what it did not.
     const sessions  = eventData.sessions  || [];
     const incidents = eventData.incidents || [];
+    const ended     = sessions.filter(s => s.status === 'ENDED').length;
+    const cancelled = sessions.filter(s => s.status === 'CANCELLED').length;
+    const delayed   = sessions.filter(s => (s.cumulative_delay || 0) > 0);
+    const maxDelay  = delayed.reduce((m, s) => Math.max(m, s.cumulative_delay || 0), 0);
+    const resolved  = incidents.filter(i => i.resolved).length;
+    const escalated = incidents.filter(i => i.escalated).length;
+    const name      = eventData.eventName || 'This event';
     return {
-      executiveSummary:     `${eventData.eventName} was executed successfully by AVE Events technical team. All primary AV systems performed within expected parameters. The event achieved its operational objectives with professional-grade technical delivery.`,
-      sessionAdherence:     `All ${sessions.length} sessions were managed within scheduled timeframes. Transitions between sessions were handled efficiently by the production team.`,
-      technicalPerformance: `Core AV systems maintained high availability throughout the event. ${incidents.filter(i => i.resolved).length} of ${incidents.length} reported issues were resolved on-site.`,
-      incidentAnalysis:     `${incidents.length} technical incident(s) were logged during the event. All critical issues were addressed promptly by the AVE Events technical crew.`,
-      streamingPerformance: `Live streaming maintained stable delivery throughout the event. Audience connectivity remained consistent with no major interruptions reported.`,
-      crewPerformance:      `The AVE Events technical crew demonstrated professional execution across all event phases. Pre-cue preparation and real-time response were conducted to standard.`,
+      executiveSummary:     `${name}: AI analysis was not available, so this summary lists only what CueDeck recorded. ` +
+                            `${sessions.length} session(s) in the programme, ${ended} ended, ${cancelled} cancelled; ` +
+                            `${incidents.length} incident(s) logged in CueDeck. Anything not recorded in CueDeck is not assessed here.`,
+      sessionAdherence:     `${sessions.length} session(s) in the programme: ${ended} ended, ${cancelled} cancelled. ` +
+                            (delayed.length
+                              ? `${delayed.length} session(s) carried a delay; the largest cumulative delay was ${maxDelay} minutes.`
+                              : 'No delay was recorded on any session.'),
+      technicalPerformance: 'Not assessed: CueDeck does not record AV system health.',
+      incidentAnalysis:     incidents.length
+                              ? `${incidents.length} incident(s) logged in CueDeck: ${resolved} marked resolved, ${escalated} escalated. Incidents not logged in CueDeck are not included.`
+                              : 'No incidents were logged in CueDeck. That does not mean none occurred.',
+      streamingPerformance: 'Not recorded: CueDeck has no streaming data for this event.',
+      crewPerformance:      'Not assessed: CueDeck does not record crew performance.',
       recommendations: [
-        'Conduct pre-event system check 90 minutes before doors open',
-        'Assign dedicated stream monitor role for events with 500+ online attendees',
-        'Create backup audio routing plan documented before each event',
-        'Consider adding redundant internet connection for streaming events'
+        'General checklist, not derived from this event: run a system check before doors open',
+        'General checklist, not derived from this event: document a backup audio route before each event'
       ],
-      overallRating: 'Good',
+      overallRating: 'Not rated (no AI analysis)',
       generatedAt:   new Date().toISOString(),
       eventData
     };
