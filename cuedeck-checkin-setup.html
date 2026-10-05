@@ -59,13 +59,14 @@
 .center{text-align:center}
 @media (max-width:900px){.layout{grid-template-columns:1fr;padding:16px}.steps{position:static}.gl,.inc{grid-template-columns:1fr}.banner{margin:16px 16px 0}.tbl .hide-sm{display:none}}
 #page-err:empty{display:none}
+.roles{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:6px;font-size:13px;color:var(--t2)}.roles b{color:var(--t1);font-weight:600}
 @media (max-width:600px){#f-inv{grid-template-columns:1fr!important}.nav{padding:14px 16px}.crumb{display:none}}
 </style>
 </head>
 <body>
 <nav class="nav">
   <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
-  <div class="nav-r"><a class="btn btn-s" id="desk-link" href="#">Try the desk</a></div>
+  <div class="nav-r"><a class="btn btn-s" id="dash-link" href="#">Dashboard</a><a class="btn btn-s" id="desk-link" href="#">Try the desk</a></div>
 </nav>
 <div class="banner" id="banner" hidden><span id="banner-t"></span><button class="btn btn-p" id="banner-go" style="height:32px">Go live</button></div>
 <div class="err" id="page-err" style="margin:16px 28px"></div>
@@ -98,6 +99,13 @@
       <button class="btn btn-p" id="d-save">Save</button><span class="ok" id="d-ok"></span>
       <div class="err" id="d-err"></div>
     </form>
+    <div id="owner-tools" hidden style="margin-top:18px">
+      <div class="toggle"><div><b>Transfer ownership</b><p>Hand this event to another organizer. You stay on as an organizer, and only the new owner can go live, transfer or delete it.</p></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="ot-target" class="search" style="flex:none;min-width:200px" aria-label="New owner"></select><button class="btn btn-s" id="ot-transfer" type="button">Transfer</button></div></div>
+      <div class="toggle" id="ot-del-row"><div><b>Delete event</b><p>Removes this event from your events. Possible only while it is in test mode.</p></div><button class="btn btn-s" id="ot-delete" type="button" style="color:var(--rd)">Delete event</button></div>
+      <div class="err" id="ot-err"></div>
+    </div>
+    <div class="ok" id="ot-ok"></div>
   </section>
 
   <section class="panel" id="p-attendees" hidden>
@@ -120,10 +128,11 @@
   </section>
 
   <section class="panel" id="p-staff" hidden>
-    <div class="ph"><div><h2>Desk staff</h2><p>Desk staff can check people in and print badges. Co-organizers can also change setup.</p></div></div>
+    <div class="ph"><div><h2>Desk staff</h2><p>Everyone who works on this event, and what each role can do.</p></div></div>
+    <ul class="roles" id="role-help"></ul>
     <form id="f-inv" class="row2" style="align-items:end;grid-template-columns:2fr 1fr auto;gap:10px">
       <div class="field"><label for="inv-email">Email</label><input id="inv-email" type="email" required></div>
-      <div class="field"><label for="inv-role">Role</label><select id="inv-role"><option value="crew">Desk staff</option><option value="organizer">Co-organizer</option></select></div>
+      <div class="field"><label for="inv-role">Role</label><select id="inv-role"></select></div>
       <div class="field"><button class="btn btn-p" id="inv-btn">Invite</button></div>
     </form>
     <div class="err" id="inv-err"></div><div class="ok" id="inv-ok"></div>
@@ -172,6 +181,7 @@
         <button class="btn btn-p" id="gl-comp-btn" style="margin-top:14px" hidden>Turn on live check-in</button>
         <div class="err" id="gl-comp-err"></div>
       </div>
+      <div class="panel center" id="gl-owner" hidden><h3 style="margin:8px 0">Owner only</h3><p class="fine center" id="gl-owner-t"></p></div>
       <div class="panel center" id="gl-wait" hidden><h3 style="margin:8px 0">Confirming your payment…</h3><p class="fine" id="gl-wait-t">This usually takes a few seconds.</p></div>
       <div class="panel center" id="gl-done" hidden>
         <div style="width:58px;height:58px;border-radius:50%;background:var(--gnsf);display:grid;place-items:center;margin:0 auto 14px;color:var(--gn)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
@@ -197,6 +207,7 @@
 <script type="module">
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
+import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -205,7 +216,7 @@ const $ = (id) => document.getElementById(id);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 const params = new URLSearchParams(location.search);
 const EVENT_ID = params.get('event');
-let EV = null, ENT = null, ATT = [], STAFF = [], PRICE = null, FILTER = 'all', PENDING_IMPORT = null;
+let EV = null, ENT = null, ATT = [], STAFF = [], PRICE = null, FILTER = 'all', PENDING_IMPORT = null, ROLE = null;
 
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const fmtDay = (d, tz) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: tz });
@@ -224,7 +235,13 @@ async function loadEvent() {
   if (error) throw new Error(error.message);
   EV = (data || []).find(r => r.event_id === EVENT_ID) || null;
   if (!EV) throw new Error('This event is not in your check-in events.');
-  if (EV.role !== 'organizer') { location.replace('/checkin/desk?event=' + EVENT_ID); return false; }
+  ROLE = effectiveRole(EV.role, EV.is_owner);
+  // Setup is for the office roles. A desk lead gets the Desk staff step
+  // only (roles ruling 6); desk staff go to the desk, viewers to the dashboard.
+  if (!can(ROLE, 'test_setup') && !can(ROLE, 'invite_crew')) {
+    location.replace((can(ROLE, 'desk') ? '/checkin/desk?event=' : '/checkin/dashboard?event=') + EVENT_ID);
+    return false;
+  }
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements').select('*').eq('event_id', EVENT_ID).maybeSingle();
   if (entErr) throw new Error(entErr.message);
   if (!ent) { location.replace('/checkin'); return false; }
@@ -267,13 +284,18 @@ function renderChrome() {
   $('crumb-ev').textContent = EV.name; $('side-name').textContent = EV.name;
   $('side-meta').textContent = fmtDate(EV.date) + ' · ' + (isLive() ? 'Live' : 'Test mode');
   $('desk-link').href = '/checkin/desk?event=' + EVENT_ID;
+  $('dash-link').href = '/checkin/dashboard?event=' + EVENT_ID;
   $('desk-link').textContent = isLive() ? 'Open desk' : 'Try the desk';
-  $('banner').hidden = isLive() || isComp();
+  const office = can(ROLE, 'test_setup');
+  $('banner').hidden = isLive() || isComp() || !office;
+  // A desk lead sees the Desk staff step only (ruling 6).
+  document.querySelectorAll('.st').forEach(b => { b.hidden = !office && b.dataset.step !== 'staff'; });
   $('gl-rail').textContent = isComp() ? 'Included' : 'Go live';
   $('gl-rail-price').hidden = isComp() || isLive();
   $('banner-t').replaceChildren(el('b', null, 'Test mode. '),
     document.createTextNode('Everything works, but check-ins are capped at ' + TEST_CAP + ' and cleared when you go live. ' + EV.test_used + ' of ' + TEST_CAP + ' used.'));
   $('banner-go').textContent = PRICE ? 'Go live · ' + PRICE : 'Go live';
+  $('banner-go').hidden = !can(ROLE, 'go_live');
   $('n-att').textContent = ATT.length || '';
   $('n-staff').textContent = STAFF.filter(s => !s.is_owner).length || '';
   const done = {
@@ -288,6 +310,7 @@ function renderChrome() {
 }
 
 function go(step) {
+  if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['details', 'attendees', 'staff', 'kiosk', 'qr', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
   ({ details: renderDetails, attendees: renderAttendees, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
@@ -304,25 +327,81 @@ function renderDetails() {
   const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [EV.timezone];
   if (!zones.includes(EV.timezone)) zones.unshift(EV.timezone);
   for (const z of zones) { const o = el('option', null, z.replace(/_/g, ' ')); o.value = z; o.selected = z === EV.timezone; sel.appendChild(o); }
-  const owner = EV.is_owner;
-  for (const id of ['d-name', 'd-date', 'd-tz', 'd-start', 'd-end', 'd-venue', 'd-save']) $(id).disabled = !owner;
+  // The RPC refuses non-owners on a console event, so say so up front.
+  const consoleLocked = ROLE !== 'owner' && EV.created_via !== 'checkin';
+  const editable = can(ROLE, 'edit_details') && !consoleLocked;
+  for (const id of ['d-name', 'd-date', 'd-tz', 'd-start', 'd-end', 'd-venue', 'd-save']) $(id).disabled = !editable;
   const dateLocked = isLive() && !isComp();
   if (dateLocked) { $('d-date').disabled = true; $('d-tz').disabled = true; }
-  $('det-note').textContent = !owner ? 'Only the event owner can change these details.'
+  renderOwnerTools();
+  $('det-note').textContent = consoleLocked ? 'Only the event owner can edit a console event.'
+    : !editable ? 'Only the event owner or an organizer can change these details.'
     : dateLocked ? 'The date and timezone are locked now the event is live. Contact support@cuedeck.io to move it.'
     : 'Shown on the desk, the kiosk and in QR emails.';
 }
 $('f-det').addEventListener('submit', async (e) => {
   e.preventDefault(); $('d-err').textContent = ''; $('d-ok').textContent = ''; $('d-save').disabled = true;
-  const patch = { name: $('d-name').value.trim(), venue: $('d-venue').value.trim() || null,
-                  event_start: $('d-start').value, event_end: $('d-end').value };
-  // Migration 069 locks timezone with the date on a live, paid event.
-  if (!isLive() || isComp()) { patch.date = $('d-date').value; patch.timezone = $('d-tz').value; }
-  const { error } = await sb.from('leod_events').update(patch).eq('id', EVENT_ID);
+  // Organizers save through checkin_update_event_details (migration 070),
+  // because leod_events UPDATE is owner-only by RLS. Migration 069 locks
+  // the date and timezone of a live, paid event, so those go as null (kept).
+  // The venue always goes as text: '' clears it, null would keep the old one.
+  const lockDate = isLive() && !isComp();
+  const { error } = await sb.rpc('checkin_update_event_details', {
+    p_event_id: EVENT_ID, p_name: $('d-name').value.trim(), p_venue: $('d-venue').value.trim(),
+    p_date: lockDate ? null : $('d-date').value, p_timezone: lockDate ? null : $('d-tz').value,
+    p_event_start: $('d-start').value, p_event_end: $('d-end').value,
+  });
   $('d-save').disabled = false;
   if (error) { $('d-err').textContent = error.message; return; }
   await loadEvent(); renderChrome(); $('d-ok').textContent = ' Saved';
 });
+
+// ── owner tools (rulings 2 and 3) ────────────────────────
+function ownerName() {
+  const o = STAFF.find(s => s.is_owner);
+  return (o && (o.name || o.email)) || 'the event owner';
+}
+function renderOwnerTools() {
+  const show = can(ROLE, 'transfer_owner') && EV.created_via === 'checkin';
+  $('owner-tools').hidden = !show;
+  if (!show) return;
+  $('ot-err').textContent = '';
+  const sel = $('ot-target'); sel.replaceChildren();
+  const orgs = STAFF.filter(s => !s.is_owner && s.role === 'organizer');
+  if (!orgs.length) sel.appendChild(el('option', null, 'Invite an organizer first'));
+  for (const s of orgs) { const o = el('option', null, s.name || s.email || 'Invited user'); o.value = s.user_id; sel.appendChild(o); }
+  sel.disabled = !orgs.length; $('ot-transfer').disabled = !orgs.length;
+  $('ot-del-row').hidden = isLive();
+}
+$('ot-transfer').onclick = async () => {
+  $('ot-err').textContent = ''; $('ot-ok').textContent = '';
+  const t = STAFF.find(s => s.user_id === $('ot-target').value);
+  if (!t) return;
+  const who = t.name || t.email || 'this organizer';
+  if (!confirm('Make ' + who + ' the owner of ' + EV.name + '? You will stay on as an organizer.' + transferNote(EV.is_comp, t.is_comp, isLive()))) return;
+  $('ot-transfer').disabled = true;
+  const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'transfer_owner', user_id: t.user_id } });
+  $('ot-transfer').disabled = false;
+  if (error) { $('ot-err').textContent = await fnError(error); return; }
+  const name = EV.name, live = isLive();
+  // A live event is paid for, so a complimentary change does not matter there.
+  const compLine = !data?.comp_changed || live ? ''
+    : data.is_comp ? ' The event is now complimentary.'
+    : ' The event is no longer complimentary, so it needs paying for before it can go live.';
+  const done = who + ' is now the owner of ' + name + ', and you are an organizer.' + compLine;
+  try { if (!(await loadEvent())) return; await loadStaff(); }
+  catch (e) { $('ot-ok').textContent = done; $('ot-err').textContent = 'This page could not refresh. Reload it.'; return; }
+  renderChrome(); renderDetails(); $('ot-ok').textContent = done;
+};
+$('ot-delete').onclick = async () => {
+  $('ot-err').textContent = ''; $('ot-ok').textContent = '';
+  if (!confirm('Delete ' + EV.name + '? It will disappear from your events. Email support@cuedeck.io if you need it back.')) return;
+  $('ot-delete').disabled = true;
+  const { error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'archive_event' } });
+  $('ot-delete').disabled = false;
+  if (error) { $('ot-err').textContent = await fnError(error); return; }
+  location.href = '/checkin';
+};
 
 // ── 2. attendees ─────────────────────────────────────────
 function statusTag(a) {
@@ -330,6 +409,7 @@ function statusTag(a) {
   return el('span', 'em', 'Expected');
 }
 function renderAttendees() {
+  $('att-export').hidden = !can(ROLE, 'export');
   const q = $('att-q').value.trim().toLowerCase();
   const rows = ATT.filter(a => (FILTER === 'all' || (FILTER === 'noemail' && !a.email) || (FILTER === 'in' && a.checked_in_at)) &&
     (!q || `${a.first_name} ${a.last_name} ${a.email || ''} ${a.company || ''}`.toLowerCase().includes(q)));
@@ -455,13 +535,21 @@ $('att-export').onclick = () => {
 
 // ── 3. staff ─────────────────────────────────────────────
 function renderStaff() {
+  const roles = invitableRoles(ROLE);
+  const help = $('role-help'); help.replaceChildren();
+  for (const r of roles) { const li = el('li'); li.append(el('b', null, roleLabel(r) + '. '), document.createTextNode(ROLE_HELP[r])); help.appendChild(li); }
+  const sel = $('inv-role'); const keep = sel.value; sel.replaceChildren();
+  for (const r of roles) { const o = el('option', null, roleLabel(r)); o.value = r; sel.appendChild(o); }
+  sel.value = roles.includes(keep) ? keep : roles.includes('crew') ? 'crew' : roles[0];
   const body = $('staff-body'); body.replaceChildren();
   for (const s of STAFF) {
     const tr = el('tr');
     const p = el('td'); p.append(el('div', 'nm', s.name || s.email || 'Invited user')); if (s.name && s.email) p.appendChild(el('div', 'em', s.email));
-    const r = el('td', null, s.is_owner ? 'Owner' : s.role === 'organizer' ? 'Co-organizer' : 'Desk staff');
+    const r = el('td', null, roleLabel(s.is_owner ? 'owner' : s.role));
     const x = el('td');
-    if (!s.is_owner) { const b = el('button', 'link', 'Remove'); b.onclick = () => removeStaff(s); x.appendChild(b); }
+    // The server's rule (removeVerdict): never the owner; a desk lead removes desk staff only.
+    const mayRemove = !s.is_owner && (can(ROLE, 'invite_any') || (can(ROLE, 'invite_crew') && s.role === 'crew'));
+    if (mayRemove) { const b = el('button', 'link', 'Remove'); b.onclick = () => removeStaff(s); x.appendChild(b); }
     tr.append(p, r, x); body.appendChild(tr);
   }
 }
@@ -542,6 +630,11 @@ function renderGolive() {
   const closed = !isLive() && !isComp() && isWindowClosed(EV.date, EV.timezone);
   $('gl-btn').disabled = closed;
   $('gl-err').textContent = closed ? 'Check-in for this event has already closed. Change the event date before going live.' : '';
+  // Going live is the owner's alone, paid or complimentary (ruling 1).
+  const mayGoLive = can(ROLE, 'go_live');
+  if (!mayGoLive) { $('gl-pay').hidden = true; $('gl-comp-btn').hidden = true; if (!isLive()) $('gl-comp').hidden = true; }
+  $('gl-owner').hidden = mayGoLive || isLive();
+  $('gl-owner-t').textContent = 'Only the event owner, ' + ownerName() + ', can go live.';
 }
 $('gl-btn').onclick = async () => {
   $('gl-err').textContent = ''; $('gl-btn').disabled = true; $('gl-btn').textContent = 'Opening payment…';

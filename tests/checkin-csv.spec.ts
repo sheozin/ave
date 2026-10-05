@@ -38,6 +38,13 @@ describe('toCsv', () => {
       expect(out.replace(/^"/, '').startsWith("'" + p)).toBe(true);
     }
   });
+  it('drops control and bidi characters, then neutralises what they hid', () => {
+    expect(toCsv([['\u202E=cmd', 'Ev\u0007il', 'A\u200Fb\u2066c\u0000', '\u0085x']])).toBe("'=cmd;Evil;Abc;x");
+    expect(toCsv([['\u2067+1']])).toBe("'+1");
+  });
+  it('keeps tabs and line breaks inside a cell', () => {
+    expect(toCsv([['a\tb', 'x\r\ny']])).toBe('a\tb;"x\r\ny"');
+  });
   it('quotes the separator, quotes and newlines', () => {
     expect(toCsv([['a;b', 'say "hi"', 'x\ny', 'plain']])).toBe('"a;b";"say ""hi""";"x\ny";plain');
   });
