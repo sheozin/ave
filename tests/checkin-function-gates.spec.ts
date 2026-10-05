@@ -6,23 +6,61 @@
 // what is expected). The real handlers are exercised end to end by
 // tests/deno/checkin-function-handlers.test.ts, which this file runs when
 // deno is installed.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
   functionGate, enableEventGate, compGoLiveDecision, FUNCTION_GATES, NOT_OWNER, type GatedFunction,
 } from '../supabase/functions/_shared/checkin-gates.ts';
-import { effectiveRole, type CheckinRole } from '../supabase/functions/_shared/checkin-roles.ts';
+import { loadCallerRole, type CheckinRole } from '../supabase/functions/_shared/checkin-roles.ts';
 
 // Operator-row value -> what loadCallerRole resolves it to (not the owner).
 const ROWS: [string, string | null][] = [
   ['organizer', 'organizer'], ['lead', 'lead'], ['crew', 'crew'], ['viewer', 'viewer'],
   ['api_consumer', 'api_consumer'], ['unknown', 'mystery'], ['none', null],
+  // A non-creator whose operator row says 'owner' gets no owner rights.
+  ['row_says_owner', 'owner'],
 ];
-type Who = 'owner' | 'organizer' | 'lead' | 'crew' | 'viewer' | 'api_consumer' | 'unknown' | 'none';
-const roleOf = (who: Who): CheckinRole | null =>
-  who === 'owner' ? effectiveRole('organizer', true) : effectiveRole(ROWS.find(r => r[0] === who)![1], false);
+type Who = 'owner' | 'organizer' | 'lead' | 'crew' | 'viewer' | 'api_consumer' | 'unknown' | 'none' | 'row_says_owner';
 const WHO: Who[] = ['owner', ...ROWS.map(r => r[0] as Who)];
+
+// Roles are resolved by the real loadCallerRole over a stubbed client, so
+// the matrix covers how an operator row becomes a role (an 'owner' row on
+// a non-creator included), not a hand-written copy of that rule.
+const USER = '11111111-1111-4111-8111-111111111111';
+const OTHER = '22222222-2222-4222-8222-222222222222';
+const EVENT = '33333333-3333-4333-8333-333333333333';
+function stubSb(createdBy: string, opRole: string | null) {
+  const rows: Record<string, Record<string, unknown> | null> = {
+    leod_events: { created_by: createdBy },
+    leod_checkin_operators: opRole ? { role: opRole } : null,
+  };
+  return {
+    from: (t: string) => {
+      const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: rows[t] ?? null, error: null }) };
+      return q;
+    },
+  };
+}
+const RESOLVED = new Map<Who, CheckinRole | null>();
+beforeAll(async () => {
+  for (const who of WHO) {
+    const sb = who === 'owner' ? stubSb(USER, 'organizer') : stubSb(OTHER, ROWS.find(r => r[0] === who)![1]);
+    const r = await loadCallerRole(sb, EVENT, USER);
+    if (r.error) throw new Error(r.error);
+    RESOLVED.set(who, r.role);
+  }
+});
+const roleOf = (who: Who): CheckinRole | null => RESOLVED.get(who) ?? null;
+
+describe('loadCallerRole', () => {
+  it('a non-creator whose operator row says owner has no role', () => {
+    expect(roleOf('row_says_owner')).toBeNull();
+  });
+  it('the creator is the owner', () => {
+    expect(roleOf('owner')).toBe('owner');
+  });
+});
 
 const ALLOWED: Record<GatedFunction, Who[]> = {
   'checkin-create-checkout': ['owner'],
@@ -99,11 +137,13 @@ describe('handlers route through the shared gates', () => {
   });
 });
 
-// The handler tests need deno. Skipped (visibly) where it is not installed,
-// which today includes CI.
+// The handler tests need deno. A local machine without it skips them
+// (visibly); CI installs deno (.github/workflows/ci.yml) and must never
+// skip, so there a missing deno is a failure.
 const hasDeno = spawnSync('deno', ['--version']).status === 0;
-describe.skipIf(!hasDeno)('Edge Function handlers (deno)', () => {
+describe.skipIf(!hasDeno && !process.env.CI)('Edge Function handlers (deno)', () => {
   it('tests/deno/checkin-function-handlers.test.ts passes', () => {
+    expect(hasDeno, 'deno is not installed; CI must install it (denoland/setup-deno)').toBe(true);
     const r = spawnSync('deno', ['test', '--allow-env', '--allow-read', '--no-lock', 'tests/deno/checkin-function-handlers.test.ts'], { encoding: 'utf8', timeout: 120_000 });
     expect(r.status, (r.stdout ?? '') + (r.stderr ?? '')).toBe(0);
   }, 130_000);

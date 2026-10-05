@@ -60,7 +60,9 @@ if [ -z "${SUPABASE_ANON_KEY:-}" ]; then
   SKIPPED=1
 else
   for func in "${DEPLOY_LIST[@]}"; do
-    if ! grep -q '_ping' "$PROJ/supabase/functions/$func/index.ts" 2>/dev/null; then
+    # A real handler is a condition on the field (if (body._ping), if (parsed?._ping)),
+    # not a mention in a comment.
+    if ! grep -qE '^[^/]*if \([^)]*\._ping' "$PROJ/supabase/functions/$func/index.ts" 2>/dev/null; then
       echo "  SKIP $func has no _ping handler, not verified"
       SKIPPED=1
       continue
@@ -84,10 +86,10 @@ else
     HTTP_CODE=$(echo "$RESP" | tail -1)
     BODY=$(echo "$RESP" | head -1)
 
-    if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"pong"' && [ -n "$ACAO" ]; then
+    if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"pong"' && { [ "$ACAO" = "https://app.cuedeck.io" ] || [ "$ACAO" = "*" ]; }; then
       green "$func ping OK (HTTP $HTTP_CODE, ACAO $ACAO)"
     elif [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q '"pong"'; then
-      red "$func ping FAILED: no Access-Control-Allow-Origin for https://app.cuedeck.io"
+      red "$func ping FAILED: Access-Control-Allow-Origin is '${ACAO}', expected https://app.cuedeck.io"
     else
       red "$func ping FAILED (HTTP $HTTP_CODE) body: $BODY"
     fi
@@ -107,5 +109,6 @@ fi
 echo "=================================="
 echo ""
 if [ $FAIL -ne 0 ]; then exit $FAIL; fi
-if [ $SKIPPED -eq 1 ]; then exit 3; fi
+# 100, not a small number: a failure count can never collide with it.
+if [ $SKIPPED -eq 1 ]; then exit 100; fi
 exit 0
