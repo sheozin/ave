@@ -40,6 +40,8 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate } from '../_shared/checkin-gates.ts'
 
 // ── Pairing code ──────────────────────────────────────────────────
 // The same 32-symbol alphabet cuedeck-display.html's
@@ -163,11 +165,9 @@ Deno.serve(async (req) => {
       return json({ error: 'Missing event_id or label' }, 400)
     }
 
-    const { data: opRow } = await sb.from('leod_checkin_operators')
-      .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-    if (opRow?.role !== 'organizer') {
-      return json({ error: 'Forbidden — organizers only' }, 403)
-    }
+    // Owner, organizer or desk lead (checkin-roles.ts 'kiosk').
+    const gate = functionGate('checkin-kiosk-pair', await loadCallerRole(sb, event_id, user.id))
+    if (!gate.ok) return json(gate.body, gate.status)
 
     // BOTH flags. checkin_core alone is not enough: self_registration
     // is the flag that says this event bought an unattended screen
@@ -176,8 +176,9 @@ Deno.serve(async (req) => {
     // request it makes. Unlike the claim branch, the caller here is a
     // named organizer looking at their own console, so the two
     // failures are worth telling apart.
-    const { data: entRow } = await sb.from('leod_checkin_entitlements')
-      .select('checkin_core, self_registration').eq('event_id', event_id).single()
+    const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
+      .select('checkin_core, self_registration').eq('event_id', event_id).maybeSingle()
+    if (entErr) return json({ error: entErr.message }, 500)
     if (!entRow?.checkin_core) {
       return json({ error: 'Check-in is not enabled for this event' }, 403)
     }
@@ -262,8 +263,12 @@ Deno.serve(async (req) => {
     // creates a credential whose every request checkin-self-register
     // will refuse. Checked after so a revoked event still spends the
     // code rather than leaving it live.
-    const { data: entRow } = await sb.from('leod_checkin_entitlements')
-      .select('checkin_core, self_registration').eq('event_id', claimed.event_id).single()
+    const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
+      .select('checkin_core, self_registration').eq('event_id', claimed.event_id).maybeSingle()
+    if (entErr) {
+      console.error('checkin-kiosk-pair: entitlement read failed for event', claimed.event_id, entErr.code)
+      return json({ error: 'Pairing failed' }, 500)
+    }
     if (!entRow?.checkin_core || !entRow?.self_registration) {
       console.warn('checkin-kiosk-pair: claim for event without self-registration', claimed.event_id)
       return json({ error: 'Self-registration is not enabled for this event' }, 403)

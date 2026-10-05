@@ -63,11 +63,15 @@ export function mapRows(table) {
 // Rows to CSV text for Excel. ';' by default because organizers in PL/DE
 // open CSVs in Excel with that locale. A cell starting with = + - @ tab
 // or CR would run as a formula, and guest names come from kiosks and
-// imports, so such a cell gets a leading apostrophe.
+// imports, so such a cell gets a leading apostrophe. Excel also reads the
+// full-width signs and skips leading (ideographic) spaces, so those count. Control characters
+// (C0 other than tab and line breaks, DEL, C1) and bidi overrides are
+// dropped first, so a hidden U+202E cannot hide a leading '='.
+const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g;
 export function toCsv(rows, sep = ';') {
   const cell = (v) => {
-    let s = v == null ? '' : String(v);
-    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    let s = v == null ? '' : String(v).replace(CONTROL_RE, '');
+    if (/^[\s　]*[=+\-@＝＋－＠\t\r]/.test(s)) s = "'" + s;
     return s.includes('"') || s.includes(sep) || /[\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   return rows.map(r => r.map(cell).join(sep)).join('\r\n');

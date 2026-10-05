@@ -9,6 +9,8 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate } from '../_shared/checkin-gates.ts'
 import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 
 interface ImportRow {
@@ -98,11 +100,10 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { data: opRow } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-  if (opRow?.role !== 'organizer') {
-    return new Response(JSON.stringify({ error: 'Forbidden — organizers only' }), {
-      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+  const gate = functionGate('checkin-import-attendees', await loadCallerRole(sb, event_id, user.id))
+  if (!gate.ok) {
+    return new Response(JSON.stringify(gate.body), {
+      status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -112,17 +113,29 @@ Deno.serve(async (req) => {
   // explicitly. Without it, an organizer role alone (auto-granted to
   // every event's creator regardless of purchase) would let attendees
   // be imported into an event that never enabled check-in.
-  const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core, auto_send_qr_email, status').eq('event_id', event_id).single()
+  const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
+    .select('checkin_core, auto_send_qr_email, status').eq('event_id', event_id).maybeSingle()
+  if (entErr) {
+    return new Response(JSON.stringify({ error: entErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const { data: existing } = await sb.from('leod_checkin_attendees')
+  // A failed read here would look like an empty guest list and import
+  // every row again as a new attendee, so it stops the import.
+  const { data: existing, error: existingErr } = await sb.from('leod_checkin_attendees')
     .select('id, external_ref, email')
     .eq('event_id', event_id)
+  if (existingErr) {
+    return new Response(JSON.stringify({ error: existingErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
 
   const byExternalRef = new Map((existing || []).filter(a => a.external_ref).map(a => [a.external_ref, a]))
   const byEmail = new Map((existing || []).filter(a => a.email).map(a => [a.email!.toLowerCase(), a]))

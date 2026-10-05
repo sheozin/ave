@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check-in dashboard</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+.crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
+.crumb a{color:var(--t2);text-decoration:none}.crumb b{color:var(--t1);font-weight:600}
+.banner{margin:20px 28px 0;padding:12px 16px;border-radius:12px;background:var(--amsf);border:1px solid var(--ambd);color:var(--am);font-size:13px}
+.banner b{color:#7A4700}
+.dash{max-width:1240px;margin:0 auto;padding:20px 28px 40px}
+.meta-line{font-size:13px;color:var(--t2);margin:0 0 14px}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.tile{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);min-width:0}
+.tile span{display:block;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em}
+.tile b{display:block;font-size:30px;letter-spacing:-1px;margin-top:6px}
+.tile small{display:block;font-size:12.5px;color:var(--t2);margin-top:2px}
+.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.chart{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);min-width:0}
+.chart.wide{grid-column:1 / -1}
+.chart h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}
+.cv{position:relative;height:240px}
+.cl{min-height:100vh;display:flex;flex-direction:column;padding:4vh 5vw;background:#fff}
+.cl-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cl h1{margin:0;font-size:clamp(26px,3.6vw,52px);letter-spacing:-1px;overflow-wrap:anywhere}
+.cl-test{font-size:clamp(14px,1.4vw,20px);font-weight:600;color:var(--am);background:var(--amsf);border:1px solid var(--ambd);border-radius:999px;padding:6px 14px;white-space:nowrap}
+.big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3vw;margin-top:4vh}
+.big b{display:block;font-size:clamp(48px,9vw,140px);letter-spacing:-3px;line-height:1}
+.big span{display:block;font-size:clamp(16px,1.8vw,26px);color:var(--t2);margin-top:1vh}
+.cl .cv{flex:1;min-height:30vh;height:auto;margin-top:4vh}
+.cl-foot{font-size:clamp(14px,1.5vw,22px);color:var(--t2);margin:2vh 0 0}
+#page-err:empty,#err:empty,#cl-err:empty{display:none}
+.ops{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
+.ops[hidden]{display:none}
+.ops h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}.ops h3{margin:18px 0 6px;font-size:13.5px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid #F0F0F3}
+.tbl td{padding:10px;border-bottom:1px solid #F5F5F7;overflow-wrap:anywhere}
+.s-online{color:var(--gn);font-weight:600}.s-syncing{color:var(--am);font-weight:600}.s-offline{color:var(--rd);font-weight:600}
+.msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin-bottom:8px;background:var(--acsf);color:var(--ac)}
+.msg.warn{background:var(--amsf);color:var(--am)}
+.gaps{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.dash{padding:16px}.banner{margin:16px 16px 0}.nav{padding:14px 16px;flex-wrap:wrap;gap:10px}.crumb{display:none}.nav-r{gap:6px}.nav-r .btn{padding:0 10px}}
+</style>
+</head>
+<body>
+<p class="small" id="page-loading" style="margin:40px auto;text-align:center">Loading the dashboard…</p>
+<div class="err" id="page-err" style="margin:16px 28px"></div>
+
+<div id="full" hidden>
+  <nav class="nav">
+    <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
+    <div class="nav-r">
+      <a class="btn btn-s" id="client-link" href="#">Client view</a>
+      <a class="btn btn-s" id="setup-link" href="#" hidden>Setup</a>
+      <a class="btn btn-s" id="desk-link" href="#" hidden>Desk</a>
+    </div>
+  </nav>
+  <div class="banner" id="banner" hidden><b>Test mode.</b> These numbers include test check-ins and are cleared when the event goes live.</div>
+  <main class="dash">
+    <p class="meta-line" id="meta"></p>
+    <div class="err" id="err"></div>
+    <section class="tiles" aria-label="Totals">
+      <div class="tile"><span>Registered</span><b id="t-reg"></b><small>on the guest list</small></div>
+      <div class="tile"><span>Checked in</span><b id="t-in"></b><small id="t-turn"></small></div>
+      <div class="tile"><span id="t-exp-l">Still expected</span><b id="t-exp"></b><small id="t-exp-s"></small></div>
+      <div class="tile"><span>Walk-ins</span><b id="t-walk"></b><small>kiosk and desk</small></div>
+      <div class="tile"><span>Peak arrivals</span><b id="t-peak"></b><small id="t-peak-s"></small></div>
+    </section>
+    <p class="meta-line" id="rate"></p>
+    <section class="ops" id="ops" hidden aria-label="Desks and pace">
+      <h2>Desks and pace</h2>
+      <div id="pace"></div>
+      <table class="tbl"><thead><tr><th>Desk</th><th>Who</th><th>Status</th></tr></thead><tbody id="desk-body"></tbody></table>
+      <p class="meta-line" id="desk-empty" hidden>No desk has reported in yet. A desk appears here once it opens this event.</p>
+      <h3>Offline gaps</h3>
+      <ul class="gaps" id="gaps"></ul>
+      <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
+    </section>
+    <section class="charts">
+      <div class="chart wide"><h2>Arrivals over time</h2><div class="cv"><canvas id="c-arrivals" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div></div>
+      <div class="chart"><h2>Registration status</h2><div class="cv"><canvas id="c-status" role="img" aria-label="Checked in against still expected"></canvas></div></div>
+      <div class="chart"><h2>By ticket type</h2><div class="cv"><canvas id="c-ticket" role="img" aria-label="Registered and checked in per ticket type"></canvas></div></div>
+      <div class="chart"><h2>How people registered</h2><div class="cv"><canvas id="c-source" role="img" aria-label="Imported, kiosk and walk-in registrations"></canvas></div></div>
+      <div class="chart"><h2>QR email status</h2><div class="cv"><canvas id="c-qr" role="img" aria-label="QR emails sent, not sent and without an email address"></canvas></div></div>
+    </section>
+    <p class="meta-line" id="updated" style="margin-top:14px"></p>
+  </main>
+</div>
+
+<div id="client" class="cl" hidden>
+  <div class="cl-top"><h1 id="cl-name"></h1><span class="cl-test" id="cl-test" hidden>Test mode</span></div>
+  <div class="err" id="cl-err"></div>
+  <div class="big">
+    <div><b id="cl-in"></b><span>checked in</span></div>
+    <div><b id="cl-reg"></b><span>registered</span></div>
+    <div><b id="cl-turn"></b><span>turnout</span></div>
+  </div>
+  <div class="cv"><canvas id="c-client" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div>
+  <p class="cl-foot" id="cl-foot"></p>
+  <p class="cl-foot" id="cl-upd"></p>
+</div>
+
+<script type="module">
+import { isWindowClosed } from '/checkin-window.js';
+import { effectiveRole, can } from '/checkin-roles.js';
+import {
+  tiles, arrivalSeries, statusDoughnut, ticketBars, sourceBars, qrBars,
+  arrivalRate, fmtRate, clientView, fmtClock, BUCKET_S, PACE_MIN_CHECKINS,
+  deskRows, gapLines, paceMessages, eventStartUtc,
+} from '/checkin-dashboard.js';
+
+const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let timer = null;
+// Signed out here or in another tab: stop polling and go back to sign-in.
+sb.auth.onAuthStateChange((event) => {
+  if (event !== 'SIGNED_OUT') return;
+  clearInterval(timer);
+  location.replace('/checkin');
+});
+const $ = (id) => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const params = new URLSearchParams(location.search);
+const EVENT_ID = params.get('event');
+const REFRESH_MS = 30000;
+// The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
+const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
+let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false;
+const charts = {};
+
+const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const BASE = { responsive: true, maintainAspectRatio: false, animation: false,
+  plugins: { legend: { labels: { boxWidth: 12, font: { size: 12 } } } } };
+
+// One Chart per canvas for the life of the page; a refresh swaps the data.
+function upsertChart(id, config) {
+  const prev = charts[id];
+  if (prev) {
+    prev.data.labels = config.data.labels;
+    prev.data.datasets.forEach((ds, i) => { ds.data = config.data.datasets[i].data; });
+    prev.update('none');
+    return;
+  }
+  charts[id] = new Chart($(id), config);
+}
+
+// big: the client view, shown on a screen across a room.
+function arrivalsConfig(series, big = false) {
+  const tick = big ? { precision: 0, font: { size: 18 } } : { precision: 0 };
+  const opts = big ? { ...BASE, plugins: { legend: { labels: { boxWidth: 18, font: { size: 20 } } } } } : BASE;
+  return { type: 'bar', data: { labels: series.labels, datasets: [
+    { type: 'bar', label: 'Arrived in these 15 minutes', data: series.bars, backgroundColor: C.ac, borderRadius: 4, yAxisID: 'y' },
+    { type: 'line', label: 'Checked in so far', data: series.cumulative, borderColor: C.gn, backgroundColor: C.gn, pointRadius: 0, tension: 0.25, yAxisID: 'y2' },
+  ] }, options: { ...opts, scales: {
+    ...(big ? { x: { ticks: { font: { size: 18 } } } } : {}),
+    y: { beginAtZero: true, ticks: tick },
+    y2: { position: 'right', beginAtZero: true, ticks: tick, grid: { drawOnChartArea: false } },
+  } } };
+}
+function statusConfig(d) {
+  return { type: 'doughnut', data: { labels: d.labels, datasets: [{ data: d.data, backgroundColor: [C.gn, C.bd2], borderWidth: 0 }] },
+           options: { ...BASE, cutout: '62%' } };
+}
+function ticketConfig(t) {
+  return { type: 'bar', data: { labels: t.labels, datasets: [
+    { label: 'Registered', data: t.registered, backgroundColor: C.bd2, borderRadius: 4 },
+    { label: 'Checked in', data: t.checkedIn, backgroundColor: C.ac, borderRadius: 4 },
+  ] }, options: { ...BASE, indexAxis: 'y', scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } } };
+}
+function barsConfig(b, colors) {
+  return { type: 'bar', data: { labels: b.labels, datasets: [{ label: 'People', data: b.data, backgroundColor: colors, borderRadius: 4 }] },
+           options: { ...BASE, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } };
+}
+
+async function loadEvent() {
+  const { data, error } = await sb.rpc('checkin_my_events');
+  if (error) throw new Error(error.message);
+  EV = (data || []).find(r => r.event_id === EVENT_ID) || null;
+  if (!EV || !EV.status) throw new Error('This event is not in your check-in events.');
+  ROLE = effectiveRole(EV.role, EV.is_owner);
+  if (!can(ROLE, 'dashboard')) throw new Error('You do not have access to this dashboard.');
+  // A viewer only ever gets the client view (event-day spec, feature 3).
+  CLIENT = ROLE === 'viewer' || params.get('view') === 'client';
+  const start = eventStartUtc(EV.date, EV.event_start, EV.timezone);
+  START_MS = start ? start.getTime() : null;
+}
+
+// Desk health and staffing (event-day spec, features 1 and 2): owner,
+// organizer and lead only. The server sends ops only to those roles; the
+// role test here keeps the panel hidden even if it ever did not.
+function renderOps(s) {
+  const show = can(ROLE, 'desk_health') && !!s.ops;
+  $('ops').hidden = !show;
+  if (!show) return;
+  const pace = $('pace'); pace.replaceChildren();
+  // Below 10 check-ins #rate already says "Pace appears after the first 10
+  // check-ins."; do not repeat it here. paceMessages takes "now" from
+  // s.generated_at; Date.now() is only its fallback.
+  const msgs = s.checked_in >= PACE_MIN_CHECKINS
+    ? paceMessages({ stats: s, nowMs: Date.now(), eventStartMs: START_MS, timeZone: EV.timezone }) : [];
+  for (const m of msgs) {
+    pace.appendChild(el('div', 'msg' + (m.tone === 'warn' ? ' warn' : ''), m.text));
+  }
+  const body = $('desk-body'); body.replaceChildren();
+  const rows = deskRows(s.ops, EV.timezone);
+  for (const r of rows) {
+    const tr = el('tr');
+    tr.append(el('td', null, r.label), el('td', null, r.who), el('td', 's-' + r.state.kind, r.state.text));
+    body.appendChild(tr);
+  }
+  $('desk-empty').hidden = rows.length > 0;
+  const list = $('gaps'); list.replaceChildren();
+  const lines = gapLines(s.ops, EV.timezone);
+  for (const line of lines) list.appendChild(el('li', null, line));
+  $('gaps-empty').hidden = lines.length > 0;
+}
+
+function renderFull(s, closed) {
+  const t = tiles(s, closed);
+  $('banner').hidden = s.status !== 'test';
+  $('t-reg').textContent = String(t.registered);
+  $('t-in').textContent = String(t.checkedIn);
+  $('t-turn').textContent = t.turnout === null ? 'No guests yet' : t.turnout + '% turnout';
+  $('t-exp-l').textContent = t.expectedLabel;
+  $('t-exp').textContent = String(t.expected);
+  $('t-exp-s').textContent = closed ? 'did not arrive' : 'not here yet';
+  $('t-walk').textContent = String(t.walkIns);
+  $('t-peak').textContent = t.peak ? String(t.peak.n) : '0';
+  $('t-peak-s').textContent = t.peak
+    ? fmtClock(t.peak.t * 1000, EV.timezone) + ' to ' + fmtClock((t.peak.t + BUCKET_S) * 1000, EV.timezone)
+    : 'No arrivals yet';
+  const r = arrivalRate(s.last_25_min);
+  $('rate').textContent = s.checked_in >= PACE_MIN_CHECKINS && r !== null
+    ? 'Arriving now: ' + fmtRate(r) + ' per minute over the last 15 minutes.'
+    : 'Pace appears after the first 10 check-ins.';
+  upsertChart('c-arrivals', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone)));
+  upsertChart('c-status', statusConfig(statusDoughnut(s, closed)));
+  upsertChart('c-ticket', ticketConfig(ticketBars(s)));
+  upsertChart('c-source', barsConfig(sourceBars(s), C.ac));
+  upsertChart('c-qr', barsConfig(qrBars(s), [C.gn, C.am, C.bd2]));
+  renderOps(s);
+}
+
+function renderClient(s) {
+  const v = clientView(s);
+  $('cl-test').hidden = s.status !== 'test';
+  $('cl-in').textContent = String(v.checkedIn);
+  $('cl-reg').textContent = String(v.registered);
+  $('cl-turn').textContent = (v.turnout ?? 0) + '%';
+  const bits = [];
+  if (v.peak) bits.push('Busiest 15 minutes: ' + v.peak.n + ' arrived from ' + fmtClock(v.peak.t * 1000, EV.timezone) + '.');
+  bits.push(v.rate === null ? 'Pace appears after the first 10 check-ins.' : 'Arriving now: ' + fmtRate(v.rate) + ' per minute.');
+  $('cl-foot').textContent = bits.join(' ');
+  upsertChart('c-client', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone), true));
+}
+
+async function refresh() {
+  if (busy) return;
+  busy = true;
+  try {
+    const errEl = CLIENT ? $('cl-err') : $('err');
+    // A failed call leaves the last good numbers on screen; say so once there are some.
+    const fail = (why) => { errEl.textContent = 'Could not refresh the numbers' + (shown ? ' (showing the last update)' : '') + ': ' + why; };
+    const { data, error } = await sb.rpc('checkin_event_stats', { p_event_id: EVENT_ID });
+    if (error) { fail(error.message); return; }
+    // "Now" is the server's generated_at, never the device clock: a laptop
+    // with a wrong clock must not turn Still expected into No-shows.
+    const now = Date.parse(data && data.generated_at);
+    if (!Number.isFinite(now)) { fail('the server sent no time.'); return; }
+    errEl.textContent = '';
+    shown = true;
+    const closed = isWindowClosed(EV.date, EV.timezone, new Date(now));
+    if (CLIENT) renderClient(data); else renderFull(data, closed);
+    $(CLIENT ? 'cl-upd' : 'updated').textContent = 'Updated ' + fmtClock(now, EV.timezone) + '. Refreshes every 30 seconds.';
+  } finally {
+    busy = false;
+  }
+}
+
+(async () => {
+  if (!EVENT_ID) { location.replace('/checkin'); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { location.replace('/checkin'); return; }
+  try { await loadEvent(); }
+  catch (e) { $('page-loading').hidden = true; $('page-err').textContent = 'Could not open this dashboard: ' + e.message; return; }
+  $('page-loading').hidden = true;
+  const q = encodeURIComponent(EVENT_ID);
+  if (CLIENT) {
+    $('client').hidden = false;
+    $('cl-name').textContent = EV.name;
+    document.title = EV.name + ' arrivals';
+  } else {
+    $('full').hidden = false;
+    $('crumb-ev').textContent = EV.name;
+    $('meta').textContent = [fmtDate(EV.date), EV.venue, EV.timezone.replace(/_/g, ' ')].filter(Boolean).join(' · ');
+    $('client-link').href = '/checkin/dashboard?event=' + q + '&view=client';
+    $('setup-link').hidden = !(can(ROLE, 'test_setup') || can(ROLE, 'invite_crew'));
+    $('setup-link').href = '/checkin/setup?event=' + q;
+    $('desk-link').hidden = !can(ROLE, 'desk');
+    $('desk-link').href = '/checkin/desk?event=' + q;
+  }
+  await refresh();
+  timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();
+</script>
+</body>
+</html>

@@ -135,6 +135,7 @@
 
 <script type="module">
 import { checkinWindow, TEST_CAP } from '/checkin-window.js';
+import { effectiveRole, can, roleLabel } from '/checkin-roles.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -443,12 +444,15 @@ function card(r) {
   left.appendChild(el('h3', null, r.name));
   const where = [fmtDate(r.date), r.venue || (r.state === 'none' && r.created_via === 'console' ? 'from your CueDeck console' : null)].filter(Boolean).join(' · ');
   left.appendChild(el('div', 'meta', where));
+  const role = effectiveRole(r.role, r.is_owner);
+  left.appendChild(el('div', 'role-l', roleLabel(role)));
   const [pc, pt] = PILL[r.state];
   const pill = el('span', 'pill ' + pc); pill.appendChild(el('i')); pill.appendChild(document.createTextNode(pt));
   top.append(left, pill); c.appendChild(top);
 
-  const org = r.role === 'organizer';
-  if (r.state === 'live' || r.state === 'ended') {
+  const org = can(role, 'test_setup');
+  // A viewer's card shows the counts in every state (roles spec, Screens).
+  if (r.state === 'live' || r.state === 'ended' || (role === 'viewer' && r.state === 'test')) {
     const st = el('div', 'stats');
     for (const [n, l] of [[r.arrived, 'checked in'], [r.attendees, 'attendees']]) { const s = el('div', 'stat'); s.append(el('b', null, String(n)), el('span', null, l)); st.appendChild(s); }
     if (r.state === 'ended' && r.attendees) { const s = el('div', 'stat'); s.append(el('b', null, Math.round(100 * r.arrived / r.attendees) + '%'), el('span', null, 'turnout')); st.appendChild(s); }
@@ -466,6 +470,13 @@ function card(r) {
   const acts = el('div', 'acts');
   const go = (label, cls, href) => { const a = el('a', 'btn ' + cls, label); a.href = href; acts.appendChild(a); };
   const setup = '/checkin/setup?event=' + r.event_id, desk = '/checkin/desk?event=' + r.event_id;
+  const dash = '/checkin/dashboard?event=' + r.event_id;
+  // Viewers read numbers only: one button, to the dashboard.
+  if (role === 'viewer') {
+    if (r.state !== 'none') go('View dashboard', 'btn-p', dash);
+    c.appendChild(acts);
+    return c;
+  }
   if (r.state === 'none' && org) {
     const b = el('button', 'btn btn-g', 'Set up check-in');
     b.onclick = async () => {
@@ -483,6 +494,10 @@ function card(r) {
     if (org) go('Setup', 'btn-s', setup);
   } else if (r.state === 'ended' && org) {
     go('View attendance', 'btn-s', setup + '&step=attendees');
+  }
+  if (r.state !== 'none') {
+    if (role === 'lead') go('Desk staff', 'btn-s', setup + '&step=staff');
+    go('Dashboard', 'btn-s', dash);
   }
   c.appendChild(acts);
   return c;

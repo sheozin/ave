@@ -1,32 +1,40 @@
 // supabase/functions/checkin-invite-staff/index.ts
-// Organizer lists, adds or removes desk staff for one event. A new address
-// gets a Supabase invite carrying checkin_staff = 'true', which migration
-// 059's signup trigger turns into a check-in-only leod_users row (never
-// a director). An existing CueDeck user just gets the grant and a short
-// notice email, unless they have never signed in: then the first invite
-// was lost or expired, so they get a fresh invite (or set-password) link,
-// also when re-invited with the role they already hold. Removing deletes
-// the grant only; the login is theirs.
+// People on one check-in event: list, invite and remove them, plus two
+// owner-only actions, transfer_owner and archive_event. Who may do what
+// comes from _shared/checkin-roles.ts through the pure decisions in
+// _shared/checkin-gates.ts (design:
+// docs/superpowers/specs/2026-10-04-checkin-roles-design.md).
+//
+// A new address gets a Supabase invite carrying checkin_staff = 'true',
+// which handle_new_auth_user turns into a check-in-only leod_users row
+// (never a director) for every role, lead and viewer included (ruling 9).
+// An existing CueDeck user just gets the grant and a short notice email,
+// unless they have never signed in: then the first invite was lost or
+// expired, so they get a fresh invite (or set-password) link, also when
+// re-invited with the role they already hold. Removing deletes the grant
+// only; the login is theirs.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { sendEmail }    from '../_shared/resend.ts'
-
-function normalizeInviteEmail(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null
-  const e = raw.trim().toLowerCase()
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254 ? e : null
-}
+import { isUuid, loadCallerRole, removeVerdict, GRANT_ROLES, type GrantRole } from '../_shared/checkin-roles.ts'
+import {
+  archivedVerdict, archiveVerdict, inviteRoleVerdict, likeEscape, normalizeInviteEmail, removeResponse, staffGate,
+  transferVerdict, visibleStaff, type GateVerdict,
+} from '../_shared/checkin-gates.ts'
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 
+const ACTIONS = ['list', 'invite', 'remove', 'transfer_owner', 'archive_event']
+
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
   const json = (b: unknown, status = 200) =>
     new Response(JSON.stringify(b), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  const refuse = (v: Exclude<GateVerdict, { ok: true }>) => json(v.body, v.status)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   let body: Record<string, unknown>
@@ -46,55 +54,118 @@ Deno.serve(async (req) => {
 
   const event_id = String(body.event_id || '')
   const action = String(body.action || '')
-  if (!event_id || !['invite', 'remove', 'list'].includes(action)) return json({ error: 'event_id and action required' }, 400)
+  if (!isUuid(event_id) || !ACTIONS.includes(action)) return json({ error: 'event_id and action required' }, 400)
 
-  const { data: me, error: meErr } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).maybeSingle()
-  if (meErr) return json({ error: meErr.message }, 500)
-  if (me?.role !== 'organizer') return json({ error: 'Forbidden, organizers only' }, 403)
+  const callerRole = await loadCallerRole(sb, event_id, user.id)
+  const gate = staffGate(callerRole)
+  if (!gate.ok) return refuse(gate)
+  const role = callerRole.role
 
   const { data: ev, error: evErr } = await sb.from('leod_events')
-    .select('name, created_by').eq('id', event_id).single()
-  if (evErr || !ev) return json({ error: evErr?.message || 'Event not found' }, 404)
+    .select('name, created_by, created_via, active').eq('id', event_id).maybeSingle()
+  if (evErr) return json({ error: evErr.message }, 500)
+  if (!ev) return json({ error: 'Event not found' }, 404)
+  const live = archivedVerdict(action, ev.active)
+  if (!live.ok) return refuse(live)
+
+  const { data: ops, error: opsErr } = await sb.from('leod_checkin_operators')
+    .select('user_id, role').eq('event_id', event_id).in('role', GRANT_ROLES)
+  if (opsErr) return json({ error: opsErr.message }, 500)
+  const team: { user_id: string; role: string }[] = ops || []
 
   if (action === 'list') {
-    const { data: ops, error: opsErr } = await sb.from('leod_checkin_operators')
-      .select('user_id, role').eq('event_id', event_id).in('role', ['organizer', 'crew'])
-    if (opsErr) return json({ error: opsErr.message }, 500)
-    const ids = (ops || []).map(o => o.user_id)
+    const shown = visibleStaff(role, user.id, team)
+    const ids = shown.map(o => o.user_id)
     const { data: people, error: pErr } = ids.length
       ? await sb.from('leod_users').select('id, email, name').in('id', ids)
       : { data: [], error: null }
     if (pErr) return json({ error: pErr.message }, 500)
-    const byId = new Map((people || []).map(p => [p.id, p]))
-    return json({ ok: true, staff: (ops || []).map(o => ({
+    // Complimentary status follows the owner (ruling 3), so the owner's
+    // transfer dialog needs it for each organizer. Nobody else sees it.
+    let comp = new Set<string>()
+    if (role === 'owner' && ids.length) {
+      const { data: comps, error: cErr } = await sb.from('leod_checkin_comp_accounts').select('user_id').in('user_id', ids)
+      if (cErr) return json({ error: cErr.message }, 500)
+      comp = new Set((comps || []).map((c: { user_id: string }) => c.user_id))
+    }
+    const byId = new Map((people || []).map((p: { id: string; email: string | null; name: string | null }) => [p.id, p]))
+    return json({ ok: true, staff: shown.map(o => ({
       user_id: o.user_id, role: o.role,
       email: byId.get(o.user_id)?.email ?? null, name: byId.get(o.user_id)?.name ?? null,
       is_owner: o.user_id === ev.created_by,
+      ...(role === 'owner' ? { is_comp: comp.has(o.user_id) } : {}),
     })) })
   }
 
   if (action === 'remove') {
     const target = String(body.user_id || '')
-    if (!target) return json({ error: 'user_id required' }, 400)
-    const { data: ops, error: opsErr } = await sb.from('leod_checkin_operators')
-      .select('user_id, role').eq('event_id', event_id).in('role', ['organizer', 'crew'])
-    if (opsErr) return json({ error: opsErr.message }, 500)
-    const row = (ops || []).find(o => o.user_id === target)
-    if (!row) return json({ error: 'Not on this event' }, 404)
-    if (target === ev.created_by) return json({ error: 'The event owner cannot be removed', code: 'event_owner' }, 409)
-    if (row.role === 'organizer' && (ops || []).filter(o => o.role === 'organizer').length <= 1) {
-      return json({ error: 'An event needs at least one organizer', code: 'last_organizer' }, 409)
-    }
+    if (!isUuid(target)) return json({ error: 'user_id required' }, 400)
+    const verdict = removeResponse(removeVerdict(role, target, ev.created_by, team))
+    if (!verdict.ok) return refuse(verdict)
     const { error: delErr } = await sb.from('leod_checkin_operators').delete().eq('event_id', event_id).eq('user_id', target)
     if (delErr) return json({ error: delErr.message }, 500)
     return json({ ok: true })
   }
 
+  if (action === 'transfer_owner') {
+    const target = String(body.user_id || '')
+    let targetActive = false
+    if (isUuid(target)) {
+      const { data: tu, error: tuErr } = await sb.from('leod_users').select('active').eq('id', target).maybeSingle()
+      if (tuErr) return json({ error: tuErr.message }, 500)
+      targetActive = !!tu && tu.active !== false
+    }
+    const verdict = transferVerdict({
+      role, createdVia: ev.created_via ?? null, callerId: user.id, targetId: target, targetIsUuid: isUuid(target), team, targetActive,
+    })
+    if (!verdict.ok) return refuse(verdict)
+    // Complimentary status is read from created_by, so it moves with the
+    // owner (ruling 3). Read both sides first so the answer can say so.
+    const { data: comps, error: cErr } = await sb.from('leod_checkin_comp_accounts')
+      .select('user_id').in('user_id', [user.id, target])
+    if (cErr) return json({ error: cErr.message }, 500)
+    const compIds = new Set((comps || []).map((c: { user_id: string }) => c.user_id))
+    // The old owner stays on as an organizer. Intentional: this overwrites any existing role with organizer.
+    const { error: keepErr } = await sb.from('leod_checkin_operators')
+      .upsert({ event_id, user_id: user.id, role: 'organizer' }, { onConflict: 'event_id,user_id' })
+    if (keepErr) return json({ error: keepErr.message }, 500)
+    // Compare-and-set on created_by: two tabs transferring at once cannot both win.
+    const { data: moved, error: mvErr } = await sb.from('leod_events')
+      .update({ created_by: target }).eq('id', event_id).eq('created_by', user.id).select('id')
+    if (mvErr) return json({ error: mvErr.message }, 500)
+    if (!moved || moved.length === 0) return json({ error: 'Ownership has already changed. Reload the page.', code: 'owner_changed' }, 409)
+    const wasComp = compIds.has(user.id)
+    const isComp = compIds.has(target)
+    return json({
+      ok: true, owner_id: target, previous_owner_role: 'organizer',
+      was_comp: wasComp, is_comp: isComp, comp_changed: wasComp !== isComp,
+    })
+  }
+
+  if (action === 'archive_event') {
+    const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
+      .select('status, checkout_session_id, checkout_expires_at').eq('event_id', event_id).maybeSingle()
+    if (entErr) return json({ error: entErr.message }, 500)
+    const verdict = archiveVerdict({
+      role, createdVia: ev.created_via ?? null, entStatus: ent?.status ?? null,
+      checkoutSessionId: ent?.checkout_session_id ?? null, checkoutExpiresAt: ent?.checkout_expires_at ?? null,
+    })
+    if (!verdict.ok) return refuse(verdict)
+    const { data: gone, error: arErr } = await sb.from('leod_events')
+      .update({ active: false }).eq('id', event_id).eq('created_by', user.id).select('id')
+    if (arErr) return json({ error: arErr.message }, 500)
+    if (!gone || gone.length === 0) return json({ error: 'Ownership has changed. Reload the page.', code: 'owner_changed' }, 409)
+    return json({ ok: true })
+  }
+
+  // ── invite ──
   const email = normalizeInviteEmail(body.email)
-  const role = body.role === 'organizer' ? 'organizer' : body.role === 'crew' ? 'crew' : null
+  const want: GrantRole | null = typeof body.role === 'string' && (GRANT_ROLES as string[]).includes(body.role)
+    ? body.role as GrantRole : null
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : ''
-  if (!email || !role) return json({ error: 'A valid email and role are required' }, 400)
+  if (!email || !want) return json({ error: 'A valid email and role are required' }, 400)
+  const allowed = inviteRoleVerdict(role, want)
+  if (!allowed.ok) return refuse(allowed)
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { count: eventCount, error: ecErr } = await sb.from('leod_checkin_invite_log')
@@ -108,10 +179,19 @@ Deno.serve(async (req) => {
   }
 
   const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
-  const likeSafe = email.replace(/[\\%_]/g, (m) => '\\' + m)
   const { data: existing, error: exErr } = await sb.from('leod_users')
-    .select('id').ilike('email', likeSafe).maybeSingle()
+    .select('id').ilike('email', likeEscape(email)).maybeSingle()
   if (exErr) return json({ error: exErr.message }, 500)
+
+  // Every invite that will send something is counted first, so a failed
+  // or slow send still counts toward the limit. No row, no send.
+  const logInvite = async () => {
+    const { error } = await sb.from('leod_checkin_invite_log').insert({ event_id, inviter_id: user.id })
+    return error ? json({ error: error.message }, 500) : null
+  }
+
+  // What the invitee is being let into, in the email's words.
+  const what = want === 'viewer' ? 'the live check-in dashboard' : 'the check-in desk'
 
   let userId: string
   let isNew = false
@@ -123,7 +203,7 @@ Deno.serve(async (req) => {
     const { data: cur, error: curErr } = await sb.from('leod_checkin_operators')
       .select('role').eq('event_id', event_id).eq('user_id', userId).maybeSingle()
     if (curErr) return json({ error: curErr.message }, 500)
-    if (cur && cur.role !== role) {
+    if (cur && cur.role !== want) {
       return json({ error: 'This person is already on this event with another role', code: 'already_on_event' }, 409)
     }
     const { data: au, error: auErr } = await sb.auth.admin.getUserById(userId)
@@ -136,7 +216,11 @@ Deno.serve(async (req) => {
     alreadyGranted = !!cur
     // Same role, already signed in before: nothing to do.
     if (alreadyGranted && !needsLink) return json({ ok: true })
+    const logFail = await logInvite()
+    if (logFail) return logFail
   } else {
+    const logFail = await logInvite()
+    if (logFail) return logFail
     const { data: inv, error: invErr } = await sb.auth.admin.inviteUserByEmail(email, {
       data: { checkin_staff: 'true', name },
       redirectTo: `${appUrl}/checkin`,
@@ -151,7 +235,7 @@ Deno.serve(async (req) => {
 
   if (!alreadyGranted) {
     const { error: grantErr } = await sb.from('leod_checkin_operators')
-      .insert({ event_id, user_id: userId, role })
+      .insert({ event_id, user_id: userId, role: want })
     if (grantErr) return json({ error: grantErr.message }, 500)
   }
 
@@ -169,7 +253,7 @@ Deno.serve(async (req) => {
     const { error: mailErr } = await sendEmail({
       to: email,
       subject: 'Your CueDeck Check-in invitation',
-      html: `<p>You have been invited to the check-in desk for <b>${escapeHtml(ev.name)}</b>.</p>` +
+      html: `<p>You have been invited to ${what} for <b>${escapeHtml(ev.name)}</b>.</p>` +
             `<p><a href="${escapeHtml(actionLink)}">Accept the invitation and set your password</a></p>` +
             `<p>This link works once. If it has expired, ask the organizer to invite you again.</p>`,
       fromName: 'CueDeck Check-in',
@@ -183,7 +267,7 @@ Deno.serve(async (req) => {
     const { error: mailErr } = await sendEmail({
       to: email,
       subject: `You've been added to ${safeName} check-in`,
-      html: `<p>You can now open the check-in desk for <b>${escapeHtml(ev.name)}</b>.</p>` +
+      html: `<p>You can now open ${what} for <b>${escapeHtml(ev.name)}</b>.</p>` +
             `<p><a href="${appUrl}/checkin">Open CueDeck Check-in</a> and sign in with your CueDeck login.</p>`,
       fromName: 'CueDeck Check-in',
     })
@@ -191,9 +275,6 @@ Deno.serve(async (req) => {
     // request over, but it must be visible.
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)
   }
-
-  const { error: logErr } = await sb.from('leod_checkin_invite_log').insert({ event_id, inviter_id: user.id })
-  if (logErr) console.error('checkin-invite-staff: invite log insert failed', logErr.message)
 
   return json({ ok: true })
 })
