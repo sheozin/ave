@@ -11,8 +11,9 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import {
   functionGate, enableEventGate, compGoLiveDecision, FUNCTION_GATES, NOT_OWNER, type GatedFunction,
+  staffGate, inviteRoleVerdict, removeResponse, transferVerdict, archiveVerdict, STAFF_FORBIDDEN,
 } from '../supabase/functions/_shared/checkin-gates.ts';
-import { loadCallerRole, type CheckinRole } from '../supabase/functions/_shared/checkin-roles.ts';
+import { loadCallerRole, removeVerdict, type CheckinRole, type GrantRole } from '../supabase/functions/_shared/checkin-roles.ts';
 
 // Operator-row value -> what loadCallerRole resolves it to (not the owner).
 const ROWS: [string, string | null][] = [
@@ -125,6 +126,100 @@ describe('compGoLiveDecision', () => {
   });
 });
 
+// ── checkin-invite-staff ────────────────────────────────────────────
+describe('staffGate (every invite-staff action)', () => {
+  const STAFF_ALLOWED: Who[] = ['owner', 'organizer', 'lead'];
+  it.each(WHO)('%s', (who) => {
+    const v = staffGate({ role: roleOf(who), error: null });
+    if (STAFF_ALLOWED.includes(who)) expect(v).toEqual({ ok: true });
+    else expect(v).toEqual({ ok: false, status: 403, body: STAFF_FORBIDDEN });
+  });
+  it('a role read error is a 500 even for the owner', () => {
+    expect(staffGate({ role: 'owner', error: 'db down' })).toEqual({ ok: false, status: 500, body: { error: 'db down' } });
+  });
+});
+
+describe('inviteRoleVerdict', () => {
+  const WANT: GrantRole[] = ['organizer', 'lead', 'crew', 'viewer'];
+  const MAY: Record<string, GrantRole[]> = { owner: WANT, organizer: WANT, lead: ['crew'] };
+  for (const who of ['owner', 'organizer', 'lead'] as Who[]) {
+    it.each(WANT)(`${who} inviting %s`, (want) => {
+      const v = inviteRoleVerdict(roleOf(who), want);
+      if (MAY[who].includes(want)) expect(v).toEqual({ ok: true });
+      else expect(v).toMatchObject({ ok: false, status: 403, body: { code: 'role_not_allowed' } });
+    });
+  }
+  it.each(['crew', 'viewer', 'none'] as Who[])('%s may invite nobody', (who) => {
+    for (const want of WANT) expect(inviteRoleVerdict(roleOf(who), want).ok).toBe(false);
+  });
+});
+
+describe('remove through removeVerdict', () => {
+  const team = [
+    { user_id: 'own', role: 'organizer' }, { user_id: 'org', role: 'organizer' },
+    { user_id: 'ld', role: 'lead' }, { user_id: 'cr', role: 'crew' }, { user_id: 'vw', role: 'viewer' },
+  ];
+  const r = (who: CheckinRole, target: string, t = team) => removeResponse(removeVerdict(who, target, 'own', t));
+  it('a lead removes crew', () => { expect(r('lead', 'cr')).toEqual({ ok: true }); });
+  it.each(['org', 'ld', 'vw'])('a lead cannot remove %s', (target) => {
+    expect(r('lead', target)).toEqual({ ok: false, status: 403, body: { error: 'Desk leads can remove desk staff only', code: 'forbidden' } });
+  });
+  it('a lead cannot remove the owner', () => { expect(r('lead', 'own')).toMatchObject({ ok: false, body: { code: 'event_owner' } }); });
+  it.each(['owner', 'organizer'] as CheckinRole[])('%s cannot remove the owner', (who) => {
+    expect(r(who, 'own')).toEqual({ ok: false, status: 409, body: { error: 'The event owner cannot be removed', code: 'event_owner' } });
+  });
+  it.each(['org', 'ld', 'cr', 'vw'])('an organizer removes %s', (target) => { expect(r('organizer', target)).toEqual({ ok: true }); });
+  it('the owner counts as an organizer: the other organizer can go', () => {
+    expect(r('owner', 'org', [{ user_id: 'own', role: 'organizer' }, { user_id: 'org', role: 'organizer' }])).toEqual({ ok: true });
+  });
+  it('the last organizer stays', () => {
+    expect(removeResponse(removeVerdict('organizer', 'org', null, [{ user_id: 'org', role: 'organizer' }])))
+      .toEqual({ ok: false, status: 409, body: { error: 'An event needs at least one organizer', code: 'last_organizer' } });
+  });
+  it('someone not on the event is a 404', () => { expect(r('owner', 'nobody')).toMatchObject({ ok: false, status: 404, body: { code: 'not_found' } }); });
+  it('crew and viewers remove nobody', () => {
+    expect(r('crew', 'cr')).toMatchObject({ ok: false, status: 403 });
+    expect(r('viewer', 'cr')).toMatchObject({ ok: false, status: 403 });
+  });
+});
+
+describe('transferVerdict', () => {
+  const T = '44444444-4444-4444-8444-444444444444';
+  const team = [{ user_id: USER, role: 'organizer' }, { user_id: T, role: 'organizer' }, { user_id: OTHER, role: 'lead' }];
+  const base = { role: 'owner' as CheckinRole | null, createdVia: 'checkin', callerId: USER, targetId: T, targetIsUuid: true, team };
+  it('owner to an organizer on a check-in event', () => { expect(transferVerdict(base)).toEqual({ ok: true }); });
+  it.each(WHO.filter(w => w !== 'owner'))('%s: not_owner', (who) => {
+    expect(transferVerdict({ ...base, role: roleOf(who) })).toMatchObject({ ok: false, status: 403, body: { code: 'not_owner' } });
+  });
+  it('a console event: console_event', () => {
+    expect(transferVerdict({ ...base, createdVia: 'console' })).toMatchObject({ ok: false, status: 409, body: { code: 'console_event' } });
+    expect(transferVerdict({ ...base, createdVia: null })).toMatchObject({ ok: false, status: 409, body: { code: 'console_event' } });
+  });
+  it('to yourself or a malformed id: bad_target', () => {
+    expect(transferVerdict({ ...base, targetId: USER })).toMatchObject({ ok: false, status: 400, body: { code: 'bad_target' } });
+    expect(transferVerdict({ ...base, targetId: 'x', targetIsUuid: false })).toMatchObject({ ok: false, status: 400, body: { code: 'bad_target' } });
+  });
+  it('to a lead or someone not on the event: not_organizer', () => {
+    expect(transferVerdict({ ...base, targetId: OTHER })).toMatchObject({ ok: false, status: 409, body: { code: 'not_organizer' } });
+    expect(transferVerdict({ ...base, targetId: EVENT })).toMatchObject({ ok: false, status: 409, body: { code: 'not_organizer' } });
+  });
+});
+
+describe('archiveVerdict', () => {
+  const base = { role: 'owner' as CheckinRole | null, createdVia: 'checkin', entStatus: 'test' as string | null };
+  it('owner, check-in event, test mode', () => { expect(archiveVerdict(base)).toEqual({ ok: true }); });
+  it('owner, check-in event never set up', () => { expect(archiveVerdict({ ...base, entStatus: null })).toEqual({ ok: true }); });
+  it.each(WHO.filter(w => w !== 'owner'))('%s: not_owner', (who) => {
+    expect(archiveVerdict({ ...base, role: roleOf(who) })).toMatchObject({ ok: false, status: 403, body: { code: 'not_owner' } });
+  });
+  it('a console event: console_event', () => {
+    expect(archiveVerdict({ ...base, createdVia: 'console' })).toMatchObject({ ok: false, status: 409, body: { code: 'console_event' } });
+  });
+  it('a live event: live_event', () => {
+    expect(archiveVerdict({ ...base, entStatus: 'live' })).toMatchObject({ ok: false, status: 409, body: { code: 'live_event' } });
+  });
+});
+
 describe('handlers route through the shared gates', () => {
   const src = (fn: string) => readFileSync(`supabase/functions/${fn}/index.ts`, 'utf8');
   it.each(Object.keys(ALLOWED))('%s', (fn) => {
@@ -134,6 +229,19 @@ describe('handlers route through the shared gates', () => {
     const s = src('checkin-enable-event');
     expect(s).toContain('enableEventGate(caller, isAdmin)');
     expect(s).toContain('compGoLiveDecision(');
+  });
+  it('checkin-invite-staff', () => {
+    const s = src('checkin-invite-staff');
+    for (const call of [
+      'staffGate(callerRole)',
+      'const callerRole = await loadCallerRole(sb, event_id, user.id)',
+      'inviteRoleVerdict(role, want)',
+      'removeResponse(removeVerdict(role, target, ev.created_by, team))',
+      'transferVerdict({',
+      'archiveVerdict({',
+    ]) expect(s).toContain(call);
+    // No hand-rolled operator-row comparison left over from the two-role version.
+    expect(s).not.toContain('me?.role');
   });
 });
 

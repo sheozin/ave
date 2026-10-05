@@ -3,10 +3,12 @@
 // so tests/checkin-function-gates.spec.ts can run every role through them
 // without a database. The permission table itself is checkin-roles.ts.
 
-import { can, type CallerRole, type CheckinRole, type Permission } from './checkin-roles.ts'
+import {
+  can, invitableRoles, type CallerRole, type CheckinRole, type GrantRole, type Permission, type RemoveVerdict,
+} from './checkin-roles.ts'
 
 export type GateBody = { error: string; code?: string }
-export type GateVerdict = { ok: true } | { ok: false; status: 403 | 500; body: GateBody }
+export type GateVerdict = { ok: true } | { ok: false; status: 400 | 403 | 404 | 409 | 500; body: GateBody }
 
 export const NOT_OWNER: GateBody = { error: 'Only the event owner can go live', code: 'not_owner' }
 
@@ -58,4 +60,75 @@ export function compGoLiveDecision(args: {
   if (can(args.role, 'go_live')) return 'go_live'
   if (args.existingStatus === 'test' && !args.hasSettings) return 'refuse'
   return 'proceed'
+}
+
+// ── checkin-invite-staff ────────────────────────────────────────────
+// Every action needs at least invite_crew (owner, organizer, desk lead).
+// The live Setup page shows this message as it comes.
+export const STAFF_FORBIDDEN: GateBody = { error: 'Forbidden, organizers and desk leads only' }
+export function staffGate(caller: Caller): GateVerdict {
+  if (caller.error) return { ok: false, status: 500, body: { error: caller.error } }
+  if (!can(caller.role, 'invite_crew')) return { ok: false, status: 403, body: { ...STAFF_FORBIDDEN } }
+  return { ok: true }
+}
+
+// Owner and organizer invite any of the four roles, a desk lead only crew.
+export function inviteRoleVerdict(role: CheckinRole | null, want: GrantRole): GateVerdict {
+  if (!invitableRoles(role).includes(want)) {
+    return { ok: false, status: 403, body: { error: 'Desk leads can invite desk staff only', code: 'role_not_allowed' } }
+  }
+  return { ok: true }
+}
+
+const REMOVE_ERRORS: Record<Exclude<RemoveVerdict, { ok: true }>['code'], [string, 403 | 404 | 409]> = {
+  forbidden: ['Desk leads can remove desk staff only', 403],
+  not_found: ['Not on this event', 404],
+  event_owner: ['The event owner cannot be removed', 409],
+  last_organizer: ['An event needs at least one organizer', 409],
+}
+export function removeResponse(v: RemoveVerdict): GateVerdict {
+  if (v.ok) return { ok: true }
+  const [error, status] = REMOVE_ERRORS[v.code]
+  return { ok: false, status, body: { error, code: v.code } }
+}
+
+// Ruling 3: check-in events only, to an existing organizer, owner only.
+export function transferVerdict(a: {
+  role: CheckinRole | null
+  createdVia: string | null
+  callerId: string
+  targetId: string
+  targetIsUuid: boolean
+  team: { user_id: string; role: string }[]
+}): GateVerdict {
+  if (!can(a.role, 'transfer_owner')) {
+    return { ok: false, status: 403, body: { error: 'Only the event owner can transfer ownership', code: 'not_owner' } }
+  }
+  if (a.createdVia !== 'checkin') {
+    return { ok: false, status: 409, body: { error: 'This event belongs to a CueDeck console account and cannot be transferred here', code: 'console_event' } }
+  }
+  if (!a.targetIsUuid || a.targetId === a.callerId) {
+    return { ok: false, status: 400, body: { error: 'Choose another organizer', code: 'bad_target' } }
+  }
+  const row = a.team.find(o => o.user_id === a.targetId)
+  if (!row || row.role !== 'organizer') {
+    return { ok: false, status: 409, body: { error: 'Ownership can only go to an organizer on this event', code: 'not_organizer' } }
+  }
+  return { ok: true }
+}
+
+// Ruling 2: delete means archive, owner only, check-in events only, and
+// only while in test mode (a live event holds a purchase and attendance).
+// No entitlement row means nothing was ever set up or bought.
+export function archiveVerdict(a: { role: CheckinRole | null; createdVia: string | null; entStatus: string | null }): GateVerdict {
+  if (!can(a.role, 'archive_event')) {
+    return { ok: false, status: 403, body: { error: 'Only the event owner can delete this event', code: 'not_owner' } }
+  }
+  if (a.createdVia !== 'checkin') {
+    return { ok: false, status: 409, body: { error: 'This event belongs to a CueDeck console account and cannot be deleted here', code: 'console_event' } }
+  }
+  if (a.entStatus !== null && a.entStatus !== 'test') {
+    return { ok: false, status: 409, body: { error: 'A live event cannot be deleted here. Email support@cuedeck.io and we will help.', code: 'live_event' } }
+  }
+  return { ok: true }
 }
