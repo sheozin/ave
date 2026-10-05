@@ -20,3 +20,7 @@ verify_jwt = false
 
 [functions.ai-proxy]
 verify_jwt = false
+
+# Called by pg_cron through pg_net; checks its own x-cron-secret (089).
+[functions.checkin-post-event-report]
+verify_jwt = false
