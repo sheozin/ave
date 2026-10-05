@@ -69,7 +69,7 @@ test('the owner gets transfer and delete, and the transfer warns about complimen
   let message = '';
   page.once('dialog', d => { message = d.message(); d.dismiss(); });
   await page.locator('#ot-transfer').click();
-  await expect.poll(() => message).toBe('Make Oscar Org the owner of Probe Summit? You will stay on as an organizer. This event will become complimentary, because their account is.');
+  await expect.poll(() => message).toBe('Make Oscar Org the owner of Probe Summit? You will stay on as an organizer. Only they can transfer it back. This event will become complimentary, because their account is.');
   await expect(page.locator('#ot-del-row')).toBeVisible();
 });
 
@@ -156,4 +156,30 @@ test('the export neutralises formulas and strips control characters', async ({ p
   const lines = text.split('\r\n');
   expect(lines[1]).toBe('"\'=HYPERLINK(""http://x"")";Nowak;a@x.pl;\'+48 Co;;;');
   expect(lines[2]).toBe("'=cmd;Evil;;;;;");
+});
+
+test('an organizer on a complimentary event is told whose account includes check-in', async ({ page }) => {
+  await open(page, { role: 'organizer', is_comp: true }, 'golive');
+  await expect(page.locator('#gl-sub')).toHaveText("Check-in is included with Olga Owner's account.");
+  await expect(page.locator('#gl-comp-btn')).toBeHidden();
+});
+
+test('an organizer on a live complimentary event reads the owner name in both places', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'organizer', is_comp: true, status: 'live' })]);
+  await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', self_registration: false, kiosk_self_print: false, auto_send_qr_email: false }]);
+  await table(page, 'leod_checkin_attendees', []);
+  await fn(page, 'checkin-invite-staff', () => ({ body: { ok: true, staff: STAFF } }));
+  await fn(page, 'checkin-price', () => ({ body: { amount: 24900, currency: 'eur' } }));
+  await page.goto('/cuedeck-checkin-setup.html?event=' + EVENT_ID + '&step=golive');
+  await expect(page.locator('#gl-sub')).toHaveText("Probe Summit is live. Check-in is included with Olga Owner's account.");
+  await expect(page.locator('#gl-comp-t')).toHaveText("Check-in is included with Olga Owner's account.");
+});
+
+test('the owner of a complimentary event keeps the account copy', async ({ page }) => {
+  await open(page, { role: 'organizer', is_owner: true, is_comp: true }, 'golive');
+  await expect(page.locator('#gl-sub')).toHaveText('Check-in is included with your account.');
+  await expect(page.locator('#gl-comp-t')).toHaveText('Check-in is included with your account.');
+  await expect(page.locator('#gl-comp-btn')).toBeVisible();
 });

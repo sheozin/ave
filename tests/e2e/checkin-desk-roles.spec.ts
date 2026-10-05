@@ -8,13 +8,13 @@ const ANA = { id: 'a0000000-0000-4000-8000-000000000001', event_id: EVENT_ID, fi
 const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'Ben', email: 'ben@cuedeck-test.io', company: 'Fabrikam Demo', qr_token: 'tok-ben', checked_in_at: null };
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
-  heartbeat?: (args: Record<string, unknown>) => unknown };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1' }: Opts) {
+  heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live' }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
-  await rpc(page, 'checkin_my_events', [myEventsRow({ role })]);
-  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role, is_owner: isOwner, status })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status }]);
   await table(page, 'leod_checkin_attendees', roster);
   await fn(page, 'checkin-record-scans', (b) => ({ body: {
     ok: true, errors: [],
@@ -566,4 +566,16 @@ test('a check-in queued offline is flushed with the desk id on reconnect', async
   const body = (await req).postDataJSON();
   expect(body.desk_id).toBe(deskId);
   expect(body.items).toMatchObject([{ action: 'checkin', attendee_id: BEN.id }]);
+});
+
+test('the test banner offers no Go live to an organizer', async ({ page }) => {
+  await open(page, { role: 'organizer', status: 'test' });
+  await expect(page.locator('#st-test')).toBeVisible();
+  await expect(page.locator('#st-test a', { hasText: 'Go live' })).toHaveCount(0);
+});
+
+test('the owner sees Go live on the test banner', async ({ page }) => {
+  await open(page, { role: 'owner', isOwner: true, status: 'test' });
+  await expect(page.locator('#st-test')).toBeVisible();
+  await expect(page.locator('#st-test a', { hasText: 'Go live' })).toBeVisible();
 });

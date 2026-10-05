@@ -4,6 +4,9 @@
 -- pages that compute the role from is_owner were live (Task 15), because
 -- the pages deployed before this plan treated only 'organizer' as an
 -- organizer. Body otherwise identical to migration 070.
+-- Rollback: before reverting the check-in pages to a build older than the
+-- roles plan, re-apply migration 070's checkin_my_events body (role = b.role).
+-- Old pages gate on role = 'organizer' and would lock every owner out of Setup.
 CREATE OR REPLACE FUNCTION checkin_my_events()
  RETURNS TABLE(event_id uuid, name text, date date, venue text, timezone text,
                event_start time without time zone, event_end time without time zone,

@@ -1782,7 +1782,7 @@ function renderTestBanner() {
   left.appendChild(b);
   left.appendChild(document.createTextNode('Check-ins here are cleared when you go live. ' + S.testUsed + ' of ' + cap + ' used.'));
   box.replaceChildren(left);
-  if (window.CK_ROLES.can(S.role, 'test_setup')) {
+  if (window.CK_ROLES.can(S.role, 'go_live')) {
     const a = document.createElement('a');
     a.href = '/checkin/setup?event=' + encodeURIComponent(S.event.id) + '&step=golive';
     a.textContent = 'Go live';

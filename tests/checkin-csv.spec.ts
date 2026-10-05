@@ -38,6 +38,15 @@ describe('toCsv', () => {
       expect(out.replace(/^"/, '').startsWith("'" + p)).toBe(true);
     }
   });
+  it('neutralises full-width formula signs and formulas behind leading spaces', () => {
+    for (const p of ['\uFF1D', '\uFF0B', '\uFF0D', '\uFF20']) {
+      expect(toCsv([[p + 'SUM(1)']])).toBe("'" + p + 'SUM(1)');
+    }
+    expect(toCsv([[' =SUM(1)']])).toBe("' =SUM(1)");
+    expect(toCsv([['  +1']])).toBe("'  +1");
+    expect(toCsv([['\u3000=SUM(1)']])).toBe("'\u3000=SUM(1)");
+    expect(toCsv([[' plain', 'a=b']])).toBe(' plain;a=b');
+  });
   it('drops control and bidi characters, then neutralises what they hid', () => {
     expect(toCsv([['\u202E=cmd', 'Ev\u0007il', 'A\u200Fb\u2066c\u0000', '\u0085x']])).toBe("'=cmd;Evil;Abc;x");
     expect(toCsv([['\u2067+1']])).toBe("'+1");

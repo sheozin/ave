@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Check-in Setup</title>
+<title>Check-in setup</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="/checkin-app.css">
@@ -177,7 +177,7 @@
       </div>
       <div class="panel center" id="gl-comp" hidden>
         <h3 style="margin:8px 0">Included</h3>
-        <p class="fine center">Check-in is included with your account.</p>
+        <p class="fine center" id="gl-comp-t">Check-in is included with your account.</p>
         <button class="btn btn-p" id="gl-comp-btn" style="margin-top:14px" hidden>Turn on live check-in</button>
         <div class="err" id="gl-comp-err"></div>
       </div>
@@ -378,7 +378,7 @@ $('ot-transfer').onclick = async () => {
   const t = STAFF.find(s => s.user_id === $('ot-target').value);
   if (!t) return;
   const who = t.name || t.email || 'this organizer';
-  if (!confirm('Make ' + who + ' the owner of ' + EV.name + '? You will stay on as an organizer.' + transferNote(EV.is_comp, t.is_comp, isLive()))) return;
+  if (!confirm('Make ' + who + ' the owner of ' + EV.name + '? You will stay on as an organizer. Only they can transfer it back.' + transferNote(EV.is_comp, t.is_comp, isLive()))) return;
   $('ot-transfer').disabled = true;
   const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'transfer_owner', user_id: t.user_id } });
   $('ot-transfer').disabled = false;
@@ -575,7 +575,8 @@ document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change'
   const { data, error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: EVENT_ID, settings: { [i.dataset.set]: i.checked } } });
   i.disabled = false;
   if (error) { i.checked = !i.checked; $('set-err').textContent = await fnError(error); return; }
-  // A comp event comes back live from enable-event, so take its status too.
+  // A settings save never changes the status (only the explicit go-live
+  // call does), but take what the server reports so the page cannot drift.
   ENT[i.dataset.set] = i.checked; if (data?.status) ENT.status = data.status; renderChrome();
 }));
 
@@ -623,7 +624,10 @@ function renderGolive() {
   $('gl-pay').hidden = isLive() || isComp(); $('gl-done').hidden = !isLive() || isComp(); $('gl-wait').hidden = true;
   $('gl-comp').hidden = !isComp(); $('gl-comp-btn').hidden = !isComp() || isLive();
   $('gl-h').textContent = isComp() ? 'Check-in' : 'Go live';
-  if (isComp()) $('gl-sub').textContent = isLive() ? EV.name + ' is live. Check-in is included with your account.' : 'Check-in is included with your account.';
+  // Only the owner's account carries the complimentary status, so anyone else reads whose it is.
+  const included = 'Check-in is included with ' + (ROLE === 'owner' ? 'your' : ownerName().replace(/^the event owner$/, 'the owner') + "'s") + ' account.';
+  $('gl-comp-t').textContent = included;
+  if (isComp()) $('gl-sub').textContent = isLive() ? EV.name + ' is live. ' + included : included;
   $('gl-done-t').textContent = 'Check-ins now count for real' + (ATT.length ? ', and you can send QR emails to your ' + ATT.length + ' attendees.' : '.');
   $('gl-desk').href = '/checkin/desk?event=' + EVENT_ID;
   // Same rule checkin-create-checkout enforces: no paying for a closed window.
