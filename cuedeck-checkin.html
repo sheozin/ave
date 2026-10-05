@@ -150,6 +150,10 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 }
 .ck-panel-title{font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px}
 .ck-panel-text{font-size:14px;color:var(--t2)}
+.ck-alerts{margin-top:20px}
+.ck-alerts[hidden]{display:none}
+.ck-alerts ul{margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.6;color:var(--t2)}
+.ck-alerts li.fresh{color:var(--t1);font-weight:600}
 
 /* ── SCAN / SEARCH FIELD ──────────────────────────
    One field for both inputs: a USB scanner types the token and sends
@@ -646,6 +650,13 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
         <button class="ck-btn ghost" type="button" id="secondary">Check in without printing</button>
       </div>
       <div class="ck-panel-text" id="st-status" style="margin-top:24px"></div>
+      <!-- Arrival alerts (event-day spec, feature 5): owner, organizer and
+           desk lead only. Quiet on purpose: no sound, no modal, nothing
+           that takes focus from the scan field. -->
+      <div class="ck-alerts" id="st-alerts" hidden aria-label="Arrival alerts">
+        <div class="ck-lbl">Arrival alerts</div>
+        <ul id="st-alert-list" aria-live="polite"></ul>
+      </div>
     </div>
   </div>
 </div>
@@ -1568,11 +1579,78 @@ function showScreen(name) {
   document.getElementById('station').style.display = name === 'station' ? 'flex' : 'none';
   if (name === 'signin') siCap();
   document.getElementById('loading').style.display = name === 'loading' ? 'flex' : 'none';
-  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); startHeartbeat(); holdFocus(); }
+  if (name === 'station') { startFocusBackstop(); startRosterRefresh(); startHeartbeat(); startDeskAlerts(); holdFocus(); }
   // Leaving the desk takes the kiosk modal with it. Switching event or
   // signing out must not leave a live pairing code on a screen that is
   // no longer the desk it was minted from.
-  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); stopHeartbeat(); }
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); stopHeartbeat(); stopDeskAlerts(); }
+}
+
+// ═══════════════════════════════════════════════════
+// ARRIVAL ALERTS (event-day spec, feature 5)
+// Leads see "Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2"
+// for the ticket types an organizer chose. Realtime is the fast path; a
+// 60 s reload is the backstop for a socket that died quietly. The Realtime
+// row carries ids only; names come from checkin_recent_alerts, which
+// re-checks the role. Failures are logged, not shown: a desk volunteer
+// must not get a red error over an optional feed. Wording comes from the
+// tested /checkin-dashboard.js, loaded on first use.
+// ═══════════════════════════════════════════════════
+const ALERTS_EVERY = 60000;
+const ALERTS_SHOWN = 10;
+const ALERT_FRESH_MS = 6000;
+let alertChan = null, alertTimer = null, alertMod = null, alertSeen = null, alertEvent = null;
+
+function startDeskAlerts() {
+  if (!S.event || !window.CK_ROLES || !window.CK_ROLES.can(S.role, 'alerts')) return;
+  if (alertEvent !== S.event.id) { stopDeskAlerts(); alertEvent = S.event.id; }
+  if (!alertChan) {
+    alertChan = sb.channel('ck-desk-alerts-' + alertEvent)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'leod_checkin_alerts', filter: 'event_id=eq.' + alertEvent },
+          () => { loadDeskAlerts(); })
+      .subscribe();
+  }
+  if (!alertTimer) alertTimer = setInterval(() => { if (!document.hidden) loadDeskAlerts(); }, ALERTS_EVERY);
+  loadDeskAlerts();
+}
+
+function stopDeskAlerts() {
+  if (alertChan) { sb.removeChannel(alertChan); alertChan = null; }
+  clearInterval(alertTimer);
+  alertTimer = null; alertSeen = null; alertEvent = null;
+  document.getElementById('st-alerts').hidden = true;
+  document.getElementById('st-alert-list').replaceChildren();
+}
+
+async function loadDeskAlerts() {
+  const ev = alertEvent;
+  if (!ev || !navigator.onLine) return;
+  try {
+    if (!alertMod) alertMod = await import('/checkin-dashboard.js');
+    const { data, error } = await sb.rpc('checkin_recent_alerts', { p_event_id: ev });
+    if (error) throw error;
+    if (alertEvent !== ev) return;   // the desk switched event meanwhile
+    renderDeskAlerts(data || []);
+  } catch (err) {
+    console.warn('checkin: arrival alerts not loaded', err);
+  }
+}
+
+function renderDeskAlerts(list) {
+  // The first load highlights nothing: only arrivals since this desk opened.
+  const fresh = new Set(alertSeen ? alertMod.newAlertIds(alertSeen, list) : []);
+  alertSeen = new Set(list.map(a => a.id));
+  const items = list.slice(0, ALERTS_SHOWN).map(a => {
+    const li = document.createElement('li');
+    li.textContent = alertMod.alertLine(a, S.eventTz);
+    if (fresh.has(a.id)) {
+      li.className = 'fresh';
+      setTimeout(() => li.classList.remove('fresh'), ALERT_FRESH_MS);
+    }
+    return li;
+  });
+  document.getElementById('st-alert-list').replaceChildren(...items);
+  document.getElementById('st-alerts').hidden = list.length === 0;
 }
 
 // ═══════════════════════════════════════════════════

@@ -8,11 +8,13 @@ const ANA = { id: 'a0000000-0000-4000-8000-000000000001', event_id: EVENT_ID, fi
 const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'Ben', email: 'ben@cuedeck-test.io', company: 'Fabrikam Demo', qr_token: 'tok-ben', checked_in_at: null };
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
-  heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live' }: Opts) {
+  heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string;
+  alerts?: (args: Record<string, unknown>) => unknown };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [] }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
+  await rpc(page, 'checkin_recent_alerts', alerts);
   await rpc(page, 'checkin_my_events', [myEventsRow({ role, is_owner: isOwner, status })]);
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status }]);
   await table(page, 'leod_checkin_attendees', roster);
@@ -579,3 +581,35 @@ test('the owner sees Go live on the test banner', async ({ page }) => {
   await expect(page.locator('#st-test')).toBeVisible();
   await expect(page.locator('#st-test a', { hasText: 'Go live' })).toBeVisible();
 });
+
+// ── Arrival alerts on the desk (event-day spec, feature 5) ──
+const DESK_ALERTS = [
+  { id: 'x2', created_at: '2026-10-18T08:59:00Z', name: 'Ewa Sample', company: 'Contoso Demo', ticket_type: 'Speaker', desk_label: 'Desk 2', still_in: true },
+  { id: 'x1', created_at: '2026-10-18T08:40:00Z', name: 'Jan <i>Undone</i>', company: null, ticket_type: 'VIP', desk_label: null, still_in: false },
+];
+
+test('a desk lead sees arrival alerts and the scan field keeps focus', async ({ page }) => {
+  await open(page, { role: 'lead', alerts: () => DESK_ALERTS });
+  const items = page.locator('#st-alert-list li');
+  await expect(page.locator('#st-alerts')).toBeVisible();
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toHaveText('10:59 Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2');
+  await expect(items.nth(1)).toHaveText('10:40 Jan <i>Undone</i> (VIP) checked in, since undone');
+  // The first load is history, not news: nothing is highlighted.
+  await expect(page.locator('#st-alert-list li.fresh')).toHaveCount(0);
+  expect(await page.evaluate(() => document.activeElement && document.activeElement.id)).toBe('scan');
+});
+
+test('desk staff never see alerts and never ask for them', async ({ page }) => {
+  let asked = 0;
+  await open(page, { role: 'crew', alerts: () => { asked++; return DESK_ALERTS; } });
+  await expect(page.locator('#st-alerts')).toBeHidden();
+  await page.waitForTimeout(300);
+  expect(asked).toBe(0);
+});
+
+test('a lead with no alerts sees no empty box', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await expect(page.locator('#st-alerts')).toBeHidden();
+});
+
