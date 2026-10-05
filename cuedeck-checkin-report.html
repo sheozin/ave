@@ -94,8 +94,15 @@ const EVENT_ID = new URLSearchParams(location.search).get('event');
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const td = (x, n) => el('td', n ? 'n' : null, x == null ? '' : String(x));
 
+// The zone is owner-written free text (migration 090): an unknown or
+// missing one falls back to UTC instead of throwing half way through.
+function validTz(z) {
+  if (!z) return 'UTC';
+  try { new Intl.DateTimeFormat('en-GB', { timeZone: z }); return z; } catch { return 'UTC'; }
+}
+
 function render(r) {
-  const tz = r.event.timezone;
+  const tz = validTz(r.event.timezone);
   $('banner').hidden = r.status !== 'test';
   $('crumb-ev').textContent = r.event.name;
   $('ev-name').textContent = r.event.name;
@@ -144,10 +151,10 @@ function render(r) {
     if (!can(effectiveRole(ev.role, ev.is_owner), 'report')) throw new Error('The report is for the event owner, organizers and viewers.');
     const { data, error } = await sb.rpc('checkin_event_report', { p_event_id: EVENT_ID });
     if (error) throw new Error(error.message);
+    $('dash-link').href = '/checkin/dashboard?event=' + encodeURIComponent(EVENT_ID);
+    render(data);   // before showing: a render error leaves only the error line, never half a report
     $('page-loading').hidden = true;
     $('full').hidden = false;
-    $('dash-link').href = '/checkin/dashboard?event=' + encodeURIComponent(EVENT_ID);
-    render(data);
   } catch (e) {
     $('page-loading').hidden = true;
     $('page-err').textContent = 'Could not open this report: ' + e.message;

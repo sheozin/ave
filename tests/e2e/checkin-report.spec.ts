@@ -93,3 +93,11 @@ test('the dashboard links organizers to the report, not desk staff', async ({ pa
   await expect(page.locator('#report-link')).toBeVisible();
   await expect(page.locator('#report-link')).toHaveAttribute('href', '/checkin/report?event=' + EVENT_ID);
 });
+
+test('an unknown timezone falls back to UTC instead of half a page', async ({ page }) => {
+  await open(page, 'organizer', REPORT({ event: { name: 'Probe Summit', date: '2026-10-18', timezone: 'Not/AZone', venue: null } }));
+  await expect(page.locator('#full')).toBeVisible();
+  await expect(page.locator('#t-peak-s')).toHaveText('08:00 to 08:15');
+  await expect(page.locator('#meta')).toContainText('UTC');
+  await expect(page.locator('#page-err')).toBeEmpty();
+});

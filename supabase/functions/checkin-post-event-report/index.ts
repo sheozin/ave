@@ -5,7 +5,8 @@
 // (report_sent_at, migration 088) and only then emails the owner the
 // headline numbers and a link. Winning the claim first means two
 // overlapping runs cannot both send; a failed send gives the claim back so
-// the next run retries.
+// the next run retries, up to 5 times (092). The Resend Idempotency-Key
+// stops a resend when only the reply to a successful send was lost.
 //
 // Auth: the x-cron-secret header must match the vault secret, checked by
 // checkin_report_cron_ok (089). The secret exists only in the vault and in
@@ -73,13 +74,16 @@ Deno.serve(async (req) => {
         if (!to) throw new Error('owner has no email')
         const m = reportEmail(rep, APP + '/checkin/report?event=' + d.event_id)
         const res = await sendEmail({ to, subject: m.subject, html: m.html, text: m.text,
-                                      tags: [{ name: 'type', value: 'checkin_report' }] })
+                                      tags: [{ name: 'type', value: 'checkin_report' }],
+                                      idempotencyKey: 'checkin-report-' + d.event_id })
         if (res.error) throw new Error('send: ' + res.error)
         sent++
       } catch (e) {
+        // Gives the claim back and counts the attempt; after 5 the event is
+        // parked and guard G11 reports it (migration 092).
         failures.push(d.event_id + ' ' + msg(e))
-        const { error: backErr } = await sb.rpc('checkin_unclaim_report', { p_event_id: d.event_id })
-        if (backErr) failures.push(d.event_id + ' unclaim: ' + backErr.message)
+        const { error: backErr } = await sb.rpc('checkin_report_failed', { p_event_id: d.event_id, p_error: msg(e) })
+        if (backErr) failures.push(d.event_id + ' record failure: ' + backErr.message)
       }
     }
     detail = (due ?? []).length + ' due, ' + sent + ' sent'

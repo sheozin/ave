@@ -10,6 +10,9 @@ export interface EmailPayload {
   tags?: { name: string; value: string }[]
   fromName?: string
   fromEmail?: string
+  // Resend drops a repeat send with the same key for 24 hours, so a
+  // response lost after Resend accepted the email cannot cause a duplicate.
+  idempotencyKey?: string
 }
 
 export interface ResendResponse {
@@ -34,6 +37,7 @@ export async function sendEmail(payload: EmailPayload): Promise<ResendResponse> 
       headers: {
         'Authorization': `Bearer ${RESEND_API_KEY}`,
         'Content-Type': 'application/json',
+        ...(payload.idempotencyKey ? { 'Idempotency-Key': payload.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from: `${fromName} <${fromEmail}>`,

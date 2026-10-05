@@ -16,6 +16,7 @@ DECLARE
   v_r     jsonb;
   v_denied int := 0;
   r uuid;
+  k int;
 BEGIN
   INSERT INTO auth.users (id, email, aud, role)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated'
@@ -115,6 +116,20 @@ BEGIN
     RESET ROLE;
   END LOOP;
   IF v_denied <> 4 THEN RAISE EXCEPTION 'FAIL denied %', v_denied; END IF;
+
+  -- 092: five failed sends park the event; G11 then names it.
+  PERFORM set_config('request.jwt.claims', '', true);
+  FOR k IN 1..4 LOOP PERFORM checkin_report_failed(v_ev, 'owner has no email'); END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM checkin_reports_due() WHERE event_id = v_ev) THEN RAISE EXCEPTION 'FAIL parked after 4'; END IF;
+  IF (SELECT ok FROM checkin_guard_results() WHERE guard = 'checkin_reports_not_parked') IS NOT TRUE THEN
+    RAISE EXCEPTION 'FAIL G11 fired early'; END IF;
+  PERFORM checkin_report_failed(v_ev, 'owner has no email');
+  IF EXISTS (SELECT 1 FROM checkin_reports_due() WHERE event_id = v_ev) THEN RAISE EXCEPTION 'FAIL still due after 5'; END IF;
+  IF (SELECT report_last_error FROM leod_checkin_entitlements WHERE event_id = v_ev) <> 'owner has no email' THEN
+    RAISE EXCEPTION 'FAIL last error not kept'; END IF;
+  IF (SELECT ok FROM checkin_guard_results() WHERE guard = 'checkin_reports_not_parked') IS NOT FALSE
+     OR (SELECT detail FROM checkin_guard_results() WHERE guard = 'checkin_reports_not_parked') NOT LIKE '%' || v_ev::text || '%' THEN
+    RAISE EXCEPTION 'FAIL G11 did not name the parked event'; END IF;
 
   RAISE EXCEPTION 'PROBE OK 088';
 END
