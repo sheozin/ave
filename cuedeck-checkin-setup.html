@@ -365,8 +365,9 @@ $('f-det').addEventListener('submit', async (e) => {
 });
 
 // ── arrival alerts (event-day spec, feature 5) ────────────
-// The choices are the ticket types on the guest list (trimmed, first
-// spelling wins, case-insensitive, as the server matches them), plus any
+// The choices are the ticket types on the guest list (trimmed, inner
+// spaces collapsed, first spelling wins, case-insensitive, as the server
+// matches them), plus any
 // saved type no longer on the list, so a saved choice never vanishes
 // without the organizer seeing it. Not class "chip": Setup binds every
 // .chip to the attendee filter.
@@ -376,7 +377,7 @@ function renderAlertTypes() {
   if (!show) return;
   const saved = (ENT && ENT.alert_ticket_types) || [];
   const seen = new Map();
-  for (const t of [...ATT.map(a => (a.ticket_type || '').trim()), ...saved]) {
+  for (const t of [...ATT.map(a => (a.ticket_type || '').replace(/\s+/g, ' ').trim()), ...saved]) {
     if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
   }
   const savedL = new Set(saved.map(x => x.toLowerCase()));

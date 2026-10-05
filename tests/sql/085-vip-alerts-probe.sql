@@ -8,6 +8,8 @@ DECLARE
   v_lead  uuid := gen_random_uuid();
   v_crew  uuid := gen_random_uuid();
   v_view  uuid := gen_random_uuid();
+  v_out   uuid := gen_random_uuid();
+  v_gold  uuid := gen_random_uuid();
   v_ev    uuid;
   v_vip   uuid := gen_random_uuid();
   v_std   uuid := gen_random_uuid();
@@ -21,7 +23,7 @@ DECLARE
 BEGIN
   INSERT INTO auth.users (id, email, aud, role, raw_user_meta_data)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated', '{"checkin_staff":"true"}'::jsonb
-    FROM unnest(ARRAY[v_owner, v_org, v_lead, v_crew, v_view]) AS u;
+    FROM unnest(ARRAY[v_owner, v_org, v_lead, v_crew, v_view, v_out]) AS u;
   INSERT INTO leod_events (name, date, event_start, event_end, timezone, created_by, created_via)
   VALUES ('Probe 085', current_date, '00:00', '23:59', 'Europe/Warsaw', v_owner, 'checkin')
   RETURNING id INTO v_ev;
@@ -33,14 +35,16 @@ BEGIN
   -- The guest list says 'vip ' (lower case, trailing space); the alert list says 'VIP'.
   INSERT INTO leod_checkin_attendees (id, event_id, first_name, last_name, company, ticket_type, source, qr_token) VALUES
     (v_vip, v_ev, 'Ewa', 'Sample', 'Contoso Demo', 'vip ', 'import', 'p085a' || replace(gen_random_uuid()::text, '-', '')),
-    (v_std, v_ev, 'Jan', 'Plain', NULL, 'attendee', 'import', 'p085b' || replace(gen_random_uuid()::text, '-', ''));
+    (v_std, v_ev, 'Jan', 'Plain', NULL, 'attendee', 'import', 'p085b' || replace(gen_random_uuid()::text, '-', '')),
+    -- Inner spaces differ from the alert list (087).
+    (v_gold, v_ev, 'Gil', 'Gold', NULL, 'VIP  Gold', 'import', 'p085c' || replace(gen_random_uuid()::text, '-', ''));
 
   -- Setter: organizer allowed and normalises; lead refused.
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_org, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
-  v_types := checkin_set_alert_ticket_types(v_ev, ARRAY['VIP', ' vip', '', 'Speaker ']);
+  v_types := checkin_set_alert_ticket_types(v_ev, ARRAY['VIP', ' vip', '', 'Speaker ', 'vip   gold']);
   RESET ROLE;
-  IF v_types <> ARRAY['VIP', 'Speaker'] THEN RAISE EXCEPTION 'FAIL normalise %', v_types; END IF;
+  IF v_types <> ARRAY['VIP', 'Speaker', 'vip gold'] THEN RAISE EXCEPTION 'FAIL normalise %', v_types; END IF;
   IF (SELECT status FROM leod_checkin_entitlements WHERE event_id = v_ev) <> 'test' THEN
     RAISE EXCEPTION 'FAIL setter changed status'; END IF;
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_lead, 'role', 'authenticated')::text, true);
@@ -52,6 +56,19 @@ BEGIN
   END;
   RESET ROLE;
 
+  -- A stranger (no operator row) and desk staff are refused too (086:
+  -- a NULL role once let a stranger through).
+  FOREACH r IN ARRAY ARRAY[v_out, v_crew] LOOP
+    PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', r, 'role', 'authenticated')::text, true);
+    SET LOCAL ROLE authenticated;
+    BEGIN
+      PERFORM checkin_set_alert_ticket_types(v_ev, ARRAY['X']);
+      RAISE EXCEPTION 'FAIL set types by %', r;
+    EXCEPTION WHEN insufficient_privilege THEN NULL;
+    END;
+    RESET ROLE;
+  END LOOP;
+
   -- Scans (service path): VIP ok -> alert; standard ok -> none; VIP duplicate -> none.
   PERFORM set_config('request.jwt.claims', '', true);
   PERFORM checkin_apply_scan(v_ev, gen_random_uuid(), v_vip, v_t, 'checkin', NULL, v_crew, NULL, true, v_desk);
@@ -60,6 +77,11 @@ BEGIN
   SELECT count(*) INTO v_n FROM leod_checkin_alerts WHERE event_id = v_ev;
   IF v_n <> 1 THEN RAISE EXCEPTION 'FAIL alert count %', v_n; END IF;
   IF NOT (SELECT is_test FROM leod_checkin_alerts WHERE event_id = v_ev) THEN RAISE EXCEPTION 'FAIL is_test'; END IF;
+  -- 'VIP  Gold' matches 'vip gold' (087) and is stored collapsed.
+  PERFORM checkin_apply_scan(v_ev, gen_random_uuid(), v_gold, v_t, 'checkin', NULL, v_crew, NULL, true, v_desk);
+  IF (SELECT ticket_type FROM leod_checkin_alerts WHERE attendee_id = v_gold) IS DISTINCT FROM 'VIP Gold' THEN
+    RAISE EXCEPTION 'FAIL inner spaces'; END IF;
+  DELETE FROM leod_checkin_alerts WHERE attendee_id = v_gold;
 
   -- Reader: lead sees name, company, desk label, still_in.
   PERFORM set_config('request.jwt.claims', jsonb_build_object('sub', v_lead, 'role', 'authenticated')::text, true);

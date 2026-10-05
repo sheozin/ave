@@ -188,6 +188,8 @@ test('the owner of a complimentary event keeps the account copy', async ({ page 
 const GUESTS = [
   { id: 'g1', first_name: 'A', last_name: 'One', email: null, company: null, ticket_type: 'VIP', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
   { id: 'g2', first_name: 'B', last_name: 'Two', email: null, company: null, ticket_type: ' vip ', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+  { id: 'g4', first_name: 'D', last_name: 'Four', email: null, company: null, ticket_type: 'VIP  Gold', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+  { id: 'g5', first_name: 'E', last_name: 'Five', email: null, company: null, ticket_type: 'vip gold', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
   { id: 'g3', first_name: 'C', last_name: 'Three', email: null, company: null, ticket_type: 'attendee', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
 ];
 
@@ -201,8 +203,8 @@ test('an organizer picks alert ticket types from the guest list and saves them',
   const opts = page.locator('#al-types label');
   await expect(page.locator('#al-row')).toBeVisible();
   // VIP and ' vip ' are one type; Speaker is saved but no longer on the list, and stays.
-  await expect(opts).toHaveText(['VIP', 'attendee', 'Speaker']);
-  await expect(opts.nth(2).locator('input')).toBeChecked();
+  await expect(opts).toHaveText(['VIP', 'VIP Gold', 'attendee', 'Speaker']);
+  await expect(opts.nth(3).locator('input')).toBeChecked();
   await opts.nth(0).click();
   // Not wired to the attendee filter chips.
   await expect(page.locator('.chip[data-f="all"]')).toHaveAttribute('aria-pressed', 'true');
