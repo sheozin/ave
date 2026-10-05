@@ -349,7 +349,8 @@ test('closing the walk-in form puts the cursor back in the scan field', async ({
 test('the desk reports in with a stable desk id and shows its label', async ({ page }) => {
   const beats: Record<string, unknown>[] = [];
   await open(page, { role: 'crew', heartbeat: (args) => { beats.push(args); return 'Desk 1'; } });
-  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  await expect(page.locator('#st-desk')).toHaveAttribute('aria-label', 'Rename this desk, currently Desk 1');
   const deskId = await page.evaluate(() => localStorage.getItem('ck_desk_id'));
   expect(deskId).toMatch(/^[0-9a-f-]{36}$/);
   expect(beats[0]).toEqual({ p_event_id: EVENT_ID, p_desk_id: deskId, p_label: null, p_pending_count: 0 });
@@ -364,10 +365,16 @@ test('the desk reports in with a stable desk id and shows its label', async ({ p
 test('renaming the desk sends the new label', async ({ page }) => {
   const beats: Record<string, unknown>[] = [];
   await open(page, { role: 'lead', heartbeat: (args) => { beats.push(args); return (args.p_label as string) || 'Desk 1'; } });
-  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
-  page.once('dialog', d => d.accept('VIP desk'));
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
   await page.locator('#st-desk').click();
-  await expect(page.locator('#st-desk')).toHaveText('VIP desk');
+  await expect(page.locator('#desk-rename')).toBeVisible();
+  await expect(page.getByLabel('Desk name', { exact: true })).toBeFocused();
+  await expect(page.getByLabel('Desk name', { exact: true })).toHaveValue('Desk 1');
+  await page.getByLabel('Desk name', { exact: true }).fill('VIP desk');
+  await page.getByRole('button', { name: 'Save desk name' }).click();
+  await expect(page.locator('#st-desk')).toHaveText('VIP desk · Rename');
+  await expect(page.locator('#desk-rename')).toBeHidden();
+  await expect(page.locator('#scan')).toBeFocused();
   expect(beats.some(b => b.p_label === 'VIP desk')).toBe(true);
 });
 
@@ -396,7 +403,7 @@ test('a failing heartbeat never stops a check-in, and the next tick retries', as
   await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
   await expect(page.locator('#station')).toBeVisible();
   await expect.poll(() => beats).toBe(1);
-  await expect(page.locator('#st-desk')).toHaveText('This desk');
+  await expect(page.locator('#st-desk')).toHaveText('This desk · Rename');
   const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
   await search(page, 'Ben');
   await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
@@ -419,7 +426,7 @@ test('switching event stops the old desk heartbeat and starts one for the new ev
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
   await table(page, 'leod_checkin_attendees', [ANA, BEN]);
   await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
-  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
   await page.locator('#st-switch').click();
   await expect(page.locator('#picker')).toBeVisible();
   const n = beats.length;
@@ -429,7 +436,7 @@ test('switching event stops the old desk heartbeat and starts one for the new ev
   await page.waitForTimeout(500);
   expect(beats.length).toBe(n);   // nothing sent from the picker, not even on reconnect
   await page.locator('.ck-ev', { hasText: 'Other Summit' }).click();
-  await expect(page.locator('#st-desk')).toHaveText('Desk 4');
+  await expect(page.locator('#st-desk')).toHaveText('Desk 4 · Rename');
   await page.clock.runFor(65000);
   await expect.poll(() => beats.length).toBeGreaterThanOrEqual(n + 3);
   expect(beats.slice(n).every(b => b.p_event_id === OTHER)).toBe(true);
@@ -443,7 +450,7 @@ test('a desk whose storage is blocked keeps one in-memory desk id', async ({ pag
     Storage.prototype.setItem = function (k, v) { if (k === 'ck_desk_id') throw new Error('QuotaExceededError'); return set.call(this, k, v); };
   });
   await open(page, { role: 'crew', heartbeat: (a) => { beats.push(a); return 'Desk 1'; } });
-  await expect(page.locator('#st-desk')).toHaveText('Desk 1');
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
   const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
   await search(page, 'Ben');
   await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
@@ -457,21 +464,106 @@ test('a desk whose storage is blocked keeps one in-memory desk id', async ({ pag
 test('a desk label is shown as text, and a rename is cleaned, trimmed and capped at 40', async ({ page }) => {
   const beats: Record<string, unknown>[] = [];
   await open(page, { role: 'lead', heartbeat: (a) => { beats.push(a); return (a.p_label as string) || '<b>Desk</b> 1'; } });
-  await expect(page.locator('#st-desk')).toHaveText('<b>Desk</b> 1');
+  await expect(page.locator('#st-desk')).toHaveText('<b>Desk</b> 1 · Rename');
   await expect(page.locator('#st-desk b')).toHaveCount(0);
-  page.once('dialog', d => d.accept('   Main \u202E  entrance\tdesk ' + 'x'.repeat(60) + '  '));
   await page.locator('#st-desk').click();
-  const want = ('Main entrance desk ' + 'x'.repeat(60)).slice(0, 40);
-  await expect(page.locator('#st-desk')).toHaveText(want);
-  expect(beats.at(-1)!.p_label).toBe(want);
+  // 39 characters once cleaned, then two astral letters: the cap counts
+  // characters, so the 40th is the whole first one, never half of it.
+  await page.getByLabel('Desk name', { exact: true }).fill('   Main \u202E  entrance\tdesk ' + 'x'.repeat(20) + '\u{1D538}\u{1D539}  ');
+  await page.getByRole('button', { name: 'Save desk name' }).click();
+  const want = 'Main entrance desk ' + 'x'.repeat(20);
+  expect(Array.from(want)).toHaveLength(39);
+  await expect(page.locator('#st-desk')).toHaveText(want + '\u{1D538} · Rename');
+  expect(beats.at(-1)!.p_label).toBe(want + '\u{1D538}');
 });
 
 test('a kiosk never sends a desk heartbeat', async ({ page }) => {
   let beats = 0;
+  await page.clock.install({ time: FIXED_NOW });
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', () => { beats++; return 'Desk 1'; });
   await page.goto('/cuedeck-checkin.html?mode=kiosk');
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.clock.runFor(65000);
   await page.waitForTimeout(500);
   expect(beats).toBe(0);
+});
+
+// Task 14 fix round 1.
+test('Escape cancels a rename and hands focus back to the scan field', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await open(page, { role: 'crew', heartbeat: (a) => { beats.push(a); return (a.p_label as string) || 'Desk 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  await page.locator('#st-desk').click();
+  await page.getByLabel('Desk name', { exact: true }).fill('Not this');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#desk-rename')).toBeHidden();
+  await expect(page.locator('#scan')).toBeFocused();
+  await page.locator('#st-desk').click();
+  await expect(page.getByLabel('Desk name', { exact: true })).toHaveValue('Desk 1');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#desk-rename')).toBeHidden();
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  expect(beats.some(b => b.p_label)).toBe(false);
+});
+
+test('a badge scanned into the rename field does not become the desk name', async ({ page }) => {
+  const beats: Record<string, unknown>[] = [];
+  await open(page, { role: 'lead', heartbeat: (a) => { beats.push(a); return (a.p_label as string) || 'Desk 1'; } });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  await page.locator('#st-desk').click();
+  await page.getByLabel('Desk name', { exact: true }).fill('');
+  await page.keyboard.type('tok-ben');   // a wedge scanner: keystrokes, then Enter
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#dr-err')).toHaveText('That looks like a badge code, not a desk name.');
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  // The last value scanned at the desk counts too, even one not on the list.
+  await page.keyboard.press('Escape');
+  await page.locator('#scan').fill('ZZ-UNKNOWN-42');
+  await page.locator('#scan').press('Enter');
+  await page.locator('#st-desk').click();
+  await page.getByLabel('Desk name', { exact: true }).fill('');
+  await page.keyboard.type('ZZ-UNKNOWN-42');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#dr-err')).toHaveText('That looks like a badge code, not a desk name.');
+  expect(beats.some(b => b.p_label)).toBe(false);
+});
+
+test('a heartbeat answered after a rename does not put the old label back', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await expect(page.locator('#st-desk')).toHaveText('Desk 1 · Rename');
+  let release: () => void = () => {};
+  const held = new Promise<void>(res => { release = res; });
+  let sawHeld = false;
+  await page.route(/\/rest\/v1\/rpc\/checkin_desk_heartbeat/, async r => {
+    const a = r.request().postDataJSON();
+    if (!a.p_label && !sawHeld) { sawHeld = true; await held; }
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(a.p_label || 'Desk 1') });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));   // a beat, held
+  await expect.poll(() => sawHeld).toBe(true);
+  await page.locator('#st-desk').click();
+  await page.getByLabel('Desk name', { exact: true }).fill('VIP desk');
+  await page.getByRole('button', { name: 'Save desk name' }).click();
+  await expect(page.locator('#st-desk')).toHaveText('VIP desk · Rename');
+  const late = page.waitForResponse(r => r.url().includes('checkin_desk_heartbeat'));
+  release();
+  await late;
+  await page.waitForTimeout(200);
+  await expect(page.locator('#st-desk')).toHaveText('VIP desk · Rename');
+});
+
+test('a check-in queued offline is flushed with the desk id on reconnect', async ({ page, context }) => {
+  await open(page, { role: 'crew' });
+  const deskId = await page.evaluate(() => localStorage.getItem('ck_desk_id'));
+  await context.setOffline(true);
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await expect(page.locator('#verdict')).toContainText('Ben Probe is checked in');
+  const req = page.waitForRequest(r => r.url().includes('/functions/v1/checkin-record-scans') && r.method() === 'POST');
+  await context.setOffline(false);
+  const body = (await req).postDataJSON();
+  expect(body.desk_id).toBe(deskId);
+  expect(body.items).toMatchObject([{ action: 'checkin', attendee_id: BEN.id }]);
 });
