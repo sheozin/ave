@@ -20,6 +20,8 @@ const ENDED_AT = '2026-10-05T10:58:00.000Z'
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 let patches: { table: string; body: Row }[]
+// Runs just before a PATCH is applied: lets a test play another writer.
+let beforePatch: ((table: string) => void) | null = null
 
 function rowFilter(url: URL): (r: Row) => boolean {
   const tests: ((r: Row) => boolean)[] = []
@@ -68,8 +70,10 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   if (method === 'PATCH') {
     const patch = JSON.parse(String(init?.body ?? '{}'))
     patches.push({ table, body: patch })
-    rows.filter(match).forEach(r => Object.assign(r, patch))
-    return reply(204, undefined)
+    beforePatch?.(table)
+    const hit = rows.filter(match)
+    hit.forEach(r => Object.assign(r, patch))
+    return (headers.get('Prefer') ?? '').includes('return=representation') ? reply(200, hit) : reply(204, undefined)
   }
   return reply(405, { message: 'stub: method' })
 }) as typeof fetch
@@ -101,6 +105,7 @@ async function call(fn: string, body: Row): Promise<{ status: number; body: Row 
 
 function setup(session: Row) {
   patches = []
+  beforePatch = null
   tables = {
     leod_sessions: [{
       id: SESSION, event_id: EVENT, title: "Chair's opening remarks", version: 7,
@@ -121,6 +126,7 @@ function assert(cond: unknown, msg: string): asserts cond {
 }
 
 for (const from of ['LIVE', 'HOLD', 'OVERRUN', 'ENDED', 'CALLING']) {
+  // CALLING counts as started only with an actual_start (HOLD -> CALLING); the default row has one.
   Deno.test(`restart-session: ${from} goes back to READY with its run cleared`, async () => {
     setup({ status: from, actual_end: from === 'ENDED' ? ENDED_AT : null })
     const r = await call('restart-session', { session_id: SESSION, version: 7, command_id: 'cmd-' + from, operator_role: 'director' })
@@ -144,7 +150,7 @@ Deno.test('restart-session: READY with an old actual_start is restartable', asyn
   assert(sess().actual_start === null, 'actual_start not cleared')
 })
 
-for (const [from, start] of [['PLANNED', STARTED], ['CANCELLED', STARTED], ['READY', null]] as const) {
+for (const [from, start] of [['PLANNED', STARTED], ['CANCELLED', STARTED], ['READY', null], ['CALLING', null]] as const) {
   Deno.test(`restart-session: ${from}${start ? '' : ' that never started'} is refused with 409`, async () => {
     setup({ status: from, actual_start: start })
     const r = await call('restart-session', { session_id: SESSION, version: 7, command_id: 'cmd-refuse' })
@@ -221,3 +227,20 @@ Deno.test('set-ready is unchanged: it keeps actual_start', async () => {
   assert(sess().status === 'READY' && sess().actual_start === STARTED, JSON.stringify(sess()))
   assert(tables.leod_commands[0].fn_name === 'transition_ready', JSON.stringify(tables.leod_commands[0]))
 })
+
+// Another writer bumps the version between the read and the guarded update:
+// the update matches no row and must not be reported as a success.
+for (const [fn, status] of [['restart-session', 'LIVE'], ['go-live', 'READY']] as const) {
+  Deno.test(`${fn}: losing the race after the version check is a 409, not a success`, async () => {
+    setup({ status, actual_start: status === 'READY' ? null : STARTED })
+    beforePatch = (table) => {
+      if (table === 'leod_sessions') { Object.assign(sess(), { status: 'HOLD', version: 8 }); beforePatch = null }
+    }
+    const r = await call(fn, { session_id: SESSION, version: 7, command_id: 'cmd-race-' + fn })
+    assert(r.status === 409 && r.body.error === 'Version conflict', `${r.status} ${JSON.stringify(r.body)}`)
+    assert(sess().status === 'HOLD' && sess().version === 8, 'other writer overwritten: ' + JSON.stringify(sess()))
+    const cmd = tables.leod_commands[0]
+    assert(cmd.status === 'REJECTED', 'command ' + JSON.stringify(cmd))
+    assert(tables.leod_event_log.length === 0, 'event logged for a write that did not happen')
+  })
+}

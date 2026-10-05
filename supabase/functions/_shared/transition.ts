@@ -17,10 +17,14 @@ export function addMinutes(timeStr: string, mins: number): string {
 // stage timer counts the full length again. The schedule is not the run:
 // scheduled_start/end, delay_minutes and cumulative_delay come from apply-delay
 // shifting the programme and are left alone. set-overrun only changes status.
-const RESTARTABLE = ['LIVE', 'HOLD', 'OVERRUN', 'ENDED', 'CALLING', 'READY']
+// LIVE, HOLD, OVERRUN and ENDED have always started; CALLING and READY count
+// only when they still carry an actual_start (e.g. HOLD -> CALLING). Same
+// rule as canRestartSession in cuedeck-console.html.
+const ALWAYS_STARTED = ['LIVE', 'HOLD', 'OVERRUN', 'ENDED']
+const STARTED_IF_STAMPED = ['CALLING', 'READY']
 export function canRestart(session: { status: string; actual_start: string | null }): boolean {
-  if (!RESTARTABLE.includes(session.status)) return false
-  return session.status !== 'READY' || !!session.actual_start
+  if (ALWAYS_STARTED.includes(session.status)) return true
+  return STARTED_IF_STAMPED.includes(session.status) && !!session.actual_start
 }
 
 // ── Shared transition runner ─────────────────────────────────────────────────
@@ -164,11 +168,12 @@ export async function runTransition(
   }
 
   // Write session (with version guard)
-  const { error: upErr } = await sb
+  const { data: written, error: upErr } = await sb
     .from('leod_sessions')
     .update(upd)
     .eq('id', session_id)
     .eq('version', version)
+    .select('id')
 
   if (upErr) {
     // Mark command rejected (best-effort)
@@ -179,6 +184,21 @@ export async function runTransition(
         .then(() => {}).catch(() => {})
     }
     return new Response(upErr.message, { status: 500, headers: cors })
+  }
+
+  // No row matched: another writer bumped the version after our check.
+  // Same answer as the version check above, so the console handles it alike.
+  if (!written || written.length === 0) {
+    if (command_id) {
+      await sb.from('leod_commands')
+        .update({ status: 'REJECTED', error: 'Version conflict', resolved_at: now })
+        .eq('command_id', command_id)
+        .then(() => {}).catch(() => {})
+    }
+    return new Response(
+      JSON.stringify({ error: 'Version conflict' }),
+      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } }
+    )
   }
 
   const resultPayload = { ok: true, status: toStatus, version: version + 1 }
