@@ -190,8 +190,11 @@ export function paceMessages({ stats, nowMs, eventStartMs, timeZone }) {
   }
   if (sustained) {
     const who = live.length === 1 ? 'your desk clears' : 'your ' + live.length + ' desks clear';
-    out.push({ tone: 'warn', text: 'Arrivals (' + fmtRate(arrivalRate(stats.last_25_min)) + '/min) are close to what '
-      + who + ' (' + fmtRate(capacity) + '/min). Consider opening another desk.' });
+    const rate = fmtRate(arrivalRate(stats.last_25_min)), cap = fmtRate(capacity);
+    // Compare the printed numbers, so the sentence never contradicts them.
+    out.push({ tone: 'warn', text: Number(rate) > Number(cap)
+      ? 'Arrivals (' + rate + '/min) are faster than ' + who + ' (' + cap + '/min). Open another desk.'
+      : 'Arrivals (' + rate + '/min) are close to what ' + who + ' (' + cap + '/min). Consider opening another desk.' });
   }
 
   const expected = Math.max(0, (stats.registered || 0) - (stats.checked_in || 0));

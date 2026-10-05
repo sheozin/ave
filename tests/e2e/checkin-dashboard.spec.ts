@@ -148,12 +148,14 @@ test('a desk lead sees desk health, offline gaps and staffing advice', async ({ 
   await expect(page.locator('#gaps li')).toHaveText(['Desk 2 offline 10:02 to 10:09, 23 check-ins synced late, 3 still on the device.']);
   await expect(page.locator('#gaps-empty')).toBeHidden();
   await expect(page.locator('#desk-empty')).toBeHidden();
-  await expect(page.locator('#pace .msg.warn')).toHaveText('Arrivals (12/min) are close to what your desk clears (6/min). Consider opening another desk.');
+  await expect(page.locator('#pace .msg.warn')).toHaveText('Arrivals (12/min) are faster than your desk clears (6/min). Open another desk.');
 });
 
 test('the desk panel waits for 10 check-ins', async ({ page }) => {
   await open(page, 'organizer', { ops: { ...OPS, gaps: [] }, checked_in: 5 });
-  await expect(page.locator('#pace')).toHaveText('Pace appears after the first 10 check-ins.');
+  await expect(page.locator('#rate')).toHaveText('Pace appears after the first 10 check-ins.');
+  await expect(page.locator('#pace')).toHaveText('');
+  await expect(page.locator('#ops')).not.toContainText('Pace appears');
   await expect(page.locator('#gaps-empty')).toBeVisible();
 });
 

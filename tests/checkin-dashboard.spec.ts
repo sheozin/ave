@@ -217,6 +217,32 @@ describe('paceMessages', () => {
     expect(d.paceMessages({ stats: s, nowMs: NOW, eventStartMs: START })[0].text)
       .toBe('Arrivals (6/min) are close to what your desk clears (6/min). Consider opening another desk.');
   });
+  // The warning compares the numbers it prints, so it never says "close to"
+  // over a rate that reads higher than the capacity.
+  it('arrivals faster than a single desk clears', () => {
+    const s = stats({ ops: ops({ desks: [desk(1), desk(2, 200)] }), last_25_min: Array(25).fill(12) });
+    expect(d.paceMessages({ stats: s, nowMs: NOW, eventStartMs: START })[0]).toEqual(
+      { tone: 'warn', text: 'Arrivals (12/min) are faster than your desk clears (6/min). Open another desk.' });
+  });
+  it('arrivals faster than several desks clear', () => {
+    const s = stats({ ops: ops(), last_25_min: Array(25).fill(14) });
+    expect(d.paceMessages({ stats: s, nowMs: NOW, eventStartMs: START })[0]).toEqual(
+      { tone: 'warn', text: 'Arrivals (14/min) are faster than your 2 desks clear (13/min). Open another desk.' });
+  });
+  it('equal once formatted reads close to, even when the raw rate is a little higher', () => {
+    // 13.2/min against 13/min: both print as 13.
+    const last = Array(25).fill(13); last[22] = 14; last[23] = 14; last[24] = 14;
+    const s = stats({ ops: ops(), last_25_min: last });
+    expect(d.paceMessages({ stats: s, nowMs: NOW, eventStartMs: START })[0].text)
+      .toBe('Arrivals (13/min) are close to what your 2 desks clear (13/min). Consider opening another desk.');
+  });
+  it('91% of capacity reads close to', () => {
+    // 178 in 15 minutes = 11.87/min, 91% of 13/min.
+    const last = Array(25).fill(12); last[23] = 11; last[24] = 11;
+    const s = stats({ ops: ops(), last_25_min: last });
+    expect(d.paceMessages({ stats: s, nowMs: NOW, eventStartMs: START })[0].text)
+      .toBe('Arrivals (12/min) are close to what your 2 desks clear (13/min). Consider opening another desk.');
+  });
   it('before the start, says how long the rest will take at measured speed', () => {
     const s = stats({ registered: 131, checked_in: 45, ops: ops() });
     expect(d.paceMessages({ stats: s, nowMs: START - 60000, eventStartMs: START })).toEqual([

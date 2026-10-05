@@ -118,6 +118,13 @@ import {
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let timer = null;
+// Signed out here or in another tab: stop polling and go back to sign-in.
+sb.auth.onAuthStateChange((event) => {
+  if (event !== 'SIGNED_OUT') return;
+  clearInterval(timer);
+  location.replace('/checkin');
+});
 const $ = (id) => document.getElementById(id);
 const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
 const params = new URLSearchParams(location.search);
@@ -125,7 +132,7 @@ const EVENT_ID = params.get('event');
 const REFRESH_MS = 30000;
 // The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
 const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
-let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, timer = null;
+let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false;
 const charts = {};
 
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
@@ -193,8 +200,12 @@ function renderOps(s) {
   $('ops').hidden = !show;
   if (!show) return;
   const pace = $('pace'); pace.replaceChildren();
-  // paceMessages takes "now" from s.generated_at; Date.now() is only its fallback.
-  for (const m of paceMessages({ stats: s, nowMs: Date.now(), eventStartMs: START_MS, timeZone: EV.timezone })) {
+  // Below 10 check-ins #rate already says "Pace appears after the first 10
+  // check-ins."; do not repeat it here. paceMessages takes "now" from
+  // s.generated_at; Date.now() is only its fallback.
+  const msgs = s.checked_in >= PACE_MIN_CHECKINS
+    ? paceMessages({ stats: s, nowMs: Date.now(), eventStartMs: START_MS, timeZone: EV.timezone }) : [];
+  for (const m of msgs) {
     pace.appendChild(el('div', 'msg' + (m.tone === 'warn' ? ' warn' : ''), m.text));
   }
   const body = $('desk-body'); body.replaceChildren();
@@ -295,12 +306,6 @@ async function refresh() {
     $('desk-link').hidden = !can(ROLE, 'desk');
     $('desk-link').href = '/checkin/desk?event=' + q;
   }
-  // Signed out here or in another tab: stop polling and go back to sign-in.
-  sb.auth.onAuthStateChange((event) => {
-    if (event !== 'SIGNED_OUT') return;
-    clearInterval(timer);
-    location.replace('/checkin');
-  });
   await refresh();
   timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
