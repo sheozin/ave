@@ -121,8 +121,13 @@ body{
 .d-people{max-width:90vw;margin:0 auto 28px}
 .d-people-mod{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.75);font-weight:500;margin-bottom:.35em}
 .d-people-list{font-size:clamp(13px,2.1vw,24px);color:rgba(255,255,255,.6);font-weight:400;line-height:1.4}
-.d-people-person,.d-people-more{white-space:nowrap}
-.d-people-more{color:rgba(255,255,255,.4)}
+.d-people-person{display:inline-block;max-width:100%}
+.d-people-more{white-space:nowrap;color:rgba(255,255,255,.4)}
+@media (max-height:800px){
+  .d-people{margin-bottom:16px}
+  .d-people-mod{font-size:clamp(13px,2vw,20px);margin-bottom:.2em}
+  .d-people-list{font-size:clamp(12px,1.5vw,16px);line-height:1.3}
+}
 .d-timer{
   font-size:clamp(48px,10vw,120px);font-weight:700;line-height:1;
   letter-spacing:.04em;margin-bottom:10px;
@@ -313,8 +318,8 @@ body.is-live #display{
 .st-people{margin-top:.3em;text-align:center;max-width:90%}
 .st-people-mod{font-size:clamp(12px,1.8vw,28px);color:#9ca3af}
 .st-people-list{font-size:clamp(11px,1.5vw,24px);color:#6b7280;margin-top:.2em;line-height:1.35}
-.st-people-person,.st-people-more{white-space:nowrap}
-.st-people-more{color:#4b5563}
+.st-people-person{display:inline-block;max-width:100%}
+.st-people-more{white-space:nowrap;color:#4b5563}
 .st-next{font-size:clamp(10px,1.3vw,16px);color:#374151;margin-top:1.8em;letter-spacing:.07em;text-align:center}
 .st-standby-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:.5em}
 .st-standby-label{font-size:clamp(16px,3vw,36px);font-weight:700;letter-spacing:.2em;color:#374151}
@@ -847,7 +852,14 @@ function updateStageTimerInPlace() {
   const sbCd = document.getElementById('st-standby-countdown');
   if (sbCd) {
     const nx = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
-    if (nx) sbCd.textContent = fmtCountdown(Math.max(0, toMs(nx.scheduled_start) - toTimeMs(correctedNow())));
+    if (nx) {
+      const sb = standbyCountdown(nx);
+      sbCd.textContent = sb.value;
+      const lab = document.getElementById('st-standby-label');
+      const sub = document.getElementById('st-standby-lbl');
+      if (lab) lab.textContent = sb.label;
+      if (sub) sub.textContent = sb.sub;
+    }
   }
 
   if (!sess2) return;
@@ -1329,12 +1341,12 @@ function renderStageTimer() {
         <div class="st-standby-session">${esc(S.event?.name || '')}</div>
       </div>`;
     }
-    const diff = toMs(next.scheduled_start) - toTimeMs(correctedNow());
+    const sb = standbyCountdown(next);
     return `<div class="st-standby-wrap fade-in">
-      <div class="st-standby-label">NEXT UP IN</div>
-      <div id="st-standby-countdown" class="st-standby-countdown">${fmtCountdown(Math.max(0, diff))}</div>
-      <div class="st-standby-lbl">TO START</div>
-      <div class="st-standby-session">${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next))}` : ''}</div>
+      <div id="st-standby-label" class="st-standby-label">${esc(sb.label)}</div>
+      <div id="st-standby-countdown" class="st-standby-countdown">${esc(sb.value)}</div>
+      <div id="st-standby-lbl" class="st-standby-lbl">${esc(sb.sub)}</div>
+      <div class="st-standby-session">${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next, 3))}` : ''}</div>
     </div>`;
   }
 
@@ -1374,7 +1386,7 @@ function renderStageTimer() {
     <div class="st-title">${esc(session.title)}</div>
     ${peopleOf(session) ? peopleBlock(peopleOf(session), 'st-people')
       : session.speaker ? `<div class="st-speaker">${esc(session.speaker)}</div>` : ''}
-    ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next))}` : ''}</div>` : ''}
+    ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next, 3))}` : ''}</div>` : ''}
   </div>`;
 }
 
@@ -1747,12 +1759,15 @@ function peopleOf(s) {
 
 // One line, plain text (callers esc() it): "Jane Smith (moderator), Ahmed Ali".
 // Same format the console writes into speaker. Falls back to speaker.
-function peopleSummary(s) {
+// cap: show that many names, then "+N".
+function peopleSummary(s, cap) {
   const ppl = peopleOf(s);
   if (!ppl) return s?.speaker || '';
   const mods = ppl.filter(p => p.role === 'moderator').map(p => `${p.name} (moderator)`);
   const rest = ppl.filter(p => p.role !== 'moderator').map(p => p.name);
-  return [...mods, ...rest].join(', ');
+  const all = [...mods, ...rest];
+  if (cap && all.length > cap) return `${all.slice(0, cap).join(', ')} +${all.length - cap}`;
+  return all.join(', ');
 }
 
 const PEOPLE_CAP = 6;  // speakers/panelists shown before "+N more"
@@ -1803,6 +1818,56 @@ function fmtTimer(remainMs) {
     return `${prefix}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${tenth}`;
   }
   return `${prefix}${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// Epoch ms of a wall-clock date + time in an IANA zone (DST-safe: the
+// offset is re-read at the first guess, as in checkin-window.js).
+function tzOffsetMs(epochMs, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(epochMs));
+  const get = t => Number(parts.find(p => p.type === t).value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return asUtc - Math.floor(epochMs / 1000) * 1000;
+}
+function zonedEpoch(ymd, hms, timeZone) {
+  const [y, mo, d] = ymd.split('-').map(Number);
+  const [h, mi, se] = hms.split(':').map(Number);
+  const wall = Date.UTC(y, mo - 1, d, h || 0, mi || 0, se || 0);
+  const first = wall - tzOffsetMs(wall, timeZone);
+  return wall - tzOffsetMs(first, timeZone);
+}
+
+// Stage timer standby: counts to the real start (event date + session time in
+// the event's timezone). Old feeds without date/timezone keep the time-of-day
+// countdown.
+function standbyCountdown(next) {
+  const t = timeStr(next.scheduled_start || next.planned_start || '').substring(0, 8);
+  const date = S.event?.date, tz = S.event?.timezone;
+  if (!date || !tz || !t) {
+    const diff = toMs(next.scheduled_start) - toTimeMs(correctedNow());
+    return { label: 'NEXT UP IN', value: fmtCountdown(Math.max(0, diff)), sub: 'TO START' };
+  }
+  let startMs;
+  try { startMs = zonedEpoch(String(date).substring(0, 10), t, tz); } catch { startMs = NaN; }
+  if (isNaN(startMs)) {
+    const diff = toMs(next.scheduled_start) - toTimeMs(correctedNow());
+    return { label: 'NEXT UP IN', value: fmtCountdown(Math.max(0, diff)), sub: 'TO START' };
+  }
+  const diff = startMs - correctedNow();
+  if (diff <= 0) return { label: 'NEXT UP', value: 'STARTING NOW', sub: '' };
+  if (diff > 86_400_000) {
+    const [y, mo, d] = String(date).substring(0, 10).split('-').map(Number);
+    const day = new Date(Date.UTC(y, mo - 1, d));
+    const wd  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][day.getUTCDay()];
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mo - 1];
+    return { label: 'STARTS', value: `${wd} ${d} ${mon}, ${t.substring(0, 5)}`, sub: '' };
+  }
+  const sec = Math.floor(diff / 1000);
+  const hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60), ss = sec % 60;
+  const p2 = n => String(n).padStart(2, '0');
+  return { label: 'NEXT UP IN', value: hh ? `${p2(hh)}:${p2(mm)}:${p2(ss)}` : `${p2(mm)}:${p2(ss)}`, sub: 'TO START' };
 }
 
 function fmtCountdown(ms) {

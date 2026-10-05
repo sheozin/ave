@@ -49,7 +49,8 @@ BEGIN
   IF NOT v_ok THEN RAISE EXCEPTION 'PROBE FAIL 3: NULL accepted as people'; END IF;
   v_checks := v_checks + 1;
 
-  -- 4. anon display_feed carries people, in order, and [] for plain sessions
+  -- 4. anon display_feed carries people, in order, and [] for plain sessions;
+  --    the event carries date and timezone
   INSERT INTO leod_signage_displays (event_id, name) VALUES (v_ev, 'Probe TV')
     RETURNING id, display_secret INTO v_disp, v_secret;
   PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
@@ -62,7 +63,9 @@ BEGIN
      OR v_feed->'sessions'->1->'people'->0->>'role' <> 'moderator'
      OR v_feed->'sessions'->1->'people'->1->>'name' <> 'Ahmed Ali'
      OR v_feed->'sessions'->1->>'speaker' <> 'Jane Smith (moderator), Ahmed Ali'
-     OR v_feed->'sessions'->1 ? 'notes' THEN
+     OR v_feed->'sessions'->1 ? 'notes'
+     OR v_feed->'event'->>'date' <> (current_date + 30)::text
+     OR v_feed->'event'->>'timezone' IS NULL THEN
     RAISE EXCEPTION 'PROBE FAIL 4: feed is %', v_feed;
   END IF;
   v_checks := v_checks + 1;

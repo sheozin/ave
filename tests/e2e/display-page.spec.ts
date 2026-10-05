@@ -9,7 +9,7 @@
 
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-const BASE       = 'http://127.0.0.1:7230';
+const BASE       = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const DISP_URL   = `${BASE}/cuedeck-display.html`;
 
 const FAKE_SUPA_URL = 'https://fakecuedecktest.supabase.co';
@@ -553,4 +553,154 @@ test.describe('Display: session people', () => {
     await expect(page.locator('.d-people')).toHaveCount(0);
   });
 
+});
+
+// ── SESSION PEOPLE: LONG NAMES AND SMALL SCREENS ─────────────────────────────
+
+const LONG_PERSON = { name: 'H.E. Dr. Mohamed Abdel-Rahman El-Sayed',
+  company: 'Ministry of Tourism and Antiquities, Arab Republic of Egypt', role: 'speaker' };
+const BIG_PANEL = [
+  { name: 'Jane Smith', company: 'Contoso', role: 'moderator' },
+  LONG_PERSON,
+  { name: 'Ahmed Ali', company: 'Fabrikam', role: 'panelist' },
+  { name: 'Sara Lee', company: 'Northwind', role: 'panelist' },
+  { name: 'Omar Said', company: 'Egyptian Tourism Authority', role: 'panelist' },
+  { name: 'Lina Haddad', company: 'Marriott International', role: 'panelist' },
+  { name: 'Karim Mostafa', company: 'AVE Events', role: 'panelist' },
+  { name: 'Nour El-Din', company: 'GTR', role: 'panelist' },
+];
+
+async function personOverflow(page: Page, sel: string) {
+  return page.evaluate((s) => {
+    const els = [...document.querySelectorAll(s)];
+    return { count: els.length, over: els.filter(e => e.getBoundingClientRect().right > window.innerWidth + 0.5
+      || e.getBoundingClientRect().left < -0.5).map(e => e.textContent) };
+  }, sel);
+}
+
+for (const [w, h] of [[1080, 1920], [1280, 720]] as const) {
+  test.describe(`Display: long names at ${w}x${h}`, () => {
+    test.use({ viewport: { width: w, height: h } });
+
+    test(`48 schedule keeps every person on screen (${w}x${h})`, async ({ page }) => {
+      await mockSupabase(page, { feed: () => feedWithPeople([{ ...LONG_PERSON, role: 'moderator' }, ...BIG_PANEL.slice(1)]) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.d-people-mod')).toContainText('Ministry of Tourism');
+      const r = await personOverflow(page, '.d-people-person');
+      expect(r.count).toBe(7);
+      expect(r.over).toEqual([]);
+    });
+
+    test(`49 stage timer keeps every person on screen (${w}x${h})`, async ({ page }) => {
+      await mockSupabase(page, { feed: () => feedWithPeople(BIG_PANEL, 'stage-timer') });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.st-people-list')).toContainText('Ministry of Tourism');
+      const r = await personOverflow(page, '.st-people-person');
+      expect(r.count).toBe(7);
+      expect(r.over).toEqual([]);
+    });
+  });
+}
+
+test.describe('Display: small landscape screen', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('50 a big panel still leaves NEXT SESSION on screen at 1280x720', async ({ page }) => {
+    // a two-line title plus the full panel: before the max-height rule this
+    // pushed the next session's time below 720 px
+    await mockSupabase(page, { feed: () => {
+      const f = feedWithPeople(BIG_PANEL);
+      (f.sessions[0] as Record<string, unknown>).title = 'Panel: the future of MICE and business events in North Africa';
+      return f;
+    } });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-list')).toBeVisible();
+    for (const sel of ['.d-next-lbl', '.d-next-title', '.d-next-time']) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box, sel).not.toBeNull();
+      expect(box!.y + box!.height, sel).toBeLessThanOrEqual(720);
+    }
+  });
+});
+
+test.describe('Display: stage timer next line', () => {
+
+  test('51 next and standby lines cap the people at 3 names plus +N', async ({ page }) => {
+    const f = makeFeed({ display: { content_mode: 'stage-timer' } });
+    Object.assign(f.sessions[1] as Record<string, unknown>, { title: 'Panel B', speaker: 'ignored', people: BIG_PANEL });
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-next')).toHaveText(
+      'NEXT: Panel B · Jane Smith (moderator), H.E. Dr. Mohamed Abdel-Rahman El-Sayed, Ahmed Ali +5');
+  });
+
+  test('52 standby line uses the same cap', async ({ page }) => {
+    const f = makeFeed({ display: { content_mode: 'stage-timer' } });
+    (f.sessions[0] as Record<string, unknown>).status = 'ENDED';
+    Object.assign(f.sessions[1] as Record<string, unknown>, { title: 'Panel B', people: BIG_PANEL.slice(0, 5) });
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-standby-session')).toHaveText(
+      'Panel B · Jane Smith (moderator), H.E. Dr. Mohamed Abdel-Rahman El-Sayed, Ahmed Ali +2');
+  });
+
+});
+
+// ── STAGE TIMER STANDBY: REAL EVENT DATE ──────────────────────────────────
+
+// Event in Africa/Cairo (UTC+3 on 12 Oct 2026); next session 09:00 local = 06:00Z.
+// The display's clock follows the feed's server_time, so that fixes "now".
+function standbyFeed(nowIso: string | null, event: Record<string, unknown> | null = { date: '2026-10-12', timezone: 'Africa/Cairo' }) {
+  const f = makeFeed({ display: { content_mode: 'stage-timer' },
+    event: { name: 'GTR North Africa 2026', brand_color: '#3b82f6', ...(event || {}) } });
+  if (nowIso) f.server_time = nowIso;
+  f.sessions = [
+    { id: 'n1', sort_order: 1, title: 'Opening', speaker: 'Jane Smith', company: null, room: 'Hall A',
+      status: 'PLANNED', planned_start: '09:00:00', planned_end: '09:30:00',
+      scheduled_start: '09:00:00', scheduled_end: '09:30:00', actual_start: null },
+  ];
+  return f;
+}
+
+test.describe('Display: stage timer counts to the real event start', () => {
+  test.use({ timezoneId: 'UTC' });
+
+  test('53 a week ahead shows the start day and event-local time', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-05T12:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('Mon 12 Oct, 09:00');
+    await expect(page.locator('#st-standby-label')).toHaveText('STARTS');
+    await page.waitForTimeout(1500); // the 1 s tick keeps the same text
+    await expect(page.locator('#st-standby-countdown')).toHaveText('Mon 12 Oct, 09:00');
+  });
+
+  test('54 two hours ahead counts down with hours', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T04:00:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(02:00:00|01:59:5\d)$/);
+    await expect(page.locator('#st-standby-label')).toHaveText('NEXT UP IN');
+    await page.waitForTimeout(1500);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(02:00:00|01:59:[45]\d)$/);
+  });
+
+  test('55 ten minutes ahead counts down in minutes', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T05:50:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^(10:00|09:5\d)$/);
+  });
+
+  test('56 past the start and not started says STARTING NOW', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed('2026-10-12T06:05:00Z') });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('STARTING NOW');
+    await page.waitForTimeout(1500);
+    await expect(page.locator('#st-standby-countdown')).toHaveText('STARTING NOW');
+  });
+
+  test('57 a feed without date and timezone keeps the old time-of-day countdown', async ({ page }) => {
+    await mockSupabase(page, { feed: () => standbyFeed(null, null) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-standby-label')).toHaveText('NEXT UP IN');
+    await expect(page.locator('#st-standby-countdown')).toHaveText(/^\d{2,}:\d{2}$/);
+  });
 });

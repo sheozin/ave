@@ -11,8 +11,10 @@
 --    The console keeps writing speaker/company as a readable summary when
 --    people is non-empty, so everything that reads speaker keeps working.
 -- 2. display_feed: same body as live (080), plus 'people' in the session
---    object. CREATE OR REPLACE keeps the existing grants; they are restated
---    below anyway so this file stands on its own.
+--    object and 'date' + 'timezone' in the event object (the stage timer
+--    counts to the real start in the event's timezone; before this it
+--    compared time of day only). CREATE OR REPLACE keeps the existing
+--    grants; they are restated below anyway so this file stands on its own.
 --
 -- Rollback (not run):
 --   re-run the display_feed definition from 080 (without 'people'), then
@@ -27,7 +29,7 @@ ALTER TABLE public.leod_sessions
 ALTER TABLE public.leod_sessions
   ADD CONSTRAINT leod_sessions_people_is_array CHECK (jsonb_typeof(people) = 'array');
 
--- ── 2. display_feed (live body from pg_get_functiondef, 'people' added) ──
+-- ── 2. display_feed (live body from pg_get_functiondef; 'people', 'date', 'timezone' added) ──
 CREATE OR REPLACE FUNCTION public.display_feed(p_display_id uuid, p_secret text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -51,7 +53,8 @@ BEGIN
   RETURN jsonb_build_object(
     'server_time', clock_timestamp(),
     'display',     to_jsonb(d) - 'display_secret',
-    'event', (SELECT jsonb_build_object('name', e.name, 'brand_color', e.brand_color)
+    'event', (SELECT jsonb_build_object('name', e.name, 'brand_color', e.brand_color,
+                                        'date', e.date, 'timezone', e.timezone)
                 FROM leod_events e WHERE e.id = d.event_id),
     'sessions', COALESCE((
        SELECT jsonb_agg(jsonb_build_object(
