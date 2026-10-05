@@ -455,6 +455,26 @@ Deno.test('checkin-record-scans scanner: cannot undo and cannot send an attendee
   assert(!world.rpcCalls.some(x => x.name === 'checkin_apply_scan'), 'scan applied')
 })
 
+Deno.test('checkin-record-scans scanner: no names for a batch, an old scan, or past the rate', async () => {
+  await setupScanner()
+  const two = [scanTok(), scanTok()]
+  let r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: two })
+  assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'batch got names ' + JSON.stringify(r.body))
+  await setupScanner()
+  const old = { ...scanTok(), scanned_at: new Date(Date.now() - 10 * 60000).toISOString() }
+  r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [old] })
+  assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'old scan got a name ' + JSON.stringify(r.body))
+  await setupScanner()
+  world.tables.leod_checkin_scan_events = Array.from({ length: 20 }, () => ({ id: crypto.randomUUID(), device_id: DEV, received_at: new Date().toISOString() }))
+  r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  assert(r.status === 200 && Object.keys(r.body.who as Row).length === 0, 'rate not applied ' + JSON.stringify(r.body))
+})
+Deno.test('checkin-scanner: no tokens when scanning at its point is switched off', async () => {
+  await setupScanner({ ent: { entrance_scanning: false } })
+  const r = await call('checkin-scanner', { action: 'tokens', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 403 && !r.body.tokens && String(r.body.error).startsWith('Door scanning is switched off'), JSON.stringify(r))
+})
+
 // ── scanner pairing (098) and checkin-scanner ───────────────────────
 Deno.test('checkin-kiosk-pair: a scanner code needs a scan point that is on, not self-registration', async () => {
   setup('lead', { ent: { checkin_core: true, status: 'test', self_registration: false, entrance_scanning: true, session_scanning: false, multi_point_scanning: false } })

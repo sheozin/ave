@@ -4,8 +4,8 @@
 // Authenticated by its device key, like the kiosk; never by a user session.
 //
 //   action 'config'  event name and date, test or live, the scan point it is
-//                    paired to, and whether scanning there is allowed now
-//                    (with the reason when not).
+//                    paired to, whether scanning there is allowed now (with
+//                    the reason when not), and the server's clock.
 //   action 'tokens'  this event's QR tokens and nothing else: no names,
 //                    emails, companies or ids. A roaming phone gets left on
 //                    chairs, so the offline cache answers only "is this code
@@ -67,10 +67,24 @@ Deno.serve(async (req) => {
       scan_point: { name: sp.name, kind: sp.kind },
       allowed: refusal === null,
       reason: refusal,
+      // The phone has no user session for checkin_server_now; it corrects its
+      // clock from this, as the desk does (checkin-clock.js).
+      server_now: new Date().toISOString(),
     })
   }
 
-  // tokens
+  // tokens: same gate as checkin-record-scans and config. A scanner whose
+  // scan point is switched off gets no guest data at all.
+  const { data: tsp, error: tspErr } = await sb.from('leod_checkin_scan_points')
+    .select('kind').eq('id', auth.device.scan_point_id).eq('event_id', event_id).maybeSingle()
+  if (tspErr) return json({ error: tspErr.message }, 500)
+  if (!tsp) return json({ error: 'This scanner is not paired to a scan point. Pair it again from the desk.' }, 403)
+  const tokRefusal = scanPointRefusal(tsp.kind, {
+    multi_point_scanning: !!ent.multi_point_scanning,
+    entrance_scanning: !!ent.entrance_scanning,
+    session_scanning: !!ent.session_scanning,
+  })
+  if (tokRefusal) return json({ error: tokRefusal }, 403)
   const { data: rows, error: tokErr } = await sb.from('leod_checkin_attendees')
     .select('qr_token').eq('event_id', event_id).not('qr_token', 'is', null).limit(MAX_TOKENS + 1)
   if (tokErr) return json({ error: tokErr.message }, 500)
