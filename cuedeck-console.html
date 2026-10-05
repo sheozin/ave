@@ -989,6 +989,7 @@
       font-family: inherit; cursor: pointer; transition: all .12s;
     }
     .sp-card-mgmt button:hover { color: var(--text); border-color: var(--border); background: var(--surface2); }
+    .sp-card-mgmt button.confirm-pending { background: rgba(239,68,68,.25); border-color: #ef4444; color: #F87171; }
     .sp-display-card {
       background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border);
       border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 8px;
@@ -4080,7 +4081,7 @@ function renderSignagePanel() {
           <div class="sp-card-mgmt">
             <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
             ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
-            <button onclick="resetDisplayKey('${esc(d.id)}')" title="Give this display a new key. Its current link and QR code stop working.">Reset key</button>
+            <button onclick="resetDisplayKey('${esc(d.id)}', this)" title="Give this display a new key. The screen will need to be paired again; its current link and QR code stop working.">Reset key</button>
           </div>
         </div>`;
       }).join('')
@@ -4222,7 +4223,10 @@ async function pairDisplayByCode(code) {
   if (linkErr || linkResult !== 'linked') {
     // Do not leave an unpaired display behind.
     var { error: delErr } = await sb.from('leod_signage_displays').delete().eq('id', display.id);
-    if (delErr) console.error('Could not remove the unpaired display:', delErr);
+    if (delErr) {
+      console.error('Could not remove the unpaired display:', delErr);
+      pushToast('The unpaired display could not be removed; delete it from the list.', 'warn');
+    }
     var reason = {
       not_found: t('toast.invalidPairing'),
       expired:   t('toast.codeExpired'),
@@ -4244,8 +4248,24 @@ async function pairDisplayByCode(code) {
 // display_rotate_secret (083) gives the display a new key. The screen holding
 // the old one gets nothing from display_feed and returns to pairing; the
 // display's Launch, QR and Copy link use the new key.
-async function resetDisplayKey(displayId) {
-  if (!confirm("Reset this display's key? The screen will need to be paired again.")) return;
+// Two clicks, like confirmEnd: the first arms the button for 3 s.
+const _keyResetPending = new Map(); // displayId → timer id
+async function resetDisplayKey(displayId, btn) {
+  if (!_keyResetPending.has(displayId)) {
+    if (btn) {
+      btn.textContent = 'Click again to reset key';
+      btn.classList.add('confirm-pending');
+    }
+    const timer = setTimeout(() => {
+      _keyResetPending.delete(displayId);
+      if (btn && btn.isConnected) { btn.textContent = 'Reset key'; btn.classList.remove('confirm-pending'); }
+    }, 3000);
+    _keyResetPending.set(displayId, timer);
+    return;
+  }
+  clearTimeout(_keyResetPending.get(displayId));
+  _keyResetPending.delete(displayId);
+  if (btn) { btn.textContent = 'Reset key'; btn.classList.remove('confirm-pending'); }
   const d = S.displays.find(x => x.id === displayId);
   const { data, error } = await sb.rpc('display_rotate_secret', { p_display_id: displayId });
   if (error || data !== true) {

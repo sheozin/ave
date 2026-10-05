@@ -4,7 +4,7 @@
 // is answered by a mock. An unmocked Supabase request fails the test.
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:7230';
+const BASE = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const EVENT_ID = '00000000-0000-4000-8000-0000000000e1';
 const NEW_DISP = '00000000-0000-4000-8000-0000000000d1';
 
@@ -21,6 +21,8 @@ async function mockSupabase(page: Page, over: Partial<Pick<Mock, 'linkAnswer' | 
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
   const reply = (route: Route, status: number, body?: unknown) =>
     route.fulfill({ status, headers: cors, contentType: 'application/json', body: body === undefined ? '' : JSON.stringify(body) });
+  // Native dialogs are not allowed in the console; any one fails the test.
+  page.on('dialog', d => { m.unmocked.push('dialog ' + d.type() + ': ' + d.message()); d.dismiss().catch(() => {}); });
   page.on('websocket', ws => { if (/supabase\.co/.test(ws.url())) m.unmocked.push('ws ' + ws.url()); });
   await page.route(u => /(^|\.)supabase\.co$/.test(u.hostname), async route => {
     const req = route.request();
@@ -75,6 +77,18 @@ test.describe('Console: pair a display by code', () => {
     });
   }
 
+  test('if the cleanup delete fails, the operator is told to delete the display', async ({ page }) => {
+    const m = await mockSupabase(page, { linkAnswer: 'expired' });
+    await page.route(u => u.pathname.endsWith('/leod_signage_displays'), r =>
+      r.request().method() === 'DELETE'
+        ? r.fulfill({ status: 500, headers: { 'access-control-allow-origin': '*' }, contentType: 'application/json', body: '{"message":"boom"}' })
+        : r.fallback());
+    await page.evaluate(`pairDisplayByCode('ABC234')`);
+    await expect(page.locator('#toast-container .toast-msg', { hasText: 'The unpaired display could not be removed; delete it from the list.' })).toHaveCount(1);
+    await expect(toastText(page)).toContainText(/expired/i);
+    expect(m.unmocked).toEqual([]);
+  });
+
   test('a failed link call also removes the new display', async ({ page }) => {
     const m = await mockSupabase(page);
     await page.route('**/rpc/display_pair_link', r => r.fulfill({ status: 500, headers: { 'access-control-allow-origin': '*' },
@@ -90,38 +104,60 @@ test.describe('Console: reset a display key', () => {
 
   const DISP = { id: NEW_DISP, event_id: EVENT_ID, name: 'Lobby TV', zone_type: 'lobby', orientation: 'landscape',
                  content_mode: 'schedule', display_secret: 'ab'.repeat(24) };
+  const showCard = (page: Page) =>
+    page.evaluate(`S.displays = [${JSON.stringify(DISP)}]; renderSignagePanel();`);
+  // The panel lives behind the sign-in screen; click the button through the DOM.
+  const clickReset = (page: Page) =>
+    page.evaluate(() => (document.querySelector('.sp-card-mgmt button[onclick^="resetDisplayKey"]') as HTMLButtonElement).click());
+  const resetBtn = (page: Page) => page.locator('.sp-card-mgmt button[onclick^="resetDisplayKey"]');
 
   test('each display card has a Reset key button', async ({ page }) => {
-    await mockSupabase(page);
-    await page.evaluate(`S.displays = [${JSON.stringify(DISP)}]; renderSignagePanel();`);
-    await expect(page.locator('.sp-card-mgmt button', { hasText: 'Reset key' })).toHaveCount(1);
-  });
-
-  test('confirming calls display_rotate_secret and reloads the displays', async ({ page }) => {
     const m = await mockSupabase(page);
-    let asked = '';
-    page.on('dialog', d => { asked = d.message(); d.accept(); });
-    await page.evaluate(`S.displays = [${JSON.stringify(DISP)}]; resetDisplayKey('${NEW_DISP}')`);
-    await expect(toastText(page)).toContainText(/key reset/i);
-    expect(asked).toBe("Reset this display's key? The screen will need to be paired again.");
-    expect(m.bodies['display_rotate_secret']).toEqual({ p_display_id: NEW_DISP });
-    expect(m.calls.filter(c => c.startsWith('GET leod_signage_displays')).length).toBeGreaterThan(0);
+    await showCard(page);
+    await expect(resetBtn(page)).toHaveCount(1);
+    await expect(resetBtn(page)).toHaveText('Reset key');
     expect(m.unmocked).toEqual([]);
   });
 
-  test('cancelling does nothing', async ({ page }) => {
+  test('the first click arms the button, the second calls display_rotate_secret and reloads', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
     const m = await mockSupabase(page);
-    page.on('dialog', d => d.dismiss());
-    await page.evaluate(`S.displays = [${JSON.stringify(DISP)}]; resetDisplayKey('${NEW_DISP}')`);
-    await page.waitForTimeout(300);
+    await showCard(page);
+    await clickReset(page);
+    await expect(resetBtn(page)).toHaveText('Click again to reset key');
+    await expect(resetBtn(page)).toHaveClass(/confirm-pending/);
     expect(m.calls.filter(c => c.includes('display_rotate_secret'))).toEqual([]);
+    await clickReset(page);
+    await expect(toastText(page)).toContainText(/key reset/i);
+    expect(m.bodies['display_rotate_secret']).toEqual({ p_display_id: NEW_DISP });
+    // the toast comes before the reload, so wait for it
+    await expect.poll(() => m.calls.filter(c => c.startsWith('GET leod_signage_displays')).length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    expect(m.unmocked).toEqual([]);
+  });
+
+  test('one click does nothing and disarms after 3 s', async ({ page }) => {
+    const m = await mockSupabase(page);
+    await showCard(page);
+    await clickReset(page);
+    await expect(resetBtn(page)).toHaveClass(/confirm-pending/);
+    await expect(resetBtn(page)).toHaveText('Reset key', { timeout: 4500 });
+    await expect(resetBtn(page)).not.toHaveClass(/confirm-pending/);
+    // a click after disarming arms again rather than resetting
+    await clickReset(page);
+    await expect(resetBtn(page)).toHaveText('Click again to reset key');
+    expect(m.calls.filter(c => c.includes('display_rotate_secret'))).toEqual([]);
+    expect(m.unmocked).toEqual([]);
   });
 
   test('a refused reset says so', async ({ page }) => {
-    await mockSupabase(page, { rotateAnswer: false });
-    page.on('dialog', d => d.accept());
-    await page.evaluate(`S.displays = [${JSON.stringify(DISP)}]; resetDisplayKey('${NEW_DISP}')`);
+    const m = await mockSupabase(page, { rotateAnswer: false });
+    await showCard(page);
+    await clickReset(page);
+    await clickReset(page);
     await expect(toastText(page)).toContainText(/could not reset/i);
+    expect(m.unmocked).toEqual([]);
   });
 
 });
