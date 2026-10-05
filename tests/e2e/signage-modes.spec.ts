@@ -8,8 +8,32 @@
 
 import { test, expect } from '@playwright/test';
 
-const BASE     = 'http://127.0.0.1:7230';
+const BASE     = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const DISP_URL = `${BASE}/cuedeck-display.html`;
+
+// No live DB. The page starts pairing on load (display_pair_start, then
+// display_pair_poll every 2 s); until 2026-10-05 every run of this file
+// inserted pairing rows into production. Both RPCs are answered here, and any
+// other Supabase request is refused and fails the test.
+let unmocked: string[] = [];
+test.beforeEach(async ({ page }) => {
+  unmocked = [];
+  page.on('websocket', ws => { if (/supabase\.co/.test(ws.url())) unmocked.push('ws ' + ws.url()); });
+  await page.route(u => /(^|\.)supabase\.co$/.test(u.hostname), async route => {
+    const req = route.request();
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: cors });
+    const url = req.url();
+    const json = (body: unknown) => route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
+    if (url.includes('/rest/v1/rpc/display_pair_start')) return json(true);
+    if (url.includes('/rest/v1/rpc/display_pair_poll'))  return json(null);
+    unmocked.push(req.method() + ' ' + url);
+    return route.fulfill({ status: 403, contentType: 'application/json', headers: cors, body: '{"message":"not mocked"}' });
+  });
+});
+test.afterEach(() => {
+  expect(unmocked, 'unmocked Supabase requests').toEqual([]);
+});
 
 // ── Helper: boot the display page into a specific mode ──────────────────────
 // Injects mock S + D state, shows the display frame, and calls render().

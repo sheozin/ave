@@ -9,15 +9,17 @@
 
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-const BASE       = 'http://127.0.0.1:7230';
+const BASE       = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const DISP_URL   = `${BASE}/cuedeck-display.html`;
 
 const FAKE_SUPA_URL = 'https://fakecuedecktest.supabase.co';
+const REAL_SUPA_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const FAKE_SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake';
 const FAKE_DISP_ID  = '00000000-0000-0000-0000-000000000001';
 const FAKE_SECRET   = 'a'.repeat(48);
 
-// #url=...&key=...&id=...&s=...
+// #url=...&key=...&id=...&s=... The url and key are a crafted link's
+// attempt to send the key elsewhere; the page must ignore them.
 function makeHash(opts: { id?: string | null; s?: string | null } = {}) {
   const id = opts.id === undefined ? FAKE_DISP_ID : opts.id;
   const s  = opts.s  === undefined ? FAKE_SECRET  : opts.s;
@@ -60,6 +62,7 @@ interface Mock {
   startBodies: Record<string, unknown>[];
   pollBodies: Record<string, unknown>[];
   otherRest: string[];
+  hosts: string[];
 }
 
 async function mockSupabase(page: Page, opts: Partial<Pick<Mock, 'feed' | 'pairStart' | 'pairPoll'>> = {}) {
@@ -67,7 +70,7 @@ async function mockSupabase(page: Page, opts: Partial<Pick<Mock, 'feed' | 'pairS
     feed: opts.feed || (() => makeFeed()),
     pairStart: opts.pairStart || (() => true),
     pairPoll: opts.pairPoll || (() => null),
-    feedBodies: [], startBodies: [], pollBodies: [], otherRest: [],
+    feedBodies: [], startBodies: [], pollBodies: [], otherRest: [], hosts: [],
   };
   const json = (route: Route, body: unknown) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body),
@@ -79,6 +82,7 @@ async function mockSupabase(page: Page, opts: Partial<Pick<Mock, 'feed' | 'pairS
         'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
     }
     const url = req.url();
+    m.hosts.push(new URL(url).host);
     const body = (() => { try { return JSON.parse(req.postData() || '{}'); } catch { return {}; } })();
     if (url.includes('/rpc/display_feed')) {
       m.feedBodies.push(body);
@@ -199,18 +203,28 @@ test.describe('Display: manual link entry', () => {
 
 test.describe('Display: hash-param pre-fill', () => {
 
-  test('14 hash params pre-fill Supabase URL input', async ({ page }) => {
-    await mockSupabase(page);
+  test('14 a url in the link is ignored: the key only goes to the built-in project', async ({ page }) => {
+    const m = await mockSupabase(page);
     await page.goto(`${DISP_URL}${makeHash()}`);
     await expect(page.locator('#display')).toBeVisible();
-    expect(await page.locator('#su-url').inputValue()).toBe(FAKE_SUPA_URL);
+    expect(await page.locator('#su-url').inputValue()).toBe(REAL_SUPA_URL);
+    expect(m.hosts.length).toBeGreaterThan(0);
+    expect(new Set(m.hosts)).toEqual(new Set([new URL(REAL_SUPA_URL).host]));
   });
 
-  test('15 hash params pre-fill anon key input', async ({ page }) => {
+  test('15 a key in the link is ignored', async ({ page }) => {
     await mockSupabase(page);
     await page.goto(`${DISP_URL}${makeHash()}`);
     await expect(page.locator('#display')).toBeVisible();
-    expect(await page.locator('#su-key').inputValue()).toBe(FAKE_SUPA_KEY);
+    expect(await page.locator('#su-key').inputValue()).not.toBe(FAKE_SUPA_KEY);
+    expect(await page.locator('#su-key').inputValue()).toMatch(/^sb_publishable_/);
+  });
+
+  test('15b a url in the query string is ignored too', async ({ page }) => {
+    const m = await mockSupabase(page);
+    await page.goto(`${DISP_URL}?url=${encodeURIComponent(FAKE_SUPA_URL)}&key=x#id=${FAKE_DISP_ID}&s=${FAKE_SECRET}`);
+    await expect(page.locator('#display')).toBeVisible();
+    expect(m.hosts).not.toContain(new URL(FAKE_SUPA_URL).host);
   });
 
   test('16 hash params pre-fill display ID input', async ({ page }) => {
@@ -422,6 +436,106 @@ test.describe('Display: feed', () => {
     await expect(page.locator('#display')).toBeVisible({ timeout: 5000 });
     await expect(page.locator('.d-big-title')).toHaveText('Feed still flowing', { timeout: 9000 });
     expect(m.feedBodies.length).toBeGreaterThanOrEqual(3);
+  });
+
+});
+
+// ── FOLLOW-UPS (2026-10-05 review) ─────────────────────────────────────────
+
+test.describe('Display: follow-ups', () => {
+
+  const SAVED_ID     = '00000000-0000-0000-0000-0000000000bb';
+  const SAVED_SECRET = 'c'.repeat(48);
+  async function saveCreds(page: Page, id: string, s: string) {
+    await page.evaluate(({ id, s }) => {
+      localStorage.setItem('cuedeck_display_id', id);
+      localStorage.setItem('cuedeck_display_secret', s);
+      localStorage.setItem('cuedeck_display_paired_at', String(Date.now()));
+    }, { id, s });
+  }
+
+  test('34 an event rename reaches the header without a reload', async ({ page }) => {
+    let name = 'GTR Probe Summit';
+    const fixed = makeFeed();  // sessions and display stay identical between polls
+    await mockSupabase(page, { feed: () => ({ ...fixed, event: { name, brand_color: '#3b82f6' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#d-event-name')).toContainText('GTR PROBE SUMMIT');
+    name = 'GTR North Africa 2026';
+    await expect(page.locator('#d-event-name')).toContainText('GTR NORTH AFRICA 2026', { timeout: 6000 });
+  });
+
+  test('35 a stale link falls back to the good saved pairing and keeps it', async ({ page }) => {
+    const m = await mockSupabase(page, { feed: () => {
+      const last = m.feedBodies[m.feedBodies.length - 1] as { p_display_id: string };
+      return last.p_display_id === SAVED_ID ? makeFeed({ display: { id: SAVED_ID } }) : null;
+    } });
+    await page.goto(`${BASE}/`);  // same origin; a hash-only change to DISP_URL would not reload
+    await saveCreds(page, SAVED_ID, SAVED_SECRET);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#display')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote');
+    expect(m.feedBodies[0]).toEqual({ p_display_id: FAKE_DISP_ID, p_secret: FAKE_SECRET });
+    expect(m.feedBodies).toContainEqual({ p_display_id: SAVED_ID, p_secret: SAVED_SECRET });
+    const saved = await page.evaluate(() => [localStorage.getItem('cuedeck_display_id'), localStorage.getItem('cuedeck_display_secret')]);
+    expect(saved).toEqual([SAVED_ID, SAVED_SECRET]);
+    expect(page.url()).not.toContain(FAKE_SECRET);
+  });
+
+  test('36 when the saved pairing itself fails it is forgotten', async ({ page }) => {
+    await mockSupabase(page, { feed: () => null });
+    await page.goto(`${BASE}/`);  // same origin; a hash-only change to DISP_URL would not reload
+    await saveCreds(page, SAVED_ID, SAVED_SECRET);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#pairing-code')).toHaveText(/^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{3}$/, { timeout: 8000 });
+    const saved = await page.evaluate(() => [localStorage.getItem('cuedeck_display_id'), localStorage.getItem('cuedeck_display_secret')]);
+    expect(saved).toEqual([null, null]);
+  });
+
+  test('37 a first render that throws is retried on the next poll', async ({ page }) => {
+    await page.addInitScript(() => {
+      // Fail the first write to the content area only.
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+      let failed = false;
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        configurable: true, get: desc.get,
+        set(v: string) {
+          if (!failed && (this as Element).id === 'content-area') { failed = true; throw new Error('first render fails'); }
+          desc.set!.call(this, v);
+        },
+      });
+    });
+    const fixed = makeFeed();
+    await mockSupabase(page, { feed: () => ({ ...fixed, server_time: new Date().toISOString() }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote', { timeout: 6000 });
+  });
+
+  test('38 repeated render errors do not show the reconnect banner, and rendering resumes', async ({ page }) => {
+    await page.addInitScript(() => {
+      // The first four writes to the content area throw (four polls in a row).
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+      let fails = 0;
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        configurable: true, get: desc.get,
+        set(v: string) {
+          if (fails < 4 && (this as Element).id === 'content-area') { fails++; throw new Error('render fails'); }
+          desc.set!.call(this, v);
+        },
+      });
+      // Record whether the banner is ever shown.
+      (window as unknown as { __bannerShown: boolean }).__bannerShown = false;
+      document.addEventListener('DOMContentLoaded', () => {
+        const el = document.getElementById('reconnect-banner')!;
+        new MutationObserver(() => {
+          if (el.style.display === 'block') (window as unknown as { __bannerShown: boolean }).__bannerShown = true;
+        }).observe(el, { attributes: true, attributeFilter: ['style'] });
+      });
+    });
+    const fixed = makeFeed();
+    await mockSupabase(page, { feed: () => ({ ...fixed, server_time: new Date().toISOString() }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote', { timeout: 15000 });
+    expect(await page.evaluate(() => (window as unknown as { __bannerShown: boolean }).__bannerShown)).toBe(false);
   });
 
 });

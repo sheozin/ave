@@ -1,4 +1,6 @@
 -- tests/sql/080-display-feed-probe.sql
+-- Valid between 080 and 083: checks 9 and 10 link codes through the table,
+-- which 083 closes (tests/sql/083-display-followups-probe.sql covers linking).
 -- Run after 080. Expected: an error whose message starts with 'PROBE OK 080'.
 -- Everything is rolled back by the final RAISE.
 DO $probe$
