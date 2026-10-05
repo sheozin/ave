@@ -25,6 +25,8 @@ const TABLE: [server.Permission, Role[]][] = [
   ['walk_in',        ['owner', 'organizer', 'lead']],
   ['undo_any',       ['owner', 'organizer', 'lead']],
   ['desk_health',    ['owner', 'organizer', 'lead']],
+  ['company_board',  ['owner', 'organizer', 'lead']],
+  ['alerts',         ['owner', 'organizer', 'lead']],
   ['desk',           ['owner', 'organizer', 'lead', 'crew']],
   ['dashboard',      ['owner', 'organizer', 'lead', 'crew', 'viewer']],
 ];

@@ -23,6 +23,8 @@ export const GRANTS = {
   walk_in: LEADS,
   undo_any: LEADS,
   desk_health: LEADS,
+  company_board: LEADS,
+  alerts: LEADS,
   desk: ['owner', 'organizer', 'lead', 'crew'],
   dashboard: ['owner', 'organizer', 'lead', 'crew', 'viewer'],
 };

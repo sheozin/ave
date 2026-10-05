@@ -285,3 +285,45 @@ describe('eventStartUtc', () => {
     expect(d.eventStartUtc('2026-10-26', '09:00', 'Not/AZone')).toBeNull();
   });
 });
+
+describe('companyRows', () => {
+  const board = [
+    { company: 'Acme', expected: 3, arrived: 1, last_arrival_at: '2026-10-18T08:05:00Z' },
+    { company: 'Zeta', expected: 2, arrived: 0, last_arrival_at: null },
+    { company: 'Solo', expected: 1, arrived: 1, last_arrival_at: '2026-10-18T08:10:00Z' },
+  ];
+  it('keeps server order and computes missing', () => {
+    const r = d.companyRows(board, 'all', WAW);
+    expect(r.map(x => x.company)).toEqual(['Acme', 'Zeta', 'Solo']);
+    expect(r[0]).toMatchObject({ missing: 2, last: '10:05' });
+    expect(r[1].last).toBe('');
+  });
+  it('Not here yet is 0 arrived; Partly here is some but not all', () => {
+    expect(d.companyRows(board, 'missing', WAW).map(x => x.company)).toEqual(['Zeta']);
+    expect(d.companyRows(board, 'partly', WAW).map(x => x.company)).toEqual(['Acme']);
+  });
+  it('tolerates a null board', () => {
+    expect(d.companyRows(null, 'all', WAW)).toEqual([]);
+  });
+});
+
+describe('alertLine and newAlertIds', () => {
+  const a = { id: 'a1', created_at: '2026-10-18T08:05:00Z', name: 'Ewa Sample', company: 'Contoso Demo',
+              ticket_type: 'Speaker', desk_label: 'Desk 2', still_in: true };
+  it('reads like the spec', () => {
+    expect(d.alertLine(a, WAW)).toBe('10:05 Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2');
+  });
+  it('drops a missing company and desk', () => {
+    expect(d.alertLine({ ...a, company: null, desk_label: null }, WAW)).toBe('10:05 Ewa Sample (Speaker) just checked in');
+  });
+  it('an undone check-in says so', () => {
+    expect(d.alertLine({ ...a, still_in: false }, WAW)).toBe('10:05 Ewa Sample (Speaker, Contoso Demo) checked in at Desk 2, since undone');
+  });
+  it('a nameless guest is not an empty string', () => {
+    expect(d.alertLine({ ...a, name: '' }, WAW)).toBe('10:05 A guest (Speaker, Contoso Demo) just checked in at Desk 2');
+  });
+  it('newAlertIds returns only unseen ids', () => {
+    expect(d.newAlertIds(new Set(['a1']), [a, { ...a, id: 'a2' }])).toEqual(['a2']);
+    expect(d.newAlertIds(new Set(), null)).toEqual([]);
+  });
+});

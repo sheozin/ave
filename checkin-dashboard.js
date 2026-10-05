@@ -234,3 +234,28 @@ export function eventStartUtc(eventDate, startTime, timeZone) {
   if (off2 !== off1) t = guess - off2;
   return new Date(t);
 }
+
+// Company arrival board (event-day spec, feature 4). The server sorts by
+// most still missing; filters only remove rows.
+export function companyRows(board, filter, timeZone) {
+  return (board || [])
+    .filter(b => filter === 'missing' ? b.arrived === 0
+      : filter === 'partly' ? b.arrived > 0 && b.arrived < b.expected : true)
+    .map(b => ({ company: b.company, expected: b.expected, arrived: b.arrived,
+                 missing: b.expected - b.arrived,
+                 last: b.last_arrival_at ? fmtClock(Date.parse(b.last_arrival_at), timeZone) : '' }));
+}
+
+// VIP arrival alerts (feature 5). An undone check-in keeps its alert but
+// says so, so the list never claims a guest is here who is not.
+export function alertLine(a, timeZone) {
+  const who = (a.name || '').trim() || 'A guest';
+  const tag = '(' + [a.ticket_type, a.company].filter(Boolean).join(', ') + ')';
+  const at = a.desk_label ? ' at ' + a.desk_label : '';
+  const what = a.still_in ? ' just checked in' + at : ' checked in' + at + ', since undone';
+  return fmtClock(Date.parse(a.created_at), timeZone) + ' ' + who + ' ' + tag + what;
+}
+
+export function newAlertIds(seen, alerts) {
+  return (alerts || []).filter(a => !seen.has(a.id)).map(a => a.id);
+}
