@@ -9,7 +9,8 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { loadCallerRole } from '../_shared/checkin-roles.ts'
+import { compGoLiveDecision, enableEventGate, NOT_OWNER } from '../_shared/checkin-gates.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -50,32 +51,39 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { data: event } = await sb.from('leod_events')
-    .select('id, created_by').eq('id', event_id).single()
+  const { data: event, error: eventErr } = await sb.from('leod_events')
+    .select('id, created_by').eq('id', event_id).maybeSingle()
+  if (eventErr) {
+    return new Response(JSON.stringify({ error: eventErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!event) {
     return new Response(JSON.stringify({ error: 'Event not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
-  const { data: callerRow } = await sb.from('leod_users')
-    .select('role, active').eq('id', user.id).single()
+  const { data: callerRow, error: callerErr } = await sb.from('leod_users')
+    .select('role, active').eq('id', user.id).maybeSingle()
+  if (callerErr) {
+    return new Response(JSON.stringify({ error: callerErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!callerRow || callerRow.active === false) {
     return new Response(JSON.stringify({ error: 'Account inactive' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
-  if (roleErr) {
-    return new Response(JSON.stringify({ error: roleErr }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-  const isAdmin = callerRow?.role === 'admin'
+  const caller = await loadCallerRole(sb, event_id, user.id)
+  const role = caller.role
+  const isAdmin = callerRow.role === 'admin'
   // Test mode and event settings: the owner, an organizer, or a CueDeck admin.
-  if (!isAdmin && !can(role, 'test_setup')) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+  const gate = enableEventGate(caller, isAdmin)
+  if (!gate.ok) {
+    return new Response(JSON.stringify(gate.body), {
+      status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -93,6 +101,25 @@ Deno.serve(async (req) => {
     isComp = !!compRow
   }
 
+  // Read before the upsert below, which creates a row when none exists: a
+  // first setup (no row) must be told apart from a go-live request on an
+  // event already in test.
+  const { data: existing, error: existingErr } = await sb.from('leod_checkin_entitlements')
+    .select('status').eq('event_id', event_id).maybeSingle()
+  if (existingErr) {
+    return new Response(JSON.stringify({ error: existingErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  const comp = compGoLiveDecision({
+    isComp, role, existingStatus: existing?.status ?? null, hasSettings: body.settings !== undefined,
+  })
+  if (comp === 'refuse') {
+    return new Response(JSON.stringify(NOT_OWNER), {
+      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+
   // Always create in test. ON CONFLICT DO NOTHING: an existing row keeps
   // its status (only checkin_mark_paid / checkin_mark_refunded /
   // checkin_mark_comp_live move it).
@@ -105,11 +132,10 @@ Deno.serve(async (req) => {
   }
 
   // Comp owner: go live through the same lock + test-data cleanup as a
-  // paid go-live (no-op when already live).
-  // A complimentary go-live is the same act as paying, so it is the
-  // owner's alone (roles ruling 1). An organizer saving settings on a
-  // complimentary event leaves it in test mode.
-  if (isComp && can(role, 'go_live')) {
+  // paid go-live (no-op when already live). Going live is the owner's act
+  // alone (roles ruling 1): anyone else's first setup or settings save on
+  // a complimentary event leaves it in test.
+  if (comp === 'go_live') {
     const { error: liveErr } = await sb.rpc('checkin_mark_comp_live', { p_event_id: event_id })
     if (liveErr) {
       return new Response(JSON.stringify({ error: liveErr.message }), {

@@ -14,7 +14,8 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { isWithinWindow } from '../_shared/checkin-policy.ts'
-import { can, isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate } from '../_shared/checkin-gates.ts'
 
 interface Item {
   client_id: string
@@ -117,15 +118,10 @@ Deno.serve(async (req) => {
   // checkin_role_for_event() cannot be used here (auth.uid() is NULL on a
   // service-role connection), so the caller's role is read with
   // loadCallerRole() from _shared/checkin-roles.ts.
-  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
-  if (roleErr) {
-    return new Response(JSON.stringify({ error: roleErr }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-  if (!can(role, 'desk')) {
-    return new Response(JSON.stringify({ error: 'Forbidden, desk roles only' }), {
-      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+  const gate = functionGate('checkin-record-scans', await loadCallerRole(sb, event_id, user.id))
+  if (!gate.ok) {
+    return new Response(JSON.stringify(gate.body), {
+      status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
@@ -163,8 +159,13 @@ Deno.serve(async (req) => {
   // rejects a scan_point_id belonging to another event, which would
   // otherwise fail the insert for every item in the batch.
   if (scan_point_id) {
-    const { data: sp } = await sb.from('leod_checkin_scan_points')
+    const { data: sp, error: spErr } = await sb.from('leod_checkin_scan_points')
       .select('id').eq('id', scan_point_id).eq('event_id', event_id).maybeSingle()
+    if (spErr) {
+      return new Response(JSON.stringify({ error: spErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
     if (!sp) {
       return new Response(JSON.stringify({ error: 'scan_point_id does not belong to this event' }), {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -229,8 +230,13 @@ Deno.serve(async (req) => {
       }
       // 23505: a concurrent insert of the same client_id won; its row is authoritative.
       if (error.code === '23505') {
-        const { data: raced } = await sb.from('leod_checkin_scan_events')
+        const { data: raced, error: racedErr } = await sb.from('leod_checkin_scan_events')
           .select('result, event_id').eq('client_id', it.client_id).maybeSingle()
+        if (racedErr) {
+          errors.push({ client_id: it.client_id, stage: 'apply', error: racedErr.message })
+          results[it.client_id] = 'error'
+          continue
+        }
         if (raced?.event_id && raced.event_id !== event_id) {
           errors.push({ client_id: it.client_id, stage: 'apply', error: clash })
           results[it.client_id] = 'error'

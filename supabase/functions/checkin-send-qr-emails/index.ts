@@ -9,7 +9,8 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate } from '../_shared/checkin-gates.ts'
 import { sendQrEmailsForAttendees, type QrEmailResult } from '../_shared/qr-email.ts'
 
 Deno.serve(async (req) => {
@@ -52,23 +53,23 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
-  if (roleErr) {
-    return new Response(JSON.stringify({ error: roleErr }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-  if (!can(role, 'manage_guests')) {
-    return new Response(JSON.stringify({ error: 'Forbidden, organizers only' }), {
-      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
+  const gate = functionGate('checkin-send-qr-emails', await loadCallerRole(sb, event_id, user.id))
+  if (!gate.ok) {
+    return new Response(JSON.stringify(gate.body), {
+      status: gate.status, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
 
   // Service-role client bypasses RLS entirely, so the entitlement gate
   // (migration 051's checkin_role_for_event) is never consulted here —
   // same explicit check as checkin-import-attendees.
-  const { data: entRow } = await sb.from('leod_checkin_entitlements')
-    .select('checkin_core, status').eq('event_id', event_id).single()
+  const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements')
+    .select('checkin_core, status').eq('event_id', event_id).maybeSingle()
+  if (entErr) {
+    return new Response(JSON.stringify({ error: entErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!entRow?.checkin_core) {
     return new Response(JSON.stringify({ error: 'Check-in is not enabled for this event' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
@@ -82,8 +83,13 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { data: event } = await sb.from('leod_events')
-    .select('name, date, venue').eq('id', event_id).single()
+  const { data: event, error: eventErr } = await sb.from('leod_events')
+    .select('name, date, venue').eq('id', event_id).maybeSingle()
+  if (eventErr) {
+    return new Response(JSON.stringify({ error: eventErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   if (!event) {
     return new Response(JSON.stringify({ error: 'Event not found' }), {
       status: 404, headers: { ...cors, 'Content-Type': 'application/json' },

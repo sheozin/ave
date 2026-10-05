@@ -6,7 +6,8 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }       from '../_shared/stripe.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
-import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate } from '../_shared/checkin-gates.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -33,9 +34,8 @@ Deno.serve(async (req) => {
   if (!event_id) return json({ error: 'event_id required' }, 400)
 
   // Going live is the owner's act alone, paid or complimentary (roles ruling 1).
-  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
-  if (roleErr) return json({ error: roleErr }, 500)
-  if (!can(role, 'go_live')) return json({ error: 'Only the event owner can go live', code: 'not_owner' }, 403)
+  const gate = functionGate('checkin-create-checkout', await loadCallerRole(sb, event_id, user.id))
+  if (!gate.ok) return json(gate.body, gate.status)
 
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
     .select('status, checkout_session_id, checkout_expires_at').eq('event_id', event_id).maybeSingle()
@@ -43,8 +43,9 @@ Deno.serve(async (req) => {
   if (!ent) return json({ error: 'Set up check-in for this event first' }, 409)
   if (ent.status === 'live') return json({ error: 'This event is already live', code: 'already_live' }, 409)
 
-  const { data: ev, error: evErr } = await sb.from('leod_events').select('name, date, timezone').eq('id', event_id).single()
-  if (evErr || !ev) return json({ error: evErr?.message || 'Event not found' }, 404)
+  const { data: ev, error: evErr } = await sb.from('leod_events').select('name, date, timezone').eq('id', event_id).maybeSingle()
+  if (evErr) return json({ error: evErr.message }, 500)
+  if (!ev) return json({ error: 'Event not found' }, 404)
   // Before any Stripe call: paying for a window that has already closed
   // (or cannot be computed) buys nothing.
   if (isWindowClosed(String(ev.date ?? ''), String(ev.timezone ?? ''))) {
