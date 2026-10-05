@@ -29,6 +29,8 @@
 .search{flex:1;min-width:200px;height:36px;border:1px solid var(--bd2);border-radius:10px;background:var(--wm);padding:0 12px;font-size:13px}
 .chip{height:36px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--t1);color:#fff}
+.al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.al-opts label{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;background:var(--pg);color:var(--t1);cursor:pointer}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:10px;border-bottom:1px solid #F0F0F3}
 .tbl td{padding:12px 10px;border-bottom:1px solid #F5F5F7;vertical-align:top}
@@ -99,6 +101,11 @@
       <button class="btn btn-p" id="d-save">Save</button><span class="ok" id="d-ok"></span>
       <div class="err" id="d-err"></div>
     </form>
+    <div class="toggle" id="al-row" hidden style="margin-top:18px"><div><b>Arrival alerts</b>
+      <p>Get an alert on the dashboard and on desk leads' screens when guests with these ticket types check in.</p>
+      <div class="al-opts" id="al-types"></div><p class="small" id="al-none" hidden>Import guests with ticket types to choose from.</p></div>
+      <div><button class="btn btn-s" id="al-save" type="button">Save alerts</button><span class="ok" id="al-ok"></span></div></div>
+    <div class="err" id="al-err"></div>
     <div id="owner-tools" hidden style="margin-top:18px">
       <div class="toggle"><div><b>Transfer ownership</b><p>Hand this event to another organizer. You stay on as an organizer, and only the new owner can go live, transfer or delete it.</p></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="ot-target" class="search" style="flex:none;min-width:200px" aria-label="New owner"></select><button class="btn btn-s" id="ot-transfer" type="button">Transfer</button></div></div>
@@ -334,6 +341,7 @@ function renderDetails() {
   const dateLocked = isLive() && !isComp();
   if (dateLocked) { $('d-date').disabled = true; $('d-tz').disabled = true; }
   renderOwnerTools();
+  renderAlertTypes();
   $('det-note').textContent = consoleLocked ? 'Only the event owner can edit a console event.'
     : !editable ? 'Only the event owner or an organizer can change these details.'
     : dateLocked ? 'The date and timezone are locked now the event is live. Contact support@cuedeck.io to move it.'
@@ -354,6 +362,41 @@ $('f-det').addEventListener('submit', async (e) => {
   $('d-save').disabled = false;
   if (error) { $('d-err').textContent = error.message; return; }
   await loadEvent(); renderChrome(); $('d-ok').textContent = ' Saved';
+});
+
+// ── arrival alerts (event-day spec, feature 5) ────────────
+// The choices are the ticket types on the guest list (trimmed, first
+// spelling wins, case-insensitive, as the server matches them), plus any
+// saved type no longer on the list, so a saved choice never vanishes
+// without the organizer seeing it. Not class "chip": Setup binds every
+// .chip to the attendee filter.
+function renderAlertTypes() {
+  const show = can(ROLE, 'edit_details');
+  $('al-row').hidden = !show;
+  if (!show) return;
+  const saved = (ENT && ENT.alert_ticket_types) || [];
+  const seen = new Map();
+  for (const t of [...ATT.map(a => (a.ticket_type || '').trim()), ...saved]) {
+    if (t && !seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+  }
+  const savedL = new Set(saved.map(x => x.toLowerCase()));
+  const box = $('al-types'); box.replaceChildren();
+  for (const [k, t] of seen) {
+    const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = t; cb.checked = savedL.has(k);
+    lab.append(cb, document.createTextNode(t)); box.appendChild(lab);
+  }
+  $('al-none').hidden = seen.size > 0;
+  $('al-save').disabled = seen.size === 0;
+}
+$('al-save').addEventListener('click', async () => {
+  $('al-err').textContent = ''; $('al-ok').textContent = ''; $('al-save').disabled = true;
+  const types = [...document.querySelectorAll('#al-types input:checked')].map(i => i.value);
+  const { data, error } = await sb.rpc('checkin_set_alert_ticket_types', { p_event_id: EVENT_ID, p_types: types });
+  $('al-save').disabled = false;
+  if (error) { $('al-err').textContent = error.message; return; }
+  ENT.alert_ticket_types = data || [];
+  renderAlertTypes();
+  $('al-ok').textContent = ' Saved';
 });
 
 // ── owner tools (rulings 2 and 3) ────────────────────────

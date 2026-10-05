@@ -183,3 +183,48 @@ test('the owner of a complimentary event keeps the account copy', async ({ page 
   await expect(page.locator('#gl-comp-t')).toHaveText('Check-in is included with your account.');
   await expect(page.locator('#gl-comp-btn')).toBeVisible();
 });
+
+// ── Arrival alert ticket types (event-day spec, feature 5) ──
+const GUESTS = [
+  { id: 'g1', first_name: 'A', last_name: 'One', email: null, company: null, ticket_type: 'VIP', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+  { id: 'g2', first_name: 'B', last_name: 'Two', email: null, company: null, ticket_type: ' vip ', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+  { id: 'g3', first_name: 'C', last_name: 'Three', email: null, company: null, ticket_type: 'attendee', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+];
+
+test('an organizer picks alert ticket types from the guest list and saves them', async ({ page }) => {
+  let sent: Record<string, unknown> = {};
+  await open(page, { role: 'organizer' }, 'details', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', alert_ticket_types: ['Speaker'] }]);
+    await table(page, 'leod_checkin_attendees', GUESTS);
+    await rpc(page, 'checkin_set_alert_ticket_types', (a) => { sent = a; return ['VIP', 'Speaker']; });
+  });
+  const opts = page.locator('#al-types label');
+  await expect(page.locator('#al-row')).toBeVisible();
+  // VIP and ' vip ' are one type; Speaker is saved but no longer on the list, and stays.
+  await expect(opts).toHaveText(['VIP', 'attendee', 'Speaker']);
+  await expect(opts.nth(2).locator('input')).toBeChecked();
+  await opts.nth(0).click();
+  // Not wired to the attendee filter chips.
+  await expect(page.locator('.chip[data-f="all"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#al-save').click();
+  await expect(page.locator('#al-ok')).toHaveText(' Saved');
+  expect(sent.p_types).toEqual(['VIP', 'Speaker']);
+  expect(sent.p_event_id).toBe(EVENT_ID);
+});
+
+test('with no ticket types on the list, alerts say what to do', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'details');
+  await expect(page.locator('#al-none')).toBeVisible();
+  await expect(page.locator('#al-save')).toBeDisabled();
+});
+
+test('a failed alert save shows the server message', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'details', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', GUESTS);
+    await rpc(page, 'checkin_set_alert_ticket_types', { message: 'Only the event owner or an organizer can choose alert ticket types' }, 403);
+  });
+  await page.locator('#al-types label').first().click();
+  await page.locator('#al-save').click();
+  await expect(page.locator('#al-err')).toHaveText('Only the event owner or an organizer can choose alert ticket types');
+});
+
