@@ -3074,10 +3074,21 @@ async function transition(sessionId, toStatus) {
     if (needsActualStart) upd.actual_start = actualStartTs;
     if (needsActualEnd)   upd.actual_end   = actualEndTs;
 
-    const { error } = await sb
+    const { data: written, error } = await sb
       .from('leod_sessions').update(upd)
-      .eq('id', sessionId).eq('version', prevVer);
+      .eq('id', sessionId).eq('version', prevVer).select('id');
 
+    if (!error && !written?.length) {
+      // The version guard matched nothing: someone else changed it first.
+      s.status = prevStatus; s.version = prevVer;
+      if (toStatus === 'LIVE')  s.actual_start = null;
+      if (toStatus === 'ENDED') s.actual_end   = null;
+      renderSessions();
+      pushLog('ERROR', 'Version conflict — direct write matched no row', sessionId);
+      pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+      if (S.event) loadSessions(S.event.id);
+      return;
+    }
     if (error) {
       // Rollback
       s.status = prevStatus; s.version = prevVer;
@@ -3096,7 +3107,7 @@ async function transition(sessionId, toStatus) {
       pushLog('DB', `${toStatus} via direct write ✓`, sessionId);
       // Write to event_log (best-effort)
       sb.from('leod_event_log').insert({
-        event_id: S.event?.id, session_id: sessionId,
+        event_id: S.event?.id, session_id: sessionId, operator_id: S.user?.id ?? null,
         action: 'SESSION_STATUS_CHANGE',
         from_status: prevStatus, to_status: toStatus,
         operator_role: S.role,
@@ -3287,8 +3298,9 @@ async function sendBroadcast() {
   const msg = document.getElementById('bc-input').value.trim();
   const pri = document.getElementById('bc-pri').value;
   if (!msg || !S.event) return;
+  // One row per event (id = event id); 'global' made every event share one row.
   const { error } = await sb.from('leod_broadcast').upsert({
-    id: 'global', event_id: S.event.id,
+    id: S.event.id, event_id: S.event.id,
     message: msg, priority: pri, sent_at: new Date().toISOString(),
   });
   if (!error) {
@@ -3315,9 +3327,14 @@ async function clearBroadcast() {
   _clearBCArmed.armed = false;
   clearTimeout(_clearBCArmed.timer);
   if (btn) btn.textContent = 'CLEAR';
-  await sb.from('leod_broadcast')
+  const { error } = await sb.from('leod_broadcast')
     .update({ message: '', sent_at: new Date().toISOString() })
-    .eq('id', 'global').eq('event_id', S.event.id);
+    .eq('id', S.event.id).eq('event_id', S.event.id);
+  if (error) {
+    pushLog('ERROR', `broadcast clear failed: ${error.message}`, null);
+    pushToast(`✕ ${error.message}`, 'error');
+    return;
+  }
   hideBCBanner();
   pushLog('BROADCAST', 'cleared', null);
 }
@@ -6195,6 +6212,8 @@ function checkOverrunSessions() {
         body: { session_id: s.id, version: s.version, command_id: cmdId, operator_role: S.role },
       }).then(({ error }) => {
         if (error) {
+          // 403: the server refused this operator; retrying every tick changes nothing.
+          if (error.context?.status === 403) return;
           const msg = String(error?.message ?? '');
           // Keep in attempted if duplicate (IN_FLIGHT/conflict) — no retry needed.
           // Remove if unexpected error so next tick can retry.

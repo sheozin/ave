@@ -154,3 +154,54 @@ test('another EF error still falls back to the direct write, and logs it', async
   await evalPage(page, `transition('${A}', 'LIVE')`);
   await expect.poll(() => rest.filter(r => r.method === 'POST' && r.url.includes('leod_event_log')).length).toBe(1);
 });
+
+test('transition fallback: a write that matches no row is a conflict, not a success', async ({ page }) => {
+  await setup(page, 500, { error: 'boom' });
+  patchReply = { status: 200, body: [] }; // the version guard matched nothing
+  await evalPage(page, `S.sessions.find(x => x.id === '${A}').status = 'LIVE'; renderSessions(); transition('${A}', 'ENDED')`);
+  await expect(toasts(page)).toContainText('Updated by another operator');
+  await page.waitForTimeout(300);
+  expect(rest.filter(r => r.method === 'POST' && r.url.includes('leod_event_log'))).toEqual([]);
+  await expect(page.locator('#undo-bar')).toBeHidden();
+  // It reloads the real state instead of keeping the optimistic ENDED.
+  await expect.poll(() => rest.filter(r => r.method === 'GET' && r.url.includes('leod_sessions')).length).toBeGreaterThan(0);
+});
+
+test('transition fallback logs who wrote it', async ({ page }) => {
+  await setup(page, 500, { error: 'boom' });
+  await evalPage(page, `S.user = { id: 'user-1' }`);
+  patchReply = { status: 200, body: [{ id: A }] };
+  await evalPage(page, `transition('${A}', 'LIVE')`);
+  await expect.poll(() => rest.filter(r => r.method === 'POST' && r.url.includes('leod_event_log')).length).toBe(1);
+  expect(rest.find(r => r.method === 'POST' && r.url.includes('leod_event_log'))!.body).toMatchObject({ operator_id: 'user-1' });
+});
+
+test('overrun tick: a 403 is not retried every second', async ({ page }) => {
+  const calls = await setup(page, 403, { error: 'Forbidden' });
+  await evalPage(page, `
+    S.user = { id: 'user-1' };
+    const s = S.sessions.find(x => x.id === '${A}');
+    s.status = 'LIVE'; s.actual_start = new Date(Date.now() - 3600_000).toISOString();
+    s.scheduled_start = '10:30:00'; s.scheduled_end = '10:45:00';
+    renderSessions();
+  `);
+  await page.waitForTimeout(3500); // three ticks
+  expect(calls.filter(c => c.fn === 'set-overrun')).toHaveLength(1);
+});
+
+test('broadcast is keyed by the event, not one global row', async ({ page }) => {
+  await setup(page, 200, {});
+  await page.fill('#bc-input', 'Doors open in 5');
+  await evalPage(page, `sendBroadcast()`);
+  await expect.poll(() => rest.filter(r => r.method === 'POST' && r.url.includes('leod_broadcast')).length).toBe(1);
+  expect(rest.find(r => r.method === 'POST' && r.url.includes('leod_broadcast'))!.body).toMatchObject({ id: 'ev-1', event_id: 'ev-1' });
+});
+
+test('clearing a broadcast targets this event and reports a failure', async ({ page }) => {
+  await setup(page, 200, {});
+  patchReply = { status: 403, body: { code: '42501', message: 'row-level security' } };
+  await evalPage(page, `_clearBCArmed.armed = true; clearBroadcast()`);
+  await expect(toasts(page)).toContainText('row-level security');
+  const patch = rest.find(r => r.method === 'PATCH' && r.url.includes('leod_broadcast'))!;
+  expect(patch.url).toContain('id=eq.ev-1');
+});
