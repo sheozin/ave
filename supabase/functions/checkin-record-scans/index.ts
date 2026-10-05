@@ -14,6 +14,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { isWithinWindow } from '../_shared/checkin-policy.ts'
+import { can, isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
 
 interface Item {
   client_id: string
@@ -92,6 +93,10 @@ Deno.serve(async (req) => {
 
   const event_id      = String(body.event_id || '')
   const scan_point_id = body.scan_point_id ? String(body.scan_point_id) : null
+  // Which browser desk sent this batch (event-day spec, feature 1). A
+  // missing or malformed value is stored as NULL rather than failing the
+  // batch: the scans matter more than the label.
+  const desk_id       = isUuid(body.desk_id) ? body.desk_id : null
   const items         = Array.isArray(body.items) ? (body.items as Item[]) : null
 
   if (!event_id || !items) {
@@ -109,15 +114,17 @@ Deno.serve(async (req) => {
   }
 
   // This client uses the service-role key, which bypasses RLS entirely.
-  // checkin_role_for_event() cannot be used here: it is SECURITY
-  // DEFINER over auth.uid(), which is NULL on a service-role
-  // connection, so it would return NULL for every caller. The operator
-  // grant is therefore read directly, exactly as
-  // checkin-import-attendees does.
-  const { data: opRow } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-  if (opRow?.role !== 'organizer' && opRow?.role !== 'crew') {
-    return new Response(JSON.stringify({ error: 'Forbidden — organizers and crew only' }), {
+  // checkin_role_for_event() cannot be used here (auth.uid() is NULL on a
+  // service-role connection), so the caller's role is read with
+  // loadCallerRole() from _shared/checkin-roles.ts.
+  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
+  if (roleErr) {
+    return new Response(JSON.stringify({ error: roleErr }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!can(role, 'desk')) {
+    return new Response(JSON.stringify({ error: 'Forbidden, desk roles only' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
@@ -210,6 +217,7 @@ Deno.serve(async (req) => {
       p_operator_id: user.id,
       p_scan_point_id: scan_point_id,
       p_live_time_ok,
+      p_desk_id: desk_id,
     })
     if (error) {
       const clash = 'client_id already used for another event'

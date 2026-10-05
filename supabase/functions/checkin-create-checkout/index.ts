@@ -6,6 +6,7 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { stripe }       from '../_shared/stripe.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
+import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -31,10 +32,10 @@ Deno.serve(async (req) => {
   const event_id = String(body.event_id || '')
   if (!event_id) return json({ error: 'event_id required' }, 400)
 
-  const { data: op, error: opErr } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).maybeSingle()
-  if (opErr) return json({ error: opErr.message }, 500)
-  if (op?.role !== 'organizer') return json({ error: 'Forbidden, organizers only' }, 403)
+  // Going live is the owner's act alone, paid or complimentary (roles ruling 1).
+  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
+  if (roleErr) return json({ error: roleErr }, 500)
+  if (!can(role, 'go_live')) return json({ error: 'Only the event owner can go live', code: 'not_owner' }, 403)
 
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
     .select('status, checkout_session_id, checkout_expires_at').eq('event_id', event_id).maybeSingle()

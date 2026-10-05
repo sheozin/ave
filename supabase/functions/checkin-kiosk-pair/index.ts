@@ -40,6 +40,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
 
 // ── Pairing code ──────────────────────────────────────────────────
 // The same 32-symbol alphabet cuedeck-display.html's
@@ -163,10 +164,12 @@ Deno.serve(async (req) => {
       return json({ error: 'Missing event_id or label' }, 400)
     }
 
-    const { data: opRow } = await sb.from('leod_checkin_operators')
-      .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-    if (opRow?.role !== 'organizer') {
-      return json({ error: 'Forbidden — organizers only' }, 403)
+    const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
+    if (roleErr) return json({ error: roleErr }, 500)
+    // The desk maps a 403 whose message contains 'organizer' to its
+    // "who can set up a kiosk" note, so keep that word in the message.
+    if (!can(role, 'kiosk')) {
+      return json({ error: 'Forbidden, organizers and desk leads only' }, 403)
     }
 
     // BOTH flags. checkin_core alone is not enough: self_registration

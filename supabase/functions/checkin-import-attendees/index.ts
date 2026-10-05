@@ -9,6 +9,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
 import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 
 interface ImportRow {
@@ -98,10 +99,14 @@ Deno.serve(async (req) => {
     })
   }
 
-  const { data: opRow } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-  if (opRow?.role !== 'organizer') {
-    return new Response(JSON.stringify({ error: 'Forbidden — organizers only' }), {
+  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
+  if (roleErr) {
+    return new Response(JSON.stringify({ error: roleErr }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!can(role, 'manage_guests')) {
+    return new Response(JSON.stringify({ error: 'Forbidden, organizers only' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

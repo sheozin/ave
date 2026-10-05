@@ -3,18 +3,13 @@
 // entitlements row (idempotent via upsert) and makes sure the event's
 // creator holds an organizer grant (covers events created before
 // migration 045's auto-grant trigger existed). Caller must be the
-// event's creator, a CueDeck admin, or already an 'organizer' in
-// leod_checkin_operators — the last case covers a co-organizer
-// granted by the original owner adjusting entitlements later, since
-// migration 045 defines organizer as "event owner, or anyone they
-// grant" full control. Ownership/admin must stay as separate,
-// independent checks: they're what let this function work at all on
-// an event that has never had check-in enabled, where no operator row
-// satisfying that condition exists yet (this function IS the thing
-// that creates the first one).
+// owner, an organizer (checkin-roles.ts 'test_setup'), or a CueDeck
+// admin. A complimentary owner's call also takes the event live;
+// nobody else's does (roles ruling 1).
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
+import { can, loadCallerRole } from '../_shared/checkin-roles.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -70,13 +65,15 @@ Deno.serve(async (req) => {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  const { data: opRow } = await sb.from('leod_checkin_operators')
-    .select('role').eq('event_id', event_id).eq('user_id', user.id).single()
-
-  const isOwner = event.created_by === user.id
+  const { role, error: roleErr } = await loadCallerRole(sb, event_id, user.id)
+  if (roleErr) {
+    return new Response(JSON.stringify({ error: roleErr }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
   const isAdmin = callerRow?.role === 'admin'
-  const isOrganizer = opRow?.role === 'organizer'
-  if (!isOwner && !isAdmin && !isOrganizer) {
+  // Test mode and event settings: the owner, an organizer, or a CueDeck admin.
+  if (!isAdmin && !can(role, 'test_setup')) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
     })
@@ -109,7 +106,10 @@ Deno.serve(async (req) => {
 
   // Comp owner: go live through the same lock + test-data cleanup as a
   // paid go-live (no-op when already live).
-  if (isComp) {
+  // A complimentary go-live is the same act as paying, so it is the
+  // owner's alone (roles ruling 1). An organizer saving settings on a
+  // complimentary event leaves it in test mode.
+  if (isComp && can(role, 'go_live')) {
     const { error: liveErr } = await sb.rpc('checkin_mark_comp_live', { p_event_id: event_id })
     if (liveErr) {
       return new Response(JSON.stringify({ error: liveErr.message }), {
