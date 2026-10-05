@@ -676,8 +676,14 @@ async function pollFeed() {
     const serverMs = new Date(data.server_time).getTime();
     if (!isNaN(serverMs)) S.clockOffset = serverMs - t1 + (t1 - t0) / 2;
 
-    if (!_booted) await startDisplay(data);
-    else applyFeed(data);
+    // A render error is not a network failure: it must not count toward the
+    // reconnect banner. Not booted yet means the next poll retries the render.
+    try {
+      if (!_booted) await startDisplay(data);
+      else applyFeed(data);
+    } catch (renderErr) {
+      console.error('Display render failed:', renderErr);
+    }
   } catch (e) {
     // Network or server error: keep whatever is on screen and keep polling.
     _pollFails++;

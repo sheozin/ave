@@ -9,7 +9,7 @@
 
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-const BASE       = 'http://127.0.0.1:7230';
+const BASE       = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const DISP_URL   = `${BASE}/cuedeck-display.html`;
 
 const FAKE_SUPA_URL = 'https://fakecuedecktest.supabase.co';
@@ -508,6 +508,34 @@ test.describe('Display: follow-ups', () => {
     await mockSupabase(page, { feed: () => ({ ...fixed, server_time: new Date().toISOString() }) });
     await page.goto(`${DISP_URL}${makeHash()}`);
     await expect(page.locator('.d-big-title')).toHaveText('Opening keynote', { timeout: 6000 });
+  });
+
+  test('38 repeated render errors do not show the reconnect banner, and rendering resumes', async ({ page }) => {
+    await page.addInitScript(() => {
+      // The first four writes to the content area throw (four polls in a row).
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+      let fails = 0;
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        configurable: true, get: desc.get,
+        set(v: string) {
+          if (fails < 4 && (this as Element).id === 'content-area') { fails++; throw new Error('render fails'); }
+          desc.set!.call(this, v);
+        },
+      });
+      // Record whether the banner is ever shown.
+      (window as unknown as { __bannerShown: boolean }).__bannerShown = false;
+      document.addEventListener('DOMContentLoaded', () => {
+        const el = document.getElementById('reconnect-banner')!;
+        new MutationObserver(() => {
+          if (el.style.display === 'block') (window as unknown as { __bannerShown: boolean }).__bannerShown = true;
+        }).observe(el, { attributes: true, attributeFilter: ['style'] });
+      });
+    });
+    const fixed = makeFeed();
+    await mockSupabase(page, { feed: () => ({ ...fixed, server_time: new Date().toISOString() }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote', { timeout: 15000 });
+    expect(await page.evaluate(() => (window as unknown as { __bannerShown: boolean }).__bannerShown)).toBe(false);
   });
 
 });

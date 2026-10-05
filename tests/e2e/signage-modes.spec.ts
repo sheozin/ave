@@ -8,7 +8,7 @@
 
 import { test, expect } from '@playwright/test';
 
-const BASE     = 'http://127.0.0.1:7230';
+const BASE     = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
 const DISP_URL = `${BASE}/cuedeck-display.html`;
 
 // No live DB. The page starts pairing on load (display_pair_start, then
