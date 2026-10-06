@@ -19,7 +19,8 @@ BEGIN
 
   -- ── test mode: immediate, no pending row, no mail log ──
   v_res := checkin_web_request(v_code, 'Test', 'Guest', 'test.guest@example.invalid', NULL, '{}', repeat('a', 64));
-  IF v_res->>'status' <> 'registered' OR length(v_res->>'qr_token') <> 32 THEN RAISE EXCEPTION 'test register: %', v_res; END IF;
+  -- (102: no qr_token is returned in test mode any more.)
+  IF v_res->>'status' <> 'registered' THEN RAISE EXCEPTION 'test register: %', v_res; END IF;
   IF checkin_web_request(v_code, 'Test', 'Guest', 'TEST.guest@example.invalid', NULL, '{}', repeat('b', 64))->>'status' <> 'duplicate' THEN
     RAISE EXCEPTION 'test duplicate';
   END IF;

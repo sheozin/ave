@@ -36,6 +36,9 @@ const cases: [string, typeof ok, string[]][] = [
   ['a domain in the first name', { ...ok, first_name: 'Verify at evil.example' }, ['first_name_invalid']],
   ['a URL in the last name', { ...ok, last_name: 'http://x' }, ['last_name_invalid']],
   ['an address as a name', { ...ok, first_name: 'a@b' }, ['first_name_invalid']],
+  ['full-width look-alikes are folded first', { ...ok, first_name: 'evil．example' }, ['first_name_invalid']],
+  ['a full-width at sign', { ...ok, last_name: 'a＠b' }, ['last_name_invalid']],
+  ['an ideographic full stop before a tld', { ...ok, first_name: 'evil。com' }, ['first_name_invalid']],
   ['real names with punctuation', { ...ok, first_name: "J.R. Mary-Ann", last_name: "O'Brien St. John" }, []],
 ];
 

@@ -20,8 +20,11 @@
 //   register -> { status: 'check_email' }               live, always
 //               { status: 'ok', test: true, code? }     test mode, no email
 //               { status: 'full' | 'closed' | 'test_cap' }
+//   preview  -> { status: 'ok', first_name, last_name, company } | { status: 'invalid' }
 //   confirm  -> { status: 'registered', first_name }    (also for 'already')
 //               { status: 'invalid' | 'full' | 'closed' }
+// Test mode answers { status: 'ok', test: true } for a new and a listed
+// address alike (102): no code, no email.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
@@ -29,7 +32,7 @@ import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
 import {
-  isRegistrationCode, validateRegistration, shortCode, mayResend, type Question,
+  isRegistrationCode, validateRegistration, mayResend, type Question,
 } from '../_shared/checkin-register.ts'
 
 const TURNSTILE_VERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
@@ -53,8 +56,16 @@ async function hmacHex(key: string, input: string): Promise<string> {
 // (Cloudflare rejects a request that sends it). X-Forwarded-For is not used:
 // its right-most entries are proxies, so taking one would pool every guest
 // into one bucket. Null when absent, and the caller refuses.
+//
+// An IPv6 client is keyed by its /64: one connection usually holds a whole
+// /64, so keying the full address would let it rotate past the limit.
 function clientIp(req: Request): string | null {
-  return (req.headers.get('cf-connecting-ip') ?? '').trim() || null
+  const ip = (req.headers.get('cf-connecting-ip') ?? '').trim()
+  if (!ip) return null
+  if (!ip.includes(':')) return ip
+  const head = ip.split('::')[0].split(':')
+  const full = ip.includes('::') ? [...head, ...Array(8).fill('0')].slice(0, 4) : ip.split(':').slice(0, 4)
+  return full.map(x => (x || '0').toLowerCase()).join(':') + '::/64'
 }
 
 const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -148,12 +159,36 @@ Deno.serve(async (req) => {
     })
   }
 
+  // Per (event, IP) budget shared by register, preview and confirm.
+  const rateOk = async (): Promise<boolean | null> => {
+    const ip = clientIp(req)
+    if (!ip) { console.error('checkin-register: no client IP header; refusing'); return null }
+    const ipHash = await hmacHex(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'cuedeck', 'checkin-web:' + ip)
+    const { data, error } = await sb.rpc('checkin_web_rate_check', { p_event_id: ent.event_id, p_ip_hash: ipHash })
+    if (error) console.error('checkin-register: rate check failed', error.code)
+    return !error && data === true
+  }
+  const tooMany = () => json({ error: 'Too many attempts from this connection just now. Please try again in a few minutes.' }, 429)
+
+  // ── preview ─────────────────────────────────────────────────────
+  // The token holder (the address owner) sees what they are confirming, so
+  // a request someone else overwrote is visible before it counts.
+  if (body.action === 'preview') {
+    const token = typeof body.token === 'string' ? body.token : ''
+    if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const ok = await rateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const { data, error } = await sb.rpc('checkin_web_pending_preview', { p_code: code, p_token_hash: await sha256Hex(token) })
+    if (error || !data) { console.error('checkin-register: preview failed', error?.code); return json({ status: 'invalid' }) }
+    return json(data)
+  }
+
   // ── confirm ─────────────────────────────────────────────────────
   // The caller holds the token from the emailed link, so is the address
   // owner. No Turnstile: the token is 256 bits and single use.
   if (body.action === 'confirm') {
     const token = typeof body.token === 'string' ? body.token : ''
     if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const ok = await rateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
     const { data: out, error } = await sb.rpc('checkin_web_confirm', { p_code: code, p_token_hash: await sha256Hex(token) })
     if (error || !out) {
       console.error('checkin-register: confirm failed', error?.code ?? 'no result')
@@ -202,7 +237,7 @@ Deno.serve(async (req) => {
     return json(test ? { status: 'ok', test: true } : { status: 'check_email' })
   }
 
-  const ip = clientIp(req)
+  const ip = (req.headers.get('cf-connecting-ip') ?? '').trim()
   if (!ip) {
     console.error('checkin-register: no client IP header; refusing')
     return json({ error: 'Registration is not available right now' }, 503)
@@ -210,13 +245,9 @@ Deno.serve(async (req) => {
   if (!(await turnstileOk(secret, str(body.turnstile_token), ip))) {
     return json({ error: 'Please complete the check that you are not a robot, then try again.', code: 'captcha' }, 400)
   }
-
-  const ipHash = await hmacHex(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'cuedeck', 'checkin-web:' + ip)
-  const { data: allowed, error: rateErr } = await sb.rpc('checkin_web_rate_check', { p_event_id: ent.event_id, p_ip_hash: ipHash })
-  if (rateErr || allowed !== true) {
-    if (rateErr) console.error('checkin-register: rate check failed', rateErr.code)
-    return json({ error: 'Too many registrations from this connection just now. Please try again in a few minutes.' }, 429)
-  }
+  const ok = await rateOk()
+  if (ok === null) return json({ error: 'Registration is not available right now' }, 503)
+  if (!ok) return tooMany()
 
   const raw = crypto.getRandomValues(new Uint8Array(32))
   const token = b64url(raw)
@@ -237,12 +268,16 @@ Deno.serve(async (req) => {
   if (test) {
     // Test mode: immediate, never any email (test mode is not free email
     // delivery). A new guest sees their code on screen.
+    // One answer for a new and an already listed address (security review of 101).
     console.log('checkin-register: test registration (' + status + '), event', ent.event_id)
-    return json(status === 'registered' ? { status: 'ok', test: true, code: shortCode(String(out.qr_token)) } : { status: 'ok', test: true })
+    await pad()
+    return json({ status: 'ok', test: true })
   }
 
   if (out.send === true) {
-    const link = 'https://app.cuedeck.io/r/' + code + '?t=' + token
+    // Token in the fragment: browsers never send it to a server, so it stays
+    // out of request logs and click-tracking redirects.
+    const link = 'https://app.cuedeck.io/r/' + code + '#t=' + token
     const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link)
     // After the response where the runtime allows it, so how long the mail
     // provider takes is not visible in the answer.

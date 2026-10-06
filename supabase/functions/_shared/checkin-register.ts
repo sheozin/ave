@@ -36,7 +36,9 @@ const HAS_LETTER = /\p{L}/u
 const EMAIL_SHAPE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]+$/
 // A name is printed in the guest's QR email, so nothing shaped like a link:
 // no @, slash or backslash, and no domain-like 'word.tld'.
-const LINKISH = /[@/\\]|[\p{L}\p{N}-]\.\p{L}{2,}/u
+// Tested after NFKC, so full-width ＠ ／ ． fold to their ASCII forms;
+// the ideographic full stops are listed because NFKC keeps them.
+const LINKISH = /[@/\\]|[\p{L}\p{N}-][.。｡]\p{L}{2,}/u
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{10}$/
 
 export function isRegistrationCode(code: unknown): code is string {
@@ -58,11 +60,11 @@ export function validateRegistration(
 
   if (!first) errors.push('first_name')
   else if (first.length > MAX_NAME) errors.push('first_name_too_long')
-  else if (!HAS_LETTER.test(first) || LINKISH.test(first)) errors.push('first_name_invalid')
+  else if (!HAS_LETTER.test(first) || LINKISH.test(first.normalize('NFKC'))) errors.push('first_name_invalid')
 
   if (!last) errors.push('last_name')
   else if (last.length > MAX_NAME) errors.push('last_name_too_long')
-  else if (!HAS_LETTER.test(last) || LINKISH.test(last)) errors.push('last_name_invalid')
+  else if (!HAS_LETTER.test(last) || LINKISH.test(last.normalize('NFKC'))) errors.push('last_name_invalid')
 
   if (!email) errors.push('email')
   else if (email.length > MAX_EMAIL || !EMAIL_SHAPE.test(email)) errors.push('email_format')

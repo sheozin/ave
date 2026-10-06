@@ -37,7 +37,11 @@ body{min-height:100vh;min-height:100dvh}
 .rg-done .mark{width:56px;height:56px;border-radius:50%;background:var(--gnsf);display:grid;place-items:center;margin:0 auto 14px}
 .rg-done h2{font-size:22px;margin:0 0 8px;letter-spacing:-.3px}
 .rg-done p{font-size:15px;color:var(--t2);line-height:1.55;margin:0 0 6px}
-.rg-code{font:700 30px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;margin:14px 0 4px;color:var(--t1)}
+.rg-who{display:grid;gap:4px;background:var(--pg);border-radius:12px;padding:12px 14px;margin:0 0 18px;font-size:14px}
+.rg-who span{font-size:12px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.rg-who b{font-size:16px;overflow-wrap:anywhere}
+.rg-who small{color:var(--t2);line-height:1.45}
+.rg label.f .lt{display:block}
 .rg-foot{text-align:center;font-size:12.5px;color:var(--t3);margin-top:18px}
 .rg-foot a{color:var(--t3)}
 </style>
@@ -64,7 +68,7 @@ body{min-height:100vh;min-height:100dvh}
           <label class="f" data-f="last_name">Last name<input type="text" name="last_name" autocomplete="family-name" maxlength="80" required><span class="err"></span></label>
         </div>
         <label class="f" data-f="email">Email<input type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" required><span class="err"></span></label>
-        <label class="f" data-f="company">Company <span class="opt">(optional)</span><input type="text" name="company" autocomplete="organization" maxlength="80"><span class="err"></span></label>
+        <label class="f" data-f="company"><span class="lt">Company <span class="opt">(optional)</span></span><input type="text" name="company" autocomplete="organization" maxlength="80"><span class="err"></span></label>
         <div id="questions" style="display:grid;gap:16px"></div>
         <div class="rg-hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
         <label class="rg-consent" data-f="consent"><input type="checkbox" name="consent"><span>I agree that the organizer of this event may use these details to manage my registration and check-in. CueDeck processes them on the organizer's behalf (<a href="https://cuedeck.io/privacy" target="_blank" rel="noopener">privacy policy</a>).</span></label>
@@ -78,6 +82,7 @@ body{min-height:100vh;min-height:100dvh}
       <p class="rg-ey">Confirm your registration</p>
       <h1 id="cf-name"></h1>
       <p class="rg-meta" id="cf-meta"></p>
+      <div class="rg-who" id="cf-who-row" hidden><span>Registering</span><b id="cf-who"></b><small>Not you, or details wrong? Do not confirm. Register again from the event's page instead.</small></div>
       <button class="btn btn-p" type="button" id="cf-btn">Confirm my registration</button>
       <p class="rg-msg" id="cf-msg" hidden></p>
     </section>
@@ -85,8 +90,7 @@ body{min-height:100vh;min-height:100dvh}
     <section id="done" class="rg-done" hidden>
       <div class="mark"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D8348" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
       <h2 id="done-h">Check your email</h2>
-      <p id="done-p">We sent you a link. Open it to confirm, and your QR code follows. Nothing is registered until you confirm.</p>
-      <div id="done-code" hidden><div class="rg-code" id="code"></div><p>Test mode: this code would normally arrive by email.</p></div>
+      <p id="done-p">We sent you a link. Open it to confirm, and your QR code follows. Nothing is registered until you confirm. If it has not arrived in 10 minutes, check your spam folder.</p>
     </section>
   </div>
   <p class="rg-foot">Registration by <a href="https://cuedeck.io/solutions/check-in" target="_blank" rel="noopener">CueDeck</a></p>

@@ -18,7 +18,7 @@ const CONFIG = (over: Record<string, unknown> = {}) => ({
 });
 
 type Handler = (b: Record<string, unknown>) => { status?: number; body: unknown };
-async function setup(page: Page, opts: { config?: unknown; configStatus?: number; register?: Handler; confirm?: Handler } = {}) {
+async function setup(page: Page, opts: { config?: unknown; configStatus?: number; register?: Handler; confirm?: Handler; preview?: Handler } = {}) {
   const sent: Record<string, unknown>[] = [];
   await page.route('https://challenges.cloudflare.com/**', r => r.fulfill({
     contentType: 'application/javascript',
@@ -30,6 +30,7 @@ async function setup(page: Page, opts: { config?: unknown; configStatus?: number
   await fn(page, 'checkin-register', (b) => {
     if (b.action === 'config') return { status: opts.configStatus ?? 200, body: opts.config ?? CONFIG() };
     sent.push(b);
+    if (b.action === 'preview') return opts.preview ? opts.preview(b) : { body: { status: 'ok', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso' } };
     if (b.action === 'confirm') return opts.confirm ? opts.confirm(b) : { body: { status: 'registered', first_name: 'Maya' } };
     return opts.register ? opts.register(b) : { body: { status: 'check_email' } };
   });
@@ -56,6 +57,7 @@ test('renders the event and its questions, and registers', async ({ page }) => {
   await fill(page);
   await page.fill('[name="q:diet"]', 'Vegetarian');
   await page.click('#submit');
+  await expect(page.locator('#done')).toBeVisible();   // #done-h holds this text while hidden too
   await expect(page.locator('#done-h')).toHaveText('Check your email');
   await expect(page.locator('#done-p')).toContainText('Nothing is registered until you confirm');
   expect(await page.evaluate(() => (window as unknown as { __tsAction: string }).__tsAction)).toBe('register');
@@ -80,13 +82,28 @@ test('checks the form before sending anything', async ({ page }) => {
   expect(sent).toHaveLength(0);
 });
 
-test('test mode says so and shows the code on screen', async ({ page }) => {
-  await setup(page, { config: CONFIG({ test: true }), register: () => ({ body: { status: 'ok', test: true, code: 'B4K2C7' } }) });
+test('test mode says so, and the answer names no code (same for a new and a listed address)', async ({ page }) => {
+  await setup(page, { config: CONFIG({ test: true }), register: () => ({ body: { status: 'ok', test: true } }) });
   await page.goto(URL_);
   await expect(page.locator('#test-note')).toBeVisible();
   await fill(page);
   await page.click('#submit');
-  await expect(page.locator('#code')).toHaveText('B4K2C7');
+  await expect(page.locator('#done-h')).toHaveText('Test registration recorded');
+  await expect(page.locator('#done-p')).toContainText('Setup, under Attendees');
+});
+
+test('a token that is slow to arrive is waited for, not refused', async ({ page }) => {
+  const sent = await setup(page);
+  // Replace the stub: the token arrives 1.5 s after render.
+  await page.route('https://challenges.cloudflare.com/**', r => r.fulfill({ contentType: 'application/javascript',
+    body: `window.turnstile = { render(el, o) { setTimeout(() => o.callback('late-token'), 1500); return 1; }, reset() {} };
+           setTimeout(() => window.onTurnstileLoad && window.onTurnstileLoad(), 0);` }));
+  await page.goto(URL_);
+  await fill(page);
+  await page.click('#submit');
+  await expect(page.locator('#done')).toBeVisible();   // #done-h holds this text while hidden too
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent[0].turnstile_token).toBe('late-token');
 });
 
 test('full, closed and unknown links say so', async ({ page }) => {
@@ -135,26 +152,34 @@ const TOKEN = 'A'.repeat(40) + '_-z';
 
 test('the emailed link asks for a button press, then registers and drops the token', async ({ page }) => {
   const sent = await setup(page);
-  await page.goto(URL_ + '&t=' + TOKEN);
+  await page.goto(URL_ + '#t=' + TOKEN);
   await expect(page.locator('#confirm')).toBeVisible();
   await expect(page.locator('#cf-name')).toHaveText('Northwind Summit 2026');
-  expect(sent).toHaveLength(0);              // opening the link alone does nothing
+  await expect(page.locator('#cf-who')).toHaveText('Maya Lindqvist, Contoso');
+  expect(sent.filter(b => b.action === 'confirm')).toHaveLength(0);   // opening the link alone does nothing
   await page.click('#cf-btn');
   await expect(page.locator('#done-h')).toHaveText('You are registered, Maya');
-  expect(sent).toEqual([expect.objectContaining({ action: 'confirm', code: CODE, token: TOKEN })]);
+  expect(sent.filter(b => b.action === 'confirm')).toEqual([expect.objectContaining({ action: 'confirm', code: CODE, token: TOKEN })]);
   expect(page.url()).not.toContain('t=');
 });
 
 test('an expired or used link says so', async ({ page }) => {
   await setup(page, { confirm: () => ({ body: { status: 'invalid' } }) });
-  await page.goto(URL_ + '&t=' + TOKEN);
+  await page.goto(URL_ + '#t=' + TOKEN);
   await page.click('#cf-btn');
   await expect(page.locator('#closed-h')).toHaveText('This link has expired or was already used');
 });
 
 test('a full event at confirm time says so', async ({ page }) => {
   await setup(page, { confirm: () => ({ body: { status: 'full' } }) });
-  await page.goto(URL_ + '&t=' + TOKEN);
+  await page.goto(URL_ + '#t=' + TOKEN);
   await page.click('#cf-btn');
   await expect(page.locator('#closed-h')).toHaveText('Registration is full');
+});
+
+test('a link whose request was replaced or expired is caught at preview', async ({ page }) => {
+  await setup(page, { preview: () => ({ body: { status: 'invalid' } }) });
+  await page.goto(URL_ + '#t=' + TOKEN);
+  await expect(page.locator('#closed-h')).toHaveText('This link has expired or was already used');
+  expect(page.url()).not.toContain('t=');
 });

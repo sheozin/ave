@@ -25,9 +25,15 @@ function fmtDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 }
 
-export function renderConfirmEmail(event: ConfirmEmailEvent, link: string): { subject: string; html: string; text: string } {
+// The organizer's event name and venue are the only free text left, so they
+// stay out of the subject and sender (fixed below) and are cut to 80
+// characters in the body (security review of 101).
+const cut = (s: string | null, n = 80) => (s ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, n)
+
+export function renderConfirmEmail(raw: ConfirmEmailEvent, link: string): { subject: string; html: string; text: string } {
+  const event = { name: cut(raw.name) || 'the event', date: raw.date, venue: cut(raw.venue) || null }
   const when = [fmtDate(event.date), event.venue].filter(Boolean).join(', ')
-  const subject = `Confirm your registration: ${event.name}`
+  const subject = 'Confirm your registration'
   const text = [
     `Someone asked to register this email address for ${event.name}${when ? ' (' + when + ')' : ''}.`,
     '',
@@ -62,8 +68,7 @@ export function renderConfirmEmail(event: ConfirmEmailEvent, link: string): { su
 
 export async function sendConfirmEmail(to: string, event: ConfirmEmailEvent, link: string): Promise<boolean> {
   const { subject, html, text } = renderConfirmEmail(event, link)
-  const safeFrom = event.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck'
-  const { error } = await sendEmail({ to, subject, html, text, fromName: `${safeFrom} Registration`, tags: [{ name: 'type', value: 'registration_confirm' }] })
+  const { error } = await sendEmail({ to, subject, html, text, fromName: 'CueDeck Registration', tags: [{ name: 'type', value: 'registration_confirm' }] })
   if (error) console.error('registration-confirm-email: send failed')
   return !error
 }

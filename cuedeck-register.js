@@ -12,6 +12,20 @@ const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLS
 let config = null;
 let tsWidget = null;
 let tsToken = '';
+let tsWaiters = [];
+let tsFailed = false;
+// A token can still be on its way when the guest presses Register (the
+// widget is invisible unless Cloudflare wants a click), so submit waits for
+// it, as the sign-in pages do (cuedeck-auth.js).
+function turnstileToken() {
+  if (tsToken) return Promise.resolve(tsToken);
+  if (tsFailed) return Promise.resolve('');
+  return new Promise((resolve) => {
+    tsWaiters.push(resolve);
+    setTimeout(() => { const i = tsWaiters.indexOf(resolve); if (i >= 0) { tsWaiters.splice(i, 1); resolve(''); } }, 30000);
+  });
+}
+function tsSettle(t) { const w = tsWaiters; tsWaiters = []; w.forEach(r => r(t)); }
 
 async function call(body) {
   const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code }) });
@@ -41,8 +55,9 @@ function renderQuestions(questions) {
   box.replaceChildren();
   for (const q of questions) {
     const lab = el('label', { class: 'f', 'data-f': 'q:' + q.id });
-    lab.append(q.label);
-    if (!q.required) { lab.append(' '); lab.append(el('span', { class: 'opt' }, '(optional)')); }
+    const lt = el('span', { class: 'lt' }, q.label);
+    if (!q.required) { lt.append(' '); lt.append(el('span', { class: 'opt' }, '(optional)')); }
+    lab.append(lt);
     let input;
     if (q.type === 'choice') {
       input = el('select', { name: 'q:' + q.id });
@@ -62,16 +77,17 @@ function loadTurnstile(siteKey) {
       tsWidget = window.turnstile.render('#ts', {
         sitekey: siteKey,
         action: 'register',
-        callback: (t) => { tsToken = t; },
+        appearance: 'interaction-only',
+        callback: (t) => { tsToken = t; tsFailed = false; tsSettle(t); },
         'expired-callback': () => { tsToken = ''; },
-        'error-callback': () => { tsToken = ''; },
+        'error-callback': () => { tsToken = ''; tsFailed = true; tsSettle(''); },
       });
       resolve();
     };
     const s = document.createElement('script');
     s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad';
     s.async = true;
-    s.onerror = () => resolve();
+    s.onerror = () => { tsFailed = true; tsSettle(''); resolve(); };
     document.head.append(s);
   });
 }
@@ -116,23 +132,18 @@ $('form').addEventListener('submit', async (ev) => {
   const v = formValues();
   const { errors } = validateRegistration(v, config.questions);
   if (errors.length) { markErrors(errors); return; }
-  if (!tsToken) { message('Please complete the check that you are not a robot.'); return; }
-
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
-    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: tsToken });
+    const token = await turnstileToken();
+    if (!token) { message('The security check did not finish. Reload the page and try again.'); return; }
+    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: token });
     const b = r.body;
     if (r.status === 200 && b.status === 'check_email') { show('done'); return; }
     if (r.status === 200 && b.status === 'ok') {
-      if (b.test && b.code) {
-        $('done-h').textContent = 'You are registered';
-        $('done-p').textContent = 'Show this code at the desk.';
-        $('code').textContent = b.code;
-        $('done-code').hidden = false;
-      } else if (b.test) {
-        $('done-h').textContent = 'You are registered';
-        $('done-p').textContent = 'Test mode: no email is sent.';
+      if (b.test) {
+        $('done-h').textContent = 'Test registration recorded';
+        $('done-p').textContent = 'Test mode sends no email. The organizer finds this guest in Setup, under Attendees, and test guests are cleared when the event goes live.';
       }
       show('done');
       return;
@@ -154,7 +165,8 @@ $('form').addEventListener('submit', async (ev) => {
 
 // The emailed link: /r/<code>?t=<token>. Confirming takes a button press, so
 // a mail scanner that opens the link does not register anyone.
-const token = new URLSearchParams(location.search).get('t') || '';
+// The token rides in the fragment (#t=), which browsers never send to a server.
+const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
 
 $('cf-btn').addEventListener('click', async () => {
   const btn = $('cf-btn');
@@ -164,10 +176,10 @@ $('cf-btn').addEventListener('click', async () => {
     const r = await call({ action: 'confirm', token });
     const b = r.body;
     // The token is spent (or dead) either way: keep it out of the address bar and history.
-    history.replaceState(null, '', location.pathname);
+    history.replaceState(null, '', location.pathname + location.search);
     if (r.status === 200 && b.status === 'registered') {
       $('done-h').textContent = b.first_name ? 'You are registered, ' + b.first_name : 'You are registered';
-      $('done-p').textContent = 'Your QR code is on its way by email. Show it at the entrance to check in.';
+      $('done-p').textContent = 'Your QR code is on its way by email. Show it at the entrance to check in. If it has not arrived in 10 minutes, check your spam folder.';
       show('done');
       return;
     }
@@ -196,6 +208,15 @@ $('cf-btn').addEventListener('click', async () => {
   if (token) {
     $('cf-name').textContent = e.name || 'Event';
     $('cf-meta').textContent = [formatEventDate(e.date), e.venue].filter(Boolean).join(' · ');
+    const pv = await call({ action: 'preview', token }).catch(() => null);
+    if (pv && pv.status === 200 && pv.body.status === 'ok') {
+      const who = [pv.body.first_name, pv.body.last_name].filter(Boolean).join(' ') + (pv.body.company ? ', ' + pv.body.company : '');
+      $('cf-who').textContent = who;
+      $('cf-who-row').hidden = false;
+    } else if (pv && pv.body && pv.body.status === 'invalid') {
+      history.replaceState(null, '', location.pathname + location.search);
+      return closed('This link has expired or was already used', 'Links work once, for 48 hours. Register again from the page you started on.');
+    }
     return show('confirm');
   }
   if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
