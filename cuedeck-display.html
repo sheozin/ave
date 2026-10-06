@@ -13,7 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ── RESET & BASE ── */
-:root { --brand: #3b82f6; }
+:root { --brand: #3b82f6; --st-live: #EF4444; --st-ready: #34D399; --st-calling: #FACC15; --st-hold: #FB923C; --st-overrun: #E879F9; }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:#05060f}
 body{
@@ -85,8 +85,8 @@ body{
 .d-header-event{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.14em;text-transform:uppercase}
 .d-header-clock{font-family:'SF Mono','Fira Code',monospace;font-size:18px;font-weight:600;color:#60a5fa;letter-spacing:.06em}
 .d-header-status{font-size:10px;letter-spacing:.14em;font-weight:700}
-.d-header-status.live{color:#ef4444}
-.d-header-status.ready{color:#fbbf24}
+.d-header-status.live{color:var(--st-live)}
+.d-header-status.ready{color:var(--st-ready)}
 .d-header-status.standby{color:rgba(255,255,255,.3)}
 .d-header:hover #disconnect-btn{opacity:1}
 
@@ -105,10 +105,10 @@ body{
   margin-bottom:20px;
 }
 .sc-tag-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.sc-tag.live .sc-tag-dot{background:#ef4444;box-shadow:0 0 12px #ef4444;animation:blink .9s infinite}
-.sc-tag.live{color:#ef4444}
-.sc-tag.ready .sc-tag-dot{background:#fbbf24}
-.sc-tag.ready{color:#fbbf24}
+.sc-tag.live .sc-tag-dot{background:var(--st-live);box-shadow:0 0 12px var(--st-live);animation:blink .9s infinite}
+.sc-tag.live{color:var(--st-live)}
+.sc-tag.ready .sc-tag-dot{background:var(--st-ready)}
+.sc-tag.ready{color:var(--st-ready)}
 .sc-tag.standby{color:rgba(255,255,255,.3)}
 .sc-tag.standby .sc-tag-dot{background:rgba(255,255,255,.3)}
 .d-big-title{
@@ -152,7 +152,7 @@ body{
 .wf-time{font-size:clamp(11px,1.4vw,14px);color:rgba(255,255,255,.4);font-family:'SF Mono','Fira Code',monospace;white-space:nowrap}
 .wf-status{font-size:10px;letter-spacing:.12em;font-weight:700;padding:2px 8px;border-radius:3px;white-space:nowrap}
 .wf-status.LIVE{background:rgba(239,68,68,.15);color:#f87171}
-.wf-status.READY{background:rgba(251,191,36,.1);color:#fbbf24}
+.wf-status.READY{background:rgba(52,211,153,.16);color:var(--st-ready)}
 .wf-title-hdr{font-size:clamp(16px,2.5vw,26px);font-weight:700;color:rgba(255,255,255,.6);margin-bottom:28px;letter-spacing:.04em}
 
 /* ── SPONSORS MODE ── */
@@ -194,7 +194,7 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
 .ag-card.ready{background:rgba(96,165,250,.08);border-color:rgba(96,165,250,.3)}
 .ag-card.empty{color:rgba(255,255,255,.25);font-size:11px;text-align:center;padding:20px}
 .ag-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;margin-bottom:4px}
-.ag-card.live .ag-badge{color:#22c55e}
+.ag-card.live .ag-badge{color:var(--st-live)}
 .ag-card.ready .ag-badge{color:#60a5fa}
 .ag-time{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.35);margin-bottom:2px}
 .ag-title{font-size:clamp(11px,1vw,16px);font-weight:600;line-height:1.3;color:#eef2f7}
@@ -223,7 +223,7 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
   display:flex;gap:clamp(8px,1vw,16px);flex-wrap:wrap}
 .tl-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;
   padding:2px 8px;border-radius:3px;flex-shrink:0;align-self:flex-start;margin-top:2px}
-.tl-badge.live{background:rgba(34,197,94,.15);color:#22c55e}
+.tl-badge.live{background:rgba(239,68,68,.16);color:var(--st-live)}
 .tl-badge.ready{background:rgba(96,165,250,.15);color:#60a5fa}
 .tl-empty{display:flex;align-items:center;justify-content:center;
   height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
@@ -251,7 +251,7 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
 .pg-cell-speaker{font-size:clamp(8px,.7vw,11px);color:rgba(255,255,255,.4);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .pg-cell-badge{font-size:clamp(7px,.55vw,9px);font-weight:700;letter-spacing:.04em}
-.pg-cell-badge.live{color:#22c55e}
+.pg-cell-badge.live{color:var(--st-live)}
 .pg-cell-badge.ready{color:#60a5fa}
 .pg-empty{display:flex;align-items:center;justify-content:center;
   height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
@@ -305,9 +305,9 @@ body.is-live #display{
 /* ── STAGE TIMER MODE ─────────────────────────── */
 .st-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;background:#05060f;gap:0;padding:2vw;box-sizing:border-box}
 .st-status{font-size:clamp(13px,2.2vw,26px);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#4b5563;margin-bottom:.2em}
-.st-status.live{color:#22c55e}
-.st-status.hold{color:#f97316}
-.st-status.overrun{color:#ef4444}
+.st-status.live{color:var(--st-live)}
+.st-status.hold{color:var(--st-hold)}
+.st-status.overrun{color:var(--st-overrun)}
 .st-timer{font-size:clamp(80px,22vw,260px);font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;transition:color .4s}
 .st-timer.flash{animation:st-flash .65s step-end infinite}
 @keyframes st-flash{0%,100%{opacity:1}50%{opacity:.12}}
@@ -903,8 +903,8 @@ function updateStageTimerInPlace() {
 
   const rem2 = isHold2 ? _stHoldRemain : liveR2;
   const ov2  = rem2 < 0;
-  const col2 = ov2 ? '#ef4444'
-    : isHold2          ? '#f97316'
+  const col2 = ov2 ? '#E879F9'
+    : isHold2          ? '#FB923C'
     : rem2 < 120_000   ? '#ef4444'
     : rem2 < 300_000   ? '#f59e0b'
     : '#22c55e';
@@ -1390,8 +1390,8 @@ function renderStageTimer() {
 
   const remain  = isHold ? _stHoldRemain : liveR;
   const ov      = remain < 0;
-  const color   = ov ? '#ef4444'
-    : isHold    ? '#f97316'
+  const color   = ov ? '#E879F9'
+    : isHold    ? '#FB923C'
     : remain < 120_000 ? '#ef4444'
     : remain < 300_000 ? '#f59e0b'
     : '#22c55e';
