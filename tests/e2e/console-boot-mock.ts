@@ -304,3 +304,21 @@ export async function snap(page: Page, name: string) {
     mask: MASK_SELECTORS.map(s => page.locator(s)),
   });
 }
+
+// WCAG contrast of a border or text colour against the element's own
+// composited background (ancestors' background colours stacked).
+const CONTRAST_JS = `(() => {
+  const parse = c => { const m = String(c).match(/rgba?\\(([^)]+)\\)/); if (!m) return null; const p = m[1].split(',').map(parseFloat); return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1]; };
+  const over = (f, b) => [0, 1, 2].map(i => f[i] * f[3] + b[i] * (1 - f[3])).concat(1);
+  const bgOf = el => { const chain = []; for (let e = el; e; e = e.parentElement) chain.push(e); let acc = [10, 14, 20, 1];
+    for (const e of chain.reverse()) { const c = parse(getComputedStyle(e).backgroundColor); if (c && c[3] > 0) acc = over(c, acc); } return acc; };
+  const lum = c => { const f = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+  const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  return { border: (sel, side) => { const el = document.querySelector(sel); if (!el) return -1; const bg = bgOf(el);
+             const c = parse(getComputedStyle(el)['border' + side[0].toUpperCase() + side.slice(1) + 'Color']); return ratio(over(c, bg), bg); },
+           text: sel => { const el = document.querySelector(sel); if (!el) return -1; const bg = bgOf(el); return ratio(over(parse(getComputedStyle(el).color), bg), bg); } };
+})()`;
+export const borderContrast = (page: Page, sel: string, side: 'top' | 'right' | 'bottom' | 'left') =>
+  page.evaluate(([js, s, d]) => (0, eval)(js).border(s, d), [CONTRAST_JS, sel, side] as const);
+export const textContrast = (page: Page, sel: string) =>
+  page.evaluate(([js, s]) => (0, eval)(js).text(s), [CONTRAST_JS, sel] as const);

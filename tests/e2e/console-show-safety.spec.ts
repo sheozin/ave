@@ -281,7 +281,7 @@ test.describe('stage monitor', () => {
     // The page clock runs in real time after install, so allow a second or two of drift under load.
     expect(m.timer).toMatch(/^\+10:0[0-3]$/);
     expect(m.label).toBe('OVERRUN');
-    expect(m.timerColor).toBe('rgb(255, 0, 168)');
+    expect(m.timerColor).toBe('rgb(232, 121, 249)'); // --st-overrun
   });
 
   test('with two rooms running the monitor shows the most urgent and stays on it', async ({ page }) => {
@@ -385,8 +385,8 @@ test('a delayed READY card keeps the READY left edge and shows the delay as a to
     const cs = getComputedStyle(e);
     return { left: cs.borderLeftColor, top: cs.borderTopColor, topW: cs.borderTopWidth };
   });
-  expect(css.left).toBe('rgb(34, 197, 94)');
-  expect(css.top).toBe('rgb(249, 115, 22)');
+  expect(css.left).toBe('rgb(52, 211, 153)');  // --st-ready
+  expect(css.top).toBe('rgb(251, 146, 60)');   // .sc.delayed uses --amber = --st-hold
   expect(css.topW).toBe('2px');
   await expect(page.locator('#card-d .delay-tag')).toHaveText('+5min');
 });
