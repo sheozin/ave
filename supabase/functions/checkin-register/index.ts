@@ -30,7 +30,8 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
-import { isWindowClosed } from '../_shared/checkin-policy.ts'
+import { isWindowClosed, zonedTimeUtc } from '../_shared/checkin-policy.ts'
+import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import {
   isRegistrationCode, validateRegistration, mayResend, cleanText, clientKey, type Question,
 } from '../_shared/checkin-register.ts'
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -122,7 +123,7 @@ Deno.serve(async (req) => {
   if (!ent || !ent.registration_enabled || !ent.checkin_core) return json({ error: 'not_found' }, 404)
 
   const { data: event, error: evErr } = await sb.from('leod_events')
-    .select('name, date, venue, timezone').eq('id', ent.event_id).single()
+    .select('name, date, venue, timezone, event_start, event_end, client_name, brand_color').eq('id', ent.event_id).single()
   if (evErr || !event) {
     console.error('checkin-register: event read failed', evErr?.code)
     return json({ error: 'Registration is not available right now' }, 503)
@@ -139,14 +140,45 @@ Deno.serve(async (req) => {
     if (!Number.isNaN(closeAt) && Date.now() >= closeAt) state = 'closed'
     // Guarded like the SQL: an event without a date or timezone has no window to close.
     if (event.date && event.timezone && isWindowClosed(event.date, event.timezone)) state = 'closed'
-    if (state === 'open' && ent.registration_capacity) {
+    let placesLeft: number | null = null
+    if (ent.registration_capacity) {
       const { count, error } = await sb.from('leod_checkin_attendees')
         .select('id', { count: 'exact', head: true }).eq('event_id', ent.event_id).eq('is_test', test)
-      if (!error && (count ?? 0) >= ent.registration_capacity) state = 'full'
+      if (!error) {
+        placesLeft = Math.max(0, ent.registration_capacity - (count ?? 0))
+        if (state === 'open' && placesLeft === 0) state = 'full'
+      }
+    }
+    // The page's design (migration 104). Falls back to the event's own
+    // branding where the organizer has not set one for the page.
+    const hex = (c: unknown) => typeof c === 'string' && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : null
+    const pub = (path: string | null) => path ? Deno.env.get('SUPABASE_URL') + '/storage/v1/object/public/checkin-public/' + path : null
+    const hhmm = (t: unknown) => typeof t === 'string' ? t.slice(0, 5) : null
+    const start = event.date && event.timezone && hhmm(event.event_start) ? zonedTimeUtc(event.date, hhmm(event.event_start)!, event.timezone) : null
+    const end = event.date && event.timezone && hhmm(event.event_end) ? zonedTimeUtc(event.date, hhmm(event.event_end)!, event.timezone) : null
+    // The programme: only when the organizer turned it on, from the live run
+    // of show (scheduled times follow delays), cancelled sessions left out.
+    let programme: { time: string | null; title: string; room: string | null; speaker: string | null }[] = []
+    if (ent.registration_show_programme) {
+      const { data: rows, error } = await sb.from('leod_sessions')
+        .select('title, room, speaker, scheduled_start, planned_start, status')
+        .eq('event_id', ent.event_id).neq('status', 'CANCELLED').order('sort_order').limit(60)
+      if (error) console.error('checkin-register: programme read failed', error.code)
+      programme = (rows ?? []).map(r => ({ time: hhmm(r.scheduled_start ?? r.planned_start), title: r.title, room: r.room ?? null, speaker: r.speaker ?? null }))
     }
     return json({
-      state, test,
-      event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone },
+      state, test, places_left: placesLeft,
+      event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
+               start: hhmm(event.event_start), end: hhmm(event.event_end),
+               start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
+      page: {
+        host_name: ent.registration_host_name ?? event.client_name ?? null,
+        description: ent.registration_description ?? null,
+        address: ent.registration_address ?? null,
+        brand_color: hex(ent.registration_brand_color) ?? hex(event.brand_color),
+        cover_url: pub(ent.registration_cover_path), logo_url: pub(ent.registration_logo_path),
+        programme,
+      },
       questions: questions.map(q => ({ id: q.id, label: q.label, type: q.type, required: q.required, options: q.options })),
       turnstile_site_key: TURNSTILE_SITE_KEY,
     })
@@ -219,7 +251,21 @@ Deno.serve(async (req) => {
       if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
     }
     console.log('checkin-register: confirmed (' + status + '), event', ent.event_id)
-    return json({ status: 'registered', first_name: String(out.first_name ?? '') })
+    // The ticket, shown to the token holder (the address owner) only.
+    let ticket = null
+    if (attendee) {
+      const { data: a } = await sb.from('leod_checkin_attendees')
+        .select('first_name, last_name, ticket_type, qr_token').eq('id', attendee.id).single()
+      if (a) {
+        const qr = qrcode(0, 'M'); qr.addData(a.qr_token); qr.make()
+        ticket = {
+          first_name: a.first_name, last_name: a.last_name, ticket_type: a.ticket_type,
+          code: a.qr_token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase(),
+          qr_svg: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true })),
+        }
+      }
+    }
+    return json({ status: 'registered', first_name: String(out.first_name ?? ''), ticket })
   }
 
   if (body.action !== 'register') return json({ error: 'Bad request' }, 400)

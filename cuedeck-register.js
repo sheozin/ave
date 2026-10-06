@@ -1,46 +1,27 @@
 // cuedeck-register.js: the public registration page (/r/<code>), kept out
-// of the HTML so the page can run under a CSP with no inline script. Rules
-// come from /checkin-register.js; the server is checkin-register.
-import { validateRegistration, fieldMessage, formatEventDate, isRegistrationCode } from '/checkin-register.js';
+// of the HTML so the page runs under a CSP with no inline script. Rules and
+// pure helpers come from /checkin-register.js; the server is
+// checkin-register. Design approved 2026-10-06.
+import {
+  validateRegistration, fieldMessage, formatEventDate, isRegistrationCode,
+  palette, tzLabel, initials, buildIcs, googleCalUrl, outlookCalUrl, mapsUrl,
+} from '/checkin-register.js';
 
 const FN = 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/checkin-register';
 const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 const $ = (id) => document.getElementById(id);
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 // /r/<code>, or ?code= when served from a dev server without the rewrite.
 const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
+// The emailed link carries its token in the fragment (#t=), which browsers never send to a server.
+const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
 let config = null;
-let tsWidget = null;
-let tsToken = '';
-let tsWaiters = [];
-let tsFailed = false;
-// A token can still be on its way when the guest presses Register (the
-// widget is invisible unless Cloudflare wants a click), so submit waits for
-// it, as the sign-in pages do (cuedeck-auth.js).
-function turnstileToken() {
-  if (tsToken) return Promise.resolve(tsToken);
-  if (tsFailed) return Promise.resolve('');
-  return new Promise((resolve) => {
-    tsWaiters.push(resolve);
-    setTimeout(() => { const i = tsWaiters.indexOf(resolve); if (i >= 0) { tsWaiters.splice(i, 1); resolve(''); } }, 30000);
-  });
-}
-function tsSettle(t) { const w = tsWaiters; tsWaiters = []; w.forEach(r => r(t)); }
 
 async function call(body) {
   const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code }) });
   let j = null; try { j = await r.json(); } catch { /* not JSON */ }
   return { status: r.status, body: j || {} };
-}
-
-function show(id) {
-  for (const s of ['loading', 'closed', 'open', 'confirm', 'done']) $(s).hidden = s !== id;
-}
-
-function closed(h, p) {
-  $('closed-h').textContent = h;
-  $('closed-p').textContent = p;
-  show('closed');
 }
 
 function el(tag, attrs, text) {
@@ -50,14 +31,144 @@ function el(tag, attrs, text) {
   return e;
 }
 
+// ── states ──
+// Before the event loads (or for a dead link) the page is one message.
+// Once it loads, the event stays on screen and the card changes.
+function solo(h, p) {
+  $('closed-h').textContent = h; $('closed-p').textContent = p;
+  $('loading').hidden = true; $('page').hidden = true; $('closed').hidden = false;
+}
+function card(id) {
+  for (const s of ['open', 'confirm', 'done', 'ticket', 'shut']) $(s).hidden = s !== id;
+  if (window.matchMedia('(max-width: 900px)').matches && id !== 'open') $('card-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closed(h, p) {
+  if (!config) return solo(h, p);
+  $('shut-h').textContent = h; $('shut-p').textContent = p;
+  // Kept in sync for anything reading the old element.
+  $('closed-h').textContent = h; $('closed-p').textContent = p;
+  card('shut');
+}
+const NOT_ACTIVE = ['This registration link is not active', 'Check the link with the event organizer.'];
+
+// ── the event page ──
+function calInfo() {
+  const e = config.event, pg = config.page;
+  if (!e.start_utc) return null;
+  return {
+    uid: code + '@app.cuedeck.io', title: e.name, startUtc: e.start_utc, endUtc: e.end_utc,
+    location: [e.venue, pg.address].filter(Boolean).join(', '),
+    description: 'Registration: https://app.cuedeck.io/r/' + code, details: 'https://app.cuedeck.io/r/' + code,
+    url: 'https://app.cuedeck.io/r/' + code,
+  };
+}
+function downloadIcs() {
+  const c = calInfo(); if (!c) return;
+  const blob = new Blob([buildIcs(c)], { type: 'text/calendar;charset=utf-8' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: (config.event.name || 'event').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + '.ics' });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function renderEvent() {
+  const e = config.event || {}, pg = config.page || {};
+  const pal = palette(pg.brand_color);
+  const root = document.documentElement.style;
+  root.setProperty('--accent', pal.accent); root.setProperty('--accent-soft', pal.soft);
+  root.setProperty('--accent-ink', pal.ink); root.setProperty('--accent-deep', pal.deep);
+  document.querySelector('meta[name=theme-color]').setAttribute('content', '#F6F5F2');
+  document.title = 'Register: ' + (e.name || 'event');
+
+  const host = pg.host_name || '';
+  $('host-name').textContent = host || e.name || 'Event';
+  $('mark').replaceChildren();
+  if (pg.logo_url) $('mark').append(el('img', { src: pg.logo_url, alt: host ? host + ' logo' : 'Organizer logo' }));
+  else $('mark').textContent = initials(host || e.name);
+
+  if (pg.cover_url) { $('cover-img').src = pg.cover_url; $('cover-img').alt = e.name || ''; $('cover-img').hidden = false; $('cover-ph').hidden = true; }
+  else { $('cover-img').hidden = true; $('cover-ph').hidden = false; $('cover-ph').textContent = e.name || ''; }
+  $('ev-name').textContent = e.name || 'Event';
+  $('test-chip').hidden = !config.test;
+
+  const d = e.date ? new Date(e.date + 'T00:00:00Z') : null;
+  $('cal-m').textContent = d ? MONTHS[d.getUTCMonth()] : '';
+  $('cal-d').textContent = d ? String(d.getUTCDate()) : '';
+  $('ev-meta').textContent = formatEventDate(e.date) || 'Date to be announced';
+  $('ev-time').textContent = e.start ? e.start + (e.end ? ' to ' + e.end : '') + (tzLabel(e.timezone) ? ', ' + tzLabel(e.timezone) : '') : '';
+  const c = calInfo();
+  $('cal-btn').hidden = !c;
+  if (c) { $('cal-google').href = googleCalUrl(c); $('cal-outlook').href = outlookCalUrl(c); $('cal-outlook').target = '_blank'; $('cal-outlook').rel = 'noopener'; }
+
+  $('fact-venue').hidden = !(e.venue || pg.address);
+  $('venue').textContent = e.venue || pg.address || '';
+  $('address').textContent = e.venue && pg.address ? pg.address : '';
+  const m = mapsUrl(e.venue, pg.address);
+  $('maps').hidden = !m; if (m) $('maps').href = m;
+
+  $('about').hidden = !pg.description; $('about-p').textContent = pg.description || '';
+  const rows = Array.isArray(pg.programme) ? pg.programme : [];
+  $('prog').hidden = !rows.length;
+  $('plist').replaceChildren(...rows.map(r => {
+    const row = el('div', { class: 'prow' });
+    const body = el('div', { style: 'min-width:0' });
+    body.append(el('b', null, r.title || ''));
+    const sub = [r.speaker, r.room].filter(Boolean).join(' · ');
+    if (sub) body.append(el('small', null, sub));
+    row.append(el('span', { class: 't' }, r.time || ''), body);
+    return row;
+  }));
+
+  $('left').hidden = config.places_left == null;
+  $('left').textContent = config.places_left == null ? '' : config.places_left + (config.places_left === 1 ? ' place left' : ' places left');
+  $('test-note').hidden = !config.test;
+  if (host) $('consent-t').textContent = 'I agree that ' + host + ' may use these details to manage my registration and check-in. CueDeck processes them on their behalf.';
+
+  $('loading').hidden = true; $('closed').hidden = true; $('page').hidden = false;
+}
+
+$('cal-btn').addEventListener('click', () => {
+  const open = $('cal-menu').hidden;
+  $('cal-menu').hidden = !open; $('cal-btn').setAttribute('aria-expanded', String(open));
+});
+$('cal-ics').addEventListener('click', (ev) => { ev.preventDefault(); downloadIcs(); });
+$('tk-cal').addEventListener('click', downloadIcs);
+$('share').addEventListener('click', async () => {
+  const url = 'https://app.cuedeck.io/r/' + code;
+  try {
+    if (navigator.share) { await navigator.share({ title: config?.event?.name || 'Register', url }); return; }
+    await navigator.clipboard.writeText(url);
+    $('share-t').textContent = 'Link copied';
+  } catch { $('share-t').textContent = 'Share'; return; }
+  setTimeout(() => { $('share-t').textContent = 'Share'; }, 1800);
+});
+
+// ── questions ──
 function renderQuestions(questions) {
   const box = $('questions');
   box.replaceChildren();
   for (const q of questions) {
+    if (q.type === 'choice' && q.options.length <= 4) {
+      // Up to four options read better as buttons than as a dropdown.
+      const fs = el('fieldset', { 'data-f': 'q:' + q.id, style: 'border:0;margin:0;padding:0;display:grid;gap:8px' });
+      const lg = el('legend', { style: 'font-size:14px;font-weight:600;padding:0;margin-bottom:8px' }, q.label);
+      if (!q.required) { lg.append(' '); lg.append(el('span', { class: 'opt' }, '(optional)')); }
+      const grid = el('div', { class: 'choices' });
+      const hidden = el('input', { type: 'hidden', name: 'q:' + q.id, value: '' });
+      for (const o of q.options) {
+        const b = el('button', { type: 'button', class: 'choice', 'aria-pressed': 'false' }, o);
+        b.addEventListener('click', () => {
+          const on = hidden.value !== o;
+          hidden.value = on ? o : '';
+          for (const x of grid.children) x.setAttribute('aria-pressed', String(on && x === b));
+        });
+        grid.append(b);
+      }
+      fs.append(lg, grid, hidden, el('span', { class: 'err' }));
+      box.append(fs);
+      continue;
+    }
     const lab = el('label', { class: 'f', 'data-f': 'q:' + q.id });
     const lt = el('span', { class: 'lt' }, q.label);
     if (!q.required) { lt.append(' '); lt.append(el('span', { class: 'opt' }, '(optional)')); }
-    lab.append(lt);
     let input;
     if (q.type === 'choice') {
       input = el('select', { name: 'q:' + q.id });
@@ -66,18 +177,30 @@ function renderQuestions(questions) {
     } else {
       input = el('input', { type: 'text', name: 'q:' + q.id, maxlength: '500', autocomplete: 'off' });
     }
-    lab.append(input, el('span', { class: 'err' }));
+    lab.append(lt, input, el('span', { class: 'err' }));
     box.append(lab);
   }
 }
 
+// ── Turnstile ──
+// A token can still be on its way when the guest presses Register (the
+// widget is invisible unless Cloudflare wants a click), so submit waits for
+// it, as the sign-in pages do (cuedeck-auth.js).
+let tsWidget = null, tsToken = '', tsWaiters = [], tsFailed = false;
+function tsSettle(t) { const w = tsWaiters; tsWaiters = []; w.forEach(r => r(t)); }
+function turnstileToken() {
+  if (tsToken) return Promise.resolve(tsToken);
+  if (tsFailed) return Promise.resolve('');
+  return new Promise((resolve) => {
+    tsWaiters.push(resolve);
+    setTimeout(() => { const i = tsWaiters.indexOf(resolve); if (i >= 0) { tsWaiters.splice(i, 1); resolve(''); } }, 30000);
+  });
+}
 function loadTurnstile(siteKey) {
   return new Promise((resolve) => {
     window.onTurnstileLoad = () => {
       tsWidget = window.turnstile.render('#ts', {
-        sitekey: siteKey,
-        action: 'register',
-        appearance: 'interaction-only',
+        sitekey: siteKey, action: 'register', appearance: 'interaction-only',
         callback: (t) => { tsToken = t; tsFailed = false; tsSettle(t); },
         'expired-callback': () => { tsToken = ''; },
         'error-callback': () => { tsToken = ''; tsFailed = true; tsSettle(''); },
@@ -92,6 +215,7 @@ function loadTurnstile(siteKey) {
   });
 }
 
+// ── form ──
 function clearErrors() {
   for (const l of document.querySelectorAll('[data-f]')) {
     l.classList.remove('bad');
@@ -99,7 +223,6 @@ function clearErrors() {
   }
   $('msg').hidden = true;
 }
-
 function markErrors(codes) {
   let first = null;
   for (const c of codes) {
@@ -110,9 +233,8 @@ function markErrors(codes) {
     const e = l.querySelector('.err'); if (e) e.textContent = m.text;
     first = first || l;
   }
-  if (first) first.querySelector('input,select')?.focus();
+  if (first) (first.querySelector('input:not([type=hidden]),select,button') || first).focus();
 }
-
 function formValues() {
   const f = $('form');
   const answers = {};
@@ -123,7 +245,6 @@ function formValues() {
     answers, consent: f.elements.consent.checked,
   };
 }
-
 function message(text) { $('msg').textContent = text; $('msg').hidden = false; }
 
 $('form').addEventListener('submit', async (ev) => {
@@ -135,23 +256,23 @@ $('form').addEventListener('submit', async (ev) => {
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
-    const token = await turnstileToken();
-    if (!token) { message('The security check did not finish. Reload the page and try again.'); return; }
-    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: token });
+    const t = await turnstileToken();
+    if (!t) { message('The security check did not finish. Reload the page and try again.'); return; }
+    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: t });
     const b = r.body;
-    if (r.status === 200 && b.status === 'check_email') { show('done'); return; }
+    if (r.status === 200 && b.status === 'check_email') { card('done'); return; }
     if (r.status === 200 && b.status === 'ok') {
       if (b.test) {
         $('done-h').textContent = 'Test registration recorded';
         $('done-p').textContent = 'Test mode sends no email. The organizer finds this guest in Setup, under Attendees, and test guests are cleared when the event goes live.';
       }
-      show('done');
+      card('done');
       return;
     }
     if (b.status === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
     if (b.status === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
     if (b.status === 'test_cap') return message('This test page has used its 25 test registrations.');
-    if (r.status === 404) return closed('This registration link is not active', 'Check the link with the event organizer.');
+    if (r.status === 404) return closed(...NOT_ACTIVE);
     if (r.status === 400 && Array.isArray(b.fields)) { markErrors(b.fields); return; }
     message(b.error || 'Registration failed. Please try again.');
   } catch {
@@ -163,10 +284,24 @@ $('form').addEventListener('submit', async (ev) => {
   }
 });
 
-// The emailed link: /r/<code>?t=<token>. Confirming takes a button press, so
-// a mail scanner that opens the link does not register anyone.
-// The token rides in the fragment (#t=), which browsers never send to a server.
-const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+// ── the emailed link ──
+// Confirming takes a button press, so a mail scanner that opens the link
+// registers nobody.
+const dropToken = () => history.replaceState(null, '', location.pathname + location.search);
+
+function showTicket(first, t) {
+  const e = config.event || {}, pg = config.page || {};
+  $('tk-h').textContent = first ? 'You are registered, ' + first : 'You are registered';
+  $('tk-host').textContent = pg.host_name || '';
+  $('tk-event').textContent = e.name || '';
+  $('tk-guest').textContent = [t.first_name, t.last_name].filter(Boolean).join(' ');
+  $('tk-type').textContent = t.ticket_type || '';
+  $('tk-date').textContent = (formatEventDate(e.date) || '').replace(/^(\w{3})\w*/, '$1') + (e.start ? ', ' + e.start : '');
+  $('tk-venue').textContent = e.venue || '';
+  $('tk-qr').src = t.qr_svg; $('tk-code').textContent = t.code || '';
+  $('tk-cal').hidden = !calInfo();
+  card('ticket');
+}
 
 $('cf-btn').addEventListener('click', async () => {
   const btn = $('cf-btn');
@@ -175,17 +310,17 @@ $('cf-btn').addEventListener('click', async () => {
   try {
     const r = await call({ action: 'confirm', token });
     const b = r.body;
-    // The token is spent (or dead) either way: keep it out of the address bar and history.
-    history.replaceState(null, '', location.pathname + location.search);
+    dropToken();
     if (r.status === 200 && b.status === 'registered') {
+      if (b.ticket && b.ticket.qr_svg) return showTicket(b.first_name, b.ticket);
       $('done-h').textContent = b.first_name ? 'You are registered, ' + b.first_name : 'You are registered';
       $('done-p').textContent = 'Your QR code is on its way by email. Show it at the entrance to check in. If it has not arrived in 10 minutes, check your spam folder.';
-      show('done');
+      card('done');
       return;
     }
     if (b.status === 'full') return closed('Registration is full', 'The event reached its capacity before you confirmed. Contact the organizer if you need a place.');
     if (b.status === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
-    if (r.status === 404) return closed('This registration link is not active', 'Check the link with the event organizer.');
+    if (r.status === 404) return closed(...NOT_ACTIVE);
     if (b.status === 'invalid') return closed('This link has expired or was already used', 'Links work once, for 48 hours. Register again from the page you started on.');
     $('cf-msg').textContent = b.error || 'Something went wrong. Please try again.'; $('cf-msg').hidden = false;
   } catch {
@@ -199,8 +334,8 @@ $('cf-no').addEventListener('click', async () => {
   $('cf-no').disabled = true;
   try {
     const r = await call({ action: 'decline', token });
-    history.replaceState(null, '', location.pathname + location.search);
-    if (r.status === 200 && r.body.status === 'declined') return closed('Request deleted', 'Nothing was registered. You can register again from the event page with the right details.');
+    dropToken();
+    if (r.status === 200 && r.body.status === 'declined') return closed('Request deleted', 'Nothing was registered. You can register again from this page with the right details.');
     if (r.body.status === 'invalid') return closed('This link has expired or was already used', 'Links work for 48 hours.');
     $('cf-msg').textContent = r.body.error || 'Something went wrong. Please try again.'; $('cf-msg').hidden = false;
   } catch {
@@ -208,36 +343,35 @@ $('cf-no').addEventListener('click', async () => {
   } finally { $('cf-no').disabled = false; }
 });
 
+// ── start ──
 (async () => {
-  if (!isRegistrationCode(code)) return closed('This registration link is not active', 'Check the link with the event organizer.');
+  if (!isRegistrationCode(code)) return solo(...NOT_ACTIVE);
   let r;
   try { r = await call({ action: 'config' }); }
-  catch { return closed('Could not load this page', 'Check your connection and reload.'); }
-  if (r.status === 404) return closed('This registration link is not active', 'Check the link with the event organizer.');
-  if (r.status !== 200) return closed('Registration is not available right now', 'Please try again in a few minutes.');
+  catch { return solo('Could not load this page', 'Check your connection and reload.'); }
+  if (r.status === 404) return solo(...NOT_ACTIVE);
+  if (r.status !== 200) return solo('Registration is not available right now', 'Please try again in a few minutes.');
   config = r.body;
-  const e = config.event || {};
-  document.title = 'Register: ' + (e.name || 'event');
+  config.questions = config.questions || [];
+  config.page = config.page || {};
+  renderEvent();
+
   if (token) {
-    $('cf-name').textContent = e.name || 'Event';
-    $('cf-meta').textContent = [formatEventDate(e.date), e.venue].filter(Boolean).join(' · ');
+    $('cf-name').textContent = config.event?.name || 'Event';
+    $('cf-meta').textContent = [formatEventDate(config.event?.date), config.event?.venue].filter(Boolean).join(' · ');
     const pv = await call({ action: 'preview', token }).catch(() => null);
     if (pv && pv.status === 200 && pv.body.status === 'ok') {
-      const who = [pv.body.first_name, pv.body.last_name].filter(Boolean).join(' ') + (pv.body.company ? ', ' + pv.body.company : '');
-      $('cf-who').textContent = who;
+      $('cf-who').textContent = [pv.body.first_name, pv.body.last_name].filter(Boolean).join(' ') + (pv.body.company ? ', ' + pv.body.company : '');
       $('cf-who-row').hidden = false;
     } else if (pv && pv.body && pv.body.status === 'invalid') {
-      history.replaceState(null, '', location.pathname + location.search);
+      dropToken();
       return closed('This link has expired or was already used', 'Links work once, for 48 hours. Register again from the page you started on.');
     }
-    return show('confirm');
+    return card('confirm');
   }
   if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
   if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
-  $('ev-name').textContent = e.name || 'Event';
-  $('ev-meta').textContent = [formatEventDate(e.date), e.venue].filter(Boolean).join(' · ');
-  $('test-note').hidden = !config.test;
-  renderQuestions(config.questions || []);
-  show('open');
+  renderQuestions(config.questions);
+  card('open');
   await loadTurnstile(config.turnstile_site_key);
 })();

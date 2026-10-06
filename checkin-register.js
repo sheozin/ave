@@ -95,3 +95,59 @@ export function formatEventDate(iso) {
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   return days[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
+
+// ── page design helpers (registration page redesign, migration 104) ──
+
+// The brand palette from one #RRGGBB: soft background, darker ink for text
+// on white (kept dark enough for 4.5:1), and a deep tone for the cover.
+export function palette(hex) {
+  const c = /^#[0-9A-Fa-f]{6}$/.test(hex || '') ? hex : '#1F4ED8';
+  const rgb = [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+  const mix = (to, t) => '#' + rgb.map((v, i) => Math.round(v * (1 - t) + to[i] * t).toString(16).padStart(2, '0')).join('');
+  return { accent: c, soft: mix([255, 255, 255], 0.88), ink: mix([0, 0, 0], 0.3), deep: mix([10, 12, 20], 0.5) };
+}
+
+// "Europe/Warsaw" -> "Warsaw time"; anything unexpected -> "".
+export function tzLabel(tz) {
+  if (typeof tz !== 'string' || !tz.includes('/')) return '';
+  return tz.split('/').pop().replace(/_/g, ' ') + ' time';
+}
+
+export function initials(name) {
+  const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return (w.length > 1 ? w[0][0] + w[1][0] : (w[0] || '?').slice(0, 2)).toUpperCase();
+}
+
+const stamp = (iso) => iso.replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+// An .ics calendar file. Text is escaped per RFC 5545 (\ ; , and newlines);
+// a missing end becomes start + 2 hours.
+export function buildIcs({ uid, title, startUtc, endUtc, location, description, url }) {
+  const esc = (s) => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const end = endUtc || new Date(Date.parse(startUtc) + 2 * 3600e3).toISOString();
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CueDeck//Registration//EN', 'CALSCALE:GREGORIAN', 'BEGIN:VEVENT',
+    'UID:' + esc(uid), 'DTSTAMP:' + stamp(new Date().toISOString()),
+    'DTSTART:' + stamp(startUtc), 'DTEND:' + stamp(end),
+    'SUMMARY:' + esc(title), location ? 'LOCATION:' + esc(location) : null,
+    description ? 'DESCRIPTION:' + esc(description) : null, url ? 'URL:' + esc(url) : null,
+    'END:VEVENT', 'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n') + '\r\n';
+}
+
+export function googleCalUrl({ title, startUtc, endUtc, location, details }) {
+  const end = endUtc || new Date(Date.parse(startUtc) + 2 * 3600e3).toISOString();
+  const q = new URLSearchParams({ action: 'TEMPLATE', text: title || '', dates: stamp(startUtc) + '/' + stamp(end), location: location || '', details: details || '' });
+  return 'https://calendar.google.com/calendar/render?' + q.toString();
+}
+
+export function outlookCalUrl({ title, startUtc, endUtc, location, details }) {
+  const end = endUtc || new Date(Date.parse(startUtc) + 2 * 3600e3).toISOString();
+  const q = new URLSearchParams({ path: '/calendar/action/compose', rru: 'addevent', subject: title || '', startdt: startUtc, enddt: end, location: location || '', body: details || '' });
+  return 'https://outlook.live.com/calendar/0/deeplink/compose?' + q.toString();
+}
+
+export function mapsUrl(venue, address) {
+  const q = [venue, address].filter(Boolean).join(', ');
+  return q ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) : '';
+}

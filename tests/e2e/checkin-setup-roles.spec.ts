@@ -325,3 +325,50 @@ test('a failed registration save shows the server message and leaves the switch 
   await expect(page.locator('#rg-err')).toHaveText('At most 5 questions');
   await expect(page.locator('#rg-on')).not.toBeChecked();
 });
+
+test('page design: an uploaded cover is re-encoded and saved with the details', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  const uploads: string[] = [];
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', registration_enabled: true,
+      registration_code: 'ABCDEFGH23', registration_questions: [], registration_show_programme: false }]);
+    await page.route(/\/storage\/v1\/object\/checkin-public\//, async r => {
+      // supabase-js sends multipart: the part's own Content-Type is in the body.
+      const body = (r.request().postDataBuffer() ?? Buffer.alloc(0)).toString('latin1');
+      uploads.push(new URL(r.request().url()).pathname + ' ' + (/Content-Type: image\/jpeg/i.test(body) ? 'image/jpeg' : 'other'));
+      await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: 'x' }) });
+    });
+    await rpc(page, 'checkin_set_registration_page', (a) => { sent.push(a); return {
+      host_name: a.p_host_name, description: a.p_description, address: a.p_address, brand_color: a.p_brand_color,
+      cover_path: a.p_cover_path, logo_path: a.p_logo_path, show_programme: a.p_show_programme }; });
+  });
+  await page.locator('#rg-host').fill('Northwind Events');
+  await page.locator('#rg-desc').fill('A day of talks.');
+  await page.locator('#rg-addr').fill('Main St 1');
+  await page.locator('#rg-color').fill('blue');
+  await page.locator('#rg-save-design').click();
+  await expect(page.locator('#rg-design-err')).toHaveText('Brand colour must look like #1F4ED8.');
+  expect(sent).toHaveLength(0);
+  await page.locator('#rg-color').fill('#0F766E');
+  // A 2x2 PNG; the page redraws it as JPEG before upload.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNAMDAFGbBPzUPg4gAAAAAElFTkSuQmCC', 'base64');
+  await page.locator('#rg-cover-file').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#rg-design-state')).toHaveText('Uploaded. Save design to publish it.');
+  expect(uploads[0]).toMatch(new RegExp('/checkin-public/' + EVENT_ID + '/cover-[0-9a-f]{16}\\.jpg image/jpeg'));
+  await page.locator('#rg-prog').evaluate((el: HTMLInputElement) => el.click());
+  await page.locator('#rg-save-design').click();
+  await expect(page.locator('#rg-design-ok')).toHaveText('Saved. Your page shows the new design now.');
+  expect(sent[0]).toMatchObject({ p_event_id: EVENT_ID, p_host_name: 'Northwind Events', p_description: 'A day of talks.', p_address: 'Main St 1',
+    p_brand_color: '#0F766E', p_logo_path: null, p_show_programme: true });
+  expect(String(sent[0].p_cover_path)).toMatch(new RegExp('^' + EVENT_ID + '/cover-[0-9a-f]{16}\\.jpg$'));
+});
+
+test('page design: a non-image file is refused before upload', async ({ page }) => {
+  let uploaded = false;
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await page.route(/\/storage\/v1\/object\/checkin-public\//, r => { uploaded = true; return r.fulfill({ status: 200, body: '{}' }); });
+  });
+  await page.locator('#rg-logo-file').setInputFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>') });
+  await expect(page.locator('#rg-design-err')).toHaveText('Use a JPEG, PNG or WebP image.');
+  expect(uploaded).toBe(false);
+});

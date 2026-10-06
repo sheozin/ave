@@ -123,3 +123,37 @@ describe('client key for the rate limit', () => {
     for (const bad of ['', 'not-an-ip', '1::2::3', '12345::1', 'g::1', '1:2:3:4:5:6:7:8:9'] ) expect(server.clientKey(bad)).toBeNull();
   });
 });
+
+describe('page design helpers', () => {
+  it('derives a palette and falls back on a bad colour', () => {
+    const p = page.palette('#0F766E');
+    expect(p.accent).toBe('#0F766E');
+    expect(p.soft).toMatch(/^#[0-9a-f]{6}$/);
+    expect(page.palette('blue').accent).toBe('#1F4ED8');
+    expect(page.palette(undefined).accent).toBe('#1F4ED8');
+  });
+  it('labels a timezone and makes initials', () => {
+    expect(page.tzLabel('Europe/Warsaw')).toBe('Warsaw time');
+    expect(page.tzLabel('America/New_York')).toBe('New York time');
+    expect(page.tzLabel('UTC')).toBe('');
+    expect(page.initials('Northwind Events')).toBe('NE');
+    expect(page.initials('Contoso')).toBe('CO');
+    expect(page.initials('')).toBe('?');
+  });
+  it('builds an .ics with escaped text and a default end', () => {
+    const ics = page.buildIcs({ uid: 'X@app', title: 'Summit, Day 1; Hall\\A', startUtc: '2026-10-18T07:00:00.000Z', endUtc: null,
+      location: 'Harbour Hall, Main St', description: 'line1\nline2', url: 'https://app.cuedeck.io/r/X' });
+    expect(ics).toContain('SUMMARY:Summit\\, Day 1\; Hall\\\\A');
+    expect(ics).toContain('DTSTART:20261018T070000Z');
+    expect(ics).toContain('DTEND:20261018T090000Z');
+    expect(ics).toContain('DESCRIPTION:line1\\nline2');
+    expect(ics.split('\r\n')[0]).toBe('BEGIN:VCALENDAR');
+  });
+  it('builds calendar and map links with encoded values', () => {
+    const g = new URL(page.googleCalUrl({ title: 'A & B', startUtc: '2026-10-18T07:00:00.000Z', endUtc: '2026-10-18T15:30:00.000Z', location: 'Hall', details: 'x' }));
+    expect(g.searchParams.get('text')).toBe('A & B');
+    expect(g.searchParams.get('dates')).toBe('20261018T070000Z/20261018T153000Z');
+    expect(page.mapsUrl('Harbour Hall', 'Main St 1, Gdańsk')).toBe('https://www.google.com/maps/search/?api=1&query=Harbour%20Hall%2C%20Main%20St%201%2C%20Gda%C5%84sk');
+    expect(page.mapsUrl(null, '')).toBe('');
+  });
+});

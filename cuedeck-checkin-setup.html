@@ -48,6 +48,9 @@
 .drop b{font-size:13.5px}.drop p{margin:2px 0 0;font-size:12.5px;color:var(--t2)}
 .preview{margin-top:16px;border:1px solid var(--bd);border-radius:14px;padding:16px}
 .preview .sum{display:flex;gap:18px;font-size:13px;margin-bottom:10px;flex-wrap:wrap}
+.rg-img{height:140px;border-radius:12px;border:1px dashed var(--bd2);background:var(--wm);display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;padding:8px}
+.rg-img img{width:100%;height:100%;object-fit:cover;border-radius:8px}
+.rg-img-logo img{object-fit:contain}
 .toggle{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #F5F5F7}
 .toggle b{font-size:14px}.toggle p{margin:3px 0 0;font-size:12.5px;color:var(--t2);max-width:520px}
 .sw{position:relative;width:44px;height:26px;flex:none}
@@ -150,6 +153,23 @@
       <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
+    <h3 class="sc-h">Page design</h3>
+    <p class="sc-p">How your page looks to guests. Colour and images follow your event's brand; leave anything empty and the page simply leaves it out.</p>
+    <div class="row2" style="gap:12px">
+      <div class="field"><label for="rg-host">Hosted by</label><input id="rg-host" maxlength="80" placeholder="Organizer or client name" autocomplete="off"></div>
+      <div class="field"><label for="rg-color">Brand colour</label><div style="display:flex;gap:8px"><input id="rg-color-pick" type="color" aria-label="Pick brand colour" style="width:52px;padding:4px;flex:none"><input id="rg-color" maxlength="7" placeholder="#1F4ED8" autocomplete="off"></div></div>
+    </div>
+    <div class="field"><label for="rg-addr">Venue address</label><input id="rg-addr" maxlength="200" placeholder="Street, city. Used for the Maps link" autocomplete="off"></div>
+    <div class="field"><label for="rg-desc">About the event</label><textarea id="rg-desc" maxlength="2000" rows="4" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="What the day is about, who it is for, what to bring"></textarea></div>
+    <div class="row2" style="gap:12px;align-items:start">
+      <div class="field"><label>Cover image</label><div class="rg-img" id="rg-cover-box"><img id="rg-cover-img" alt="Cover image preview" hidden><span id="rg-cover-none" class="small">Wide image, at least 1600 px. JPEG, PNG or WebP.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-cover-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-cover-rm" hidden>Remove</button></div></div>
+      <div class="field"><label>Logo</label><div class="rg-img rg-img-logo" id="rg-logo-box"><img id="rg-logo-img" alt="Logo preview" hidden><span id="rg-logo-none" class="small">Square works best.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-logo-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-logo-rm" hidden>Remove</button></div></div>
+    </div>
+    <div class="toggle"><div><b>Show the programme</b><p>Guests see your sessions and times from the run of show, and they follow any delays. Only for events you run in CueDeck.</p></div><label class="sw"><input type="checkbox" id="rg-prog"><span></span></label></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn btn-p" id="rg-save-design" type="button">Save design</button><span class="small" id="rg-design-state"></span></div>
+    <div class="err" id="rg-design-err"></div><div class="ok" id="rg-design-ok"></div>
     <h3 class="sc-h">Limits</h3>
     <div class="row2" style="gap:12px">
       <div class="field"><label for="rg-cap">Capacity</label><input id="rg-cap" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
@@ -364,7 +384,7 @@ function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['details', 'attendees', 'register', 'staff', 'kiosk', 'qr', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ details: renderDetails, attendees: renderAttendees, register: renderRegister, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
+  ({ details: renderDetails, attendees: renderAttendees, register: () => { renderRegister(); renderDesign(); }, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
 document.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => go(b.dataset.step)));
@@ -679,6 +699,88 @@ function renderQuestionRows() {
   });
   $('rg-addq').hidden = RG_QS.length >= 5;
 }
+
+// ── page design (migration 104) ──
+// Images are re-encoded in the browser before upload: a cover to at most
+// 2400 px as JPEG, a logo to 512 px as PNG (keeps transparency). Drawing to
+// a canvas also strips EXIF, including any GPS position in a phone photo.
+const RG_BUCKET = 'checkin-public';
+const rgPublicUrl = (path) => path ? SUPABASE_URL + '/storage/v1/object/public/' + RG_BUCKET + '/' + path : '';
+let RG_IMG = { cover: null, logo: null };      // current paths on the form
+let RG_SAVED = { cover: null, logo: null };    // paths last saved
+
+function renderDesign() {
+  $('rg-host').value = ENT.registration_host_name ?? (EV.client_name || '');
+  $('rg-desc').value = ENT.registration_description ?? '';
+  $('rg-addr').value = ENT.registration_address ?? '';
+  const c = ENT.registration_brand_color || (/^#[0-9A-Fa-f]{6}$/.test(EV.brand_color || '') ? EV.brand_color : '');
+  $('rg-color').value = c; $('rg-color-pick').value = c || '#1F4ED8';
+  $('rg-prog').checked = !!ENT.registration_show_programme;
+  RG_IMG = { cover: ENT.registration_cover_path || null, logo: ENT.registration_logo_path || null };
+  RG_SAVED = { ...RG_IMG };
+  showImg('cover'); showImg('logo');
+  $('rg-design-err').textContent = ''; $('rg-design-ok').textContent = ''; $('rg-design-state').textContent = '';
+}
+function showImg(kind) {
+  const p = RG_IMG[kind];
+  $('rg-' + kind + '-img').hidden = !p; $('rg-' + kind + '-none').hidden = !!p; $('rg-' + kind + '-rm').hidden = !p;
+  if (p) $('rg-' + kind + '-img').src = rgPublicUrl(p);
+}
+function reencode(file, kind) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const max = kind === 'cover' ? 2400 : 512;
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      const type = kind === 'cover' ? 'image/jpeg' : 'image/png';
+      c.toBlob(b => b ? resolve({ blob: b, type, ext: kind === 'cover' ? 'jpg' : 'png' }) : reject(new Error('Could not read that image.')), type, 0.88);
+    };
+    img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('That file is not an image we can read. Use JPEG, PNG or WebP.')); };
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function uploadImg(kind, file) {
+  $('rg-design-err').textContent = ''; $('rg-design-ok').textContent = '';
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { $('rg-design-err').textContent = 'Use a JPEG, PNG or WebP image.'; return; }
+  if (file.size > 25 * 1024 * 1024) { $('rg-design-err').textContent = 'That image is over 25 MB. Choose a smaller one.'; return; }
+  $('rg-design-state').textContent = 'Uploading…';
+  try {
+    const { blob, type, ext } = await reencode(file, kind);
+    const rand = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16).padStart(2, '0')).join('');
+    const path = EVENT_ID + '/' + kind + '-' + rand + '.' + ext;
+    const { error } = await sb.storage.from(RG_BUCKET).upload(path, blob, { contentType: type, upsert: false, cacheControl: '31536000' });
+    if (error) throw new Error(error.message);
+    RG_IMG[kind] = path; showImg(kind);
+    $('rg-design-state').textContent = 'Uploaded. Save design to publish it.';
+  } catch (e) { $('rg-design-state').textContent = ''; $('rg-design-err').textContent = e.message; }
+}
+$('rg-cover-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('cover', f); };
+$('rg-logo-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('logo', f); };
+$('rg-cover-rm').onclick = () => { RG_IMG.cover = null; showImg('cover'); $('rg-design-state').textContent = 'Save design to publish the change.'; };
+$('rg-logo-rm').onclick = () => { RG_IMG.logo = null; showImg('logo'); $('rg-design-state').textContent = 'Save design to publish the change.'; };
+$('rg-color-pick').oninput = () => { $('rg-color').value = $('rg-color-pick').value.toUpperCase(); };
+$('rg-color').oninput = () => { if (/^#[0-9A-Fa-f]{6}$/.test($('rg-color').value)) $('rg-color-pick').value = $('rg-color').value; };
+$('rg-save-design').onclick = async () => {
+  $('rg-design-err').textContent = ''; $('rg-design-ok').textContent = '';
+  const color = $('rg-color').value.trim();
+  if (color && !/^#[0-9A-Fa-f]{6}$/.test(color)) { $('rg-design-err').textContent = 'Brand colour must look like #1F4ED8.'; return; }
+  const { data, error } = await sb.rpc('checkin_set_registration_page', {
+    p_event_id: EVENT_ID, p_host_name: $('rg-host').value, p_description: $('rg-desc').value, p_address: $('rg-addr').value,
+    p_brand_color: color, p_cover_path: RG_IMG.cover, p_logo_path: RG_IMG.logo, p_show_programme: $('rg-prog').checked });
+  if (error) { $('rg-design-err').textContent = error.message; return; }
+  // Images no longer used are deleted once the page stops pointing at them.
+  const gone = ['cover', 'logo'].map(k => RG_SAVED[k]).filter(p => p && p !== data.cover_path && p !== data.logo_path);
+  if (gone.length) { const { error: rmErr } = await sb.storage.from(RG_BUCKET).remove(gone); if (rmErr) console.error('setup: old image delete failed', rmErr.message); }
+  Object.assign(ENT, { registration_host_name: data.host_name, registration_description: data.description, registration_address: data.address,
+    registration_brand_color: data.brand_color, registration_cover_path: data.cover_path, registration_logo_path: data.logo_path,
+    registration_show_programme: data.show_programme });
+  renderDesign();
+  $('rg-design-ok').textContent = 'Saved. Your page shows the new design now.';
+};
 
 $('rg-addq').onclick = () => {
   if (RG_QS.length >= 5) return;

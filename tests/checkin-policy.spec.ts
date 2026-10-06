@@ -379,3 +379,14 @@ describe('invoiceTaxAmount', () => {
     expect(invoiceTaxAmount('x')).toBe(0);
   });
 });
+
+import { zonedTimeUtc } from '../supabase/functions/_shared/checkin-policy.ts';
+describe('zonedTimeUtc', () => {
+  it('converts a wall-clock time in the event timezone, across DST', () => {
+    expect(zonedTimeUtc('2026-10-18', '09:00', 'Europe/Warsaw')!.toISOString()).toBe('2026-10-18T07:00:00.000Z');   // CEST
+    expect(zonedTimeUtc('2026-11-02', '09:00:00', 'Europe/Warsaw')!.toISOString()).toBe('2026-11-02T08:00:00.000Z'); // CET
+    expect(zonedTimeUtc('2026-03-29', '03:30', 'Europe/Warsaw')!.toISOString()).toBe('2026-03-29T01:30:00.000Z');  // after the spring jump
+    expect(zonedTimeUtc('2026-10-18', '25:00', 'Europe/Warsaw')).toBeNull();
+    expect(zonedTimeUtc('2026-10-18', '09:00', 'Not/AZone')).toBeNull();
+  });
+});

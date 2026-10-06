@@ -33,6 +33,23 @@ function zonedMidnightUtc(ymd: string, timeZone: string): Date {
   return new Date(t)
 }
 
+// A wall-clock time ('HH:MM' or 'HH:MM:SS') on `ymd` in `timeZone`, as a
+// UTC instant, by the same two-read method as zonedMidnightUtc. Null for
+// an invalid date, time or zone. Used for the registration page's
+// calendar entries.
+export function zonedTimeUtc(ymd: string, hhmm: string, timeZone: string): Date | null {
+  if (!isValidEventDate(ymd) || !isValidTimeZone(timeZone) || !/^\d{2}:\d{2}(:\d{2})?$/.test(hhmm)) return null
+  const [y, m, d] = ymd.split('-').map(Number)
+  const [hh, mm] = hhmm.split(':').map(Number)
+  if (hh > 23 || mm > 59) return null
+  const guess = Date.UTC(y, m - 1, d, hh, mm)
+  const off1 = tzOffsetMs(new Date(guess), timeZone)
+  let t = guess - off1
+  const off2 = tzOffsetMs(new Date(t), timeZone)
+  if (off2 !== off1) t = guess - off2
+  return new Date(t)
+}
+
 export function isValidEventDate(s: unknown): s is string {
   if (typeof s !== 'string') return false
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
