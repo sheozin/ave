@@ -73,6 +73,45 @@ test.describe('END and CANCEL confirm', () => {
     await expect(page.locator('#card-live1 .sc-actions button.confirm-pending')).toHaveText('CONFIRM END');
   });
 
+  test('an END armed just before the end time still confirms after LIVE flips to OVERRUN', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    const endBtn = page.locator('#card-live1 .sc-actions button', { hasText: /END SESSION|CONFIRM END/ });
+    await endBtn.click();
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      (window as any).onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'OVERRUN', version: 4 }, old: {} });
+    });
+    await expect(endBtn).toHaveText('CONFIRM END');
+    await endBtn.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
+  test('an END arm does not come back after LIVE to HOLD to LIVE; one press only arms', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      const w = window as any;
+      w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'HOLD', version: 4 }, old: {} });
+      w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'LIVE', version: 5 }, old: {} });
+    });
+    expect(await page.locator('#card-live1 .confirm-pending').count()).toBe(0);
+    await expect(page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' })).toHaveCount(1);
+    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    expect(await calls(page)).toEqual([]);
+    await expect(page.locator('#card-live1 .sc-actions button.confirm-pending')).toHaveText('CONFIRM END');
+  });
+
+  test('an armed CANCEL holds for 3 s like END', async ({ page }) => {
+    await setup(page, [sess('ready1', 1, { status: 'READY' })]);
+    await page.locator('#card-ready1 .sc-actions button', { hasText: 'CANCEL' }).click();
+    await page.clock.runFor(2500);
+    const armed = page.locator('#card-ready1 .sc-actions button.confirm-pending');
+    expect(await armed.count()).toBe(1);
+    await armed.click();
+    expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
+  });
+
   test('armed END returns to its normal label after the timeout', async ({ page }) => {
     await setup(page, [live()]);
     await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
@@ -431,4 +470,23 @@ test('a malicious action name in the event log is shown as text, not HTML', asyn
   await expect(page.locator('#log-feed img')).toHaveCount(0);
   await expect(page.locator('#log-feed')).toContainText('<img src=x');
   expect(await page.evaluate(() => (window as any).__xss)).toBeUndefined();
+});
+
+// ── Setup wizard reloads the sessions of the current event ────────────────
+test('the setup wizard shows the session it just added', async ({ page }) => {
+  await setup(page, []);
+  const row = { id: 'w1', event_id: 'ev-1', sort_order: 1, title: 'Wizard keynote', status: 'PLANNED', version: 1, room: '',
+    speaker: '', planned_start: '09:00:00', planned_end: '09:30:00', scheduled_start: '09:00:00', scheduled_end: '09:30:00' };
+  await page.route('**/rest/v1/leod_sessions**', r => r.request().method() === 'GET'
+    ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([row]) })
+    : r.fulfill({ status: 201, contentType: 'application/json', body: '[]' }));
+  await page.evaluate(async () => {
+    const w = window as any;
+    w.showSetupWizard();
+    (0, eval)('_wizStep = 1');
+    w.renderWizStep();
+    (document.getElementById('wiz-sess-title') as HTMLInputElement).value = 'Wizard keynote';
+    await w.wizNext();
+  });
+  expect(await page.evaluate(() => (0, eval)('S').sessions.map((s: any) => s.id))).toEqual(['w1']);
 });

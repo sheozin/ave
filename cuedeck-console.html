@@ -2783,7 +2783,7 @@ async function loadSnapshot(eventId) {
   const { data, error } = await sb
     .from('leod_sessions').select('*').eq('event_id', eventId).order('sort_order');
   if (error) throw error;
-  if (S.event && S.event.id !== eventId) return; // answer for an event already switched away from
+  if (S.event && S.event.id !== eventId) return false; // answer for an event already switched away from
   S.sessions  = data || [];
   S.dbStatus  = 'ok';
   S.lastSyncAt = Date.now(); // PR-016: record sync time for diag tooltip
@@ -2895,6 +2895,7 @@ function onSessionChange(payload) {
   if (!row) return;
   if (S.event && row.event_id && row.event_id !== S.event.id) return; // another event's row
   if (payload.eventType === 'DELETE') {
+    dropStaleArms(row.id);
     delete S.seqMap[row.id];
     S.sessions = S.sessions.filter(s => s.id !== row.id);
     // Clear ghost room filter if deleted session was the only one in that room
@@ -2932,6 +2933,7 @@ function onSessionChange(payload) {
       if (S.sessions[idx].version > row.version) return; // stale (version check)
       const prev = S.sessions[idx];
       S.sessions[idx] = row;
+      if (prev.status !== row.status) dropStaleArms(row.id, row.status);
       if (prev.status !== row.status)
         pushLog('STATUS', `${trunc(row.title, 22)}: ${prev.status} → ${row.status}`, row.id);
     } else {
@@ -2954,14 +2956,30 @@ function onSessionChange(payload) {
 // buildCtxPanel render from it, so the 1 s re-render of a LIVE event keeps
 // the confirm label instead of wiping it.
 // An arm holds for the status it was armed in: if the session changes status
-// meanwhile (another operator, realtime), the arm no longer counts.
+// meanwhile (another operator, realtime), the arm is dropped. For END, LIVE
+// and OVERRUN count as one state: a talk flips to OVERRUN on its own at its
+// end time, which is exactly when operators press END.
 const _cancelPending = new Map(); // sessionId → { status, timer }
+function armState(pending, status) {
+  return pending === _endPending && status === 'OVERRUN' ? 'LIVE' : status;
+}
 function isArmed(pending, s) {
   const a = pending.get(s.id);
-  return !!a && a.status === s.status;
+  return !!a && a.status === armState(pending, s.status);
+}
+// Drop arms whose (normalised) status no longer matches, so an arm cannot
+// come back to life when the session returns to its old status.
+function dropStaleArms(sessionId, status) {
+  for (const pending of [_endPending, _cancelPending]) {
+    const a = pending.get(sessionId);
+    if (a && (status === undefined || a.status !== armState(pending, status))) {
+      clearTimeout(a.timer);
+      pending.delete(sessionId);
+    }
+  }
 }
 function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms) {
-  const status = S.sessions.find(x => x.id === sessionId)?.status;
+  const status = armState(pending, S.sessions.find(x => x.id === sessionId)?.status);
   const prev = pending.get(sessionId);
   if (prev) { clearTimeout(prev.timer); pending.delete(sessionId); }
   if (prev && prev.status === status) {
@@ -2980,7 +2998,7 @@ function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms) {
   renderSessions();
 }
 function confirmCancel(sessionId, btn) {
-  armOrConfirm(_cancelPending, sessionId, btn, 'CANCELLED', 'confirm.confirmCancel', 2000);
+  armOrConfirm(_cancelPending, sessionId, btn, 'CANCELLED', 'confirm.confirmCancel', 3000);
 }
 
 // ═══════════════════════════════════════════════════
@@ -3428,7 +3446,9 @@ function scheduleReconnect() {
 async function doReconnect() {
   try {
     await syncClock();
-    await loadSnapshot(S.event.id);
+    // Dropped as stale: the operator switched event, and switchEvent loads
+    // and subscribes the new one. Nothing was reconnected here.
+    if (await loadSnapshot(S.event.id) === false) return;
     await subscribeControl(S.event.id);
     S.retries = 0;
     setConn('live');
@@ -8153,7 +8173,7 @@ async function wizNext() {
         type: 'Keynote', sort_order: 1, status: 'PLANNED',
       });
       if (error) { wizShowError(error.message); return; }
-      await loadSnapshot();
+      if (S.event) await loadSnapshot(S.event.id);
     } else if (_wizStep === 2) {
       const email = document.getElementById('wiz-inv-email')?.value?.trim();
       if (email) {
@@ -8176,7 +8196,7 @@ async function wizNext() {
         event_id: evId, name, content_mode: mode, orientation: orient, zone_type: 'lobby',
       });
       if (error) { wizShowError(error.message); return; }
-      await loadSnapshot();
+      if (S.event) await loadSnapshot(S.event.id);
       wizSkip();
       if (typeof refreshChecklist === 'function') refreshChecklist();
       return;

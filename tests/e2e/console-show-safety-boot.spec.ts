@@ -148,3 +148,17 @@ test('a reconnect landing during an event switch never shows the old event', asy
     await expect(page.locator('#sessions-list')).toContainText('Third event opening');
   } finally { await ctx.close(); }
 });
+
+test('a reconnect whose snapshot was dropped as stale does not log "reconnected"', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, {
+    extraEvents: [EV4], sessionsByEvent: { [E4]: [] }, sessionDelayMs: { [EVENT_ID]: 1500 },
+  });
+  try {
+    const oldSnapshot = page.waitForRequest(r => r.url().includes('/leod_sessions') && r.url().includes(EVENT_ID));
+    await page.evaluate(() => { (window as any).__rc = (window as any).doReconnect(); });
+    await oldSnapshot;
+    await page.evaluate(async (e4) => { await (window as any).switchEvent(e4); await (window as any).__rc; }, E4);
+    const resyncs = await page.evaluate(() => (0, eval)('S').log.filter((e: any) => e.action === 'RESYNC').length);
+    expect(resyncs).toBe(0);
+  } finally { await ctx.close(); }
+});
