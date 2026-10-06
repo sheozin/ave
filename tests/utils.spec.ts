@@ -249,18 +249,21 @@ describe('PR-006 — detectSeqGap()', () => {
 
 // ── PR-010: getNextSession() ──────────────────────────────────────────────────
 // Mirrors getNextSession() in cuedeck-console.html.
-// Returns first non-ENDED/CANCELLED session after the live session in sort order.
+// Returns first non-ENDED/CANCELLED session after the live session in sort order,
+// in the same room (any room only when the live session has none).
 
 interface FullSession extends Session {
   sort_order: number;
   title: string;
+  room?: string | null;
 }
 
 function getNextSession(sessions: FullSession[], liveSession: FullSession | null): FullSession | null {
   if (!liveSession) return null;
   return sessions.find(s =>
     s.sort_order > liveSession.sort_order &&
-    !['ENDED', 'CANCELLED'].includes(s.status)
+    !['ENDED', 'CANCELLED'].includes(s.status) &&
+    (!liveSession.room || s.room === liveSession.room)
   ) || null;
 }
 
@@ -322,6 +325,25 @@ describe('PR-010 — getNextSession()', () => {
     const s3 = makeSession({ id: 'c', status: 'PLANNED', sort_order: 3 });
     // Array.find() returns first match — sort_order 2 comes before 3
     expect(getNextSession([live, s2, s3], live)).toBe(s2);
+  });
+
+  it('skips sessions in other rooms', () => {
+    const live = makeSession({ id: 'a', status: 'LIVE', sort_order: 1, room: 'Main Stage' });
+    const other = makeSession({ id: 'b', status: 'PLANNED', sort_order: 2, room: 'Hall B' });
+    const same = makeSession({ id: 'c', status: 'PLANNED', sort_order: 3, room: 'Main Stage' });
+    expect(getNextSession([live, other, same], live)).toBe(same);
+  });
+
+  it('returns null when only other rooms have sessions left', () => {
+    const live = makeSession({ id: 'a', status: 'LIVE', sort_order: 1, room: 'Main Stage' });
+    const other = makeSession({ id: 'b', status: 'PLANNED', sort_order: 2, room: 'Hall B' });
+    expect(getNextSession([live, other], live)).toBeNull();
+  });
+
+  it('uses any room when the live session has none', () => {
+    const live = makeSession({ id: 'a', status: 'LIVE', sort_order: 1, room: null });
+    const other = makeSession({ id: 'b', status: 'PLANNED', sort_order: 2, room: 'Hall B' });
+    expect(getNextSession([live, other], live)).toBe(other);
   });
 });
 
