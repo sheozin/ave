@@ -710,7 +710,7 @@ let RG_IMG = { cover: null, logo: null };      // current paths on the form
 let RG_SAVED = { cover: null, logo: null };    // paths last saved
 
 function renderDesign() {
-  $('rg-host').value = ENT.registration_host_name ?? (EV.client_name || '');
+  $('rg-host').value = ENT.registration_host_name ?? '';
   $('rg-desc').value = ENT.registration_description ?? '';
   $('rg-addr').value = ENT.registration_address ?? '';
   const c = ENT.registration_brand_color || (/^#[0-9A-Fa-f]{6}$/.test(EV.brand_color || '') ? EV.brand_color : '');

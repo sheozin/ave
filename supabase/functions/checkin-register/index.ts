@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
   if (!ent || !ent.registration_enabled || !ent.checkin_core) return json({ error: 'not_found' }, 404)
 
   const { data: event, error: evErr } = await sb.from('leod_events')
-    .select('name, date, venue, timezone, event_start, event_end, client_name, brand_color').eq('id', ent.event_id).single()
+    .select('name, date, venue, timezone, event_start, event_end, brand_color').eq('id', ent.event_id).single()
   if (evErr || !event) {
     console.error('checkin-register: event read failed', evErr?.code)
     return json({ error: 'Registration is not available right now' }, 503)
@@ -149,8 +149,8 @@ Deno.serve(async (req) => {
         if (state === 'open' && placesLeft === 0) state = 'full'
       }
     }
-    // The page's design (migration 104). Falls back to the event's own
-    // branding where the organizer has not set one for the page.
+    // The page's design (migration 104). Only the brand colour falls back
+    // to the event's own branding.
     const hex = (c: unknown) => typeof c === 'string' && /^#[0-9A-Fa-f]{6}$/.test(c) ? c : null
     const pub = (path: string | null) => path ? Deno.env.get('SUPABASE_URL') + '/storage/v1/object/public/checkin-public/' + path : null
     const hhmm = (t: unknown) => typeof t === 'string' ? t.slice(0, 5) : null
@@ -172,7 +172,9 @@ Deno.serve(async (req) => {
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
       page: {
-        host_name: ent.registration_host_name ?? event.client_name ?? null,
+        // Only what the organizer set for the page: the event's client_name is
+        // internal (an agency's client) and is never published by default.
+        host_name: ent.registration_host_name ?? null,
         description: ent.registration_description ?? null,
         address: ent.registration_address ?? null,
         brand_color: hex(ent.registration_brand_color) ?? hex(event.brand_color),

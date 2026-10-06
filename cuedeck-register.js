@@ -84,8 +84,11 @@ function renderEvent() {
   if (pg.logo_url) $('mark').append(el('img', { src: pg.logo_url, alt: host ? host + ' logo' : 'Organizer logo' }));
   else $('mark').textContent = initials(host || e.name);
 
-  if (pg.cover_url) { $('cover-img').src = pg.cover_url; $('cover-img').alt = e.name || ''; $('cover-img').hidden = false; $('cover-ph').hidden = true; }
-  else { $('cover-img').hidden = true; $('cover-ph').hidden = false; $('cover-ph').textContent = e.name || ''; }
+  // No cover: a short band in the brand colour, not a second copy of the title.
+  $('cover').classList.toggle('none', !pg.cover_url);
+  if (pg.cover_url) { $('cover-img').src = pg.cover_url; $('cover-img').alt = e.name || ''; $('cover-img').hidden = false; }
+  else $('cover-img').hidden = true;
+  $('cover-ph').hidden = true;
   $('ev-name').textContent = e.name || 'Event';
   $('test-chip').hidden = !config.test;
 
@@ -120,7 +123,8 @@ function renderEvent() {
   $('left').hidden = config.places_left == null;
   $('left').textContent = config.places_left == null ? '' : config.places_left + (config.places_left === 1 ? ' place left' : ' places left');
   $('test-note').hidden = !config.test;
-  if (host) $('consent-t').textContent = 'I agree that ' + host + ' may use these details to manage my registration and check-in. CueDeck processes them on their behalf.';
+  // The consent names "the organizer", not the host shown on the page: the
+  // host may be a client brand, while the organizer is the data controller.
 
   $('loading').hidden = true; $('closed').hidden = true; $('page').hidden = false;
 }
