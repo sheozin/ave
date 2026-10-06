@@ -41,6 +41,14 @@ const EMAIL_SHAPE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,
 const LINKISH = /[@/\\]|[\p{L}\p{N}-][.。｡]\p{L}{2,}/u
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{10}$/
 
+// What is stored and printed for a typed name or company: NFKC (full-width
+// look-alikes folded), format characters removed (zero-width spaces and
+// bidi controls, which hid a 'word.tld' from the link check), whitespace
+// collapsed. Validation runs on this same value.
+export function cleanText(s: string): string {
+  return s.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/\s+/g, ' ').trim()
+}
+
 export function isRegistrationCode(code: unknown): code is string {
   return typeof code === 'string' && CODE_SHAPE.test(code)
 }
@@ -54,22 +62,22 @@ export function validateRegistration(
   questions: Question[],
 ): { errors: string[]; answers: Record<string, { label: string; value: string }> } {
   const errors: string[] = []
-  const first = f.first_name.trim()
-  const last = f.last_name.trim()
+  const first = cleanText(f.first_name)
+  const last = cleanText(f.last_name)
   const email = f.email.trim()
 
   if (!first) errors.push('first_name')
   else if (first.length > MAX_NAME) errors.push('first_name_too_long')
-  else if (!HAS_LETTER.test(first) || LINKISH.test(first.normalize('NFKC'))) errors.push('first_name_invalid')
+  else if (!HAS_LETTER.test(first) || LINKISH.test(first)) errors.push('first_name_invalid')
 
   if (!last) errors.push('last_name')
   else if (last.length > MAX_NAME) errors.push('last_name_too_long')
-  else if (!HAS_LETTER.test(last) || LINKISH.test(last.normalize('NFKC'))) errors.push('last_name_invalid')
+  else if (!HAS_LETTER.test(last) || LINKISH.test(last)) errors.push('last_name_invalid')
 
   if (!email) errors.push('email')
   else if (email.length > MAX_EMAIL || !EMAIL_SHAPE.test(email)) errors.push('email_format')
 
-  if (f.company.trim().length > MAX_COMPANY) errors.push('company_too_long')
+  if (cleanText(f.company).length > MAX_COMPANY) errors.push('company_too_long')
 
   const answers: Record<string, { label: string; value: string }> = {}
   for (const q of questions) {
@@ -102,4 +110,22 @@ export function mayResend(lastSentIso: string | null, nowMs: number): boolean {
   if (!lastSentIso) return true
   const t = Date.parse(lastSentIso)
   return Number.isNaN(t) || nowMs - t >= RESEND_GAP_MS
+}
+
+// An IPv6 client is keyed by its /64: one connection usually holds a whole
+// /64, so keying the full address would let it rotate past the limit. An
+// IPv4-mapped address (::ffff:a.b.c.d) is keyed as the IPv4 address.
+// Anything that is not a well-formed address is refused (null).
+export function clientKey(raw: string): string | null {
+  const ip = raw.trim().toLowerCase().replace(/%.*$/, '')
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return ip
+  const mapped = ip.match(/^::ffff:(\d{1,3}(\.\d{1,3}){3})$/)
+  if (mapped) return mapped[1]
+  if (!/^[0-9a-f:]+$/.test(ip) || ip.split('::').length > 2) return null
+  const [h, t] = ip.includes('::') ? ip.split('::') : [ip, null]
+  const head = h ? h.split(':') : []
+  const tail = t ? t.split(':') : []
+  const groups = t === null ? head : [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail]
+  if (groups.length !== 8 || groups.some(g => !/^[0-9a-f]{1,4}$/.test(g))) return null
+  return groups.slice(0, 4).map(g => g.padStart(4, '0')).join(':') + '::/64'
 }

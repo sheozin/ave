@@ -30,6 +30,7 @@ async function setup(page: Page, opts: { config?: unknown; configStatus?: number
   await fn(page, 'checkin-register', (b) => {
     if (b.action === 'config') return { status: opts.configStatus ?? 200, body: opts.config ?? CONFIG() };
     sent.push(b);
+    if (b.action === 'decline') return { body: { status: 'declined' } };
     if (b.action === 'preview') return opts.preview ? opts.preview(b) : { body: { status: 'ok', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso' } };
     if (b.action === 'confirm') return opts.confirm ? opts.confirm(b) : { body: { status: 'registered', first_name: 'Maya' } };
     return opts.register ? opts.register(b) : { body: { status: 'check_email' } };
@@ -181,5 +182,15 @@ test('a link whose request was replaced or expired is caught at preview', async 
   await setup(page, { preview: () => ({ body: { status: 'invalid' } }) });
   await page.goto(URL_ + '#t=' + TOKEN);
   await expect(page.locator('#closed-h')).toHaveText('This link has expired or was already used');
+  expect(page.url()).not.toContain('t=');
+});
+
+test('"This is not me" deletes the request without confirming it', async ({ page }) => {
+  const sent = await setup(page);
+  await page.goto(URL_ + '#t=' + TOKEN);
+  await page.click('#cf-no');
+  await expect(page.locator('#closed-h')).toHaveText('Request deleted');
+  expect(sent.filter(b => b.action === 'confirm')).toHaveLength(0);
+  expect(sent.filter(b => b.action === 'decline')).toEqual([expect.objectContaining({ token: TOKEN })]);
   expect(page.url()).not.toContain('t=');
 });

@@ -32,7 +32,7 @@ import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
 import {
-  isRegistrationCode, validateRegistration, mayResend, type Question,
+  isRegistrationCode, validateRegistration, mayResend, cleanText, clientKey, type Question,
 } from '../_shared/checkin-register.ts'
 
 const TURNSTILE_VERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
@@ -57,15 +57,8 @@ async function hmacHex(key: string, input: string): Promise<string> {
 // its right-most entries are proxies, so taking one would pool every guest
 // into one bucket. Null when absent, and the caller refuses.
 //
-// An IPv6 client is keyed by its /64: one connection usually holds a whole
-// /64, so keying the full address would let it rotate past the limit.
 function clientIp(req: Request): string | null {
-  const ip = (req.headers.get('cf-connecting-ip') ?? '').trim()
-  if (!ip) return null
-  if (!ip.includes(':')) return ip
-  const head = ip.split('::')[0].split(':')
-  const full = ip.includes('::') ? [...head, ...Array(8).fill('0')].slice(0, 4) : ip.split(':').slice(0, 4)
-  return full.map(x => (x || '0').toLowerCase()).join(':') + '::/64'
+  return clientKey(req.headers.get('cf-connecting-ip') ?? '')
 }
 
 const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -168,6 +161,17 @@ Deno.serve(async (req) => {
     if (error) console.error('checkin-register: rate check failed', error.code)
     return !error && data === true
   }
+  // Preview, confirm and decline: their own per-IP budget with no event-wide
+  // cap, so nobody can spend an event's register budget to block real
+  // guests' links (the 256-bit token makes guessing pointless anyway).
+  const tokenRateOk = async (): Promise<boolean | null> => {
+    const ip = clientIp(req)
+    if (!ip) { console.error('checkin-register: no client IP header; refusing'); return null }
+    const ipHash = await hmacHex(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'cuedeck', 'checkin-web:' + ip)
+    const { data, error } = await sb.rpc('checkin_web_token_rate_check', { p_ip_hash: ipHash })
+    if (error) console.error('checkin-register: token rate check failed', error.code)
+    return !error && data === true
+  }
   const tooMany = () => json({ error: 'Too many attempts from this connection just now. Please try again in a few minutes.' }, 429)
 
   // ── preview ─────────────────────────────────────────────────────
@@ -176,9 +180,19 @@ Deno.serve(async (req) => {
   if (body.action === 'preview') {
     const token = typeof body.token === 'string' ? body.token : ''
     if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
-    const ok = await rateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
     const { data, error } = await sb.rpc('checkin_web_pending_preview', { p_code: code, p_token_hash: await sha256Hex(token) })
     if (error || !data) { console.error('checkin-register: preview failed', error?.code); return json({ status: 'invalid' }) }
+    return json(data)
+  }
+
+  // ── decline: "This is not me" ───────────────────────────────────
+  if (body.action === 'decline') {
+    const token = typeof body.token === 'string' ? body.token : ''
+    if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const { data, error } = await sb.rpc('checkin_web_decline', { p_code: code, p_token_hash: await sha256Hex(token) })
+    if (error || !data) { console.error('checkin-register: decline failed', error?.code); return json({ error: 'Something went wrong. Please try again.' }, 500) }
     return json(data)
   }
 
@@ -188,7 +202,7 @@ Deno.serve(async (req) => {
   if (body.action === 'confirm') {
     const token = typeof body.token === 'string' ? body.token : ''
     if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
-    const ok = await rateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
     const { data: out, error } = await sb.rpc('checkin_web_confirm', { p_code: code, p_token_hash: await sha256Hex(token) })
     if (error || !out) {
       console.error('checkin-register: confirm failed', error?.code ?? 'no result')
@@ -252,8 +266,8 @@ Deno.serve(async (req) => {
   const raw = crypto.getRandomValues(new Uint8Array(32))
   const token = b64url(raw)
   const { data: out, error: regErr } = await sb.rpc('checkin_web_request', {
-    p_code: code, p_first_name: form.first_name, p_last_name: form.last_name,
-    p_email: form.email, p_company: form.company, p_answers: answers, p_token_hash: await sha256Hex(token),
+    p_code: code, p_first_name: cleanText(form.first_name), p_last_name: cleanText(form.last_name),
+    p_email: form.email.trim(), p_company: cleanText(form.company), p_answers: answers, p_token_hash: await sha256Hex(token),
   })
   if (regErr || !out) {
     // Code only: the message of a constraint error can carry the address.
@@ -278,7 +292,14 @@ Deno.serve(async (req) => {
     // Token in the fragment: browsers never send it to a server, so it stays
     // out of request logs and click-tracking redirects.
     const link = 'https://app.cuedeck.io/r/' + code + '#t=' + token
+    const tokenHash = await sha256Hex(token)
+    // A refused send gives the guest's budget back (103, F7).
     const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link)
+      .then(async (sent) => {
+        if (sent) return
+        const { error } = await sb.rpc('checkin_web_send_failed', { p_code: code, p_token_hash: tokenHash })
+        if (error) console.error('checkin-register: send_failed refund failed', error.code)
+      })
     // After the response where the runtime allows it, so how long the mail
     // provider takes is not visible in the answer.
     const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime

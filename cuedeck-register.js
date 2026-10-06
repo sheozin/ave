@@ -195,6 +195,19 @@ $('cf-btn').addEventListener('click', async () => {
   }
 });
 
+$('cf-no').addEventListener('click', async () => {
+  $('cf-no').disabled = true;
+  try {
+    const r = await call({ action: 'decline', token });
+    history.replaceState(null, '', location.pathname + location.search);
+    if (r.status === 200 && r.body.status === 'declined') return closed('Request deleted', 'Nothing was registered. You can register again from the event page with the right details.');
+    if (r.body.status === 'invalid') return closed('This link has expired or was already used', 'Links work for 48 hours.');
+    $('cf-msg').textContent = r.body.error || 'Something went wrong. Please try again.'; $('cf-msg').hidden = false;
+  } catch {
+    $('cf-msg').textContent = 'Could not reach the server. Check your connection and try again.'; $('cf-msg').hidden = false;
+  } finally { $('cf-no').disabled = false; }
+});
+
 (async () => {
   if (!isRegistrationCode(code)) return closed('This registration link is not active', 'Check the link with the event organizer.');
   let r;

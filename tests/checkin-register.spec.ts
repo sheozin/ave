@@ -39,6 +39,8 @@ const cases: [string, typeof ok, string[]][] = [
   ['full-width look-alikes are folded first', { ...ok, first_name: 'evil．example' }, ['first_name_invalid']],
   ['a full-width at sign', { ...ok, last_name: 'a＠b' }, ['last_name_invalid']],
   ['an ideographic full stop before a tld', { ...ok, first_name: 'evil。com' }, ['first_name_invalid']],
+  ['a zero-width space hiding a domain', { ...ok, first_name: 'example.\u200bcom' }, ['first_name_invalid']],
+  ['a zero-width space before the dot', { ...ok, last_name: 'exam\u200b.com' }, ['last_name_invalid']],
   ['real names with punctuation', { ...ok, first_name: "J.R. Mary-Ann", last_name: "O'Brien St. John" }, []],
 ];
 
@@ -96,5 +98,28 @@ describe('page wording', () => {
   it('formats the event date without shifting the day', () => {
     expect(page.formatEventDate('2026-10-18')).toBe('Sunday 18 October 2026');
     expect(page.formatEventDate(null)).toBe('');
+  });
+});
+
+describe('stored text', () => {
+  it('folds look-alikes, drops format characters and collapses spaces', () => {
+    expect(server.cleanText('  Ｍaya\u200b  Lind\u202eqvist ')).toBe('Maya Lindqvist');
+    expect(page.cleanText('  Ｍaya\u200b  Lind\u202eqvist ')).toBe('Maya Lindqvist');
+    expect(server.cleanText('José')).toBe('José');
+  });
+});
+
+describe('client key for the rate limit', () => {
+  it('keeps IPv4, maps ::ffff: to IPv4, keys IPv6 by /64', () => {
+    expect(server.clientKey('203.0.113.7')).toBe('203.0.113.7');
+    expect(server.clientKey('::ffff:203.0.113.7')).toBe('203.0.113.7');
+    expect(server.clientKey('2001:db8:1:2:3:4:5:6')).toBe('2001:0db8:0001:0002::/64');
+    expect(server.clientKey('2001:db8:1:2::9')).toBe('2001:0db8:0001:0002::/64');
+    expect(server.clientKey('1:2::3:4:5:6:7')).toBe('0001:0002:0000:0003::/64');
+    expect(server.clientKey('::1')).toBe('0000:0000:0000:0000::/64');
+    expect(server.clientKey('FE80::1%eth0')).toBe('fe80:0000:0000:0000::/64');
+  });
+  it('refuses anything malformed', () => {
+    for (const bad of ['', 'not-an-ip', '1::2::3', '12345::1', 'g::1', '1:2:3:4:5:6:7:8:9'] ) expect(server.clientKey(bad)).toBeNull();
   });
 });

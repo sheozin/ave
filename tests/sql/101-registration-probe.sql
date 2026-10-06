@@ -81,9 +81,9 @@ BEGIN
     RAISE EXCEPTION 'capacity answer differs by address';
   END IF;
 
-  -- Rate limit: 20 per (event, IP) per 10 minutes.
+  -- Rate limit per (event, IP) per 10 minutes: 20 in 101, 30 since 103.
   DELETE FROM leod_checkin_web_attempts WHERE event_id = E;
-  FOR k IN 1..20 LOOP
+  FOR k IN 1..30 LOOP
     IF NOT checkin_web_rate_check(E, repeat('c', 64)) THEN RAISE EXCEPTION 'rate refused early at %', k; END IF;
   END LOOP;
   IF checkin_web_rate_check(E, repeat('c', 64)) THEN RAISE EXCEPTION 'rate limit not enforced'; END IF;

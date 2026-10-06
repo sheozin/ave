@@ -20,28 +20,33 @@ const EMAIL_SHAPE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,
 const LINKISH = /[@/\\]|[\p{L}\p{N}-][.。｡]\p{L}{2,}/u;
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{10}$/;
 
+// See the server copy: NFKC, no format characters, collapsed whitespace.
+export function cleanText(s) {
+  return s.normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/\s+/g, ' ').trim();
+}
+
 export function isRegistrationCode(code) {
   return typeof code === 'string' && CODE_SHAPE.test(code);
 }
 
 export function validateRegistration(f, questions) {
   const errors = [];
-  const first = f.first_name.trim();
-  const last = f.last_name.trim();
+  const first = cleanText(f.first_name);
+  const last = cleanText(f.last_name);
   const email = f.email.trim();
 
   if (!first) errors.push('first_name');
   else if (first.length > MAX_NAME) errors.push('first_name_too_long');
-  else if (!HAS_LETTER.test(first) || LINKISH.test(first.normalize('NFKC'))) errors.push('first_name_invalid');
+  else if (!HAS_LETTER.test(first) || LINKISH.test(first)) errors.push('first_name_invalid');
 
   if (!last) errors.push('last_name');
   else if (last.length > MAX_NAME) errors.push('last_name_too_long');
-  else if (!HAS_LETTER.test(last) || LINKISH.test(last.normalize('NFKC'))) errors.push('last_name_invalid');
+  else if (!HAS_LETTER.test(last) || LINKISH.test(last)) errors.push('last_name_invalid');
 
   if (!email) errors.push('email');
   else if (email.length > MAX_EMAIL || !EMAIL_SHAPE.test(email)) errors.push('email_format');
 
-  if (f.company.trim().length > MAX_COMPANY) errors.push('company_too_long');
+  if (cleanText(f.company).length > MAX_COMPANY) errors.push('company_too_long');
 
   const answers = {};
   for (const q of questions) {
