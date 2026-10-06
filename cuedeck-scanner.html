@@ -8,8 +8,17 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/checkin-app.css">
 <style>
-html,body{background:#111113;color:#F5F5F7;min-height:100%}
-.sx{max-width:520px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;min-height:100vh}
+html,body{background:#111113;color:#F5F5F7;height:100%;margin:0}
+/* One screen, no scrolling: the page is exactly the visible viewport (dvh,
+   falling back to vh), header pinned top, code box and footer pinned
+   bottom, and the camera, start button and verdict centred in between. */
+.sx{box-sizing:border-box;width:100%;max-width:560px;margin:0 auto;height:100vh;height:100dvh;
+  padding:max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+.sx-scan{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.sx-mid{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.sx-side{display:flex;flex-direction:column;gap:12px}
+.sx-pair{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;max-width:420px;width:100%;margin:0 auto}
 .sx-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .sx-ev{font-size:13px;color:#A1A1A6;overflow-wrap:anywhere}
 .sx-pt{font-size:20px;font-weight:700;letter-spacing:-.3px;overflow-wrap:anywhere}
@@ -17,13 +26,15 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
 .sx-pill.test{background:#4A3300;color:#FFD27A}
 .sx-net{font-size:12.5px;color:#A1A1A6}
 .sx-net b{color:#F5F5F7}
-.sx-cam{position:relative;border-radius:18px;overflow:hidden;background:#000;aspect-ratio:3/4;display:grid;place-items:center}
+.sx-cam{position:relative;flex:1 1 auto;min-height:200px;border-radius:18px;overflow:hidden;background:#000;display:grid;place-items:center;container-type:size}
 .sx-cam video{width:100%;height:100%;object-fit:cover}
-.sx-frame{position:absolute;inset:18%;border:3px solid rgba(255,255,255,.75);border-radius:16px;pointer-events:none}
+/* A square aiming frame, centred, sized to the shorter side of the camera
+   view: QR codes are square whatever shape the camera area is. */
+.sx-frame{position:absolute;left:50%;top:50%;width:64cqmin;height:64cqmin;transform:translate(-50%,-50%);border:3px solid rgba(255,255,255,.75);border-radius:16px;pointer-events:none}
 .sx-start{width:100%;height:56px;border-radius:14px;border:0;background:#0071E3;color:#fff;font:inherit;font-size:17px;font-weight:700;cursor:pointer}
 .sx-start[disabled]{opacity:.5}
 .sx-v{border-radius:18px;padding:18px;min-height:96px}
-.sx-v h2{margin:0 0 4px;font-size:26px;letter-spacing:-.5px}
+.sx-v h2{margin:0 0 4px;font-size:clamp(24px,7vw,32px);letter-spacing:-.5px}
 .sx-v p{margin:0;font-size:16px;line-height:1.4}
 .sx-v.ok{background:#0F3D22;color:#C7F5D6}
 .sx-v.warn{background:#4A3300;color:#FFE2A8}
@@ -37,9 +48,9 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
 .sx-err{font-size:14px;color:#FF9F9F;line-height:1.45}
 .sx-err:empty{display:none}
 .sx-block{border-radius:14px;padding:14px;background:#4D1414;color:#FFD0D0;font-size:15px;line-height:1.45}
-.sx-pair h1{margin:28px 0 8px;font-size:28px;letter-spacing:-.6px}
+.sx-pair h1{margin:0 0 8px;font-size:28px;letter-spacing:-.6px}
 .sx-code{width:100%;height:60px;border-radius:14px;border:1px solid #3A3A3C;background:#1C1C1E;color:#F5F5F7;text-align:center;font:inherit;font-size:28px;font-weight:700;letter-spacing:.2em;text-transform:uppercase}
-.sx-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sx-foot{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .sx-link{background:none;border:0;color:#A1A1A6;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:0}
 [hidden]{display:none!important}
 /* Feedback: a full-screen colour flash, then the verdict card pops in with
@@ -57,6 +68,19 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
 .sx-v.pop .sx-ic .draw{stroke-dasharray:60;stroke-dashoffset:60;animation:sxdraw .42s .12s ease-out forwards}
 @keyframes sxdraw{to{stroke-dashoffset:0}}
 .sx-snd{background:#2C2C2E;border:0;color:#D1D1D6;font:inherit;font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;cursor:pointer}
+/* Landscape phones: camera on the left, start button and verdict on the right. */
+@media (orientation: landscape) and (max-height: 560px){
+  .sx{max-width:none}
+  .sx-mid{flex-direction:row;align-items:stretch}
+  .sx-cam{flex:1.3 1 0;min-height:0}
+  .sx-side{flex:1 1 0;justify-content:center}
+  .sx-cam[hidden] + .sx-side{max-width:520px;margin:0 auto}
+}
+/* Tablets and desktops: a wider column and a larger verdict. */
+@media (min-width: 700px) and (min-height: 700px){
+  .sx{max-width:640px;zoom:1.25}
+  .sx-v{padding:24px}
+}
 @media (prefers-reduced-motion: reduce){.sx-flash.go,.sx-v.pop,.sx-v.pop .sx-ic .draw{animation:none}.sx-v.pop .sx-ic .draw{stroke-dashoffset:0}}
 </style>
 </head>
@@ -75,16 +99,20 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
   </section>
 
   <!-- Scanning -->
-  <section id="scan" hidden style="display:flex;flex-direction:column;gap:12px;flex:1">
+  <section class="sx-scan" id="scan" hidden>
     <div class="sx-top">
       <div><div class="sx-pt" id="pt-name"></div><div class="sx-ev" id="ev-name"></div></div>
       <div style="display:flex;gap:6px;align-items:center"><button class="sx-snd" id="snd" type="button" aria-pressed="true">Sound on</button><span class="sx-pill" id="mode-pill"></span></div>
     </div>
     <div class="sx-net" id="net"></div>
     <div class="sx-block" id="blocked" hidden></div>
-    <div class="sx-cam" id="cam" hidden><video id="video" playsinline muted></video><div class="sx-frame"></div></div>
-    <button class="sx-start" id="start" type="button">Start scanning</button>
-    <div class="sx-v idle" id="verdict" role="status" aria-live="assertive"><svg class="sx-ic" id="v-ic" viewBox="0 0 52 52" aria-hidden="true"></svg><div><h2 id="v-title">Ready</h2><p id="v-text">Point the camera at a guest's QR code.</p></div></div>
+    <div class="sx-mid">
+      <div class="sx-cam" id="cam" hidden><video id="video" playsinline muted></video><div class="sx-frame"></div></div>
+      <div class="sx-side">
+        <button class="sx-start" id="start" type="button">Start scanning</button>
+        <div class="sx-v idle" id="verdict" role="status" aria-live="assertive"><svg class="sx-ic" id="v-ic" viewBox="0 0 52 52" aria-hidden="true"></svg><div><h2 id="v-title">Ready</h2><p id="v-text">Point the camera at a guest's QR code.</p></div></div>
+      </div>
+    </div>
     <form class="sx-man" id="man-form" autocomplete="off">
       <input id="man-code" placeholder="Or type the code from the email" aria-label="QR code" spellcheck="false" autocapitalize="off">
       <button id="man-btn">Check</button>
