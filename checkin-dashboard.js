@@ -81,7 +81,7 @@ export function ticketBars(s) {
 
 export function sourceBars(s) {
   const b = s.by_source || {};
-  return { labels: ['Imported', 'Kiosk', 'Walk-in'], data: [b.import || 0, b.kiosk || 0, b.walk_in || 0] };
+  return { labels: ['Imported', 'Registration page', 'Kiosk', 'Walk-in'], data: [b.import || 0, b.web || 0, b.kiosk || 0, b.walk_in || 0] };
 }
 
 export function qrBars(s) {

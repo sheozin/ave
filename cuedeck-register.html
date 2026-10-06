@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#F5F5F7">
+<title>Register</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+/* Public registration page (/r/<code>). Phone first: one column, 16px
+   inputs so iOS does not zoom on focus. */
+body{min-height:100vh;min-height:100dvh}
+.rg{max-width:560px;margin:0 auto;padding:max(28px, env(safe-area-inset-top)) 20px max(36px, env(safe-area-inset-bottom))}
+.rg-card{background:var(--sf);border:1px solid var(--bd);border-radius:18px;box-shadow:var(--shadow);padding:28px 24px}
+.rg-ey{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ac);margin:0 0 8px}
+.rg h1{font-size:28px;line-height:1.15;letter-spacing:-.6px;margin:0 0 8px;overflow-wrap:anywhere}
+.rg-meta{font-size:14.5px;color:var(--t2);margin:0 0 22px;line-height:1.5}
+.rg-test{background:var(--amsf);border:1px solid var(--ambd);color:var(--am);border-radius:12px;padding:10px 14px;font-size:13.5px;margin:0 0 18px;line-height:1.45}
+.rg form{display:grid;gap:16px}
+.rg-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:440px){.rg-row{grid-template-columns:1fr}}
+.rg label.f{display:grid;gap:6px;font-size:13.5px;font-weight:600;color:var(--t1)}
+.rg label.f span.opt{font-weight:400;color:var(--t3)}
+.rg input[type=text],.rg input[type=email],.rg select{width:100%;height:46px;border:1px solid var(--bd2);border-radius:11px;padding:0 13px;font-size:16px;background:#fff}
+.rg input:focus,.rg select:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--acsf)}
+.rg .bad input,.rg .bad select{border-color:var(--rd)}
+.rg .err{font-size:12.5px;color:var(--rd);font-weight:500;min-height:0}
+.rg-consent{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.5;color:var(--t2)}
+.rg-consent input{width:20px;height:20px;margin:1px 0 0;flex-shrink:0}
+.rg-consent.bad{color:var(--rd)}
+.rg-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+.rg .btn-p{height:48px;font-size:15.5px;width:100%}
+.rg-msg{font-size:14px;color:var(--rd);text-align:center;margin:0}
+.rg-done{text-align:center}
+.rg-done .mark{width:56px;height:56px;border-radius:50%;background:var(--gnsf);display:grid;place-items:center;margin:0 auto 14px}
+.rg-done h2{font-size:22px;margin:0 0 8px;letter-spacing:-.3px}
+.rg-done p{font-size:15px;color:var(--t2);line-height:1.55;margin:0 0 6px}
+.rg-code{font:700 30px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;margin:14px 0 4px;color:var(--t1)}
+.rg-foot{text-align:center;font-size:12.5px;color:var(--t3);margin-top:18px}
+.rg-foot a{color:var(--t3)}
+</style>
+</head>
+<body>
+<main class="rg">
+  <div class="rg-card" id="card">
+    <p class="rg-meta" id="loading">Loading…</p>
+
+    <section id="closed" hidden>
+      <p class="rg-ey">Registration</p>
+      <h1 id="closed-h">This registration link is not active</h1>
+      <p class="rg-meta" id="closed-p">Check the link with the event organizer.</p>
+    </section>
+
+    <section id="open" hidden>
+      <p class="rg-ey">Register</p>
+      <h1 id="ev-name"></h1>
+      <p class="rg-meta" id="ev-meta"></p>
+      <p class="rg-test" id="test-note" hidden><b>Test mode.</b> This page works, but registrations are for testing: no email is sent and they are cleared when the organizer goes live.</p>
+      <form id="form" novalidate>
+        <div class="rg-row">
+          <label class="f" data-f="first_name">First name<input type="text" name="first_name" autocomplete="given-name" maxlength="80" required><span class="err"></span></label>
+          <label class="f" data-f="last_name">Last name<input type="text" name="last_name" autocomplete="family-name" maxlength="80" required><span class="err"></span></label>
+        </div>
+        <label class="f" data-f="email">Email<input type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" required><span class="err"></span></label>
+        <label class="f" data-f="company">Company <span class="opt">(optional)</span><input type="text" name="company" autocomplete="organization" maxlength="80"><span class="err"></span></label>
+        <div id="questions" style="display:grid;gap:16px"></div>
+        <div class="rg-hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <label class="rg-consent" data-f="consent"><input type="checkbox" name="consent"><span>I agree that the organizer of this event may use these details to manage my registration and check-in. CueDeck processes them on the organizer's behalf (<a href="https://cuedeck.io/privacy" target="_blank" rel="noopener">privacy policy</a>).</span></label>
+        <div id="ts"></div>
+        <button class="btn btn-p" type="submit" id="submit">Register</button>
+        <p class="rg-msg" id="msg" hidden></p>
+      </form>
+    </section>
+
+    <section id="done" class="rg-done" hidden>
+      <div class="mark"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D8348" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <h2 id="done-h">Check your email</h2>
+      <p id="done-p">Your QR code is on its way. Show it at the entrance to check in.</p>
+      <div id="done-code" hidden><div class="rg-code" id="code"></div><p>Test mode: this code would normally arrive by email.</p></div>
+    </section>
+  </div>
+  <p class="rg-foot">Registration by <a href="https://cuedeck.io/solutions/check-in" target="_blank" rel="noopener">CueDeck</a></p>
+</main>
+<script type="module">
+import { validateRegistration, fieldMessage, formatEventDate, isRegistrationCode } from '/checkin-register.js';
+
+const FN = 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/checkin-register';
+const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
+const $ = (id) => document.getElementById(id);
+
+// /r/<code>, or ?code= when served from a dev server without the rewrite.
+const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
+let config = null;
+let tsWidget = null;
+let tsToken = '';
+
+async function call(body) {
+  const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code }) });
+  let j = null; try { j = await r.json(); } catch { /* not JSON */ }
+  return { status: r.status, body: j || {} };
+}
+
+function show(id) {
+  for (const s of ['loading', 'closed', 'open', 'done']) $(s).hidden = s !== id;
+}
+
+function closed(h, p) {
+  $('closed-h').textContent = h;
+  $('closed-p').textContent = p;
+  show('closed');
+}
+
+function el(tag, attrs, text) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function renderQuestions(questions) {
+  const box = $('questions');
+  box.replaceChildren();
+  for (const q of questions) {
+    const lab = el('label', { class: 'f', 'data-f': 'q:' + q.id });
+    lab.append(q.label);
+    if (!q.required) { lab.append(' '); lab.append(el('span', { class: 'opt' }, '(optional)')); }
+    let input;
+    if (q.type === 'choice') {
+      input = el('select', { name: 'q:' + q.id });
+      input.append(el('option', { value: '' }, 'Choose…'));
+      for (const o of q.options) input.append(el('option', { value: o }, o));
+    } else {
+      input = el('input', { type: 'text', name: 'q:' + q.id, maxlength: '500', autocomplete: 'off' });
+    }
+    lab.append(input, el('span', { class: 'err' }));
+    box.append(lab);
+  }
+}
+
+function loadTurnstile(siteKey) {
+  return new Promise((resolve) => {
+    window.onTurnstileLoad = () => {
+      tsWidget = window.turnstile.render('#ts', {
+        sitekey: siteKey,
+        callback: (t) => { tsToken = t; },
+        'expired-callback': () => { tsToken = ''; },
+        'error-callback': () => { tsToken = ''; },
+      });
+      resolve();
+    };
+    const s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onTurnstileLoad';
+    s.async = true;
+    s.onerror = () => resolve();
+    document.head.append(s);
+  });
+}
+
+function clearErrors() {
+  for (const l of document.querySelectorAll('[data-f]')) {
+    l.classList.remove('bad');
+    const e = l.querySelector('.err'); if (e) e.textContent = '';
+  }
+  $('msg').hidden = true;
+}
+
+function markErrors(codes) {
+  let first = null;
+  for (const c of codes) {
+    const m = fieldMessage(c);
+    const l = document.querySelector(`[data-f="${CSS.escape(m.field || '')}"]`);
+    if (!l) continue;
+    l.classList.add('bad');
+    const e = l.querySelector('.err'); if (e) e.textContent = m.text;
+    first = first || l;
+  }
+  if (first) first.querySelector('input,select')?.focus();
+}
+
+function formValues() {
+  const f = $('form');
+  const answers = {};
+  for (const q of config.questions) answers[q.id] = f.elements['q:' + q.id]?.value ?? '';
+  return {
+    first_name: f.elements.first_name.value, last_name: f.elements.last_name.value,
+    email: f.elements.email.value, company: f.elements.company.value,
+    answers, consent: f.elements.consent.checked,
+  };
+}
+
+function message(text) { $('msg').textContent = text; $('msg').hidden = false; }
+
+$('form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  clearErrors();
+  const v = formValues();
+  const { errors } = validateRegistration(v, config.questions);
+  if (errors.length) { markErrors(errors); return; }
+  if (!tsToken) { message('Please complete the check that you are not a robot.'); return; }
+
+  const btn = $('submit');
+  btn.disabled = true; btn.textContent = 'Registering…';
+  try {
+    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: tsToken });
+    const b = r.body;
+    if (r.status === 200 && b.status === 'ok') {
+      if (b.test && b.code) {
+        $('done-h').textContent = 'You are registered';
+        $('done-p').textContent = 'Show this code at the desk.';
+        $('code').textContent = b.code;
+        $('done-code').hidden = false;
+      } else if (b.test) {
+        $('done-h').textContent = 'You are registered';
+        $('done-p').textContent = 'Test mode: no email is sent.';
+      }
+      show('done');
+      return;
+    }
+    if (b.status === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
+    if (b.status === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
+    if (b.status === 'test_cap') return message('This test page has used its 25 test registrations.');
+    if (r.status === 404) return closed('This registration link is not active', 'Check the link with the event organizer.');
+    if (r.status === 400 && Array.isArray(b.fields)) { markErrors(b.fields); return; }
+    message(b.error || 'Registration failed. Please try again.');
+  } catch {
+    message('Could not reach the server. Check your connection and try again.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Register';
+    tsToken = '';
+    if (tsWidget != null && window.turnstile) window.turnstile.reset(tsWidget);
+  }
+});
+
+(async () => {
+  if (!isRegistrationCode(code)) return closed('This registration link is not active', 'Check the link with the event organizer.');
+  let r;
+  try { r = await call({ action: 'config' }); }
+  catch { return closed('Could not load this page', 'Check your connection and reload.'); }
+  if (r.status === 404) return closed('This registration link is not active', 'Check the link with the event organizer.');
+  if (r.status !== 200) return closed('Registration is not available right now', 'Please try again in a few minutes.');
+  config = r.body;
+  const e = config.event || {};
+  document.title = 'Register: ' + (e.name || 'event');
+  if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
+  if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
+  $('ev-name').textContent = e.name || 'Event';
+  $('ev-meta').textContent = [formatEventDate(e.date), e.venue].filter(Boolean).join(' · ');
+  $('test-note').hidden = !config.test;
+  renderQuestions(config.questions || []);
+  show('open');
+  await loadTurnstile(config.turnstile_site_key);
+})();
+</script>
+</body>
+</html>

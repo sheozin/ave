@@ -82,7 +82,9 @@ describe('chart data', () => {
     expect(d.ticketBars(stats())).toEqual({ labels: ['attendee · 40%', 'VIP · 25%'], registered: [100, 20], checkedIn: [40, 5] });
   });
   it('sources and QR status', () => {
-    expect(d.sourceBars(stats())).toEqual({ labels: ['Imported', 'Kiosk', 'Walk-in'], data: [114, 4, 2] });
+    expect(d.sourceBars(stats())).toEqual({ labels: ['Imported', 'Registration page', 'Kiosk', 'Walk-in'], data: [114, 0, 4, 2] });
+    // Web registrations (migration 100) get their own bar.
+    expect(d.sourceBars({ by_source: { import: 1, web: 7, kiosk: 0, walk_in: 0 } }).data).toEqual([1, 7, 0, 0]);
     expect(d.qrBars(stats())).toEqual({ labels: ['Sent', 'Not sent', 'No email address'], data: [100, 15, 5] });
   });
 });

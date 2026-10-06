@@ -148,14 +148,19 @@ test('the export neutralises formulas and strips control characters', async ({ p
   const att = [
     { id: 'a1', first_name: '=HYPERLINK("http://x")', last_name: 'Nowak', email: 'a@x.pl', company: '+48 Co', ticket_type: null, checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'import', created_at: '2026-10-01T00:00:00Z' },
     { id: 'a2', first_name: '\u202E=cmd', last_name: 'Ev\u0007il', email: null, company: null, ticket_type: null, checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'kiosk', created_at: '2026-10-01T00:00:00Z' },
+    // A registration-page guest: answers are guest-typed, so they go through the same neutralising.
+    { id: 'a3', first_name: 'Web', last_name: 'Guest', email: 'w@x.pl', company: null, ticket_type: null, checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: false, source: 'web', created_at: '2026-10-01T00:00:00Z',
+      custom_fields: { diet: { label: 'Dietary needs', value: '=SUM(A1)' } } },
   ];
   await open(page, { role: 'organizer' }, 'attendees', STAFF, () => table(page, 'leod_checkin_attendees', att));
   await expect(page.locator('#att-export')).toBeVisible();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#att-export').click()]);
   const text = readFileSync(await dl.path(), 'utf8').replace(/^\uFEFF/, '');
   const lines = text.split('\r\n');
-  expect(lines[1]).toBe('"\'=HYPERLINK(""http://x"")";Nowak;a@x.pl;\'+48 Co;;;');
-  expect(lines[2]).toBe("'=cmd;Evil;;;;;");
+  expect(lines[0]).toBe('First name;Last name;Email;Company;Ticket;Source;Checked in at;Badge printed at;Dietary needs');
+  expect(lines[1]).toBe('"\'=HYPERLINK(""http://x"")";Nowak;a@x.pl;\'+48 Co;;Imported;;;');
+  expect(lines[2]).toBe("'=cmd;Evil;;;;Kiosk;;;");
+  expect(lines[3]).toBe("Web;Guest;w@x.pl;;;Registration page;;;'=SUM(A1)");
 });
 
 test('an organizer on a complimentary event is told whose account includes check-in', async ({ page }) => {
@@ -261,3 +266,62 @@ test('an organizer turns door scanning on and adds a door; session scanning says
   expect(String(row.code)).toMatch(/^SIDEDOOR-[A-Z0-9]{4}$/);
 });
 
+
+// ── Registration page step (migration 100) ──────────────────────────
+test('an organizer turns the registration page on, adds questions and gets a link', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await rpc(page, 'checkin_set_registration', (a) => {
+      sent.push(a);
+      return { enabled: a.p_enabled, code: 'ABCDEFGH23', capacity: a.p_capacity, closes_at: a.p_closes_at, questions: a.p_questions };
+    });
+  });
+  await expect(page.locator('#p-register')).toBeVisible();
+  await expect(page.locator('#rg-linkbox')).toBeHidden();
+  // A question with no text is refused before anything is sent.
+  await page.locator('#rg-addq').click();
+  await page.locator('#rg-save').click();
+  await expect(page.locator('#rg-err')).toHaveText('Every question needs some text, or remove it.');
+  expect(sent).toHaveLength(0);
+  await page.locator('#rg-qs input').first().fill('Which track?');
+  await page.locator('#rg-qs select').first().selectOption('choice');
+  await page.locator('#rg-qs input[aria-label=Options]').fill('Tech, Business , ');
+  await page.locator('#rg-qs input[type=checkbox]').check();
+  await page.locator('#rg-cap').fill('150');
+  await page.locator('#rg-on').evaluate((el: HTMLInputElement) => el.click());  // the input sits under the .sw switch
+  await expect(page.locator('#rg-ok')).toHaveText('Saved.');
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ p_event_id: EVENT_ID, p_enabled: true, p_capacity: 150, p_closes_at: null });
+  expect(sent[0].p_questions).toEqual([{ id: expect.stringMatching(/^q[0-9a-f]{7}$/), label: 'Which track?', type: 'choice', required: true, options: ['Tech', 'Business'] }]);
+  await expect(page.locator('#rg-link')).toHaveValue(/\/r\/ABCDEFGH23$/);
+  await expect(page.locator('#rg-test')).toBeVisible();
+  await expect(page.locator('.st[data-step=register]')).toHaveClass(/done/);
+});
+
+test('replacing the registration link takes two clicks and no native dialog', async ({ page }) => {
+  let calls = 0;
+  page.on('dialog', d => { throw new Error('native dialog: ' + d.message()); });
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_enabled: true,
+      registration_code: 'ABCDEFGH23', registration_capacity: null, registration_closes_at: null, registration_questions: [] }]);
+    await rpc(page, 'checkin_new_registration_code', () => { calls++; return 'ZZZZZZZZ22'; });
+  });
+  await expect(page.locator('#rg-link')).toHaveValue(/\/r\/ABCDEFGH23$/);
+  await expect(page.locator('#rg-test')).toBeHidden();
+  await page.locator('#rg-new').click();
+  await expect(page.locator('#rg-new')).toHaveText('Click again to replace it');
+  expect(calls).toBe(0);
+  await page.locator('#rg-new').click();
+  await expect(page.locator('#rg-link')).toHaveValue(/\/r\/ZZZZZZZZ22$/);
+  expect(calls).toBe(1);
+});
+
+test('a failed registration save shows the server message and leaves the switch as it was', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await page.route(/\/rest\/v1\/rpc\/checkin_set_registration/, r => r.fulfill({ status: 400, contentType: 'application/json',
+      body: JSON.stringify({ code: '22023', message: 'At most 5 questions' }) }));
+  });
+  await page.locator('#rg-on').evaluate((el: HTMLInputElement) => el.click());  // the input sits under the .sw switch
+  await expect(page.locator('#rg-err')).toHaveText('At most 5 questions');
+  await expect(page.locator('#rg-on')).not.toBeChecked();
+});

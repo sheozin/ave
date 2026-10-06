@@ -84,9 +84,10 @@
     <div class="ttl"><h3 id="side-name"></h3><p id="side-meta"></p></div>
     <button class="st" data-step="details"><span class="dot">1</span>Event details</button>
     <button class="st" data-step="attendees"><span class="dot">2</span>Attendees<small id="n-att"></small></button>
-    <button class="st" data-step="staff"><span class="dot">3</span>Desk staff<small id="n-staff"></small></button>
-    <button class="st" data-step="kiosk"><span class="dot">4</span>Kiosk &amp; scanners</button>
-    <button class="st" data-step="qr"><span class="dot">5</span>QR emails</button>
+    <button class="st" data-step="register"><span class="dot">3</span>Registration page<small id="n-web"></small></button>
+    <button class="st" data-step="staff"><span class="dot">4</span>Desk staff<small id="n-staff"></small></button>
+    <button class="st" data-step="kiosk"><span class="dot">5</span>Kiosk &amp; scanners</button>
+    <button class="st" data-step="qr"><span class="dot">6</span>QR emails</button>
     <button class="st golive" data-step="golive"><span class="dot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span id="gl-rail">Go live</span><small id="gl-rail-price" data-price></small></button>
   </aside>
 
@@ -137,6 +138,30 @@
       <div><b>Drop a CSV to add people</b><p>You'll see who will be added, updated or skipped before anything is saved. Columns: first name, last name, email, company, ticket type.</p></div></label>
     <div class="preview" id="imp-prev" hidden></div>
     <div class="err" id="att-err"></div>
+  </section>
+
+  <section class="panel" id="p-register" hidden>
+    <div class="ph"><div><h2>Registration page</h2><p>A link guests use to add themselves to your guest list before the event. Each guest gets their QR code by email.</p></div></div>
+    <div class="toggle"><div><b>Registration page</b><p id="rg-state">Off. Turn it on to get a link you can share.</p></div><label class="sw"><input type="checkbox" id="rg-on"><span></span></label></div>
+    <div id="rg-linkbox" hidden>
+      <div class="field"><label for="rg-link">Your link</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="search" id="rg-link" readonly style="flex:1;min-width:220px"><button class="btn btn-s" id="rg-copy" type="button">Copy</button><a class="btn btn-s" id="rg-open" target="_blank" rel="noopener">Open</a></div>
+      </div>
+      <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
+      <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
+    </div>
+    <h3 class="sc-h">Limits</h3>
+    <div class="row2" style="gap:12px">
+      <div class="field"><label for="rg-cap">Capacity</label><input id="rg-cap" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
+      <div class="field"><label for="rg-close">Registration closes</label><input id="rg-close" type="datetime-local"></div>
+    </div>
+    <p class="small">Capacity counts everyone on the guest list, however they were added. Your local time. Registration also closes when check-in closes, two days after the event.</p>
+    <h3 class="sc-h">Questions</h3>
+    <p class="sc-p">Up to 5 extra questions, such as dietary needs or which track they will attend. Name, email and company are always asked.</p>
+    <div id="rg-qs" style="display:grid;gap:10px"></div>
+    <p style="margin:10px 0 0"><button class="btn btn-g" id="rg-addq" type="button">Add a question</button></p>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:18px"><button class="btn btn-p" id="rg-save" type="button">Save</button><span class="small" id="rg-count"></span></div>
+    <div class="err" id="rg-err"></div><div class="ok" id="rg-ok"></div>
   </section>
 
   <section class="panel" id="p-staff" hidden>
@@ -277,7 +302,7 @@ async function loadAttendees() {
   const all = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb.from('leod_checkin_attendees')
-      .select('id,first_name,last_name,email,company,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at')
+      .select('id,first_name,last_name,email,company,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at,custom_fields')
       .eq('event_id', EVENT_ID).order('last_name').order('first_name').order('id').range(from, from + 999);
     if (error) throw new Error(error.message);
     all.push(...data);
@@ -321,10 +346,12 @@ function renderChrome() {
   $('banner-go').textContent = PRICE ? 'Go live · ' + PRICE : 'Go live';
   $('banner-go').hidden = !can(ROLE, 'go_live');
   $('n-att').textContent = ATT.length || '';
+  $('n-web').textContent = ATT.filter(a => a.source === 'web').length || '';
   $('n-staff').textContent = STAFF.filter(s => !s.is_owner).length || '';
   const done = {
     details: true,
     attendees: ATT.length > 0,
+    register: !!ENT.registration_enabled,
     staff: STAFF.some(s => !s.is_owner),
     kiosk: ENT.self_registration || ENT.kiosk_self_print || ENT.auto_send_qr_email,
     qr: ATT.some(a => a.qr_email_sent_at),
@@ -335,9 +362,9 @@ function renderChrome() {
 
 function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
-  for (const s of ['details', 'attendees', 'staff', 'kiosk', 'qr', 'golive']) $('p-' + s).hidden = s !== step;
+  for (const s of ['details', 'attendees', 'register', 'staff', 'kiosk', 'qr', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ details: renderDetails, attendees: renderAttendees, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
+  ({ details: renderDetails, attendees: renderAttendees, register: renderRegister, staff: renderStaff, kiosk: renderKiosk, qr: renderQr, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
 document.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => go(b.dataset.step)));
@@ -587,11 +614,119 @@ async function previewImport(file) {
 }
 
 $('att-export').onclick = () => {
-  const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Checked in at', 'Badge printed at'];
-  const csv = toCsv([head, ...ATT.map(a => [a.first_name, a.last_name, a.email, a.company, a.ticket_type, a.checked_in_at, a.badge_printed_at])]);
+  // One column per registration answer: the current questions in order,
+  // then any answered question since removed, under the label it had.
+  const SOURCE = { import: 'Imported', kiosk: 'Kiosk', walk_in: 'Walk-in', web: 'Registration page' };
+  const cols = (ENT.registration_questions || []).map(q => ({ id: q.id, label: q.label }));
+  for (const a of ATT) for (const [id, v] of Object.entries(a.custom_fields || {})) {
+    if (v && typeof v === 'object' && 'value' in v && !cols.some(c => c.id === id)) cols.push({ id, label: String(v.label || id) });
+  }
+  const answer = (a, id) => { const v = (a.custom_fields || {})[id]; return v && typeof v === 'object' ? v.value : ''; };
+  const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Source', 'Checked in at', 'Badge printed at', ...cols.map(c => c.label)];
+  const csv = toCsv([head, ...ATT.map(a => [a.first_name, a.last_name, a.email, a.company, a.ticket_type, SOURCE[a.source] || a.source,
+    a.checked_in_at, a.badge_printed_at, ...cols.map(c => answer(a, c.id))])]);
   const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
   const a = el('a'); a.href = url; a.download = EV.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + '-attendance.csv';
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+};
+
+// ── registration page ────────────────────────────────────
+// Spec docs/superpowers/specs/2026-10-06-checkin-public-registration-design.md.
+// Questions keep their id once created, because answers are stored under it.
+let RG_QS = [];
+const rgUrl = (code) => location.origin + '/r/' + code;
+const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+const newQid = () => 'q' + Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, '0')).join('').slice(0, 7);
+
+function renderRegister() {
+  const on = !!ENT.registration_enabled;
+  $('rg-on').checked = on;
+  $('rg-state').textContent = on ? 'On. Anyone with the link can register.' : (ENT.registration_code ? 'Off. The link shows "not active" until you turn it back on.' : 'Off. Turn it on to get a link you can share.');
+  $('rg-linkbox').hidden = !ENT.registration_code;
+  if (ENT.registration_code) { $('rg-link').value = rgUrl(ENT.registration_code); $('rg-open').href = rgUrl(ENT.registration_code); }
+  $('rg-test').hidden = isLive();
+  $('rg-cap').value = ENT.registration_capacity ?? '';
+  $('rg-close').value = toLocalInput(ENT.registration_closes_at);
+  RG_QS = (ENT.registration_questions || []).map(q => ({ ...q, options: [...(q.options || [])] }));
+  renderQuestionRows();
+  const n = ATT.filter(a => a.source === 'web').length;
+  $('rg-count').textContent = n ? n + (n === 1 ? ' person has' : ' people have') + ' registered through this page.' : '';
+  $('rg-err').textContent = ''; $('rg-ok').textContent = '';
+}
+
+function renderQuestionRows() {
+  const box = $('rg-qs');
+  box.replaceChildren();
+  RG_QS.forEach((q, i) => {
+    const row = el('div', 'toggle'); row.style.cssText = 'display:grid;gap:8px;grid-template-columns:1fr;align-items:stretch';
+    const label = el('input', 'search'); label.value = q.label || ''; label.maxLength = 120; label.placeholder = 'Question, for example Dietary needs'; label.setAttribute('aria-label', 'Question');
+    label.oninput = () => { q.label = label.value; };
+    const line = el('div'); line.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+    const type = el('select', 'search'); type.style.flex = 'none'; type.setAttribute('aria-label', 'Answer type');
+    for (const [v, t] of [['text', 'Text answer'], ['choice', 'Choose from a list']]) { const o = el('option', null, t); o.value = v; type.append(o); }
+    type.value = q.type || 'text';
+    const opts = el('input', 'search'); opts.placeholder = 'Options, separated by commas'; opts.value = (q.options || []).join(', '); opts.setAttribute('aria-label', 'Options');
+    opts.hidden = type.value !== 'choice';
+    opts.oninput = () => { q.options = opts.value.split(',').map(x => x.trim()).filter(Boolean); };
+    type.onchange = () => { q.type = type.value; opts.hidden = type.value !== 'choice'; };
+    const req = el('label', 'small'); req.style.cssText = 'display:flex;gap:6px;align-items:center;white-space:nowrap';
+    const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!q.required; cb.onchange = () => { q.required = cb.checked; };
+    req.append(cb, document.createTextNode('Required'));
+    const rm = el('button', 'link', 'Remove'); rm.type = 'button'; rm.onclick = () => { RG_QS.splice(i, 1); renderQuestionRows(); };
+    line.append(type, req, rm);
+    row.append(label, line, opts);
+    box.append(row);
+  });
+  $('rg-addq').hidden = RG_QS.length >= 5;
+}
+
+$('rg-addq').onclick = () => {
+  if (RG_QS.length >= 5) return;
+  RG_QS.push({ id: newQid(), label: '', type: 'text', required: false, options: [] });
+  renderQuestionRows();
+  $('rg-qs').lastElementChild?.querySelector('input')?.focus();
+};
+
+async function saveRegistration(enabled) {
+  $('rg-err').textContent = ''; $('rg-ok').textContent = '';
+  const qs = RG_QS.map(q => ({ id: q.id, label: (q.label || '').trim(), type: q.type || 'text', required: !!q.required, options: q.type === 'choice' ? q.options : [] }));
+  if (qs.some(q => !q.label)) { $('rg-err').textContent = 'Every question needs some text, or remove it.'; return false; }
+  if (qs.some(q => q.type === 'choice' && !q.options.length)) { $('rg-err').textContent = 'A list question needs at least one option.'; return false; }
+  const capRaw = $('rg-cap').value.trim();
+  const cap = capRaw ? Number(capRaw) : null;
+  if (cap !== null && (!Number.isInteger(cap) || cap < 1 || cap > 100000)) { $('rg-err').textContent = 'Capacity must be a whole number from 1 to 100000, or empty for no limit.'; return false; }
+  const close = $('rg-close').value ? new Date($('rg-close').value).toISOString() : null;
+  const { data, error } = await sb.rpc('checkin_set_registration', { p_event_id: EVENT_ID, p_enabled: enabled, p_capacity: cap, p_closes_at: close, p_questions: qs });
+  if (error) { $('rg-err').textContent = error.message; return false; }
+  Object.assign(ENT, { registration_enabled: data.enabled, registration_code: data.code, registration_capacity: data.capacity,
+    registration_closes_at: data.closes_at, registration_questions: data.questions });
+  renderRegister(); renderChrome();
+  $('rg-ok').textContent = 'Saved.';
+  return true;
+}
+
+$('rg-save').onclick = () => saveRegistration($('rg-on').checked);
+$('rg-on').onchange = async () => { if (!(await saveRegistration($('rg-on').checked))) $('rg-on').checked = !!ENT.registration_enabled; };
+$('rg-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('rg-link').value); $('rg-copy').textContent = 'Copied'; }
+  catch { $('rg-link').select(); $('rg-copy').textContent = 'Press Ctrl+C'; }
+  setTimeout(() => { $('rg-copy').textContent = 'Copy'; }, 1800);
+};
+// Two clicks, no native dialog: the first arms, the second replaces.
+let rgArmed = null;
+$('rg-new').onclick = async () => {
+  if (!rgArmed) {
+    $('rg-new').textContent = 'Click again to replace it';
+    rgArmed = setTimeout(() => { rgArmed = null; $('rg-new').textContent = 'Replace the link'; }, 4000);
+    return;
+  }
+  clearTimeout(rgArmed); rgArmed = null;
+  $('rg-new').textContent = 'Replace the link';
+  const { data, error } = await sb.rpc('checkin_new_registration_code', { p_event_id: EVENT_ID });
+  if (error) { $('rg-err').textContent = error.message; return; }
+  ENT.registration_code = data;
+  renderRegister();
+  $('rg-ok').textContent = 'New link ready. The old one no longer works.';
 };
 
 // ── 3. staff ─────────────────────────────────────────────
@@ -853,7 +988,7 @@ async function waitForLive() {
   $('layout').hidden = false; renderChrome();
   if (params.get('paid') === '1' && !isLive() && !isComp()) { await waitForLive(); return; }
   const step = params.get('step');
-  go(['details', 'attendees', 'staff', 'kiosk', 'qr', 'golive'].includes(step) ? step
+  go(['details', 'attendees', 'register', 'staff', 'kiosk', 'qr', 'golive'].includes(step) ? step
      : !ATT.length || isLive() || isComp() ? 'attendees' : 'golive');
 })();
 </script>

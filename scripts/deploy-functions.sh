@@ -27,7 +27,7 @@ echo "-- Deploy --"
 for func in "${DEPLOY_LIST[@]}"; do
   echo "  -> deploying $func..."
   extra=()
-  case "$func" in stripe-webhook|checkin-price|create-checkout-session|customer-portal|send-invoice-email|ai-proxy|checkin-post-event-report|checkin-scanner) extra=(--no-verify-jwt) ;; esac
+  case "$func" in stripe-webhook|checkin-price|create-checkout-session|customer-portal|send-invoice-email|ai-proxy|checkin-post-event-report|checkin-scanner|checkin-register) extra=(--no-verify-jwt) ;; esac
   if supabase functions deploy "$func" --project-ref "sawekpguemzvuvvulfbc" --workdir "$PROJ" ${extra[@]+"${extra[@]}"} 2>&1; then
     green "$func deployed"
   else

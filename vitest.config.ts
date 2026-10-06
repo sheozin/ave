@@ -5,7 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.spec.ts'],
-    exclude: ['tests/e2e/**'],
+    // Playwright suites: e2e, and the marketing screenshot script.
+    exclude: ['tests/e2e/**', 'tests/screenshots/**'],
     reporters: ['verbose'],
   },
 });
