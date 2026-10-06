@@ -446,8 +446,6 @@
     }
     .fvp-btn.active { background:#1e3a5f; color:#60A5FA; font-weight:600; }
     .fvp-btn:not(.active):hover { color:#9CA3AF; }
-    .tl-auto-toast { padding:4px 12px;font-size:10px;color:#f59e0b;font-style:italic;display:none;align-items:center;gap:6px; }
-    .tl-auto-toast.show { display:flex; }
 
     /* ── BROADCAST BANNER ── */
     #bc-banner {
@@ -561,13 +559,13 @@
       border-left-color: #3B82F6;
     }
     .sc.status-READY {
-      border-left-color: #22C55E;
       border-color: rgba(34,197,94,0.20);
+      border-left-color: #22C55E; /* after border-color, which would reset it */
       box-shadow: 0 0 12px rgba(34,197,94,0.12);
     }
     .sc.status-CALLING {
-      border-left-color: #F97316;
       border-color: rgba(249,115,22,0.20);
+      border-left-color: #F97316;
     }
     .sc.status-LIVE {
       background: linear-gradient(135deg, rgba(255,59,48,0.07) 0%, #141D2B 60%);
@@ -582,8 +580,8 @@
       animation: badge-pulse-overrun 1.6s ease-in-out infinite;
     }
     .sc.status-HOLD {
-      border-left-color: #F97316;
       border-color: rgba(249,115,22,0.20);
+      border-left-color: #F97316;
     }
     .sc.status-ENDED {
       border: 1px solid rgba(148,163,184,0.07);
@@ -620,7 +618,7 @@
     .badge-CALLING   { background: var(--c-calling-bg);   color: var(--c-calling-fg); animation: badge-pulse 1.2s infinite; }
     .badge-LIVE      { background: var(--c-live-bg);      color: var(--c-live-fg);    animation: badge-pulse-live 1.4s infinite; }
     .badge-OVERRUN   { background: var(--c-overrun-bg);   color: var(--c-overrun-fg); animation: badge-pulse-overrun 1.2s infinite; }
-    .badge-HOLD      { background: var(--c-hold-bg);      color: var(--c-hold-fg);    animation: badge-blink 1.0s infinite; }
+    .badge-HOLD      { background: var(--c-hold-bg);      color: var(--c-hold-fg); }
     .badge-ENDED     { background: var(--c-ended-bg);     color: var(--c-ended-fg); }
     .badge-CANCELLED { background: var(--c-cancelled-bg); color: var(--c-cancelled-fg); }
 
@@ -694,7 +692,7 @@
     .btn-purple { background: rgba(168,85,247,.10); border-color: rgba(168,85,247,.40); color: #C4B5FD; }
     /* Dangerous action style (END SESSION, CANCEL) */
     .btn-red:hover { background: rgba(239,68,68,.20); }
-    .abtn.confirm-pending { background: rgba(239,68,68,.25); border-color: #ef4444; color: #F87171; animation: pulse-confirm .5s ease-in-out infinite alternate; }
+    .abtn.confirm-pending, .ctx-btn.confirm-pending { background: rgba(239,68,68,.25); border-color: #ef4444; color: #F87171; animation: pulse-confirm .5s ease-in-out infinite alternate; }
     @keyframes pulse-confirm { from { opacity:.85; } to { opacity:1; } }
     @keyframes pulse-red { from { opacity:.85; } to { opacity:1; } }
     .delay-grp  { margin-left: auto; display: flex; gap: 3px; align-items: center; }
@@ -762,9 +760,11 @@
     .ck-val.drifted { color: var(--amber); }
 
     /* Log */
-    #log-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    /* Never collapses under the fixed-height sections above it: the sidebar
+       scrolls instead, and the feed scrolls inside its own minimum height. */
+    #log-panel { flex: 1 0 220px; min-height: 220px; display: flex; flex-direction: column; overflow: hidden; }
     #log-panel .sb-title { padding: 10px 14px 5px; margin: 0; }
-    #log-feed   { flex: 1; overflow-y: auto; padding: 0 6px 10px; }
+    #log-feed   { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 10px; }
     .le {
       padding: 5px 10px; margin-bottom: 2px;
       background: rgba(255,255,255,0.02);
@@ -923,8 +923,6 @@
       background: #3b82f6 !important;
       color: #fff !important;
     }
-    /* Badge blink — HOLD */
-    @keyframes badge-blink        { 0%,100% { opacity:1; } 50% { opacity:0; } }
     /* Legacy pulse-red alias (used by wrap-up warning) */
     @keyframes pulse-red          { 0%,100% { box-shadow: 0 2px 24px rgba(255,59,48,.12), 0 0 0 1px rgba(255,59,48,.15); } 50% { box-shadow: 0 2px 30px rgba(255,59,48,.28), 0 0 0 1px rgba(255,59,48,.28); } }
     @keyframes pulse-amber        { 0%,100% { opacity:1; } 50% { opacity:.6; } }
@@ -1270,8 +1268,9 @@
       cursor:pointer;font-size:10px;font-family:inherit;transition:all .12s;
     }
     #delay-strip .ds-reset:hover { color:var(--text);border-color:var(--dim); }
-    .sc.delayed      { border-left:4px solid var(--amber) !important; }
-    .sc.delay-origin { border-left:4px solid #f97316 !important; }
+    /* Delay is a thin top line; the left edge always shows the status. */
+    .sc.delayed      { border-top:2px solid var(--amber); }
+    .sc.delay-origin { border-top:2px solid #f97316; }
     .delay-break {
       display:flex;align-items:center;gap:8px;
       padding:6px 0 10px;font-size:10px;color:var(--dim);letter-spacing:.06em;
@@ -1361,6 +1360,11 @@
       width: 10px; height: 10px; border-radius: 50%; background: var(--red);
       box-shadow: 0 0 14px var(--red); flex-shrink: 0; animation: blink .9s infinite;
     }
+    .sm-status-hold {
+      font-size: 16px; font-weight: 700; letter-spacing: .3em; color: var(--amber); margin-bottom: 20px;
+    }
+    .sm-status-live.sm-status-overrun { color: var(--magenta); }
+    .sm-status-overrun .sm-live-dot { background: var(--magenta); box-shadow: 0 0 14px var(--magenta); }
     .sm-status-standby { font-size: 14px; font-weight: 600; letter-spacing: .25em; color: var(--dim); margin-bottom: 20px; }
     .sm-title {
       font-size: clamp(32px, 6vw, 80px); font-weight: 700; color: var(--text);
@@ -1450,6 +1454,7 @@
     .toast-close:hover { color: var(--fg); }
     @media (prefers-reduced-motion: reduce) {
       .toast, .toast.toast-out { animation: none; }
+      .badge, .sc, .sm-live-dot { animation: none !important; }
     }
 
     /* ── RESPONSIVE ── */
@@ -1731,9 +1736,9 @@
   align-items:center;gap:10px;z-index:9998;box-shadow:0 8px 32px rgba(0,0,0,.5);
   font-size:12px;color:var(--text-primary)">
   <span id="batch-count" style="font-weight:700"></span>
-  <button class="abtn abtn-sm btn-amber" onclick="batchTransition('READY')">SET READY</button>
-  <button class="abtn abtn-sm btn-red"   onclick="batchTransition('ENDED')">END ALL</button>
-  <button class="abtn abtn-sm btn-grey"  onclick="batchTransition('CANCELLED')">CANCEL ALL</button>
+  <button class="abtn abtn-sm btn-amber" data-batch="READY" onclick="batchTransition('READY')">SET READY</button>
+  <button class="abtn abtn-sm btn-red"   data-batch="ENDED" onclick="batchTransition('ENDED')">END ALL</button>
+  <button class="abtn abtn-sm btn-grey"  data-batch="CANCELLED" onclick="batchTransition('CANCELLED')">CANCEL ALL</button>
   <button class="abtn abtn-sm btn-grey"  onclick="clearBatchSelection()" style="margin-left:4px">Clear</button>
 </div>
 
@@ -2615,8 +2620,7 @@ const S = {
   lastSyncAt:      0,      // PR-016: ms timestamp of last successful loadSnapshot()
   presence:        {},     // PR-009: role → count of connected operators
   viewMode:        'list', // PR-020: 'list' | 'timeline'
-  tlManualOverride: false, // prevents timeline auto-switch after user chooses List
-  tlBootDone:       false, // true after first render — auto-switch only on realtime updates
+  booted:          false,  // boot() runs once per sign-in
   autoStart:       false,  // auto go-live at planned start time
   _autoStarted:    new Set(), // session IDs already auto-started this session
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
@@ -2635,7 +2639,7 @@ const ALLOWED = {
   READY:     ['CALLING','LIVE','PLANNED','CANCELLED'],
   CALLING:   ['LIVE','HOLD','READY','CANCELLED'],
   LIVE:      ['HOLD','ENDED'],
-  OVERRUN:   ['ENDED','HOLD'],
+  OVERRUN:   ['HOLD','ENDED'],
   HOLD:      ['LIVE','ENDED','CALLING','READY'],
   ENDED:     [],
   CANCELLED: ['PLANNED'],
@@ -2725,10 +2729,44 @@ async function syncClock() {
 
 const correctedNow = () => Date.now() + S.clockOffset;
 
+// Event wall clock. "Now" for the NOW line, auto-start, cues and shown times
+// is the event's own time zone (S.event.timezone), not the laptop's. Falls
+// back to the browser zone when the event has none or the zone is unknown.
+const _eventClockFmt = new Map();
+function eventClockParts(ms = correctedNow()) {
+  const tz = S.event?.timezone || undefined;
+  let fmt = _eventClockFmt.get(tz);
+  if (!fmt) {
+    const opts = { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' };
+    try { fmt = new Intl.DateTimeFormat('en-GB', { ...opts, timeZone: tz }); }
+    catch { fmt = new Intl.DateTimeFormat('en-GB', opts); }
+    _eventClockFmt.set(tz, fmt);
+  }
+  const p = {};
+  for (const part of fmt.formatToParts(ms)) p[part.type] = part.value;
+  return { h: Number(p.hour), m: Number(p.minute), s: Number(p.second) };
+}
+function eventNowMinutes(ms = correctedNow()) {
+  const c = eventClockParts(ms);
+  return c.h * 60 + c.m + c.s / 60;
+}
+function eventLocalHMS(ms = correctedNow()) {
+  const c = eventClockParts(ms);
+  return `${pad(c.h)}:${pad(c.m)}:${pad(c.s)}`;
+}
+// The cue engine reads hours with Date#getHours (browser zone). Hand it a
+// clock shifted so that the browser zone reads the event's wall time;
+// differences between two readings stay real milliseconds.
+function eventWallClockNow() {
+  const ms = correctedNow();
+  const d  = new Date(ms);
+  let diff = eventNowMinutes(ms) - (d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60);
+  if (diff > 720) diff -= 1440; else if (diff < -720) diff += 1440;
+  return ms + Math.round(diff) * 60_000;
+}
+
 function correctedHMS() {
-  const d  = new Date(correctedNow());
-  const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
-  return `${hh}:${mm}:${ss}`;
+  return eventLocalHMS(correctedNow());
 }
 
 // ═══════════════════════════════════════════════════
@@ -2886,24 +2924,26 @@ function onSessionChange(payload) {
 // First click → button turns red + shows "CONFIRM CANCEL", starts 2s timer.
 // Second click within 2s → proceeds with transition.
 // Timer expiry → reverts to original label.
+// The armed state lives in _cancelPending / _endPending and buildButtons /
+// buildCtxPanel render from it, so the 1 s re-render of a LIVE event keeps
+// the confirm label instead of wiping it.
 const _cancelPending = new Map(); // sessionId → timer id
 function confirmCancel(sessionId, btn) {
   if (_cancelPending.has(sessionId)) {
     // Second click — proceed
     clearTimeout(_cancelPending.get(sessionId));
     _cancelPending.delete(sessionId);
-    btn.textContent = 'CANCEL';
-    btn.classList.remove('confirm-pending');
+    renderSessions();
     transition(sessionId, 'CANCELLED');
   } else {
     // First click — show confirm state
-    btn.textContent = t('confirm.confirmCancel');
-    btn.classList.add('confirm-pending');
     const timer = setTimeout(() => {
       _cancelPending.delete(sessionId);
-      if (btn.isConnected) { btn.textContent = 'CANCEL'; btn.classList.remove('confirm-pending'); }
+      renderSessions();
     }, 2000);
     _cancelPending.set(sessionId, timer);
+    if (btn) { btn.textContent = t('confirm.confirmCancel'); btn.classList.add('confirm-pending'); }
+    renderSessions();
   }
 }
 
@@ -2971,17 +3011,16 @@ function confirmEnd(sessionId, btn) {
   if (_endPending.has(sessionId)) {
     clearTimeout(_endPending.get(sessionId));
     _endPending.delete(sessionId);
-    btn.textContent = 'END';
-    btn.classList.remove('confirm-pending');
+    renderSessions();
     transition(sessionId, 'ENDED');
   } else {
-    btn.textContent = t('confirm.confirmEnd');
-    btn.classList.add('confirm-pending');
     const timer = setTimeout(() => {
       _endPending.delete(sessionId);
-      if (btn.isConnected) { btn.textContent = 'END'; btn.classList.remove('confirm-pending'); }
+      renderSessions();
     }, 3000);
     _endPending.set(sessionId, timer);
+    if (btn) { btn.textContent = t('confirm.confirmEnd'); btn.classList.add('confirm-pending'); }
+    renderSessions();
   }
 }
 
@@ -3285,11 +3324,19 @@ async function applyDelay(sessionId, minutes) {
 async function markArrived(sessionId, arrived) {
   const s = S.sessions.find(x => x.id === sessionId);
   if (!s) return;
+  const prev = s.speaker_arrived;
   s.speaker_arrived = arrived;
   renderSessions();
-  await sb.from('leod_sessions').update({ speaker_arrived: arrived }).eq('id', sessionId)
-    .then(() => pushLog('ARRIVED', `${trunc(s.title,20)}: speaker ${arrived?'confirmed':'cleared'}`, sessionId))
-    .catch(e => pushLog('ERROR', e.message, sessionId));
+  const { error } = await sb.from('leod_sessions').update({ speaker_arrived: arrived }).eq('id', sessionId);
+  if (error) {
+    const cur = S.sessions.find(x => x.id === sessionId);
+    if (cur) cur.speaker_arrived = prev;
+    renderSessions();
+    pushToast(`Arrival not saved: ${error.message}`, 'error');
+    pushLog('ERROR', `arrival not saved: ${error.message}`, sessionId);
+    return;
+  }
+  pushLog('ARRIVED', `${trunc(s.title,20)}: speaker ${arrived?'confirmed':'cleared'}`, sessionId);
 }
 
 // ═══════════════════════════════════════════════════
@@ -3463,7 +3510,8 @@ function applyFilters() {
                || (s.speaker||'').toLowerCase().includes(needle);
       if (!hit) return false;
     }
-    if (F.status && s.status !== F.status) return false;
+    if (F.status === 'ACTIVE') { if (s.status === 'ENDED' || s.status === 'CANCELLED') return false; }
+    else if (F.status && s.status !== F.status) return false;
     if (F.room   && s.room   !== F.room)   return false;
     return true;
   });
@@ -3478,25 +3526,6 @@ function renderSessions() {
     document.getElementById('delay-strip').style.display = 'none';
     renderSignagePanel();
     return;
-  }
-
-  // Smart auto-open: switch to timeline when a session is newly armed
-  // (PLANNED -> READY/CALLING). Only after boot, and never because of a
-  // restart (LIVE/HOLD/ENDED -> READY) or an unrelated edit while some
-  // session already sits in READY: the operator chose this view.
-  const prevStatus = S._tlPrevStatus || new Map();
-  const newlyArmed = S.sessions.some(s =>
-    (s.status === 'READY' || s.status === 'CALLING') && prevStatus.get(s.id) === 'PLANNED');
-  S._tlPrevStatus = new Map(S.sessions.map(s => [s.id, s.status]));
-  if (S.tlBootDone && S.viewMode === 'list' && !S.tlManualOverride) {
-    if (newlyArmed) {
-      S.viewMode = 'timeline';
-      buildFilterBar();
-      const toast = document.getElementById('tl-auto-toast');
-      if (toast) { toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 4000); }
-      renderTimeline();
-      return;
-    }
   }
 
   // PR-020: Timeline view mode
@@ -3590,7 +3619,6 @@ function toggleViewMode() {
 function setViewMode(mode) {
   if (S.viewMode === mode) return;
   S.viewMode = mode;
-  if (mode === 'list') S.tlManualOverride = true;
   buildFilterBar();
   renderSessions();
 }
@@ -3733,7 +3761,7 @@ function renderTimeline() {
   });
 
   // ── Now line ──
-  const nowMins = correctedNow() / 60_000 % 1440;
+  const nowMins = eventNowMinutes();
   let nowLineSvg = '';
   if (nowMins >= minMins && nowMins <= maxMins) {
     const nx = xPos(nowMins);
@@ -3917,6 +3945,7 @@ function clearBatchSelection() {
   updateBatchBar();
 }
 
+const _batchArmTimers = {}; // toStatus → timer that disarms the batch button
 async function batchTransition(toStatus) {
   if (_batchSelected.size === 0) return;
   const ids = [..._batchSelected];
@@ -3925,13 +3954,27 @@ async function batchTransition(toStatus) {
   // Two-step confirmation for destructive batch actions
   const bar = document.getElementById('batch-bar');
   const confirmKey = `batch-${toStatus}`;
+  const btn = bar.querySelector(`[data-batch="${toStatus}"]`);
+  const disarm = () => {
+    delete bar.dataset[confirmKey];
+    if (btn) { btn.classList.remove('confirm-pending'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+  };
   if (!bar.dataset[confirmKey]) {
     bar.dataset[confirmKey] = 'armed';
+    if (btn) {
+      btn.dataset.label = btn.dataset.label || btn.textContent;
+      btn.textContent = toStatus === 'ENDED' ? t('confirm.confirmEnd')
+                      : toStatus === 'CANCELLED' ? t('confirm.confirmCancel')
+                      : `${btn.dataset.label}?`;
+      btn.classList.add('confirm-pending');
+    }
     pushToast(`Click again to ${toStatus} ${count} session${count>1?'s':''}`, 'warn');
-    setTimeout(() => { delete bar.dataset[confirmKey]; }, 3000);
+    clearTimeout(_batchArmTimers[toStatus]);
+    _batchArmTimers[toStatus] = setTimeout(disarm, 3000);
     return;
   }
-  delete bar.dataset[confirmKey];
+  clearTimeout(_batchArmTimers[toStatus]);
+  disarm();
 
   let success = 0;
   for (const id of ids) {
@@ -3973,11 +4016,13 @@ function buildButtons(s) {
     const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
-      return `<button class="abtn ${cfg.cls}" onclick="confirmCancel('${s.id}',this)">${label}</button>`;
+      const armed = _cancelPending.has(s.id);
+      return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
     }
     // END SESSION uses two-step confirmation to prevent accidental ending
     if (to === 'ENDED') {
-      return `<button class="abtn ${cfg.cls}" onclick="confirmEnd('${s.id}',this)">${label}</button>`;
+      const armed = _endPending.has(s.id);
+      return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
     }
     return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
   }).join('');
@@ -4071,9 +4116,13 @@ function buildCtxPanel() {
         const cfg   = _btnCfg2[to] || { label: to, cls: 'btn-blue' };
         const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
         if (to === 'CANCELLED') {
-          html += cbtn(label, cfg.cls, `confirmCancel('${esc(tgt.id)}',event.target)`);
+          const armed = _cancelPending.has(tgt.id);
+          html += cbtn(armed ? t('confirm.confirmCancel') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
+                       `confirmCancel('${esc(tgt.id)}',this)`);
         } else if (to === 'ENDED') {
-          html += cbtn(label, cfg.cls, `confirmEnd('${esc(tgt.id)}',event.target)`);
+          const armed = _endPending.has(tgt.id);
+          html += cbtn(armed ? t('confirm.confirmEnd') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
+                       `confirmEnd('${esc(tgt.id)}',this)`);
         } else {
           html += cbtn(label, cfg.cls, `transition('${esc(tgt.id)}','${to}')`);
         }
@@ -4238,7 +4287,11 @@ async function loadSponsors(eventId) {
   } catch { S.sponsors = []; }
 }
 
-function subscribeDisplays(eventId) {
+async function subscribeDisplays(eventId) {
+  // channel() returns an existing channel of the same name, and adding
+  // postgres_changes callbacks to a joined channel throws. Remove it first.
+  const existing = sb.getChannels().find(c => c.topic === 'realtime:leod-signage');
+  if (existing) await sb.removeChannel(existing);
   sb.channel('leod-signage')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_displays',
         filter: `event_id=eq.${eventId}` }, p => {
@@ -4840,6 +4893,8 @@ async function deleteSponsorFromModal() {
   renderSignagePanel();
 }
 
+let _smCurrentId = null;              // session the stage monitor is showing
+let _smHold = { id: null, text: '' }; // timer frozen while that session is on HOLD
 function openStageMonitor() {
   document.getElementById('stage-monitor').style.display = 'flex';
   updateStageMonitor();
@@ -4863,12 +4918,16 @@ function updateStageMonitor() {
   if (!mon || mon.style.display === 'none') return;
 
   const nowMs = Date.now() + (S.clockOffset || 0);
-  const live  = S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN');
-  const ready = S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING');
-  const cur   = live || ready;
-  const next  = cur
-    ? S.sessions.find(s => s.sort_order > cur.sort_order && !['ENDED','CANCELLED'].includes(s.status))
-    : S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+  // Current session: the most urgent of OVERRUN > LIVE > HOLD. A held session
+  // is still the one on stage. Among equals keep the one already shown, so
+  // two rooms running at once do not make the monitor jump.
+  const RANK = { OVERRUN: 3, LIVE: 2, HOLD: 1 };
+  const active = S.sessions.filter(s => RANK[s.status]);
+  const top = active.length ? Math.max(...active.map(s => RANK[s.status])) : 0;
+  const best = active.filter(s => RANK[s.status] === top);
+  const live = best.find(s => s.id === _smCurrentId) || best[0] || null;
+  const ready = live ? null : S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING');
+  _smCurrentId = live ? live.id : null;
 
   const smStatus   = document.getElementById('sm-status');
   const smTitle    = document.getElementById('sm-title');
@@ -4882,9 +4941,28 @@ function updateStageMonitor() {
 
   // Footer clock + event name
   if (smClock) smClock.textContent = correctedHMS();
-  if (smEvt && S.currentEvent) smEvt.textContent = (S.currentEvent.name || '—').toUpperCase();
+  if (smEvt) smEvt.textContent = (S.event?.name || '—').toUpperCase();
 
-  if (live && live.actual_start) {
+  if (live && live.status === 'HOLD') {
+    // Paused: freeze the remaining time seen when the hold was first shown.
+    if (_smHold.id !== live.id) {
+      let frozen = '--:--';
+      if (live.actual_start) {
+        const durMs  = (toMins(live.scheduled_end) - toMins(live.scheduled_start)) * 60_000;
+        const remain = durMs - (nowMs - new Date(live.actual_start).getTime());
+        frozen = (remain < 0 ? '+' : '') + fmtDur(remain);
+      }
+      _smHold = { id: live.id, text: frozen };
+    }
+    smStatus.innerHTML  = '❚❚ PLEASE HOLD';
+    smStatus.className  = 'sm-status-hold';
+    smTitle.textContent = live.title;
+    smSpk.textContent   = live.speaker || '';
+    smTimer.textContent = _smHold.text;
+    smTimer.style.color = 'var(--amber)';
+    smLbl.textContent   = 'PAUSED';
+
+  } else if (live && live.actual_start) {
     const startMs = new Date(live.actual_start).getTime();
     const elapsed = nowMs - startMs;
     const durMs   = (toMins(live.scheduled_end) - toMins(live.scheduled_start)) * 60_000;
@@ -4894,13 +4972,22 @@ function updateStageMonitor() {
     const m       = Math.floor(abs / 60_000);
     const s       = Math.floor((abs % 60_000) / 1000);
 
-    smStatus.innerHTML = `<span class="sm-live-dot"></span>YOU ARE LIVE`;
-    smStatus.className = 'sm-status-live';
+    smStatus.innerHTML = overrun ? `<span class="sm-live-dot"></span>OVER TIME` : `<span class="sm-live-dot"></span>YOU ARE LIVE`;
+    smStatus.className = overrun ? 'sm-status-live sm-status-overrun' : 'sm-status-live';
     smTitle.textContent  = live.title;
     smSpk.textContent    = live.speaker || '';
-    smTimer.textContent  = `${m}:${String(s).padStart(2,'0')}`;
-    smTimer.style.color  = overrun ? '#ef4444' : remain <= 2*60_000 ? '#ef4444' : remain <= 5*60_000 ? '#f59e0b' : '#22c55e';
-    smLbl.textContent    = overrun ? 'OVERTIME' : remain <= 2*60_000 ? 'ENDING NOW' : remain <= 5*60_000 ? 'WRAPPING UP' : 'REMAINING';
+    smTimer.textContent  = `${overrun ? '+' : ''}${m}:${String(s).padStart(2,'0')}`;
+    smTimer.style.color  = overrun ? 'var(--magenta)' : remain <= 2*60_000 ? '#ef4444' : remain <= 5*60_000 ? '#f59e0b' : '#22c55e';
+    smLbl.textContent    = overrun ? 'OVERRUN' : remain <= 2*60_000 ? 'ENDING NOW' : remain <= 5*60_000 ? 'WRAPPING UP' : 'REMAINING';
+
+  } else if (live) {
+    smStatus.innerHTML  = `<span class="sm-live-dot"></span>YOU ARE LIVE`;
+    smStatus.className  = 'sm-status-live';
+    smTitle.textContent = live.title;
+    smSpk.textContent   = live.speaker || '';
+    smTimer.textContent = '--:--';
+    smTimer.style.color = 'var(--dim)';
+    smLbl.textContent   = '';
 
   } else if (ready) {
     smStatus.innerHTML  = '◈ STANDING BY — STARTING SHORTLY';
@@ -4914,12 +5001,14 @@ function updateStageMonitor() {
   } else {
     smStatus.innerHTML  = '— STANDBY';
     smStatus.className  = 'sm-status-standby';
-    smTitle.textContent = S.currentEvent?.name ? S.currentEvent.name.toUpperCase() : 'STANDING BY';
+    smTitle.textContent = S.event?.name ? S.event.name.toUpperCase() : 'STANDING BY';
     smSpk.textContent   = '';
     smTimer.textContent = '--:--';
     smTimer.style.color = 'var(--dim)';
     smLbl.textContent   = '';
   }
+
+  if (!live || live.status !== 'HOLD') _smHold = { id: null, text: '' };
 
   // PR-010: Hide NEXT UP section when no next session exists
   const nextSession = getNextSession(S.sessions, live || ready);
@@ -5108,9 +5197,7 @@ function toggleAutoStart() {
 }
 
 function checkAutoStart() {
-  const nowMs   = correctedNow();
-  const nowDate = new Date(nowMs);
-  const nowMins = nowDate.getHours() * 60 + nowDate.getMinutes() + nowDate.getSeconds() / 60;
+  const nowMins = eventNowMinutes();
   const toStart = S.sessions.find(s => {
     if (s.status !== 'READY' || !s.planned_start) return false;
     const diff = nowMins - toMins(s.planned_start);
@@ -5245,17 +5332,19 @@ function toggleNotes(sessionId) {
 }
 
 // PR-010: Pure function — testable without browser context
-// Returns first non-ENDED/CANCELLED session after the given live session in sort order.
+// Returns the first non-ENDED/CANCELLED session after the given one in sort
+// order, in the same room. Any room only when the given session has none.
 function getNextSession(sessions, liveSession) {
   if (!liveSession) return null;
   return sessions.find(s =>
     s.sort_order > liveSession.sort_order &&
-    !['ENDED', 'CANCELLED'].includes(s.status)
+    !['ENDED', 'CANCELLED'].includes(s.status) &&
+    (!liveSession.room || s.room === liveSession.room)
   ) || null;
 }
 
-function pushLog(action, detail, sessionId) {
-  S.log.unshift({ action, detail, sessionId, ts: correctedNow() });
+function pushLog(action, detail, sessionId, ts) {
+  S.log.unshift({ action, detail, sessionId, ts: ts ?? correctedNow() });
   if (S.log.length > 60) S.log.pop();
   renderLog();
 
@@ -5338,10 +5427,13 @@ document.addEventListener('click', function _reqNotif() {
 }, { once: true });
 
 function pushLogFromRow(row) {
+  const msg = row.payload && typeof row.payload.message === 'string' ? row.payload.message : null;
   const detail = row.from_status
     ? `${row.from_status} → ${row.to_status}`
+    : msg !== null ? trunc(msg, 120)
     : String(JSON.stringify(row.payload || '')).substring(0, 45);
-  pushLog(row.action, detail, row.session_id);
+  const ts = row.ts ? new Date(row.ts).getTime() : undefined;
+  pushLog(row.action, detail, row.session_id, Number.isFinite(ts) ? ts : undefined);
 }
 
 function renderLog() {
@@ -5363,7 +5455,7 @@ function renderLog() {
   }
   feed.innerHTML = S.log.slice(0, 25).map(e => `
     <div class="le ${leClass(e.action)}">
-      <span class="le-ts">${new Date(e.ts).toTimeString().substring(0,8)}</span>
+      <span class="le-ts">${fmtTS(e.ts)}</span>
       <span class="le-act"> ${e.action}</span>
       ${e.detail ? `<div class="le-det">${esc(e.detail)}</div>` : ''}
     </div>`).join('');
@@ -5420,9 +5512,9 @@ function onBCInput() {
 // PR-018: Role-adaptive filter defaults — each role gets a sensible status preset
 const ROLE_FILTER_DEFAULT = {
   director: '',         // see everything
-  stage:    'LIVE',     // stage crew only cares about what's live right now
-  av:       'LIVE',     // AV same as stage
-  interp:   'LIVE',
+  stage:    'ACTIVE',   // everything not ended or cancelled: live, held, overrun and what is next
+  av:       'ACTIVE',
+  interp:   'ACTIVE',
   reg:      'PLANNED',  // registration monitors upcoming sessions
   signage:  '',
 };
@@ -5498,7 +5590,8 @@ function buildFilterBar() {
     ' value="' + esc(F.text) + '" oninput="onFilterInput(event)">' +
     '<button id="filter-toggle-btn" onclick="toggleFilters()">\u25BE Filters</button>' +
     '<select id="fb-status" onchange="onFilterChange()">' +
-    '<option value="' + (!F.status?'" selected':'"') + '>' + t('misc.allStatuses') + '</option>' + stOpts +
+    '<option value="' + (!F.status?'" selected':'"') + '>' + t('misc.allStatuses') + '</option>' +
+    '<option value="ACTIVE"' + (F.status==='ACTIVE'?' selected':'') + '>' + t('misc.activeStatuses') + '</option>' + stOpts +
     '</select>' +
     '<select id="fb-room" onchange="onFilterChange()">' +
     '<option value="' + (!F.room?'" selected':'"') + '>' + t('misc.allRooms') + '</option>' + roomOpts +
@@ -5508,8 +5601,7 @@ function buildFilterBar() {
     '<div class="fb-view-pill">' +
     '<button class="fvp-btn' + (S.viewMode === 'list' ? ' active' : '') + '" onclick="setViewMode(\'list\')">\u2630 List</button>' +
     '<button class="fvp-btn' + (S.viewMode === 'timeline' ? ' active' : '') + '" onclick="setViewMode(\'timeline\')">\u23F1 Timeline</button>' +
-    '</div>' +
-    '<div id="tl-auto-toast" class="tl-auto-toast">\u26A1 Auto-switched to Timeline \u2014 sessions starting soon</div>';
+    '</div>';
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
@@ -5529,8 +5621,7 @@ async function switchEvent(eventId) {
   if (!ev) return;
   S.event = ev;
   setStep(`Loading ${ev.name}…`);
-  F.text = ''; F.status = ''; F.room = ''; // clear filters on event switch
-  S.tlManualOverride = false; // reset timeline auto-switch on event change
+  F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});
   await loadLog(eventId).catch(() => {});
@@ -6166,7 +6257,7 @@ function fmtDur(ms) {
 }
 
 function fmtTS(ts) {
-  return ts ? new Date(ts).toTimeString().substring(0, 8) : '—';
+  return ts ? eventLocalHMS(new Date(ts).getTime()) : '—';
 }
 
 function timeSince(ts) {
@@ -7683,7 +7774,8 @@ sb.auth.onAuthStateChange((event, session) => {
     // Only act if we are currently on the confirm-email screen (polling).
     // This fires when the user clicks the confirmation link in any tab.
     const confirmScreen = document.getElementById('confirm-email-screen');
-    if (confirmScreen && confirmScreen.style.display !== 'none') {
+    // The screen is hidden by CSS, so read the computed display, not the inline one.
+    if (confirmScreen && getComputedStyle(confirmScreen).display !== 'none') {
       stopConfirmPolling();
       S.user = session.user;
       confirmScreen.style.display = 'none';
@@ -8081,6 +8173,9 @@ function wizSkip() {
 // BOOT
 // ═══════════════════════════════════════════════════
 async function boot() {
+  // Login, confirm polling and SIGNED_IN can each call boot: run it once.
+  if (S.booted) return;
+  S.booted = true;
   const overlay = document.getElementById('loading-overlay');
 
   // Set language switcher to current locale
@@ -8251,7 +8346,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       });
       CueDeckCueEngine.init([], {
         supabaseClient:     sb,
-        correctedNow,                     // CueDeck 3-sample RTT clock sync
+        correctedNow: eventWallClockNow,  // synced clock, read as event wall time
         cueDeckSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
         alertMinutesBefore: 8
       });
@@ -8286,12 +8381,9 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     initChecklist();
     setTimeout(() => showRoleTips(), 800);
 
-    // Enable timeline auto-switch after boot settles (delay prevents
-    // realtime events fired during subscribe from triggering auto-switch)
-    setTimeout(() => { S.tlBootDone = true; }, 3000);
-
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
+    S.booted = false; // a failed boot may be retried by the next sign-in
     setStep(`Boot error: ${e.message}`);
     console.error('CueDeck boot failed:', e);
     setTimeout(() => { overlay.style.display = 'none'; }, 3000);
@@ -8370,7 +8462,7 @@ function ensureAgentsInited() {
   });
   CueDeckCueEngine.init([], {
     supabaseClient:     typeof sb !== 'undefined' ? sb : null,
-    correctedNow:       typeof correctedNow === 'function' ? correctedNow : () => Date.now(),
+    correctedNow:       typeof eventWallClockNow === 'function' ? eventWallClockNow : () => Date.now(),
     cueDeckSessions:    S?.sessions || [],
     alertMinutesBefore: 8
   });

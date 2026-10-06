@@ -1,8 +1,8 @@
 // tests/e2e/console-timeline-autoswitch.spec.ts
-// The session list auto-opens the timeline when a session is armed
-// (PLANNED -> READY/CALLING). A restart (LIVE/HOLD/ENDED -> READY) must not
-// switch the operator's view (reported 2026-10-05), nor may an unrelated
-// re-render while some session already sits in READY.
+// The console never changes the operator's view on its own. Arming a session
+// used to flip the director to the timeline, which has no controls (removed
+// 2026-10-06, show-safety audit); a restart must not switch it either
+// (reported 2026-10-05). The user chooses the view.
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.CONSOLE_BASE || 'http://127.0.0.1:7230';
@@ -20,7 +20,8 @@ async function setup(page) {
       { id: 'b', event_id: 'e1', sort_order: 2, title: 'Panel', status: 'PLANNED', version: 1, planned_start: '09:15:00', planned_end: '10:00:00', scheduled_start: '09:15:00', scheduled_end: '10:00:00' },
     ];
     St.viewMode = 'list';
-    St.tlManualOverride = false;
+    // The removed auto-switch only fired once this boot flag was set; set it
+    // so the spec catches the switch if it ever comes back.
     St.tlBootDone = true;
     w.renderSessions();
   });
@@ -43,8 +44,24 @@ test('a re-render while a session is already READY keeps the list view', async (
   expect(await viewMode(page)).toBe('list');
 });
 
-test('arming a planned session (PLANNED -> READY) still opens the timeline', async ({ page }) => {
+test('arming a planned session (PLANNED -> READY) keeps the list view', async ({ page }) => {
   await setup(page);
   await setStatus(page, 'b', 'READY');
+  expect(await viewMode(page)).toBe('list');
+  await expect(page.locator('#sessions-list .sc')).toHaveCount(2);
+});
+
+test('arming to CALLING keeps the list view and shows no auto-switch notice', async ({ page }) => {
+  await setup(page);
+  await setStatus(page, 'b', 'CALLING');
+  expect(await viewMode(page)).toBe('list');
+  await expect(page.locator('#tl-auto-toast')).toHaveCount(0);
+});
+
+test('a director on the timeline stays there when a session is armed or restarted', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => (window as any).setViewMode('timeline'));
+  await setStatus(page, 'b', 'READY');
+  await setStatus(page, 'a', 'READY');
   expect(await viewMode(page)).toBe('timeline');
 });

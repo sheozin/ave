@@ -320,6 +320,7 @@ const CueDeckI18n = (() => {
       // Misc
       'misc.search':          'Search sessions...',
       'misc.allStatuses':     'All statuses',
+      'misc.activeStatuses':  'Active',
       'misc.allRooms':        'All rooms',
       'misc.online':          'Back online — syncing...',
       'misc.saved':           'Saved',
@@ -610,6 +611,7 @@ const CueDeckI18n = (() => {
 
       'misc.search':      'بحث في الجلسات...',
       'misc.allStatuses': 'جميع الحالات',
+      'misc.activeStatuses': 'النشطة',
       'misc.allRooms':    'جميع القاعات',
       'misc.online':      'عاد الاتصال — جاري المزامنة...',
       'misc.saved':       'تم الحفظ',
@@ -747,6 +749,7 @@ const CueDeckI18n = (() => {
       'profile.signOut':      'Wyloguj',
       'misc.search':          'Szukaj sesji...',
       'misc.allStatuses':     'Wszystkie statusy',
+      'misc.activeStatuses':  'Aktywne',
       'misc.allRooms':        'Wszystkie sale',
     },
 
@@ -876,6 +879,7 @@ const CueDeckI18n = (() => {
       'profile.signOut':      'Abmelden',
       'misc.search':          'Sitzungen suchen...',
       'misc.allStatuses':     'Alle Status',
+      'misc.activeStatuses':  'Aktiv',
       'misc.allRooms':        'Alle Räume',
     },
   };
