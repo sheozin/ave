@@ -1311,7 +1311,7 @@
     .ctx-title.ctx-empty { font-size: 11px; color: var(--dim); font-weight: 400; }
     .ctx-sub { font-size: 10px; color: var(--dim); margin-top: 4px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
     .ctx-sub-live, .ctx-sub-overrun { color: #f87171; }
-    .ctx-sub-ready, .ctx-sub-calling { color: var(--amber); }
+    .ctx-sub-ready, .ctx-sub-calling, .ctx-sub-hold { color: var(--amber); }
     #ctx-actions {
       padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;
       border-bottom: 1px solid var(--border); flex-shrink: 0;
@@ -2821,12 +2821,27 @@ async function loadLog(eventId) {
 // ═══════════════════════════════════════════════════
 // REALTIME
 // ═══════════════════════════════════════════════════
+// One live channel per name. sb.channel(name) hands back an existing channel
+// of that name, and adding postgres_changes callbacks to a joined or joining
+// one throws. So remove it (and any channel in `extra`) and wait for that
+// before building the new one. Calls run one at a time: a scheduled reconnect
+// and a tab refocus can land together.
+let _channelQueue = Promise.resolve();
+function replaceChannel(name, build, extra = null) {
+  const run = _channelQueue.then(async () => {
+    const old = sb.getChannels().filter(c => c.topic === `realtime:${name}` || c === extra);
+    for (const c of old) await sb.removeChannel(c);
+    return build(sb.channel(name));
+  });
+  _channelQueue = run.catch(() => {});
+  return run;
+}
+
 function subscribeControl(eventId) {
-  S.ctrlChan?.unsubscribe();
+  return replaceChannel(`leod-ctrl-${eventId}`, ch => {
   S.presence = {};
   refreshPresence();
-  S.ctrlChan = sb
-    .channel(`leod-ctrl-${eventId}`)
+  S.ctrlChan = ch
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'leod_sessions', filter: `event_id=eq.${eventId}` },
         onSessionChange)
@@ -2863,6 +2878,7 @@ function subscribeControl(eventId) {
         onDisconnect();
       }
     });
+  }, S.ctrlChan);
 }
 
 function onSessionChange(payload) {
@@ -3406,7 +3422,7 @@ async function doReconnect() {
   try {
     await syncClock();
     await loadSnapshot(S.event.id);
-    subscribeControl(S.event.id);
+    await subscribeControl(S.event.id);
     S.retries = 0;
     setConn('live');
     document.getElementById('rc-overlay').style.display = 'none';
@@ -4081,11 +4097,10 @@ function buildCtxPanel() {
   const actionsEl = document.getElementById('ctx-actions');
   if (!titleEl || !actionsEl) return;
 
-  // Active target: LIVE/OVERRUN → CALLING → READY
-  const tgt = S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN')
-           || S.sessions.find(s => s.status === 'CALLING')
-           || S.sessions.find(s => s.status === 'READY')
-           || null;
+  // Active target by urgency. Every quick action below acts on this session.
+  const tgt = ['OVERRUN', 'LIVE', 'HOLD', 'CALLING', 'READY']
+    .map(st => S.sessions.find(s => s.status === st))
+    .find(Boolean) || null;
 
   if (tgt) {
     titleEl.className = 'ctx-title';
@@ -4287,12 +4302,8 @@ async function loadSponsors(eventId) {
   } catch { S.sponsors = []; }
 }
 
-async function subscribeDisplays(eventId) {
-  // channel() returns an existing channel of the same name, and adding
-  // postgres_changes callbacks to a joined channel throws. Remove it first.
-  const existing = sb.getChannels().find(c => c.topic === 'realtime:leod-signage');
-  if (existing) await sb.removeChannel(existing);
-  sb.channel('leod-signage')
+function subscribeDisplays(eventId) {
+  return replaceChannel('leod-signage', ch => ch
     .on('postgres_changes', { event: '*', schema: 'public', table: 'leod_signage_displays',
         filter: `event_id=eq.${eventId}` }, p => {
       if (p.eventType === 'DELETE') {
@@ -4325,7 +4336,7 @@ async function subscribeDisplays(eventId) {
           if (S.role === 'signage') renderSignagePanel();
         }, 3_000 + Math.random() * 2_000);
       }
-    });
+    }));
 }
 
 function renderSignagePanel() {
@@ -5625,7 +5636,7 @@ async function switchEvent(eventId) {
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});
   await loadLog(eventId).catch(() => {});
-  subscribeControl(eventId);
+  await subscribeControl(eventId);
   document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
   buildEvSelect(S.events);
 }
@@ -8308,7 +8319,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
 
     // 7. Realtime
     setStep('Subscribing to realtime…');
-    subscribeControl(ev.id);
+    await subscribeControl(ev.id);
 
     // 8. Signage displays & sponsors (non-blocking — tables may not exist yet)
     loadDisplays(ev.id).then(() => {

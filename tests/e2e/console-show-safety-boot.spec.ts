@@ -66,3 +66,29 @@ test('subscribing the signage channel twice replaces it instead of throwing', as
     expect(res).toEqual({ threw: '', count: 1 });
   } finally { await ctx.close(); }
 });
+
+test('two reconnects leave exactly one live channel per name and no "after subscribe()" error', async ({ browser }) => {
+  const { ctx, page, errors } = await openConsole(browser);
+  try {
+    const res = await page.evaluate(async (ev) => {
+      const w = window as any;
+      const sbc = (0, eval)('sb');
+      const St = (0, eval)('S');
+      const thrown: string[] = [];
+      const run = async (f: () => Promise<unknown>) => { try { await f(); } catch (e: any) { thrown.push(e.message); } };
+      await run(() => w.doReconnect());
+      await run(() => w.doReconnect());
+      // A scheduled retry and a tab refocus can land together.
+      await Promise.all([run(() => w.doReconnect()), run(() => w.subscribeDisplays(ev)), run(() => w.subscribeDisplays(ev))]);
+      await new Promise(r => setTimeout(r, 800));
+      const topics: Record<string, number> = {};
+      for (const c of sbc.getChannels()) topics[c.topic] = (topics[c.topic] || 0) + 1;
+      return { thrown, topics, ctrlState: St.ctrlChan?.state, ctrlInList: sbc.getChannels().includes(St.ctrlChan) };
+    }, EVENT_ID);
+    expect(res.thrown).toEqual([]);
+    expect(res.topics).toEqual({ [`realtime:leod-ctrl-${EVENT_ID}`]: 1, 'realtime:leod-signage': 1 });
+    expect(res.ctrlState).toBe('joined');
+    expect(res.ctrlInList).toBe(true);
+    expect(errors.filter(e => /after `?subscribe\(\)/.test(e))).toEqual([]);
+  } finally { await ctx.close(); }
+});

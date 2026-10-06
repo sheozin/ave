@@ -110,6 +110,40 @@ for (const status of ['LIVE', 'OVERRUN']) {
   });
 }
 
+// ── Sidebar "Active session": urgency order, quick actions act on it ──────
+test.describe('sidebar active session', () => {
+  test('the only active session is on HOLD: the panel shows it and RESUME/END target it', async ({ page }) => {
+    await setup(page, [
+      sess('done', 1, { status: 'ENDED', title: 'Keynote', actual_start: iso(-60), actual_end: iso(-20) }),
+      sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
+      sess('later', 3, { status: 'PLANNED', title: 'Case study' }),
+    ]);
+    await expect(page.locator('#ctx-title')).toHaveText('Workshop');
+    await page.locator('#ctx-actions .ctx-btn', { hasText: 'RESUME' }).click();
+    await page.locator('#ctx-actions .ctx-btn', { hasText: 'END SESSION' }).click();
+    await page.locator('#ctx-actions .ctx-btn.confirm-pending').click();
+    expect(await calls(page)).toEqual([['held', 'LIVE'], ['held', 'ENDED']]);
+  });
+
+  test('HOLD plus a READY session: the HOLD one is shown', async ({ page }) => {
+    await setup(page, [
+      sess('ready', 1, { status: 'READY', title: 'Pricing talk' }),
+      sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
+    ]);
+    await expect(page.locator('#ctx-title')).toHaveText('Workshop');
+    await expect(page.locator('#ctx-actions .ctx-btn').first()).toHaveText('RESUME');
+  });
+
+  test('OVERRUN outranks LIVE, which outranks HOLD', async ({ page }) => {
+    await setup(page, [
+      sess('held', 1, { status: 'HOLD', title: 'Held' }),
+      live({ title: 'Live' }),
+      sess('over', 3, { status: 'OVERRUN', title: 'Over', actual_start: iso(-40) }),
+    ]);
+    await expect(page.locator('#ctx-title')).toHaveText('Over');
+  });
+});
+
 // ── 5. Stage monitor ─────────────────────────────────────────────────────
 async function monitor(page: Page) {
   await page.evaluate(() => (window as any).openStageMonitor());
