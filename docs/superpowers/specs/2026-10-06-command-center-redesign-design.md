@@ -56,7 +56,7 @@ Text on a solid status fill is `#0A0E14` (5.14 to 12.63:1). Worst pair ΔE 21.3 
 
 **Accent and focus.** `--accent #2563EB` (one primary blue; white text 5.17:1), `--accent-fg #60A5FA`, focus ring `0 0 0 2px var(--bg), 0 0 0 4px #93C5FD` on every interactive element via `:focus-visible`.
 
-**Action colour rule.** Action colour follows the action, state colour follows the status. Forward actions (Set ready, Call, On stage, Resume) use the colour of the state they lead to as a solid fill; Hold is solid amber; End and Cancel are red outlined (danger); everything else is secondary.
+**Action colour rule.** Action colour follows the action, state colour follows the status, and red is never used for a non-destructive action (controller ruling, 2026-10-06). Set ready and the actions that put a session on stage (On stage, Go live, Resume) are solid green (`--st-ready`, dark text); Call speaker is solid yellow (`--st-calling`); Hold is solid amber; End and Cancel are red outlined (danger); solid red is reserved for the armed confirm state; everything else is secondary.
 
 **Type.** 8 sizes: 11 (labels, captions; the minimum), 12 (meta), 13 (body, buttons), 14 (row title), 16 (section and inspector title), 20, 28 (countdowns in the band), 40 (inspector countdown on phone). Weights 400/500/600/700. Letter-spacing: .06em uppercase labels, .04em uppercase badges, -.01em large numbers, 0 otherwise. Inter everywhere with `tabular-nums` for times; mono only for codes and the clock offset.
 
