@@ -4,14 +4,39 @@
 // tests/checkin-scanner-policy.spec.ts; the verdict wording lives only here.
 // Tested in tests/checkin-scanner-page.spec.ts.
 
-export const COOLDOWN_MS = 4000;
+export const REARM_MS = 2500;
 
+// Read once; not again until the code has been out of view for REARM_MS
+// (every sighting refreshes it). See the server copy for why.
 export function shouldAccept(seen, token, now) {
-  for (const [k, t] of seen) if (now - t >= COOLDOWN_MS) seen.delete(k);   // a Map, not a database write
+  for (const [k, t] of seen) if (now - t >= REARM_MS) seen.delete(k);
   const last = seen.get(token);
-  if (last !== undefined && now - last < COOLDOWN_MS) return false;
   seen.set(token, now);
-  return true;
+  return last === undefined;
+}
+
+// Several codes in one frame (two guests, or a sheet of codes): read only
+// the largest, the one held up to the camera. Field test 2026-10-06 checked
+// two people in 170 ms apart from one frame.
+export function pickCode(codes) {
+  let best = null, bestArea = -1;
+  for (const c of codes || []) {
+    const b = c && c.boundingBox;
+    const area = b ? (b.width || 0) * (b.height || 0) : 0;
+    if (c && typeof c.rawValue === 'string' && area > bestArea) { best = c.rawValue; bestArea = area; }
+  }
+  return best;
+}
+
+// Sound per verdict tone: rising two notes for in, one middle note for
+// already in, two low buzzes for stop; queued offline is quiet.
+export function toneFor(tone) {
+  switch (tone) {
+    case 'ok':   return [{ hz: 880, ms: 110, wave: 'sine' }, { hz: 1320, ms: 170, wave: 'sine' }];
+    case 'warn': return [{ hz: 660, ms: 220, wave: 'triangle' }];
+    case 'stop': return [{ hz: 220, ms: 140, wave: 'square' }, { hz: 196, ms: 200, wave: 'square' }];
+    default:     return [];
+  }
 }
 
 export function normalizeToken(raw) {

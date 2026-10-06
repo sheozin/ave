@@ -4,7 +4,7 @@
 // event"). Imported for real, not re-expressed: a test that restates the
 // rule passes whatever the code does.
 import { describe, it, expect } from 'vitest';
-import { scanPointRefusal, shouldAccept, normalizeToken, COOLDOWN_MS } from '../supabase/functions/_shared/checkin-scanner.ts';
+import { scanPointRefusal, shouldAccept, normalizeToken, REARM_MS } from '../supabase/functions/_shared/checkin-scanner.ts';
 
 const on = { multi_point_scanning: true, entrance_scanning: true, session_scanning: true };
 
@@ -27,12 +27,23 @@ describe('scanPointRefusal', () => {
   });
 });
 
-describe('shouldAccept (cooldown)', () => {
-  it('accepts a code the first time and again after the cooldown', () => {
+describe('shouldAccept (re-arm when the code leaves the camera)', () => {
+  // The decoder reads a code every ~180 ms while it is in view. Field test
+  // 2026-10-06: a 4 s cooldown re-scanned a code still held up, turning a
+  // green check-in amber and writing 7 duplicate rows in a minute.
+  it('accepts a code the first time it is seen', () => {
+    expect(shouldAccept(new Map(), 'AAA', 1000)).toBe(true);
+  });
+  it('never again while it stays in view, however long', () => {
     const seen = new Map<string, number>();
-    expect(shouldAccept(seen, 'AAA', 1000)).toBe(true);
-    expect(shouldAccept(seen, 'AAA', 1000 + COOLDOWN_MS - 1)).toBe(false);
-    expect(shouldAccept(seen, 'AAA', 1000 + COOLDOWN_MS)).toBe(true);
+    shouldAccept(seen, 'AAA', 0);
+    for (let t = 180; t <= 60000; t += 180) expect(shouldAccept(seen, 'AAA', t)).toBe(false);
+  });
+  it('again once it has been out of view for REARM_MS', () => {
+    const seen = new Map<string, number>();
+    shouldAccept(seen, 'AAA', 0);
+    expect(shouldAccept(seen, 'AAA', REARM_MS - 1)).toBe(false);
+    expect(shouldAccept(seen, 'AAA', 2 * REARM_MS)).toBe(true);
   });
   it('one code does not block another', () => {
     const seen = new Map<string, number>();
@@ -42,7 +53,7 @@ describe('shouldAccept (cooldown)', () => {
   it('forgets old codes so the map cannot grow all day', () => {
     const seen = new Map<string, number>();
     for (let i = 0; i < 1000; i++) shouldAccept(seen, 'T' + i, i);
-    shouldAccept(seen, 'late', 10 * COOLDOWN_MS);
+    shouldAccept(seen, 'late', 10 * REARM_MS);
     expect(seen.size).toBe(1);
   });
 });

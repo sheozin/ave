@@ -6,8 +6,8 @@ import * as page from '../checkin-scanner.js';
 import * as server from '../supabase/functions/_shared/checkin-scanner.ts';
 
 describe('parity with the server copy', () => {
-  it('same cooldown', () => {
-    expect(page.COOLDOWN_MS).toBe(server.COOLDOWN_MS);
+  it('same re-arm gap', () => {
+    expect(page.REARM_MS).toBe(server.REARM_MS);
   });
   it('same token decisions', () => {
     for (const raw of ['  abc12345\n', 'abc', 'a b c d e f g h', 'x'.repeat(200), 'x'.repeat(201), 'https://e.x/?q=1', 'tok0123456789abcdef0123456789abcd', '']) {
@@ -16,7 +16,7 @@ describe('parity with the server copy', () => {
   });
   it('same cooldown decisions over a sequence', () => {
     const a = new Map<string, number>(), b = new Map<string, number>();
-    const seq: [string, number][] = [['A', 0], ['A', 100], ['B', 200], ['A', 4000], ['A', 4100], ['B', 9000]];
+    const seq: [string, number][] = [['A', 0], ['A', 180], ['B', 200], ['A', 4000], ['A', 9000], ['B', 9100], ['A', 9200]];
     expect(seq.map(([t, n]) => page.shouldAccept(a, t, n))).toEqual(seq.map(([t, n]) => server.shouldAccept(b, t, n)));
   });
 });
@@ -46,3 +46,30 @@ describe('settle', () => {
     expect(page.settle(box, null)).toHaveLength(3);
   });
 });
+
+describe('pickCode', () => {
+  const box = (w: number, h: number) => ({ width: w, height: h });
+  it('reads only the largest code in view: the guest in front, not the one behind', () => {
+    expect(page.pickCode([{ rawValue: 'far', boundingBox: box(40, 40) }, { rawValue: 'near', boundingBox: box(200, 190) }])).toBe('near');
+  });
+  it('one code, or none', () => {
+    expect(page.pickCode([{ rawValue: 'only', boundingBox: box(10, 10) }])).toBe('only');
+    expect(page.pickCode([])).toBeNull();
+    expect(page.pickCode(null)).toBeNull();
+  });
+  it('a code without a box still counts', () => {
+    expect(page.pickCode([{ rawValue: 'nobox' }])).toBe('nobox');
+  });
+});
+
+describe('feedback', () => {
+  it('each tone has its own sound', () => {
+    const ok = page.toneFor('ok'), warn = page.toneFor('warn'), stop = page.toneFor('stop');
+    expect(ok.length).toBe(2);
+    expect(ok[1].hz).toBeGreaterThan(ok[0].hz);   // rising: good news
+    expect(warn.length).toBe(1);
+    expect(stop[0].hz).toBeLessThan(warn[0].hz); // low: stop
+    expect(page.toneFor('wait')).toEqual([]);     // queued offline: quiet
+  });
+});
+

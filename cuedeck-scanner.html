@@ -42,9 +42,26 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
 .sx-foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .sx-link{background:none;border:0;color:#A1A1A6;font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;padding:0}
 [hidden]{display:none!important}
+/* Feedback: a full-screen colour flash, then the verdict card pops in with
+   its mark drawn. Reduced motion keeps the colours and drops the movement. */
+.sx-flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:50}
+.sx-flash.go{animation:sxflash .7s ease-out}
+.sx-flash.ok{background:#1D8348}.sx-flash.warn{background:#C98A00}.sx-flash.stop{background:#C0392B}.sx-flash.wait{background:#636366}
+@keyframes sxflash{0%{opacity:.55}100%{opacity:0}}
+.sx-v{display:flex;gap:14px;align-items:center}
+.sx-v .sx-ic{flex:none;width:52px;height:52px}
+.sx-v.idle .sx-ic{display:none}
+.sx-v.pop{animation:sxpop .38s cubic-bezier(.2,1.4,.4,1)}
+@keyframes sxpop{0%{transform:scale(.86);opacity:.4}100%{transform:scale(1);opacity:1}}
+.sx-ic path,.sx-ic circle{fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+.sx-v.pop .sx-ic .draw{stroke-dasharray:60;stroke-dashoffset:60;animation:sxdraw .42s .12s ease-out forwards}
+@keyframes sxdraw{to{stroke-dashoffset:0}}
+.sx-snd{background:#2C2C2E;border:0;color:#D1D1D6;font:inherit;font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;cursor:pointer}
+@media (prefers-reduced-motion: reduce){.sx-flash.go,.sx-v.pop,.sx-v.pop .sx-ic .draw{animation:none}.sx-v.pop .sx-ic .draw{stroke-dashoffset:0}}
 </style>
 </head>
 <body>
+<div class="sx-flash" id="flash" aria-hidden="true"></div>
 <div class="sx">
   <!-- Pairing: no device key on this phone yet -->
   <section class="sx-pair" id="pair" hidden>
@@ -61,13 +78,13 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
   <section id="scan" hidden style="display:flex;flex-direction:column;gap:12px;flex:1">
     <div class="sx-top">
       <div><div class="sx-pt" id="pt-name"></div><div class="sx-ev" id="ev-name"></div></div>
-      <span class="sx-pill" id="mode-pill"></span>
+      <div style="display:flex;gap:6px;align-items:center"><button class="sx-snd" id="snd" type="button" aria-pressed="true">Sound on</button><span class="sx-pill" id="mode-pill"></span></div>
     </div>
     <div class="sx-net" id="net"></div>
     <div class="sx-block" id="blocked" hidden></div>
     <div class="sx-cam" id="cam" hidden><video id="video" playsinline muted></video><div class="sx-frame"></div></div>
     <button class="sx-start" id="start" type="button">Start scanning</button>
-    <div class="sx-v idle" id="verdict" role="status" aria-live="assertive"><h2 id="v-title">Ready</h2><p id="v-text">Point the camera at a guest's QR code.</p></div>
+    <div class="sx-v idle" id="verdict" role="status" aria-live="assertive"><svg class="sx-ic" id="v-ic" viewBox="0 0 52 52" aria-hidden="true"></svg><div><h2 id="v-title">Ready</h2><p id="v-text">Point the camera at a guest's QR code.</p></div></div>
     <form class="sx-man" id="man-form" autocomplete="off">
       <input id="man-code" placeholder="Or type the code from the email" aria-label="QR code" spellcheck="false" autocapitalize="off">
       <button id="man-btn">Check</button>
@@ -87,7 +104,7 @@ html,body{background:#111113;color:#F5F5F7;min-height:100%}
 // guest data on the phone is the list of QR tokens (checkin-scanner
 // 'tokens'); names come back per scan, online, from checkin-record-scans.
 // Every node is built with textContent.
-import { shouldAccept, normalizeToken, verdictFor, settle } from '/checkin-scanner.js';
+import { shouldAccept, normalizeToken, verdictFor, settle, pickCode, toneFor } from '/checkin-scanner.js';
 import { correctedIso } from '/checkin-clock.js';
 
 const FN = 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/';
@@ -95,6 +112,7 @@ const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 const STORE = 'cuedeck.scanner.v1';           // { device_key, event_id, label }
 const TOKENS = 'cuedeck.scanner.tokens.v1';   // { event_id, tokens: [...] }
 const OUTBOX = 'cuedeck.scanner.outbox.v1';   // [{ client_id, qr_token, scanned_at, action }]
+const SOUND = 'cuedeck.scanner.sound.v1';     // true | false, this phone only
 const REFRESH_MS = 5 * 60 * 1000, FLUSH_MS = 10000, DETECT_MS = 180, CHUNK = 200;
 
 const $ = (id) => document.getElementById(id);
@@ -131,6 +149,7 @@ function showPair(message) {
 }
 $('pair-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  unlockAudio();
   const code = $('pair-code').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   $('pair-err').textContent = '';
   if (code.length !== 8) { $('pair-err').textContent = 'The code has 8 letters and numbers, like ABCD-EFGH.'; return; }
@@ -199,14 +218,75 @@ function renderNet() {
   const n = read(OUTBOX, []).length;
   const net = $('net'); net.replaceChildren();
   const b = document.createElement('b'); b.textContent = navigator.onLine ? 'Online' : 'Offline';
-  net.append(b, document.createTextNode(' · ' + tokenSet.size + ' codes on this phone' + (n ? ' · ' + n + ' waiting to send' : '')));
+  net.append(b, document.createTextNode(' · ' + tokenSet.size + (tokenSet.size === 1 ? ' code' : ' codes') + ' on this phone' + (n ? ' · ' + n + ' waiting to send' : '')));
 }
 
+// ── feedback: sound, flash, mark ─────────────────────────
+// Sound is made with Web Audio (no files to load at the door). Browsers only
+// allow it after a tap, so the context is unlocked by Start scanning, Check
+// and Pair. Off is remembered on this phone.
+let audio = null;
+let soundOn = read(SOUND, true) !== false;
+function unlockAudio() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === 'suspended') audio.resume();
+  } catch { audio = null; }
+}
+function beep(tone) {
+  if (!soundOn || !audio) return;
+  let t = audio.currentTime + 0.01;
+  for (const n of toneFor(tone)) {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = n.wave; o.frequency.value = n.hz;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + n.ms / 1000);
+    o.connect(g).connect(audio.destination);
+    o.start(t); o.stop(t + n.ms / 1000 + 0.02);
+    t += n.ms / 1000 + 0.04;
+  }
+}
+function renderSound() {
+  $('snd').textContent = soundOn ? 'Sound on' : 'Sound off';
+  $('snd').setAttribute('aria-pressed', String(soundOn));
+}
+$('snd').addEventListener('click', () => { soundOn = !soundOn; write(SOUND, soundOn); renderSound(); if (soundOn) { unlockAudio(); beep('ok'); } });
+renderSound();
+
+// Each mark: a faint ring plus strokes; 'draw' strokes animate in.
+const MARKS = {
+  ok:   [['M15 27l7 7 15-16', true]],
+  warn: [['M26 14v15', true], ['M26 37v.5', false]],
+  stop: [['M18 18l16 16M34 18L18 34', true]],
+  wait: [['M26 15v12l7 5', true]],
+};
+const SVGNS = 'http://www.w3.org/2000/svg';
+function drawMark(svg, tone) {
+  svg.replaceChildren();
+  if (!MARKS[tone]) return;
+  const ring = document.createElementNS(SVGNS, 'circle');
+  ring.setAttribute('cx', '26'); ring.setAttribute('cy', '26'); ring.setAttribute('r', '23'); ring.setAttribute('opacity', '.35');
+  svg.appendChild(ring);
+  for (const [d, draw] of MARKS[tone]) {
+    const path = document.createElementNS(SVGNS, 'path');
+    path.setAttribute('d', d);
+    if (draw) path.setAttribute('class', 'draw');
+    svg.appendChild(path);
+  }
+}
 function show(v) {
   const box = $('verdict');
-  box.className = 'sx-v ' + v.tone;
+  drawMark($('v-ic'), v.tone);
   $('v-title').textContent = v.title;
   $('v-text').textContent = v.text;
+  box.className = 'sx-v ' + v.tone;
+  const flash = $('flash');
+  flash.className = 'sx-flash ' + v.tone;
+  void box.offsetWidth;                    // restart both animations on every scan
+  box.classList.add('pop');
+  flash.classList.add('go');
+  beep(v.tone);
   if (navigator.vibrate) navigator.vibrate(v.tone === 'ok' ? 60 : v.tone === 'stop' ? [80, 60, 80] : 30);
 }
 
@@ -284,6 +364,7 @@ async function makeDetector() {
   return new api.BarcodeDetector({ formats: ['qr_code'] });
 }
 async function startCamera() {
+  unlockAudio();
   $('scan-err').textContent = '';
   $('start').disabled = true; $('start').textContent = 'Starting…';
   try {
@@ -296,8 +377,8 @@ async function startCamera() {
     timer = setInterval(async () => {
       if (!stream || v.readyState < 2) return;
       try {
-        const codes = await detector.detect(v);
-        for (const c of codes) handle(c.rawValue, true);
+        const raw = pickCode(await detector.detect(v));
+        if (raw) handle(raw, true);
       } catch { /* one bad frame */ }
     }, DETECT_MS);
   } catch (e) {
@@ -320,6 +401,7 @@ function stopCamera() {
 $('start').addEventListener('click', startCamera);
 $('man-form').addEventListener('submit', (e) => {
   e.preventDefault();
+  unlockAudio();
   const v = $('man-code').value; $('man-code').value = '';
   seen.delete(normalizeToken(v) || '');   // a Map: typing the same code twice on purpose is allowed
   handle(v, false);

@@ -30,18 +30,20 @@ export function scanPointRefusal(kind: ScanPointKind, s: ScanSettings): string |
   return 'This scan point has an unknown kind.'
 }
 
-// A continuous decoder reports the same code many times a second while it
-// is in frame; without this one guest becomes dozens of scans.
-export const COOLDOWN_MS = 4000
+// A continuous decoder reports the same code several times a second while
+// it is in view. A code is read once, then not again until it has been out
+// of view for REARM_MS: every sighting refreshes it. (A fixed 4 s cooldown
+// re-scanned a phone still held up in the 2026-10-06 field test, turning a
+// green check-in amber and writing a duplicate row every 4 seconds.)
+export const REARM_MS = 2500
 
 export function shouldAccept(seen: Map<string, number>, token: string, now: number): boolean {
-  // Entries older than the cooldown can never block again: drop them so the
-  // map stays small over a long day.
-  for (const [k, t] of seen) if (now - t >= COOLDOWN_MS) seen.delete(k)   // a Map, not a database write
+  // Codes not seen for a while can never block again: drop them so the map
+  // stays small over a long day.
+  for (const [k, t] of seen) if (now - t >= REARM_MS) seen.delete(k)
   const last = seen.get(token)
-  if (last !== undefined && now - last < COOLDOWN_MS) return false
   seen.set(token, now)
-  return true
+  return last === undefined
 }
 
 // QR codes carry the bare token: URL-safe characters, 32 long today. A

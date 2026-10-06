@@ -115,7 +115,7 @@ test('offline: a listed code is queued, then sent when the connection is back', 
     return { body: { ok: true, errors: [], results: Object.fromEntries(items.map(i => [i.client_id, 'ok'])) } };
   });
   await page.goto(URL_);
-  await expect(page.locator('#net')).toContainText('1 codes on this phone');
+  await expect(page.locator('#net')).toContainText('1 code on this phone');
   await context.setOffline(true);
   await page.locator('#man-code').fill(TOK);
   await page.locator('#man-btn').click();
@@ -126,3 +126,31 @@ test('offline: a listed code is queued, then sent when the connection is back', 
   await expect.poll(() => sentItems.length, { timeout: 15000 }).toBe(1);
   await expect(page.locator('#net')).not.toContainText('waiting');
 });
+
+test('a check-in flashes green, pops the card with a tick, and the sound setting sticks', async ({ page }) => {
+  await paired(page);
+  await fn(page, 'checkin-record-scans', (b) => { const cid = (b.items as { client_id: string }[])[0].client_id; return { body: { ok: true, errors: [], results: { [cid]: 'ok' }, who: { [cid]: { first_name: 'Jan', ticket_type: 'Delegate' } } } }; });
+  await page.goto(URL_);
+  await expect(page.locator('#snd')).toHaveText('Sound on');
+  await page.locator('#man-code').fill(TOK);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Checked in');
+  await expect(page.locator('#flash')).toHaveClass(/sx-flash ok go/);
+  await expect(page.locator('#verdict')).toHaveClass(/pop/);
+  await expect(page.locator('#v-ic path.draw')).toHaveCount(1);
+  await page.locator('#snd').click();
+  await expect(page.locator('#snd')).toHaveText('Sound off');
+  await page.reload();
+  await expect(page.locator('#snd')).toHaveText('Sound off');
+});
+
+test('not on the list shows a red cross', async ({ page }) => {
+  await paired(page);
+  await fn(page, 'checkin-record-scans', (b) => { const cid = (b.items as { client_id: string }[])[0].client_id; return { body: { ok: true, errors: [], results: { [cid]: 'unknown_token' } } }; });
+  await page.goto(URL_);
+  await page.locator('#man-code').fill(OTHER);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#flash')).toHaveClass(/stop/);
+  await expect(page.locator('#v-ic path.draw')).toHaveAttribute('d', 'M18 18l16 16M34 18L18 34');
+});
+
