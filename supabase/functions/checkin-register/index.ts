@@ -28,7 +28,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
-import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
+import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed, zonedTimeUtc } from '../_shared/checkin-policy.ts'
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
     // 'already': the owner of an address already on the list gets their QR
     // again, at most every 10 minutes.
     if (attendee && (status === 'registered' || mayResend(attendee.qr_email_sent_at, Date.now()))) {
-      const res = await sendQrEmailsForAttendees(sb, { name: event.name, date: event.date, venue: event.venue }, [attendee])
+      const res = await sendQrEmailsForAttendees(sb, await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue }), [attendee])
       if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
     }
     console.log('checkin-register: confirmed (' + status + '), event', ent.event_id)

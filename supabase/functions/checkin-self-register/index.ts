@@ -28,7 +28,7 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
+import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 import { TEST_CAP } from '../_shared/checkin-policy.ts'
 
 // ── Validation, mirrored from tests/checkin-kiosk.spec.ts ──────────
@@ -397,7 +397,7 @@ Deno.serve(async (req) => {
       // case this protects against: someone probing a colleague's
       // address at a public screen.
       // (test mode: see 5c, no email is sent)
-      const results = await sendQrEmailsForAttendees(sb, event, [existing])
+      const results = await sendQrEmailsForAttendees(sb, await withBrand(sb, event_id, event), [existing])
       if (results.some(r => r.status === 'error')) {
         console.error('checkin-self-register: collision email failed, device', device.id)
       }
@@ -433,7 +433,7 @@ Deno.serve(async (req) => {
   if (isTest) {
     // no email in test mode
   } else if (event && created.email) {
-    const results = await sendQrEmailsForAttendees(sb, event, [created])
+    const results = await sendQrEmailsForAttendees(sb, await withBrand(sb, event_id, event), [created])
     if (results.some(r => r.status === 'error')) {
       console.error('checkin-self-register: registration email failed, device', device.id)
     }

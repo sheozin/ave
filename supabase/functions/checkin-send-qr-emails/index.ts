@@ -11,7 +11,7 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
-import { sendQrEmailsForAttendees, type QrEmailResult } from '../_shared/qr-email.ts'
+import { sendQrEmailsForAttendees, withBrand, type QrEmailResult } from '../_shared/qr-email.ts'
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
-    const res = await sendQrEmailsForAttendees(sb, event, sample, { overrideTo: user.email, recordSent: false })
+    const res = await sendQrEmailsForAttendees(sb, await withBrand(sb, event_id, event), sample, { overrideTo: user.email, recordSent: false })
     const failed = res.find(r => r.status === 'error')
     return new Response(JSON.stringify(failed
       ? { ok: false, error: failed.error }
@@ -144,7 +144,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  const results: QrEmailResult[] = await sendQrEmailsForAttendees(sb, event, attendees || [])
+  const results: QrEmailResult[] = await sendQrEmailsForAttendees(sb, await withBrand(sb, event_id, event), attendees || [])
 
   const summary = {
     total: results.length,

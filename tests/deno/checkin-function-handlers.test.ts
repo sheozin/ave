@@ -1115,3 +1115,16 @@ Deno.test(`${IS} invite: a new address gets our email naming the event, not Supa
   assert(m && m.subject === "You're invited to Northwind Summit 2026 check-in", 'subject ' + m?.subject)
   assert(m.html.includes('access to the check-in desk') && m.html.includes('token=new'), m.html)
 })
+
+Deno.test('checkin-send-qr-emails: the guest email carries the event brand (Event admin)', async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live', registration_brand_color: '#0F766E',
+    registration_logo_path: EVENT + '/logo-abcdef12.png', registration_host_name: 'Northwind <Events>' } })
+  ;(world.tables.leod_checkin_attendees ??= []).push({ id: 'b1000000-0000-4000-8000-000000000001', event_id: EVENT, first_name: 'Maya',
+    email: 'maya@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null, is_test: false })
+  const r = await call('checkin-send-qr-emails', { event_id: EVENT })
+  assert(r.status === 200, JSON.stringify(r))
+  const html = String(world.emails?.[0]?.html ?? '')
+  assert(html.includes('border-top:4px solid #0F766E'), 'colour ' + html.slice(0, 300))
+  assert(html.includes('/storage/v1/object/public/checkin-public/' + EVENT + '/logo-abcdef12.png'), 'logo')
+  assert(html.includes('Northwind &lt;Events&gt;') && !html.includes('<Events>'), 'host escaped')
+})

@@ -21,6 +21,25 @@ export interface QrEmailEvent {
   name: string
   date: string        // ISO date, e.g. '2026-09-15'
   venue: string | null
+  // The event's brand (Event admin, Branding). Optional: without it the
+  // email is the plain CueDeck layout.
+  brand_color?: string | null
+  logo_url?: string | null
+  host_name?: string | null
+}
+
+// The event's brand for guest emails, from the Branding tab (migration
+// 104/106). Best effort: a failed read sends the plain layout, never fails
+// the send. The logo is only ever a URL in our own checkin-public bucket.
+export async function withBrand(
+  sb: ReturnType<typeof import('./client.ts').adminClient>, eventId: string, event: QrEmailEvent,
+): Promise<QrEmailEvent> {
+  const { data, error } = await sb.from('leod_checkin_entitlements')
+    .select('registration_brand_color, registration_logo_path, registration_host_name').eq('event_id', eventId).maybeSingle()
+  if (error || !data) return event
+  const color = /^#[0-9A-Fa-f]{6}$/.test(data.registration_brand_color ?? '') ? data.registration_brand_color : null
+  const logo = data.registration_logo_path ? Deno.env.get('SUPABASE_URL') + '/storage/v1/object/public/checkin-public/' + data.registration_logo_path : null
+  return { ...event, brand_color: color, logo_url: logo, host_name: data.registration_host_name ?? null }
 }
 
 export interface QrEmailResult {
@@ -54,6 +73,10 @@ function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDat
   const safeName = escapeHtml(event.name)
   const safeFirstName = escapeHtml(attendee.first_name)
   const venueLine = event.venue ? ` &middot; ${escapeHtml(event.venue)}` : ''
+  const accent = /^#[0-9A-Fa-f]{6}$/.test(event.brand_color ?? '') ? event.brand_color! : '#1a1a2e'
+  const brandBar = event.logo_url || event.host_name
+    ? `<div style="padding:16px 24px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;">${event.logo_url ? `<img src="${escapeHtml(event.logo_url)}" alt="" width="36" height="36" style="display:inline-block;width:36px;height:36px;border-radius:8px;object-fit:contain;vertical-align:middle;">` : ''}${event.host_name ? `<span style="font-size:14px;font-weight:600;color:#374151;vertical-align:middle;margin-left:${event.logo_url ? '10px' : '0'};">${escapeHtml(event.host_name)}</span>` : ''}</div>`
+    : ''
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -64,9 +87,10 @@ function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDat
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
   <div style="width:100%;background-color:#f4f4f5;padding:40px 20px;">
-    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+    <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);border-top:4px solid ${accent};">
+      ${brandBar}
       <div style="background:#fff;padding:28px 24px;text-align:center;border-bottom:1px solid #eee;">
-        <div style="font-size:22px;font-weight:700;color:#1a1a2e;">${safeName}</div>
+        <div style="font-size:22px;font-weight:700;color:${accent};">${safeName}</div>
         <div style="color:#6b7280;font-size:12px;margin-top:6px;">${formatEventDate(event.date)}${venueLine}</div>
       </div>
       <div style="padding:28px 24px;color:#374151;">

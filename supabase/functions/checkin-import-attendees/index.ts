@@ -11,7 +11,7 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
-import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
+import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 
 interface ImportRow {
   first_name: string
@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
     const { data: event, error: eventErr } = await sb.from('leod_events')
       .select('name, date, venue').eq('id', event_id).single()
     if (event) {
-      const sendResults = await sendQrEmailsForAttendees(sb, event, insertedAttendees)
+      const sendResults = await sendQrEmailsForAttendees(sb, await withBrand(sb, event_id, event), insertedAttendees)
       const failed = sendResults.filter(r => r.status === 'error')
       if (failed.length) {
         console.error('checkin-import-attendees: auto-send QR email failures:', failed)

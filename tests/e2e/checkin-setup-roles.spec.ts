@@ -329,7 +329,7 @@ test('a failed registration save shows the server message and leaves the switch 
 test('page design: an uploaded cover is re-encoded and saved with the details', async ({ page }) => {
   const sent: Record<string, unknown>[] = [];
   const uploads: string[] = [];
-  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+  await open(page, { role: 'organizer' }, 'branding', STAFF, async () => {
     await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', registration_enabled: true,
       registration_code: 'ABCDEFGH23', registration_questions: [], registration_show_programme: false }]);
     await page.route(/\/storage\/v1\/object\/checkin-public\//, async r => {
@@ -366,13 +366,67 @@ test('page design: an uploaded cover is re-encoded and saved with the details', 
 
 test('page design: a non-image file is refused before upload', async ({ page }) => {
   let uploaded = false;
-  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+  await open(page, { role: 'organizer' }, 'branding', STAFF, async () => {
     await page.route(/\/storage\/v1\/object\/checkin-public\//, r => { uploaded = true; return r.fulfill({ status: 200, body: '{}' }); });
   });
   // Wait for the step to open: opening it clears the design messages.
-  await expect(page.locator('#p-register')).toBeVisible();
+  await expect(page.locator('#p-branding')).toBeVisible();
   await expect(page.locator('#rg-save-design')).toBeVisible();
   await page.locator('#rg-logo-file').setInputFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>') });
   await expect(page.locator('#rg-design-err')).toHaveText('Use a JPEG, PNG or WebP image.');
   expect(uploaded).toBe(false);
+});
+
+
+// ── Event admin tabs (2026-10-06) ───────────────────────────────────
+test('the event admin opens on Overview, and the checklist jumps to each tab', async ({ page }) => {
+  await open(page, { role: 'organizer', name: 'Northwind Summit 2026' }, '', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', GUESTS);
+  });
+  await expect(page.locator('#p-overview')).toBeVisible();
+  await expect(page).toHaveTitle('Event admin');
+  await expect(page.locator('.st[data-step=overview]')).toHaveAttribute('aria-current', 'step');
+  await expect(page.locator('#ov-name')).toHaveText('Northwind Summit 2026');
+  await expect(page.locator('#ov-stats .stat')).toHaveCount(4);
+  await expect(page.locator('#ov-todo .todo')).toHaveCount(7);
+  await page.locator('#ov-todo .todo', { hasText: 'Branding' }).click();
+  await expect(page.locator('#p-branding')).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('step')).toBe('branding');
+});
+
+test('old step links still open their tab', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'attendees');
+  await expect(page.locator('#p-attendees')).toBeVisible();
+  await expect(page.locator('.st[data-step=attendees]')).toContainText('Guests');
+});
+
+test('the branding preview follows unsaved edits', async ({ page }) => {
+  await open(page, { role: 'organizer', name: 'Northwind Summit 2026' }, 'branding');
+  await page.locator('#rg-host').fill('Northwind Events');
+  await page.locator('#rg-color').fill('#0F766E');
+  await page.locator('#rg-color').dispatchEvent('input');
+  await expect(page.locator('#bp-host')).toHaveText('Northwind Events');
+  await expect(page.locator('#bp-mark')).toHaveText('NE');
+  expect(await page.locator('#bp-btn').evaluate(e => getComputedStyle(e).backgroundColor)).toBe('rgb(15, 118, 110)');
+  await expect(page.locator('#bp-title')).toHaveText('Northwind Summit 2026');
+});
+
+test('reports link to the dashboard and report, and count guests by source', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [
+      { id: 'a1', first_name: 'A', last_name: 'A', source: 'import', is_test: false }, { id: 'a2', first_name: 'B', last_name: 'B', source: 'web', is_test: false },
+      { id: 'a3', first_name: 'C', last_name: 'C', source: 'web', is_test: false }, { id: 'a4', first_name: 'D', last_name: 'D', source: 'walk_in', is_test: false }]);
+  });
+  await expect(page.locator('#rp-dash')).toHaveAttribute('href', '/checkin/dashboard?event=' + EVENT_ID);
+  await expect(page.locator('#rp-report')).toHaveAttribute('href', '/checkin/report?event=' + EVENT_ID);
+  await expect(page.locator('#rp-src .stat')).toHaveText(['Imported1', 'Registration page2', 'Kiosk0', 'Walk-in1']);
+});
+
+test('on a phone the tabs are one scrolling row and the page does not overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page, { role: 'organizer' }, 'overview');
+  await expect(page.locator('#p-overview')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  const tops = await page.locator('.st:visible').evaluateAll(els => [...new Set(els.map(e => Math.round(e.getBoundingClientRect().top)))]);
+  expect(tops.length).toBe(1);
 });
