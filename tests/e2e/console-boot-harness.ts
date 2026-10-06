@@ -58,6 +58,9 @@ export interface Scenario {
   sessions?: unknown[];
   viewport?: { width: number; height: number };
   timezoneId?: string;
+  extraEvents?: Record<string, unknown>[];              // more active events besides EVENT
+  sessionsByEvent?: Record<string, unknown[]>;          // leod_sessions rows per event id
+  sessionDelayMs?: Record<string, number>;              // slow leod_sessions answer per event id
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -138,9 +141,13 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         return r.fulfill({ status: 200, headers: { 'content-range': '*/0', 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' } });
       }
       if (req.method() !== 'GET') return json(r, [], 201);
+      const evId = (url.searchParams.get('event_id') || '').replace(/^eq\./, '');
+      if (table === 'leod_sessions' && sc.sessionDelayMs?.[evId]) await new Promise(res => setTimeout(res, sc.sessionDelayMs![evId]));
       const rows: Record<string, unknown[]> = {
         leod_users: [{ id: USER_ID, name: 'Demo Operator', email, role, organization: 'Demo Events', phone: null, active: true, company_name: 'Demo Events', vat_id: null, billing_address: null }],
-        leod_events: [EVENT], leod_sessions: sessions, leod_event_log: LOG,
+        leod_events: [EVENT, ...(sc.extraEvents ?? [])],
+        leod_sessions: (sc.sessionsByEvent && evId in sc.sessionsByEvent) ? sc.sessionsByEvent[evId] : sessions,
+        leod_event_log: LOG,
       };
       const data = rows[table] ?? [];
       if (one) return data.length ? json(r, data[0]) : json(r, { code: 'PGRST116', message: 'no rows' }, 406);

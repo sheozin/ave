@@ -2093,7 +2093,7 @@
         </button>
         <button class="sb-action-btn btn-blue"
           title="Fire a demo pre-cue modal (as if 8 min before next session)"
-          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(Date.now()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(Date.now()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(Date.now()+8*60000));})()">
+          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(eventWallClockNow()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(eventWallClockNow()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(eventWallClockNow()+8*60000));})()">
           <span class="sb-btn-icon">⏱</span> Test Cue Alert
         </button>
         <button class="sb-action-btn btn-green"
@@ -2783,6 +2783,7 @@ async function loadSnapshot(eventId) {
   const { data, error } = await sb
     .from('leod_sessions').select('*').eq('event_id', eventId).order('sort_order');
   if (error) throw error;
+  if (S.event && S.event.id !== eventId) return; // answer for an event already switched away from
   S.sessions  = data || [];
   S.dbStatus  = 'ok';
   S.lastSyncAt = Date.now(); // PR-016: record sync time for diag tooltip
@@ -2815,6 +2816,7 @@ async function loadLog(eventId) {
   const { data } = await sb
     .from('leod_event_log').select('*')
     .eq('event_id', eventId).order('ts', { ascending: false }).limit(25);
+  if (S.event && S.event.id !== eventId) return;
   if (data) data.reverse().forEach(r => pushLogFromRow(r));
 }
 
@@ -2823,13 +2825,15 @@ async function loadLog(eventId) {
 // ═══════════════════════════════════════════════════
 // One live channel per name. sb.channel(name) hands back an existing channel
 // of that name, and adding postgres_changes callbacks to a joined or joining
-// one throws. So remove it (and any channel in `extra`) and wait for that
-// before building the new one. Calls run one at a time: a scheduled reconnect
-// and a tab refocus can land together.
+// one throws. So remove it, and every channel `removeIf` matches, and wait for
+// that before building the new one. Calls run one at a time (a scheduled
+// reconnect and a tab refocus can land together), and what to remove or skip
+// is decided when the queued step runs, not when it was asked for.
 let _channelQueue = Promise.resolve();
-function replaceChannel(name, build, extra = null) {
+function replaceChannel(name, build, { removeIf = () => false, skipIf = () => false } = {}) {
   const run = _channelQueue.then(async () => {
-    const old = sb.getChannels().filter(c => c.topic === `realtime:${name}` || c === extra);
+    if (skipIf()) return;
+    const old = sb.getChannels().filter(c => c.topic === `realtime:${name}` || removeIf(c));
     for (const c of old) await sb.removeChannel(c);
     return build(sb.channel(name));
   });
@@ -2878,12 +2882,18 @@ function subscribeControl(eventId) {
         onDisconnect();
       }
     });
-  }, S.ctrlChan);
+  }, {
+    // One control channel at a time, whichever event it was for, and never
+    // for an event the operator has already switched away from.
+    removeIf: c => c.topic.startsWith('realtime:leod-ctrl-'),
+    skipIf: () => !!S.event && S.event.id !== eventId,
+  });
 }
 
 function onSessionChange(payload) {
   const row = payload.new || payload.old;
   if (!row) return;
+  if (S.event && row.event_id && row.event_id !== S.event.id) return; // another event's row
   if (payload.eventType === 'DELETE') {
     delete S.seqMap[row.id];
     S.sessions = S.sessions.filter(s => s.id !== row.id);
@@ -2943,24 +2953,34 @@ function onSessionChange(payload) {
 // The armed state lives in _cancelPending / _endPending and buildButtons /
 // buildCtxPanel render from it, so the 1 s re-render of a LIVE event keeps
 // the confirm label instead of wiping it.
-const _cancelPending = new Map(); // sessionId → timer id
-function confirmCancel(sessionId, btn) {
-  if (_cancelPending.has(sessionId)) {
-    // Second click — proceed
-    clearTimeout(_cancelPending.get(sessionId));
-    _cancelPending.delete(sessionId);
+// An arm holds for the status it was armed in: if the session changes status
+// meanwhile (another operator, realtime), the arm no longer counts.
+const _cancelPending = new Map(); // sessionId → { status, timer }
+function isArmed(pending, s) {
+  const a = pending.get(s.id);
+  return !!a && a.status === s.status;
+}
+function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms) {
+  const status = S.sessions.find(x => x.id === sessionId)?.status;
+  const prev = pending.get(sessionId);
+  if (prev) { clearTimeout(prev.timer); pending.delete(sessionId); }
+  if (prev && prev.status === status) {
+    // Second click on the same status — proceed
     renderSessions();
-    transition(sessionId, 'CANCELLED');
-  } else {
-    // First click — show confirm state
-    const timer = setTimeout(() => {
-      _cancelPending.delete(sessionId);
-      renderSessions();
-    }, 2000);
-    _cancelPending.set(sessionId, timer);
-    if (btn) { btn.textContent = t('confirm.confirmCancel'); btn.classList.add('confirm-pending'); }
-    renderSessions();
+    transition(sessionId, toStatus);
+    return;
   }
+  // First click (or the status moved on) — show confirm state
+  const arm = { status, timer: null };
+  arm.timer = setTimeout(() => {
+    if (pending.get(sessionId) === arm) { pending.delete(sessionId); renderSessions(); }
+  }, ms);
+  pending.set(sessionId, arm);
+  if (btn) { btn.textContent = t(labelKey); btn.classList.add('confirm-pending'); }
+  renderSessions();
+}
+function confirmCancel(sessionId, btn) {
+  armOrConfirm(_cancelPending, sessionId, btn, 'CANCELLED', 'confirm.confirmCancel', 2000);
 }
 
 // ═══════════════════════════════════════════════════
@@ -3022,22 +3042,9 @@ async function executeUndo() {
 }
 
 // END SESSION two-step confirmation (same pattern as PR-015 CANCEL)
-const _endPending = new Map();
+const _endPending = new Map(); // sessionId → { status, timer }
 function confirmEnd(sessionId, btn) {
-  if (_endPending.has(sessionId)) {
-    clearTimeout(_endPending.get(sessionId));
-    _endPending.delete(sessionId);
-    renderSessions();
-    transition(sessionId, 'ENDED');
-  } else {
-    const timer = setTimeout(() => {
-      _endPending.delete(sessionId);
-      renderSessions();
-    }, 3000);
-    _endPending.set(sessionId, timer);
-    if (btn) { btn.textContent = t('confirm.confirmEnd'); btn.classList.add('confirm-pending'); }
-    renderSessions();
-  }
+  armOrConfirm(_endPending, sessionId, btn, 'ENDED', 'confirm.confirmEnd', 3000);
 }
 
 async function transition(sessionId, toStatus) {
@@ -3962,19 +3969,29 @@ function clearBatchSelection() {
 }
 
 const _batchArmTimers = {}; // toStatus → timer that disarms the batch button
+function disarmBatch(toStatus) {
+  clearTimeout(_batchArmTimers[toStatus]);
+  delete _batchArmTimers[toStatus];
+  const bar = document.getElementById('batch-bar');
+  if (!bar) return;
+  delete bar.dataset[`batch-${toStatus}`];
+  const btn = bar.querySelector(`[data-batch="${toStatus}"]`);
+  if (btn) { btn.classList.remove('confirm-pending'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+}
+function disarmAllBatch() {
+  for (const st of ['READY', 'ENDED', 'CANCELLED']) disarmBatch(st);
+}
 async function batchTransition(toStatus) {
-  if (_batchSelected.size === 0) return;
-  const ids = [..._batchSelected];
+  // Only sessions of the current event count; a stale id is dropped.
+  const ids = [..._batchSelected].filter(id => S.sessions.some(s => s.id === id));
   const count = ids.length;
+  if (count === 0) return;
 
   // Two-step confirmation for destructive batch actions
   const bar = document.getElementById('batch-bar');
   const confirmKey = `batch-${toStatus}`;
   const btn = bar.querySelector(`[data-batch="${toStatus}"]`);
-  const disarm = () => {
-    delete bar.dataset[confirmKey];
-    if (btn) { btn.classList.remove('confirm-pending'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
-  };
+  const disarm = () => disarmBatch(toStatus);
   if (!bar.dataset[confirmKey]) {
     bar.dataset[confirmKey] = 'armed';
     if (btn) {
@@ -3989,7 +4006,6 @@ async function batchTransition(toStatus) {
     _batchArmTimers[toStatus] = setTimeout(disarm, 3000);
     return;
   }
-  clearTimeout(_batchArmTimers[toStatus]);
   disarm();
 
   let success = 0;
@@ -4032,12 +4048,12 @@ function buildButtons(s) {
     const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
-      const armed = _cancelPending.has(s.id);
+      const armed = isArmed(_cancelPending, s);
       return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
     }
     // END SESSION uses two-step confirmation to prevent accidental ending
     if (to === 'ENDED') {
-      const armed = _endPending.has(s.id);
+      const armed = isArmed(_endPending, s);
       return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
     }
     return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
@@ -4131,11 +4147,11 @@ function buildCtxPanel() {
         const cfg   = _btnCfg2[to] || { label: to, cls: 'btn-blue' };
         const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
         if (to === 'CANCELLED') {
-          const armed = _cancelPending.has(tgt.id);
+          const armed = isArmed(_cancelPending, tgt);
           html += cbtn(armed ? t('confirm.confirmCancel') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
                        `confirmCancel('${esc(tgt.id)}',this)`);
         } else if (to === 'ENDED') {
-          const armed = _endPending.has(tgt.id);
+          const armed = isArmed(_endPending, tgt);
           html += cbtn(armed ? t('confirm.confirmEnd') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
                        `confirmEnd('${esc(tgt.id)}',this)`);
         } else {
@@ -4929,14 +4945,15 @@ function updateStageMonitor() {
   if (!mon || mon.style.display === 'none') return;
 
   const nowMs = Date.now() + (S.clockOffset || 0);
-  // Current session: the most urgent of OVERRUN > LIVE > HOLD. A held session
-  // is still the one on stage. Among equals keep the one already shown, so
-  // two rooms running at once do not make the monitor jump.
+  // Current session: keep the one already shown for as long as it is
+  // OVERRUN, LIVE or HOLD, so the monitor never jumps rooms mid-talk. Only
+  // when it leaves those states (or nothing is shown) pick again by urgency:
+  // OVERRUN > LIVE > HOLD. A held session is still the one on stage.
   const RANK = { OVERRUN: 3, LIVE: 2, HOLD: 1 };
+  const shown = S.sessions.find(s => s.id === _smCurrentId && RANK[s.status]);
   const active = S.sessions.filter(s => RANK[s.status]);
   const top = active.length ? Math.max(...active.map(s => RANK[s.status])) : 0;
-  const best = active.filter(s => RANK[s.status] === top);
-  const live = best.find(s => s.id === _smCurrentId) || best[0] || null;
+  const live = shown || active.find(s => RANK[s.status] === top) || null;
   const ready = live ? null : S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING');
   _smCurrentId = live ? live.id : null;
 
@@ -5098,7 +5115,7 @@ function refreshDiag() {
   const dbLbl = document.getElementById('dl-db');
   if (dbLbl) {
     dbLbl.title = S.lastSyncAt
-      ? `Last sync: ${new Date(S.lastSyncAt).toLocaleTimeString()}`
+      ? `Last sync: ${fmtTS(S.lastSyncAt)}`
       : 'Not yet synced';
   }
 }
@@ -5227,7 +5244,7 @@ function exportLog() {
   if (!S.log.length) { pushToast(t('toast.logEmpty'), 'warn'); return; }
   const lines = ['Time,Action,Detail,SessionId'];
   for (const e of S.log) {
-    const ts  = new Date(e.ts).toTimeString().substring(0, 8);
+    const ts  = fmtTS(e.ts);
     const act = (e.action  || '').replace(/,/g, ';');
     const det = (e.detail  || '').replace(/,/g, ';').replace(/\n/g, ' ');
     lines.push(`${ts},${act},"${det}",${e.sessionId || ''}`);
@@ -5467,7 +5484,7 @@ function renderLog() {
   feed.innerHTML = S.log.slice(0, 25).map(e => `
     <div class="le ${leClass(e.action)}">
       <span class="le-ts">${fmtTS(e.ts)}</span>
-      <span class="le-act"> ${e.action}</span>
+      <span class="le-act"> ${esc(e.action)}</span>
       ${e.detail ? `<div class="le-det">${esc(e.detail)}</div>` : ''}
     </div>`).join('');
 }
@@ -5632,6 +5649,8 @@ async function switchEvent(eventId) {
   if (!ev) return;
   S.event = ev;
   setStep(`Loading ${ev.name}…`);
+  clearBatchSelection(); // a selection belongs to the event it was made in
+  disarmAllBatch();
   F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});

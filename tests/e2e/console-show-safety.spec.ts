@@ -57,6 +57,22 @@ test.describe('END and CANCEL confirm', () => {
     expect(await calls(page)).toEqual([['live1', 'ENDED']]);
   });
 
+  test('an END armed on LIVE is dropped when the session moves to HOLD; one press then does not end it', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    await expect(page.locator('#card-live1 .confirm-pending')).toHaveCount(1);
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      const row = { ...St.sessions[0], status: 'HOLD', version: 4 };
+      (window as any).onSessionChange({ eventType: 'UPDATE', new: row, old: {} });
+    });
+    // Checked at once: the 3 s arm timeout must not be what clears it.
+    expect(await page.locator('#card-live1 .confirm-pending').count()).toBe(0);
+    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    expect(await calls(page)).toEqual([]);
+    await expect(page.locator('#card-live1 .sc-actions button.confirm-pending')).toHaveText('CONFIRM END');
+  });
+
   test('armed END returns to its normal label after the timeout', async ({ page }) => {
     await setup(page, [live()]);
     await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
@@ -96,6 +112,42 @@ test.describe('END and CANCEL confirm', () => {
     await page.clock.runFor(3500);
     await expect(btn).not.toHaveClass(/confirm-pending/);
     await expect(btn).toHaveText('END ALL');
+  });
+});
+
+// ── Batch selection and event switches ─────────────────────────────────
+test.describe('batch actions', () => {
+  test('a batch only counts sessions that exist in the current event', async ({ page }) => {
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1 .batch-chk').check();
+    await page.evaluate(() => (window as any).toggleBatchSelect('ghost-from-another-event', true));
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await btn.click();
+    await expect.poll(() => calls(page)).toEqual([['live1', 'ENDED']]);
+    await expect(page.locator('#toast-container')).toContainText('ENDED: 1/1');
+  });
+
+  test('switching event clears the batch selection and its armed button', async ({ page }) => {
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.evaluate(() => { (0, eval)('S').events = [{ id: 'ev-1', name: 'One' }, { id: 'ev-2', name: 'Two', timezone: 'UTC' }]; });
+    await page.locator('#card-live1 .batch-chk').check();
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await expect(btn).toHaveClass(/confirm-pending/);
+    await page.evaluate(() => (window as any).switchEvent('ev-2'));
+    await expect(page.locator('#batch-bar')).toBeHidden();
+    await expect(btn).not.toHaveClass(/confirm-pending/);
+    await expect(btn).toHaveText('END ALL');
+    // Selecting in the new event and pressing once only arms again.
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      St.sessions = [{ ...St.sessions[0], id: 'n1', event_id: 'ev-2', status: 'LIVE' }];
+      (window as any).renderSessions();
+    });
+    await page.locator('#card-n1 .batch-chk').check();
+    await btn.click();
+    expect(await calls(page)).toEqual([]);
   });
 });
 
@@ -207,6 +259,21 @@ test.describe('stage monitor', () => {
     expect((await monitor(page)).title).toBe('Hall B');
   });
 
+  test('the monitor stays on the room it shows when another room goes OVERRUN, and moves when that one ends', async ({ page }) => {
+    await setup(page, [
+      live({ room: 'Room A', title: 'Room A talk' }),
+      sess('b', 2, { status: 'LIVE', title: 'Room B talk', room: 'Room B', actual_start: iso(-5) }),
+    ]);
+    expect((await monitor(page)).title).toBe('Room A talk');
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      const b = St.sessions.find((s: any) => s.id === 'b'); b.status = 'OVERRUN'; b.actual_start = new Date(Date.now() - 40 * 60_000).toISOString();
+    });
+    expect((await monitor(page)).title).toBe('Room A talk');
+    await page.evaluate(() => { (0, eval)('S').sessions.find((s: any) => s.id === 'live1').status = 'ENDED'; });
+    expect((await monitor(page)).title).toBe('Room B talk');
+  });
+
   test('the footer shows the event name', async ({ page }) => {
     await setup(page, [live()]);
     expect((await monitor(page)).event).toBe('GTR NORTH AFRICA 2026');
@@ -316,4 +383,52 @@ test('a failed arrival write reverts, says so and does not log it as confirmed',
   expect(st.arrived).toBe(false);
   expect(st.log.some((l: string) => l.includes('confirmed'))).toBe(false);
   await expect(page.locator('#toast-container')).toContainText('permission denied');
+});
+
+// ── Test Cue Alert uses the event clock ───────────────────────────────────
+test('Test Cue Alert counts down about 8 minutes for a Cairo event in a UTC browser', async ({ page }) => {
+  await setup(page, [], { event: { id: 'ev-1', name: 'GTR North Africa 2026', timezone: 'Africa/Cairo' } });
+  await page.evaluate(() => (document.querySelector('[title^="Fire a demo pre-cue"]') as HTMLButtonElement).click());
+  await page.clock.runFor(1500);
+  await expect(page.locator('#ce-timer')).toHaveText(/^0(7:5\d|8:00)$/);
+});
+
+// ── CSV export uses the event zone ────────────────────────────────────────
+test('the event log CSV time column is in the event zone', async ({ page }) => {
+  await setup(page, [], { event: { id: 'ev-1', name: 'GTR North Africa 2026', timezone: 'Africa/Cairo' } });
+  const csv = await page.evaluate(async () => {
+    const w = window as any;
+    (0, eval)('S').log = [];
+    w.pushLog('BROADCAST', 'Hall B on hold', null, Date.parse('2026-10-06T09:06:00Z'));
+    let blob: Blob | null = null;
+    URL.createObjectURL = (b: Blob) => { blob = b; return 'blob:test'; };
+    URL.revokeObjectURL = () => {};
+    HTMLAnchorElement.prototype.click = () => {};
+    w.exportLog();
+    return blob ? await (blob as Blob).text() : '';
+  });
+  expect(csv.split('\n')[1]).toMatch(/^12:06:00,BROADCAST,/);
+});
+
+// ── Realtime arming does not switch the view ─────────────────────────────
+test('a PLANNED to READY change from realtime does not change the view', async ({ page }) => {
+  await setup(page, [live(), sess('p2', 2, { status: 'PLANNED', version: 1 })]);
+  await page.evaluate(() => {
+    const St = (0, eval)('S');
+    St.tlBootDone = true; // the removed auto-switch was gated on this flag
+    const row = { ...St.sessions[1], status: 'READY', version: 2 };
+    (window as any).onSessionChange({ eventType: 'UPDATE', new: row, old: {} });
+  });
+  await page.clock.runFor(1500);
+  expect(await page.evaluate(() => (0, eval)('S').viewMode)).toBe('list');
+  await expect(page.locator('#card-p2 .badge')).toHaveText('READY');
+});
+
+// ── Event log escapes the action name ─────────────────────────────────────
+test('a malicious action name in the event log is shown as text, not HTML', async ({ page }) => {
+  await setup(page, []);
+  await page.evaluate(() => (window as any).pushLog('<img src=x onerror="window.__xss=1">', 'detail', null));
+  await expect(page.locator('#log-feed img')).toHaveCount(0);
+  await expect(page.locator('#log-feed')).toContainText('<img src=x');
+  expect(await page.evaluate(() => (window as any).__xss)).toBeUndefined();
 });

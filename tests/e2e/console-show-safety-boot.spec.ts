@@ -4,7 +4,7 @@
 // director sidebar, and boot running once per sign-in. Uses the mocked boot
 // harness: no real backend is reached.
 import { test, expect } from '@playwright/test';
-import { openConsole, ID, EVENT_ID } from './console-boot-harness';
+import { openConsole, ID, EVENT_ID, EVENT, sess } from './console-boot-harness';
 
 for (const role of ['stage', 'av']) {
   test(`${role} operator sees held, overrun and upcoming sessions by default, not ended or cancelled`, async ({ browser }) => {
@@ -90,5 +90,61 @@ test('two reconnects leave exactly one live channel per name and no "after subsc
     expect(res.ctrlState).toBe('joined');
     expect(res.ctrlInList).toBe(true);
     expect(errors.filter(e => /after `?subscribe\(\)/.test(e))).toEqual([]);
+  } finally { await ctx.close(); }
+});
+
+// Two more events for the switch tests (fictional).
+const E3 = 'e3e3e3e3-0000-4000-8000-000000000003';
+const E4 = 'e4e4e4e4-0000-4000-8000-000000000004';
+const EV3 = { ...EVENT, id: E3, name: 'Second event' };
+const EV4 = { ...EVENT, id: E4, name: 'Third event' };
+const ctrlTopics = () => (0, eval)('sb').getChannels().map((c: any) => c.topic).filter((t: string) => t.startsWith('realtime:leod-ctrl-'));
+
+test('back-to-back control subscriptions for two events leave only the last one', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { extraEvents: [EV3, EV4] });
+  try {
+    const res = await page.evaluate(async ([ev3, ev4, getTopics]) => {
+      const w = window as any;
+      const St = (0, eval)('S');
+      St.event = ev3; const a = w.subscribeControl(ev3.id);
+      St.event = ev4; const b = w.subscribeControl(ev4.id);
+      await Promise.all([a, b]);
+      await new Promise(r => setTimeout(r, 500));
+      return { topics: (0, eval)(`(${getTopics})`)(), current: St.ctrlChan?.topic };
+    }, [EV3, EV4, ctrlTopics.toString()] as const);
+    expect(res.topics).toEqual([`realtime:leod-ctrl-${E4}`]);
+    expect(res.current).toBe(`realtime:leod-ctrl-${E4}`);
+  } finally { await ctx.close(); }
+});
+
+test('a reconnect landing during an event switch never shows the old event', async ({ browser }) => {
+  const e4Sessions = [sess(9, { event_id: E4, title: 'Third event opening', room: 'Main Stage', status: 'READY',
+    planned_start: '12:00:00', planned_end: '12:30:00', scheduled_start: '12:00:00', scheduled_end: '12:30:00' })];
+  const { ctx, page } = await openConsole(browser, {
+    extraEvents: [EV4], sessionsByEvent: { [E4]: e4Sessions }, sessionDelayMs: { [EVENT_ID]: 1500 },
+  });
+  try {
+    // Start a reconnect for the current event and wait until its slow snapshot request is out.
+    const oldSnapshot = page.waitForRequest(r => r.url().includes('/leod_sessions') && r.url().includes(EVENT_ID));
+    await page.evaluate(() => { (window as any).__rc = (window as any).doReconnect(); });
+    await oldSnapshot;
+    // The operator switches event while that request is still in flight.
+    await page.evaluate(async (e4) => { await (window as any).switchEvent(e4); await (window as any).__rc; }, E4);
+    await page.waitForTimeout(800);
+    const res = await page.evaluate((getTopics) => {
+      const St = (0, eval)('S');
+      return {
+        event: St.event.id,
+        sessionEvents: [...new Set(St.sessions.map((s: any) => s.event_id))],
+        topics: (0, eval)(`(${getTopics})`)(),
+        current: St.ctrlChan?.topic,
+      };
+    }, ctrlTopics.toString());
+    expect(res.event).toBe(E4);
+    expect(res.sessionEvents).toEqual([E4]);
+    expect(res.topics).toEqual([`realtime:leod-ctrl-${E4}`]);
+    expect(res.current).toBe(`realtime:leod-ctrl-${E4}`);
+    await expect(page.locator('#sessions-list .sc')).toHaveCount(1);
+    await expect(page.locator('#sessions-list')).toContainText('Third event opening');
   } finally { await ctx.close(); }
 });
