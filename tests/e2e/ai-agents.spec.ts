@@ -11,7 +11,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:7230';
+const BASE = process.env.CONSOLE_BASE ?? 'http://127.0.0.1:7230';
 
 /** Allow clicks to pass through the loading overlay without real auth. */
 async function bypassOverlay(page: Page) {

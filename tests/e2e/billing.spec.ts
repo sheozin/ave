@@ -10,7 +10,7 @@ import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BASE = 'http://127.0.0.1:7230';
+const BASE = process.env.CONSOLE_BASE ?? 'http://127.0.0.1:7230';
 const ROOT = path.resolve(__dirname, '../..');
 
 async function bypassOverlay(page: Page) {
