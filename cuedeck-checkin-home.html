@@ -503,7 +503,7 @@ function card(r) {
     go(org ? 'Try the desk' : 'Open desk (test)', org ? 'btn-s' : 'btn-p', desk);
   } else if (r.state === 'live') {
     go('Open desk', 'btn-p', desk);
-    if (org) go('Setup', 'btn-s', setup);
+    if (org) go('Event admin', 'btn-s', setup);
   } else if (r.state === 'ended' && org) {
     go('View attendance', 'btn-s', setup + '&step=attendees');
   }
