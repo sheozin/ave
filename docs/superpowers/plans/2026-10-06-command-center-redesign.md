@@ -23,35 +23,40 @@
 - Copy: sentence case for buttons, menus, titles, toasts and modals; uppercase only through CSS for badges and section labels; no em-dashes anywhere (code strings, i18n values, this repo's new docs); times as HH:MM, seconds only on running timers and the header clock; an empty value shows `–` (en dash). Every new string goes through `t()` or `tf()` and exists in en, ar, pl and de under the `cc.` namespace.
 - Single file, no framework, no build step, no new dependency.
 - Serve the checkout under test on a private port with `python3 -m http.server 7291 --bind 127.0.0.1 --directory <checkout>` and pass `CONSOLE_BASE=http://127.0.0.1:7291`; never use 7230 (other checkouts).
-- Work in the worktree `/Users/sheriff/AVE-Production-Console-redesign`, one branch per stage (`redesign/stage-0` … `redesign/stage-5`), branched from the latest `main`; `node_modules` is a symlink that is never staged.
-- Git: `git status --short` first; `git add` explicit file paths only; `git commit` with a pathspec; trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; never `git add -A`, `git add .` or `git commit -a`.
+- Work in the existing worktree `/Users/sheriff/AVE-Production-Console-redesign` (created 6 Oct on branch `feat/console-redesign` at `3fd0971`, which is `main` with the merged show-safety fixes; do not create it again). One branch per stage (`redesign/stage-0` … `redesign/stage-5`), each created in that worktree from the latest `main` with the `git -C … switch -c` command given at the start of its stage; `node_modules` is already a symlink there and is never staged.
+- Remotes are `cuedeck` and `origin`. Fetch them as two commands (`git fetch cuedeck` then `git fetch origin`); `git fetch cuedeck origin` is invalid (it asks the `cuedeck` remote for a ref named `origin`).
+- Git: `git status --short` first; `git add` explicit file paths only; `git commit` with a pathspec; never `git add -A`, `git add .`, `git add -p` (interactive, not available here) or `git commit -a`. One commit per task (the release tasks commit nothing), unless a step says otherwise. The trailer is the one the session's system reminder gives (on this plan's sessions: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`; a session running another model uses its own line).
+- `$SCRATCH` is the session scratchpad directory (from the system prompt). Shell state does not persist between calls, so every command that uses it sets it in the same command, for example `SCRATCH=/private/tmp/…/scratchpad node "$SCRATCH/cd-icons.mjs" …`. Nothing under it is committed.
+- Show-safety behaviours stay intact. Each has a test in `tests/e2e/console-show-safety.spec.ts` or `tests/e2e/console-show-safety-boot.spec.ts` (harness `tests/e2e/console-boot-harness.ts`), and both files run in every task's full console suite: armed End/Cancel survive re-renders (`armOrConfirm`/`isArmed`), OVERRUN offers Hold before End, Test cue alert uses `eventWallClockNow()` (its button keeps `title="Fire a demo pre-cue …"`), no automatic view switch, "Active" status filter by default for stage, av and interp, the stage monitor (HOLD stays shown, same-room next, `+` on overrun, event name), the event log's minimum height and per-row times, a delayed row's left edge is its status colour, HOLD does not blink and reduced motion stops animation, and the stale-event guards. A task that changes markup or text those specs select on (`.sc-actions`, `.batch-chk`, `#ctx-title`, `#ctx-actions .ctx-btn`, `.le`, `.sc-times`, `.delay-tag`, `CONFIRM END`, timeline ticks, colours) updates them in the same task with the exact edits it lists, keeping each assertion's meaning. An assertion is never deleted to make a test pass.
 - Never name a local variable `t` in console code (it shadows the i18n `t()`); use `tf()` for strings with `{placeholders}`.
 - Keep class names and ids that tests rely on (`confirm-pending`, `.primary` in modal footers, `.rbtn[data-role]`, `#card-<id>`, `[data-restart]`, `#ctx-wrap`, `#ctx-actions`, `#delay-strip`, `#dl-db`/`#dl-rt`/`#dl-ck`, `#bc-input`, `#bc-char`, `#sidebar`, `.btn-*`) until the same commit updates the tests that use them.
 - Modals keep inline `style.display` (the Escape handler and boot checks read it) until the commit that moves those readers.
 - Freeze: no release task starts after 18:00 on 10 Oct (Sherif's local time); a stage not reviewed and live-checked by 21:00 on 10 Oct waits until after GTR (13 Oct or later); 11 Oct is the rehearsal day and nothing is pushed.
 
-### Assumed interfaces from `fix/show-safety` (on that branch now; Task 0.1 checks each after it is merged into `main`)
+### Show-safety interfaces on `main` (merged in `88a024f` and `6f78ac9`; Task 0.1 checks each)
 
-| Behaviour | Name the plan uses |
+| Behaviour | Real names on `main` @ `3fd0971` |
 |---|---|
-| Armed END/CANCEL survives re-renders | `_endPending`, `_cancelPending` (Maps keyed by session id), read by `buildButtons`; `confirmEnd(id, btn)`, `confirmCancel(id, btn)` |
+| Armed END/CANCEL survives re-renders | `_endPending`, `_cancelPending` are Maps of `sessionId → { status, timer }`. Read them only through `isArmed(pending, s)` (takes the session object; true while the arm's status matches the session's normalised status). `armState(pending, status)` treats LIVE and OVERRUN as one state for END. `dropStaleArms(sessionId, status)` drops arms whose status moved on. `armOrConfirm(pending, id, btn, toStatus, labelKey, ms)` is the one two-press helper: first press arms for `ms` (3000 for both End and Cancel) and re-renders, second press re-renders and calls `transition`. `confirmEnd(id, btn)` and `confirmCancel(id, btn)` are one-line delegates to it. Never use `_endPending.has(…)`, and never add a second arming implementation: a new armed action calls `armOrConfirm` (Task 3.1 gives it an optional `act` callback). |
 | Fixed HOLD-then-END order | `ALLOWED.OVERRUN` is `['HOLD','ENDED']` |
-| No timeline auto-switch | no `S._tlPrevStatus` / `tl-auto-toast` logic in `renderSessions` |
-| "Active" status filter | `F.status === 'ACTIVE'` matches every status except ENDED and CANCELLED; default for stage and av |
+| No timeline auto-switch | no `S._tlPrevStatus` / `tl-auto-toast` logic anywhere |
+| "Active" status filter | `F.status === 'ACTIVE'` matches every status except ENDED and CANCELLED; `ROLE_FILTER_DEFAULT` makes it the default for stage, av and interp |
 | Same-room next session | `getNextSession(sessions, current)` returns the next not-finished session in `current.room` |
-| Event-local time | `eventNowMinutes()` (minutes since local midnight in `S.event.timezone`) and `eventLocalHM()` |
-| Log min-height | `#log-panel` has a real minimum height |
+| Event-local time | `eventClockParts(ms)` (cached formatter), `eventNowMinutes(ms)`, `eventLocalHMS(ms)`, `correctedHMS()` (event-local, already feeds `#hdr-clock`), `fmtTS(ts)`, and `eventWallClockNow()` (the clock handed to the cue engine) |
+| Log min-height | `#log-panel` has a real minimum height; loaded rows keep their own time |
 | Boot once | `S.booted` guard in `boot()` |
 
 ## Review Focus
 
-Five failure modes the spec implies that no task's happy-path tests would catch. Each has a named test in its owning task.
+Six failure modes the spec implies that no task's happy-path tests would catch. Each has a named test in its owning task.
 
 1. **Four or more rooms at 1440×900.** Attention lanes must stay full, the rest collapse to 28 px chips, and the list must still show rows. Test: `band: 4 rooms keep attention lanes full and collapse the idle one` in `tests/e2e/console-band.spec.ts` (Task 4.1).
 2. **A session with no room, and an event with no rooms at all.** The band must show one "No room" lane with the right now and next, not drop the sessions. Test: `band: sessions without a room get one No room lane` in `tests/e2e/console-band.spec.ts` (Task 4.1).
 3. **Arabic (RTL) UI.** The band, list grid, inspector and header must mirror without overlap, and End must stay in its slot. Test: `layout: Arabic mirrors the band and keeps End last in reading order` in `tests/e2e/console-a11y.spec.ts` (Task 5.2).
 4. **Very long titles and speaker lists.** Title and speaker cells must truncate inside the 56 px row and the 58 px lane; controls must never be pushed out. Test: `list: a 140-character title and nine speakers stay inside the row` in `tests/e2e/console-list.spec.ts` (Task 3.2) and `band: a long title never pushes End out of the lane` in `tests/e2e/console-band.spec.ts` (Task 4.1).
 5. **An operator locked to one role, reduced motion, and 1280×720.** A stage operator sees no "View as" switch and only the controls their role allows; with reduced motion nothing animates; at 1280×720 the band plus 6 rows and a 200 px log fit. Tests: `header: a stage operator sees their role, not the View as menu` in `tests/e2e/console-header.spec.ts` (Task 3.1); `inspector: av sees Hold but never End` in `tests/e2e/console-inspector.spec.ts` (Task 4.2); `a11y: reduced motion stops every animation` in `tests/e2e/console-a11y.spec.ts` (Task 5.2); `layout: 1280x720 fits the band, six rows and a 200 px log` in `tests/e2e/console-inspector.spec.ts` (Task 4.2).
+
+6. **The show-safety fixes surviving the rebuild.** Every control moves (card, drawer, band, inspector), so the armed End/Cancel, Hold-before-End, Test cue clock, log times, delayed edge and timeline NOW line must be re-proved where they now live. Tests: `tests/e2e/console-show-safety.spec.ts` and `console-show-safety-boot.spec.ts`, edited in 1.2, 3.2, 4.2, 4.3 and 5.2 with the edits written out in those tasks; plus `list: wrap-up warnings at 5 and 1 minute, and tenths in the final minute` and `list: a held timer keeps counting when nothing is live` (Task 3.2), `band: "in N min" keeps counting when nothing is running` (Task 4.1), `layout: at 1280x720 the armed End label fits its slot in the band and the inspector` (Task 4.2), `phone: the room picker is not rebuilt by the 1 s re-render` (Task 5.1).
 
 ## Execution order and the freeze
 
@@ -69,12 +74,15 @@ Tasks are grouped by stage below. They are executed in the spec's order of value
 |---|---|
 | `playwright.console.config.ts` | created 0.1 |
 | `playwright.config.ts` | 0.1 (`testIgnore` for the screenshot suite) |
-| `tests/e2e/console-boot-mock.ts` | created 0.1; extended 1.2, 4.1 |
+| `tests/e2e/console-boot-mock.ts` | created 0.1; extended 1.2 (contrast helpers), 4.1 (`manySessions()`) |
+| `tests/e2e/console-boot-harness.ts` | read only (the show-safety harness; the screenshot mock is separate on purpose, see Task 0.1) |
+| `tests/e2e/console-show-safety.spec.ts` | updated 1.2, 3.2, 4.2, 4.3, 5.2 (exact edits listed in each) |
+| `tests/e2e/console-show-safety-boot.spec.ts` | updated 4.2 |
 | `tests/e2e/console-visual.spec.ts` (+ `tests/e2e/__screenshots__/console-visual.spec.ts/*.png`) | created 0.1; cases added 4.1, 4.3, 5.1; baselines updated in every stage |
-| `tests/console-colour-ratchet.spec.ts` | created 1.1; budget lowered 1.2, 2.1, 2.2, 2.3, 3.1, 3.2 |
+| `tests/console-colour-ratchet.spec.ts` | created 1.1; budget lowered in every build task that removes literals |
 | `tests/console-status-palette.spec.ts` | created 1.2 |
 | `tests/display-status-tokens.spec.ts` | created 1.2 |
-| `tests/e2e/console-tokens.spec.ts` | created 1.2, extended 1.3 |
+| `tests/e2e/console-tokens.spec.ts` | created 1.2, extended 1.3; text-contrast selectors updated 3.1 and 4.2 |
 | `tests/e2e/console-components.spec.ts` | created 2.1, extended 2.2 |
 | `tests/console-no-emoji-icons.spec.ts` | created 2.3 |
 | `tests/console-i18n-keys.spec.ts` | created 3.1 |
@@ -130,38 +138,42 @@ Tasks are grouped by stage below. They are executed in the spec's order of value
 - Create: `tests/e2e/console-visual.spec.ts`
 - Create: `tests/e2e/__screenshots__/console-visual.spec.ts/*.png` (generated, 12 files)
 - Read only: `cuedeck-console.html` (no product change in this task)
+- Not reused: `tests/e2e/console-boot-harness.ts`. It boots the same way but serves the show-safety specs with a different clock (`T0` 11:40 UTC, running) and a different session set and `ID` shape; changing it would change what those specs prove. The screenshot mock below is a separate file with a frozen clock and the GTR demo data. Both stay; neither imports the other.
 
 **Interfaces:**
 - Consumes: page globals `S`, `renderSessions()`, `refreshClockUI()`, `setViewMode()`, `setRole()`, `confirmEnd()`; element ids `#loading-overlay`, `#conn-lbl`, `#toast-container`.
 - Produces (exports of `tests/e2e/console-boot-mock.ts`, used by every later spec): `BASE`, `SB`, `USER_ID`, `EVENT_ID`, `T0`, `FROZEN_AT`, `iso(mins)`, `ID(k)`, `PANEL_ID`, `demoSessions()`, `overrunSessions()`, `noLiveSessions()`, `fourRoomSessions()`, `roomlessSessions()`, `longTitleSessions()`, `type Scenario`, `openConsole(browser, scenario)`, `freeze(page)`, `evalPage(page, code)`, `MASK_SELECTORS`, `snap(page, name)`. Mask hook for later stages: any element with a `data-timer` attribute is masked.
 - Produces: config `playwright.console.config.ts` that runs every console spec (new and existing) with system Chrome and Supabase blocked at DNS level.
 
-- [ ] **Step 1: Pre-flight on `main`, after `fix/show-safety` is merged into `main`.** The safety work lives on `fix/show-safety` (commits `2d17d51`, `b03c3c1` and a review-fix round, in `/Users/sheriff/AVE-Production-Console-safety`); these names exist there, not on `main` yet. Run this check only after that branch is merged into `main`, and stop and ask Sherif if any line prints `MISSING`.
+- [ ] **Step 1: Pre-flight on `main`.** The show-safety fixes are merged (`88a024f`, with `6f78ac9`) and the safety worktree no longer exists. Check that the worktree sits on `main`'s tip and that every safety name this plan builds on is present. Stop and ask Sherif if any line prints `MISSING`.
 
 ```bash
 cd /Users/sheriff/AVE-Production-Console
-git fetch cuedeck origin
+git fetch cuedeck
+git fetch origin
 git log --oneline -1 main
-for pat in "S.booted" "function eventNowMinutes" "function eventLocalHM" "'ACTIVE'" "_endPending.has" "_cancelPending.has" "OVERRUN:   \['HOLD','ENDED'\]"; do
-  if grep -q "$pat" cuedeck-console.html; then echo "ok      $pat"; else echo "MISSING $pat"; fi
+cd /Users/sheriff/AVE-Production-Console-redesign
+git status --short --branch                      # expect "## feat/console-redesign" and only "?? node_modules"
+test "$(git rev-parse HEAD)" = "$(git -C /Users/sheriff/AVE-Production-Console rev-parse main)" && echo "ok      worktree at main" || echo "MISSING worktree at main"
+for pat in "S.booted" "function eventNowMinutes(" "function eventLocalHMS(" "function eventWallClockNow(" "'ACTIVE'" "function isArmed(" "function armOrConfirm(" "function armState(" "function dropStaleArms(" "OVERRUN:   ['HOLD','ENDED']"; do
+  if grep -qF "$pat" cuedeck-console.html; then echo "ok      $pat"; else echo "MISSING $pat"; fi
 done
 grep -n "_tlPrevStatus\|tl-auto-toast" cuedeck-console.html || echo "ok      auto-switch removed"
 ```
 
-Expected: seven `ok` lines and `ok      auto-switch removed`.
+Expected (checked on `3fd0971`): `ok      worktree at main`, ten `ok` lines for the names, and `ok      auto-switch removed`. If `main` has moved past the worktree, run `git -C /Users/sheriff/AVE-Production-Console-redesign merge --ff-only main` first (the worktree has no commits of its own yet).
 
-- [ ] **Step 2: Create the worktree and branch.**
+- [ ] **Step 2: Branch and server.** The worktree and its `node_modules` symlink already exist; only the stage branch and the private server are new.
 
 ```bash
-cd /Users/sheriff/AVE-Production-Console
-git worktree add -b redesign/stage-0 /Users/sheriff/AVE-Production-Console-redesign main
-ln -s /Users/sheriff/AVE-Production-Console/node_modules /Users/sheriff/AVE-Production-Console-redesign/node_modules
 cd /Users/sheriff/AVE-Production-Console-redesign
+git switch -c redesign/stage-0
+test -L node_modules && echo "ok      node_modules is a symlink"
 (python3 -m http.server 7291 --bind 127.0.0.1 --directory /Users/sheriff/AVE-Production-Console-redesign >/dev/null 2>&1 &)
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7291/cuedeck-console.html
 ```
 
-Expected: `200`.
+Expected: `Switched to a new branch 'redesign/stage-0'`, the symlink line, and `200`.
 
 - [ ] **Step 3: Write the config.** Create `playwright.console.config.ts`:
 
@@ -199,7 +211,7 @@ Then in `playwright.config.ts` add, directly under `testDir: './tests/e2e',`:
   testIgnore: /console-visual\.spec\.ts$/,
 ```
 
-- [ ] **Step 4: Baseline the existing console suite on unchanged `main`.** A pre-existing failure is not an acceptable baseline: if anything fails here, stop and report it (it belongs to the safety branch, not to this plan).
+- [ ] **Step 4: Baseline the existing console suite on unchanged `main`.** A pre-existing failure is not an acceptable baseline: if anything fails here, stop and report it (it predates this plan and is fixed before stage 1, not worked around).
 
 ```bash
 cd /Users/sheriff/AVE-Production-Console-redesign
@@ -207,7 +219,7 @@ npx vitest run 2>&1 | tail -5
 CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts 2>&1 | tail -8
 ```
 
-Expected: vitest all passed; Playwright `N passed`, some `skipped` (live-credential tests), `0 failed`. Record both counts in the commit message.
+Expected: vitest all passed; Playwright `N passed`, some `skipped` (live-credential tests), `0 failed`, and the list includes `console-show-safety.spec.ts` and `console-show-safety-boot.spec.ts` (the config's `testMatch` picks them up). Record both counts in the commit message.
 
 - [ ] **Step 5: Write the boot mock.** Create `tests/e2e/console-boot-mock.ts`. The event is in Africa/Cairo (UTC+3 on 6 Oct 2026), so the frozen clock is 08:40 UTC, which is 11:40 event-local, matching the session times.
 
@@ -499,6 +511,9 @@ export async function freeze(page: Page) {
 export const evalPage = (page: Page, code: string) => page.evaluate((c) => (0, eval)(c), code);
 
 // Live timers are masked even though the clock is frozen (spec stage 0).
+// '#sb-time', '.lt-remain', '.lt-elapsed' and '.le-ts' disappear in stages 3
+// and 4; a mask locator that matches nothing is harmless. Every new countdown
+// sits inside an element with data-timer.
 export const MASK_SELECTORS = ['#hdr-clock', '#hdr-offset', '#sb-time', '.ck-val', '.lt-remain', '.lt-elapsed', '.le-ts', '[data-timer]'];
 
 // toHaveScreenshot against the committed baseline, or, with CONSOLE_NOTES_DIR
@@ -607,11 +622,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- playwright.console.c
 ```bash
 cd /Users/sheriff/AVE-Production-Console
 git status --short -- cuedeck-console.html cuedeck-i18n.js cuedeck-display.html tests playwright.console.config.ts
-git fetch cuedeck origin
+git fetch cuedeck
+git fetch origin
 git log --oneline main..cuedeck/main
+git log --oneline main..origin/main
 ```
 
-Expected: the status line prints nothing (if it prints files, another session is editing them in the main checkout: stop and ask Sherif). If `main..cuedeck/main` lists commits, run `git merge --ff-only cuedeck/main`; if that refuses (diverged), stop and ask Sherif.
+Expected: the status line prints nothing (if it prints files, another session is editing them in the main checkout: stop and ask Sherif). If `main..cuedeck/main` or `main..origin/main` lists commits, run `git merge --ff-only cuedeck/main` (or `origin/main`); if that refuses (diverged), stop and ask Sherif.
 - [ ] **Step 3: Review, rebase and merge.** Run the house `diff-review` skill on `main..redesign/stage-0` (repo `/Users/sheriff/AVE-Production-Console-redesign`) and fix findings first. Then:
 
 ```bash
@@ -636,7 +653,7 @@ git log --oneline cuedeck/main..main
 git log --oneline origin/main..main
 ```
 
-Expected: only commits from this plan: the spec commits (`docs(console): command center redesign spec…`, `docs(console): redesign spec decisions…`), the plan commit if it is not yet pushed, the `fix/show-safety` merge if not yet pushed, and `test(console): screenshot baseline harness…`. Anything else: stop and ask Sherif.
+Expected: only commits from this plan: the spec and plan doc commits that are not yet pushed (`docs(console): …`) and `test(console): screenshot baseline harness…`. The show-safety merge was pushed before this plan started (`cuedeck/main..main` was empty at `3fd0971`), so it must not appear. Anything else: stop and ask Sherif.
 - [ ] **Step 6: Push both remotes.** `git push cuedeck main && git push origin main`. Then `git log --oneline cuedeck/main..main` and `git log --oneline origin/main..main` both print nothing.
 - [ ] **Step 7: CI ran and passed for this SHA** (a missing run is not a pass): `SHA=$(git rev-parse main)`, then `gh run list -R sheozin/cuedeck-console --commit "$SHA" --json conclusion,name` and the same for `-R sheozin/ave`. First see which repos run the workflow (`gh workflow list -R <repo>` shows `CI` as `active`); on each of those, wait until the run for this SHA exists and shows `conclusion: success`. Record which repos have no active CI in the note, rather than treating a missing run as a pass. A failure is a stop: fix forward on a new commit or revert, never leave `main` red.
 - [ ] **Step 8: Verify the deploy.** In Vercel project `cuedeck-console` (`prj_yxtJHa9k9jO7ZEPjaYRr3BaBxuLz`, team `team_PwIbNALSFmtcg9ELOX9o34M0`), the deployment for the pushed SHA is `READY`. `curl -s https://app.cuedeck.io/ | grep -o "<title>[^<]*</title>"` returns the console title. No visible change is expected in this stage.
@@ -704,7 +721,7 @@ describe('console colour ratchet', () => {
 });
 ```
 
-- [ ] **Step 2: Run it.** `npx vitest run tests/console-colour-ratchet.spec.ts`. On `4a76ff0` the count is 506. If the post-safety `main` prints a different count, set `BUDGET` to that printed number (the safety branch may add a few literals) and note the delta in the commit message. Expected after that: 3 passed.
+- [ ] **Step 2: Run it.** `npx vitest run tests/console-colour-ratchet.spec.ts`. On `3fd0971` the count is 504 (it was 506 on `4a76ff0`, before the safety merge): set `BUDGET` to the printed number. Expected after that: 3 passed.
 
 - [ ] **Step 3: Make the aliases references (zero pixel diff).** In the `:root` block replace the block that starts `/* ── BACKWARD-COMPAT ALIASES` with:
 
@@ -774,10 +791,10 @@ console.log(`replaced ${n} literals`);
 ```
 
 ```bash
-node "$SCRATCH/cd-literals-to-tokens.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
+SCRATCH=<session scratchpad>; node "$SCRATCH/cd-literals-to-tokens.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
 ```
 
-Expected: `replaced 75 literals` on `4a76ff0` (a few more or fewer after the safety merge is fine).
+Expected: `replaced 78 literals` on `3fd0971` (verified in the pre-flight run; 12 baselines unchanged).
 
 - [ ] **Step 5: Screenshot diff must be zero.**
 
@@ -787,7 +804,7 @@ CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.con
 
 Expected: `12 passed`. A diff here means a mapping changed a value: find it in the diff PNG and revert that one replacement.
 
-- [ ] **Step 6: Lower the budget.** `npx vitest run tests/console-colour-ratchet.spec.ts` prints the new count (about 431). Set `BUDGET` to exactly that number. Expected: 3 passed.
+- [ ] **Step 6: Lower the budget.** `npx vitest run tests/console-colour-ratchet.spec.ts` prints the new count (426 on `3fd0971`). Set `BUDGET` to exactly that number. Expected: 3 passed.
 
 - [ ] **Step 7: Commit.**
 
@@ -804,8 +821,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- tests/console-colour
 
 **Files:**
 - Modify: `cuedeck-console.html`: the `:root` block (replaced whole); `.sc.status-*` rules (selector `/* Per-status card styles */`, lines 559-598); `.badge-*` rules (612-625); `.prog-fill.ov`, `.lt-remain.ov` (659, 671); `#header` (465-474); `#bc-banner.*` (458-460); `.le.le-*` (775-785); `.sm-status-live`, `.sm-live-dot` (1355-1363); `@keyframes badge-pulse-live`, `badge-pulse-overrun`, `badge-blink` users; `renderTimeline()` `STATUS_COLOR` map (3683-3687, 3722); a new block appended at the end of `<style>`.
-- Modify: `cuedeck-display.html` `:root` (line 16) and status rules (lines 88-89, 108-111, 155, 197, 226, 254, 308-310) and the overrun and hold colours in the two timer functions (lines 839-910 and 1393-1400).
+- Modify: `cuedeck-console.html`: delete the show-safety reduced-motion block (`@media (prefers-reduced-motion: reduce) { .toast, .toast.toast-out { animation: none; } .badge, .sc, .sm-live-dot { animation: none !important; } }`, just above `/* ── RESPONSIVE ── */`), which the global rule of Step 6 replaces.
+- Modify: `cuedeck-display.html` `:root` (line 16) and status rules (lines 88-89, 108-111, 155, 197, 226, 254, 308-310) and the overrun and hold colours in the two stage-timer functions (lines 906-907 and 1393-1394). The presenter timer (lines 839 and 847) is not a status colour and is not touched.
 - Modify: `tests/e2e/console-boot-mock.ts` (add contrast helpers).
+- Modify: `tests/e2e/console-show-safety.spec.ts` (three colour assertions, Step 9b).
 - Create: `tests/console-status-palette.spec.ts`, `tests/display-status-tokens.spec.ts`, `tests/e2e/console-tokens.spec.ts`.
 - Update: all 12 PNG baselines.
 
@@ -906,6 +925,15 @@ describe('display page status colours', () => {
     expect(SRC).toContain('.st-status.hold{color:var(--st-hold)}');
     expect(SRC).toContain('.st-status.overrun{color:var(--st-overrun)}');
   });
+  it('the stage timer uses the overrun and hold status colours; the presenter timer keeps its own', () => {
+    expect(SRC).toContain("const col2 = ov2 ? '#E879F9'");
+    expect(SRC).toContain("const color   = ov ? '#E879F9'");
+    expect(SRC.match(/isHold2? +\? '#FB923C'/g)).toHaveLength(2);
+    expect(SRC).not.toMatch(/isHold2? +\? '#f97316'/);
+    // presenter timer (remaining-time colours, not statuses): unchanged
+    expect(SRC).toContain("const tc = ov ? '#ef4444'");
+    expect(SRC).toContain("pb.style.background = ov ? '#ef4444'");
+  });
 });
 ```
 
@@ -951,21 +979,35 @@ test('tokens: section dividers are at least 1.78:1 and control boundaries at lea
   await ctx.close();
 });
 
+// Every selector must exist: a missing element (-1) fails instead of being
+// skipped. Tasks that remove one of these elements replace its selector with
+// its successor in the same task (3.1: '#bc-bar label', 4.2: '#ctx-sub').
+const META_TEXT = [`#card-${PANEL_ID} .sc-num`, '#ctx-sub', '#fb-count', '#bc-bar label'];
 test('tokens: meta and label text is at least 4.5:1', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  for (const sel of [`#card-${PANEL_ID} .sc-num`, '#ctx-sub', '#fb-count', '#bc-bar label']) {
-    const r = await textContrast(page, sel);
-    if (r < 0) continue; // element not rendered in this state
-    expect(r, sel).toBeGreaterThanOrEqual(4.5);
+  for (const sel of META_TEXT) {
+    expect(await textContrast(page, sel), sel).toBeGreaterThanOrEqual(4.5);
   }
   await ctx.close();
 });
 
-test('tokens: every focusable control shows the focus ring', async ({ browser }) => {
+test('tokens: every control reached by Tab shows the focus ring', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  await page.locator('#fb-search').focus();
-  const shadow = await page.locator('#fb-search').evaluate(el => getComputedStyle(el).boxShadow);
-  expect(shadow).toContain('rgb(147, 197, 253)');
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < 40; i++) {
+    await page.keyboard.press('Tab');
+    const r = await page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el || el === document.body) return null;
+      return { key: `${el.tagName.toLowerCase()}#${el.id}.${String(el.className).slice(0, 30)}`, ring: getComputedStyle(el).boxShadow.includes('rgb(147, 197, 253)') };
+    });
+    if (!r) continue;
+    seen.add(r.key);
+    if (!r.ring) missing.push(r.key);
+  }
+  expect(seen.size).toBeGreaterThan(10);   // the walk really visited controls
+  expect([...new Set(missing)]).toEqual([]);
   await ctx.close();
 });
 
@@ -993,7 +1035,7 @@ npx vitest run tests/console-status-palette.spec.ts tests/display-status-tokens.
 CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-tokens.spec.ts
 ```
 
-Expected: palette spec fails on `--st-planned missing`; display spec fails on `--st-live`; e2e fails on the contrast values (about 1.1 to 1.4), the focus ring, the timeline fill (`#ef4444`) and the LIVE badge animation (`badge-pulse-live`).
+Expected: palette spec fails on `--st-planned missing`; display spec fails on `--st-live` and the stage-timer colours; e2e fails on the contrast values (about 1.1 to 1.4), the focus ring (no stop shows it), the timeline fill (`#ef4444`) and the LIVE badge animation (`badge-pulse-live`).
 
 - [ ] **Step 3: Replace the whole `:root` block** with:
 
@@ -1167,7 +1209,7 @@ node "$SCRATCH/cd-one-blue-one-red.mjs" /Users/sheriff/AVE-Production-Console-re
 
 Expected: `replaced` followed by a number above 0. (`$SCRATCH` is the session scratchpad directory; nothing from it is committed.)
 
-- [ ] **Step 6: Lines, control boundaries, focus ring, motion.** Remove the `animation:` declarations from `.sc.status-LIVE`/`.sc.status-OVERRUN` (done by Step 4's replacement), and from `.badge-READY`, `.badge-LIVE`, `.badge-HOLD` (done by Step 4). Append at the very end of the `<style>` block (just above `</style>`):
+- [ ] **Step 6: Lines, control boundaries, focus ring, motion.** Remove the `animation:` declarations from `.sc.status-LIVE`/`.sc.status-OVERRUN` (done by Step 4's replacement), and from `.badge-READY`, `.badge-LIVE`, `.badge-HOLD` (done by Step 4). Delete the show-safety reduced-motion block just above `/* ── RESPONSIVE ── */` (the three lines `@media (prefers-reduced-motion: reduce) {`, `.toast, .toast.toast-out { animation: none; }`, `.badge, .sc, .sm-live-dot { animation: none !important; }` and its closing brace): the global rule below covers every element, including those three, and the safety test `reduced motion stops badge and card pulses` keeps checking it. Append at the very end of the `<style>` block (just above `</style>`):
 
 ```css
     /* ═══ Command center tokens: lines, controls, focus, motion (stage 1) ═══ */
@@ -1230,7 +1272,16 @@ and make these exact replacements (status meaning only; the remaining-time colou
 | `.st-status.hold{color:#f97316}` | `.st-status.hold{color:var(--st-hold)}` |
 | `.st-status.overrun{color:#ef4444}` | `.st-status.overrun{color:var(--st-overrun)}` |
 
-In the two stage-timer colour functions (around lines 906 and 1393), change the overrun branch `ov2 ? '#ef4444'` / `ov ? '#ef4444'` to `'#E879F9'` and the hold branch `isHold2 ? '#f97316'` / `isHold ? '#f97316'` to `'#FB923C'`.
+In the two stage-timer colour functions make exactly these four replacements (each string occurs once in the file; checked on `3fd0971`, whitespace as in the file):
+
+| Old (line) | New |
+|---|---|
+| `const col2 = ov2 ? '#ef4444'` (906) | `const col2 = ov2 ? '#E879F9'` |
+| `    : isHold2          ? '#f97316'` (907) | `    : isHold2          ? '#FB923C'` |
+| `const color   = ov ? '#ef4444'` (1393) | `const color   = ov ? '#E879F9'` |
+| `    : isHold    ? '#f97316'` (1394) | `    : isHold    ? '#FB923C'` |
+
+Do not replace `ov ? '#ef4444'` file-wide: it also occurs at lines 839 (`const tc = ov ? '#ef4444' …`) and 847 (`pb.style.background = ov ? '#ef4444' …`), which are the presenter timer's remaining-time colours and stay as they are (spec non-goal; the display test checks both are unchanged). The other branches of the stage-timer ternaries (`rem2 < 120_000 ? '#ef4444'` and the like) are remaining-time colours too and stay.
 
 - [ ] **Step 9: Run the tests.**
 
@@ -1241,6 +1292,16 @@ CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.con
 
 Expected: vitest all pass except the ratchet's "kept tight" test, which now reports the new count; set `BUDGET` to the printed count. The tokens e2e: 5 passed.
 
+- [ ] **Step 9b: Show-safety colour assertions (same commit).** The palette change moves three colours that `tests/e2e/console-show-safety.spec.ts` pins (verified: these three fail after Steps 3 to 6 and nothing else in that file does). Each assertion keeps its meaning (overrun is the magenta status colour; the left edge is the READY status colour; the delay line is the amber delay colour) with the new token values:
+
+| Old line | New line |
+|---|---|
+| `    expect(m.timerColor).toBe('rgb(255, 0, 168)');` | `    expect(m.timerColor).toBe('rgb(232, 121, 249)'); // --st-overrun` |
+| `  expect(css.left).toBe('rgb(34, 197, 94)');` | `  expect(css.left).toBe('rgb(52, 211, 153)');  // --st-ready` |
+| `  expect(css.top).toBe('rgb(249, 115, 22)');` | `  expect(css.top).toBe('rgb(251, 146, 60)');   // .sc.delayed uses --amber = --st-hold` |
+
+Then `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts`: all pass.
+
 - [ ] **Step 10: Update and review the baselines.** This is the deliberate palette change.
 
 ```bash
@@ -1250,16 +1311,17 @@ git diff --stat tests/e2e/__screenshots__
 
 Open all 12 PNGs. Check: card outlines and bar lines visible; inputs have visible edges; status colours match the table; HOLD amber, CALLING yellow (no longer the same); LIVE red badge with dark text; no pulsing frames. Then run the full console suite (`npx playwright test -c playwright.console.config.ts`) and expect `0 failed`.
 
-- [ ] **Step 11: Commit in three commits** (display page separately so it can be reverted alone):
+- [ ] **Step 11: Commit in three commits** (an exception to one commit per task: the display page goes separately so it can be reverted alone, and the baselines separately so the code diff stays readable; each commit takes whole files, no hunk staging):
 
 ```bash
-git add tests/console-status-palette.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-boot-mock.ts tests/console-colour-ratchet.spec.ts cuedeck-console.html
+git add tests/console-status-palette.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-boot-mock.ts tests/console-colour-ratchet.spec.ts tests/e2e/console-show-safety.spec.ts cuedeck-console.html
 git commit -m "feat(console): new palette, status set, control borders, focus ring, motion rule
 
 Section lines 1.79 to 1.87:1, control edges 3.3:1, meta text 6.5:1, worst
 status pair dE 21.3 (normal, protan, deutan). Timeline colours from CSS.
+Show-safety colour assertions follow the new tokens.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- tests/console-status-palette.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-boot-mock.ts tests/console-colour-ratchet.spec.ts cuedeck-console.html
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- tests/console-status-palette.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-boot-mock.ts tests/console-colour-ratchet.spec.ts tests/e2e/console-show-safety.spec.ts cuedeck-console.html
 git add tests/e2e/__screenshots__/console-visual.spec.ts
 git commit -m "test(console): baselines for the stage 1 palette
 
@@ -1393,7 +1455,7 @@ Expected: the string. Open https://app.cuedeck.io in Chrome (`open -a "Google Ch
 
 # Stage 2: Components
 
-Task 2.1 runs right after stage 1 (branch `redesign/stage-3`, because it ships with stage 3). Tasks 2.2 and 2.3 run after stage 4 on branch `redesign/stage-2`, and they assume stages 3 and 4 are merged.
+Task 2.1 runs right after stage 1 (branch `redesign/stage-3`, because it ships with stage 3): create it first with `git -C /Users/sheriff/AVE-Production-Console-redesign switch -c redesign/stage-3 main` (after Task 1.4). Tasks 2.2 and 2.3 run after stage 4 on branch `redesign/stage-2`, created with `git -C /Users/sheriff/AVE-Production-Console-redesign switch -c redesign/stage-2 main` after Task 4.4; they assume stages 3 and 4 are merged.
 
 ### Task 2.1: Primitives: button, badge, chip, section label, status pill, icon sprite
 
@@ -1598,12 +1660,12 @@ function chipHTML(kind, text) {
 // Times are HH:MM everywhere except running timers and the header clock.
 function hm(v) { return v ? String(v).slice(0, 5) : '–'; }
 function sessionSpan(s) { return `${hm(s.scheduled_start)}–${hm(s.scheduled_end)}`; }
-// A timestamp shown as HH:MM in the event's own time zone.
+// A timestamp shown as HH:MM in the event's own time zone (the show-safety
+// eventClockParts keeps one cached formatter per zone; fmtTS is the HH:MM:SS twin).
 function tsHM(ts) {
   if (!ts) return '–';
-  try {
-    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: S.event?.timezone || undefined }).format(new Date(ts));
-  } catch { return new Date(ts).toTimeString().slice(0, 5); }
+  const c = eventClockParts(new Date(ts).getTime());
+  return `${pad(c.h)}:${pad(c.m)}`;
 }
 ```
 
@@ -1721,14 +1783,14 @@ function getBtnCfg() {
 }
 ```
 
-In `buildButtons(s)`: in every button template change `class="abtn ${cfg.cls}"` to `class="btn md ${cfg.cls}"` and the fallback `{ label: to, cls: 'btn-blue' }` to `{ label: to, cls: '' }`; prefix the END button with the gap, so its template reads `` `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}…` `` (keep whatever armed-state attributes the safety branch added); change the arrive, restart, delay and nudge buttons from `abtn btn-*` to `btn sm` (keep `data-restart` and every `onclick`). In `buildCtxPanel()`, change `cbtn` to:
+In `buildButtons(s)`: in every button template change `class="abtn ${cfg.cls}"` to `class="btn md ${cfg.cls}"` and the fallback `{ label: to, cls: 'btn-blue' }` to `{ label: to, cls: '' }`; prefix the END button with the gap, so its template reads `` `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">…` ``; the END and CANCEL branches keep their `const armed = isArmed(_endPending, s)` / `isArmed(_cancelPending, s)` lines and labels exactly as on `main` (only the class string changes); change the arrive, restart, delay and nudge buttons from `abtn btn-*` to `btn sm` (keep `data-restart` and every `onclick`). In `buildCtxPanel()`, change `cbtn` to:
 
 ```js
   const cbtn = (label, cls, action, ico = '') =>
     `<button class="btn md ctx-btn ${cls}" onclick="${action}">${ico ? icon(ico) : ''}${label}</button>`;
 ```
 
-and its icon arguments `'⊡'`, `'⏱'`, `'⏸'`, `'📢'`, `'☕'` to `'monitor'`, `'timer'`, `'pause'`, `'broadcast'`, `'coffee'` (the label strings with emoji inside them are Task 2.3's). In `cardHTML()`, change `<span class="badge badge-${s.status}">${t('status.' + s.status)}</span>` to `${statusBadge(s.status)}`. In the batch bar markup: `SET READY` button `class="btn sm fwd fwd-ready"`, `END ALL` and `CANCEL ALL` `class="btn sm danger"`, `Clear` `class="btn sm ghost"`. Undo button: `class="btn sm"` and remove its inline `style`.
+and its icon arguments `'⊡'`, `'⏱'`, `'⏸'`, `'📢'`, `'☕'` to `'monitor'`, `'timer'`, `'pause'`, `'broadcast'`, `'coffee'` (the label strings with emoji inside them are Task 2.3's). In `cardHTML()`, change `<span class="badge badge-${s.status}">${t('status.' + s.status)}</span>` to `${statusBadge(s.status)}`. In the batch bar markup: `SET READY` button `class="btn sm fwd fwd-ready"`, `END ALL` and `CANCEL ALL` `class="btn sm danger"`, `Clear` `class="btn sm ghost"`; keep each button's `data-batch` attribute and `onclick` as they are (the safety batch tests select on `[data-batch="ENDED"]`). Undo button: `class="btn sm"` and remove its inline `style`.
 
 - [ ] **Step 7: Tests that select on the old classes (same commit).** In `tests/e2e/auth-flows.spec.ts`:
   - line 398: `await page.locator('.abtn.btn-green:has-text("GO LIVE")').first().click();` becomes `await page.locator('button.fwd-go:has-text("Go live")').first().click();`
@@ -1742,26 +1804,23 @@ CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.con
 npx vitest run tests/console-colour-ratchet.spec.ts
 ```
 
-Expected: components 6 passed, confirm 2 passed, restart all passed. Set `BUDGET` to the printed count.
+Expected: components 6 passed, confirm 2 passed, restart all passed. Set `BUDGET` to the printed count. Then `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-show-safety.spec.ts`: all pass unchanged (the card buttons keep `.sc-actions`, their labels and `data-batch`; the act-gap is a `span`, so `.sc-actions > button` still reads HOLD then END SESSION).
 
 - [ ] **Step 9: Baselines.** `--update-snapshots` on `console-visual.spec.ts`; review: buttons 32 px with 8 px radius, End outlined, Hold solid amber with a gap before End, badges 22 px. Full console suite: `0 failed`.
 
-- [ ] **Step 10: Commit, one commit per component** (spec stage 2): stage the hunks with `git add -p cuedeck-console.html` per component and commit each with an explicit pathspec:
+- [ ] **Step 10: Commit (one commit for the task).** Hunk staging (`git add -p`) is interactive and unavailable here, and a pathspec commit takes the whole working-tree file anyway, so the components go in one commit whose body lists them:
 
 ```bash
-git add -p cuedeck-console.html   # sprite + helpers only
-git commit -m "feat(console): icon sprite and shared view helpers
+git status --short
+git add cuedeck-console.html tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git commit -m "feat(console): shared components: icon sprite, view helpers, button, badge, chip, label, pill
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html
-git add -p cuedeck-console.html   # .btn, getBtnCfg, buildButtons, cbtn, batch and undo
-git add tests/e2e/auth-flows.spec.ts
-git commit -m "feat(console): button component; actions follow the action colour rule
+- icon sprite and icon(), tf(), statusBadge(), chipHTML(), hm(), tsHM(), sessionSpan()
+- button sizes and variants; actions follow the action colour rule (forward green,
+  Call speaker yellow, Hold amber, End and Cancel red outline, solid red only armed)
+- badge per status, chip, section label, status pill
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html tests/e2e/auth-flows.spec.ts
-git add cuedeck-console.html tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
-git commit -m "feat(console): badge, chip, section label and status pill components
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
 
 ### Task 2.2: Inputs and selects, modals, toasts
@@ -1790,6 +1849,21 @@ test('components: inputs are 32 px, control border, radius 8, broadcast input 36
   expect((await box(page, '#bc-input')).h).toBe(36);
   const inline = await page.evaluate(() => [...document.querySelectorAll('input, select, textarea')].filter(e => /outline\s*:\s*none/i.test(e.getAttribute('style') || '')).map(e => e.id || e.className));
   expect(inline).toEqual([]);
+  // The field recipe is for text-like inputs only: checkboxes, radios, colour and file inputs keep their own size.
+  await mount(page, '<div class="ev-modal-card"><input type="text" id="mf-text"><input type="checkbox" id="mf-cb"><input type="radio" id="mf-rd"><input type="color" id="mf-col"></div>');
+  expect((await box(page, '#mf-text')).h).toBe(32);
+  for (const sel of ['#mf-cb', '#mf-rd', '#mf-col']) expect((await box(page, sel)).h, sel).not.toBe(32);
+  await ctx.close();
+});
+
+test('components: Escape closes a modal like a click on its backdrop, but never skips the setup wizard', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `document.getElementById('wizard-modal').style.display = 'flex'`);
+  await page.keyboard.press('Escape');
+  expect(await evalPage(page, `document.getElementById('wizard-modal').style.display`)).toBe('flex');
+  await evalPage(page, `document.getElementById('wizard-modal').style.display = 'none'; openAboutModal()`);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#about-modal')).toBeHidden();
   await ctx.close();
 });
 
@@ -1825,7 +1899,7 @@ test('components: toasts live in a polite region; errors are alerts and stay 8 s
 });
 ```
 
-- [ ] **Step 2: Run, expect failure** (heights 26-30, no `role`, focus not moved, error toast gone after 3 s).
+- [ ] **Step 2: Run, expect failure** (heights 26-30, no `role`, focus not moved, error toast gone after 3 s). The Escape test passes before and after: it is a guard that the generic handler keeps closing About and never skips the wizard.
 
 - [ ] **Step 3: Inputs.** Replace the `#fb-search`, `#fb-status,#fb-room` and their `:focus` rules with:
 
@@ -1839,7 +1913,20 @@ test('components: toasts live in a polite region; errors are alerts and stay 8 s
     #fb-search:focus, #fb-status:focus, #fb-room:focus { border-color: var(--accent); }
 ```
 
-Set `#bc-input` to `height: 36px; background: var(--input-bg); border: 1px solid var(--border-control); border-radius: var(--r-ctl); padding: 0 12px; color: var(--text-primary); font-size: var(--fs-13);` and `#bc-pri` to `height: 36px; border-radius: var(--r-ctl); border: 1px solid var(--border-control); background: var(--input-bg); color: var(--text-primary);`. Set `.ev-modal-card input,.ev-modal-card select` and `.wiz-body input, .wiz-body select` and `#login-form input, #register-form input, #reset-form input` to `height: 32px; background: var(--input-bg); border: 1px solid var(--border-control); border-radius: var(--r-ctl); padding: 0 10px; color: var(--text-primary); font-size: var(--fs-13);` (textareas keep their height). Delete the two `!important` lines of the stage 1 control-boundary block (the rules above now carry the border). Remove `outline:none` from every inline style in the HTML and in script templates (everything after `</style>`; the ring rule from Task 1.2 handles focus):
+Set `#bc-input` to `height: 36px; background: var(--input-bg); border: 1px solid var(--border-control); border-radius: var(--r-ctl); padding: 0 12px; color: var(--text-primary); font-size: var(--fs-13);` and `#bc-pri` to `height: 36px; border-radius: var(--r-ctl); border: 1px solid var(--border-control); background: var(--input-bg); color: var(--text-primary);`. Replace the selector `.ev-modal-card input,.ev-modal-card select` with the text-like inputs only, and give it and `.wiz-body input, .wiz-body select` and `#login-form input, #register-form input, #reset-form input` the field recipe:
+
+```css
+    .ev-modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
+    .ev-modal-card select,
+    .wiz-body input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
+    .wiz-body select,
+    #login-form input, #register-form input, #reset-form input {
+      height: 32px; background: var(--input-bg); border: 1px solid var(--border-control); border-radius: var(--r-ctl);
+      padding: 0 10px; color: var(--text-primary); font-size: var(--fs-13);
+    }
+```
+
+(textareas keep their height; `#dm-audio`, the `#sess-modal .smv-chip input` chips and the other checkboxes, radios, colour and file inputs keep their own rules, the same exclusion Task 1.2's control-boundary block uses). Delete the two `!important` lines of the stage 1 control-boundary block (the rules above now carry the border). Remove `outline:none` from every inline style in the HTML and in script templates (everything after `</style>`; the ring rule from Task 1.2 handles focus):
 
 ```bash
 node -e '
@@ -1905,13 +1992,17 @@ function initModalManager() {
 initModalManager();
 ```
 
-In the Escape branch of the `keydown` handler, replace the `// Close any open modal` block (the `openModal` lookup and its twelve `if (openModal.id === …)` lines) with:
+In the Escape branch of the `keydown` handler, replace the `// Close any open modal` block (the `openModal` lookup, its `if (openModal) {` and its twelve `if (openModal.id === …)` lines) with:
 
 ```js
-    // Close any open modal: each backdrop closes itself on a click on the backdrop.
+    // Close the open modal the way a click on its backdrop does. Modals marked
+    // data-esc="off" (setup wizard, welcome) ignore Escape, as before: their
+    // backdrop click skips onboarding, which a stray Escape must not do.
     const openModal = [...document.querySelectorAll('.ev-modal-backdrop')].find(m => m.style.display === 'flex');
-    if (openModal) { openModal.click(); return; }
+    if (openModal && openModal.dataset.esc !== 'off') { openModal.click(); return; }
 ```
+
+and add `data-esc="off"` to `<div id="wizard-modal" class="ev-modal-backdrop" …>` and `<div id="welcome-modal" class="ev-modal-backdrop" …>`. Behaviour change, stated for the review and the note to Sherif: Escape now also closes the Team (`#users-modal`) and QR (`#qr-modal`) modals, which it did not before; both backdrops already close on a click (`closeUsersModal()`, `closeQR()`), so Escape now matches the click. Every modal Escape closed before (`sess-modal`, `ev-modal`, `restart-modal` and the rest) still closes, through the same close function its backdrop calls.
 
 - [ ] **Step 5: Toasts.** Change `<div id="toast-container"></div>` to `<div id="toast-container" role="status" aria-live="polite"></div>`. Replace the `.toast*` colour and radius rules with:
 
@@ -1933,13 +2024,26 @@ In `pushToast(msg, type)`: after `el.className = …` add `if (type === 'error')
 
 and the timeout line to `const delay = type === 'error' ? 8000 : type === 'warn' ? 3000 : 2000;`.
 
-- [ ] **Step 6: Run** the three new tests plus `console-restart`, `console-forbidden`, `console-pairing`, `session-management`, `session-people`: all pass. Lower `BUDGET`. Update and review baselines (modals are not in the baseline set; check the `empty-1440` and `director-1440` diffs only show input edges). Full console suite `0 failed`.
+- [ ] **Step 6: Run** the four new tests plus `console-restart`, `console-forbidden`, `console-pairing`, `session-management`, `session-people` and both `console-show-safety*` specs: all pass. Lower `BUDGET`. Update and review baselines (modals are not in the baseline set; check the `empty-1440` and `director-1440` diffs only show input edges). Full console suite `0 failed`.
 
-- [ ] **Step 7: Commit, one per component** (`git add -p` per component as in Task 2.1 Step 10): `feat(console): input and select component`, `feat(console): modals are labelled dialogs with focus trap and one Escape handler`, `feat(console): toasts with status icons, polite region, errors stay 8 s`; the last commit also carries `tests/e2e/console-components.spec.ts`, `tests/console-colour-ratchet.spec.ts` and the screenshot directory.
+- [ ] **Step 7: Commit (one commit for the task, as in Task 2.1 Step 10).**
+
+```bash
+git status --short
+git add cuedeck-console.html tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git commit -m "feat(console): inputs, dialogs and toasts
+
+- input and select component (text-like inputs only)
+- modals are labelled dialogs with a focus trap and one Escape handler;
+  Escape now also closes Team and QR, never the setup wizard or welcome
+- toasts with status icons in a polite region; errors stay 8 s
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html tests/e2e/console-components.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+```
 
 ### Task 2.3: Every remaining emoji icon replaced by the sprite
 
-Runs after Task 2.2 on `redesign/stage-2`. Stages 3 and 4 already wrote the header, list, band, inspector and log without emoji; this task covers everything else.
+Runs after Task 2.2 on `redesign/stage-2`. Stages 3 and 4 already rewrote, without emoji, the header (with the help menu and the account panel's actions), the sidebar AI and clock sections, `refreshDiag`, the banner and presets, `buildEvSelect`, the list (`renderSessions` from `const list`, `cardHTML`, `buildFlags`, `updateDelayStrip`), the director, stage and av quick actions and the log; this task covers every other glyph site in the file, so the guard covers the whole file. Coverage was checked on `3fd0971`: running this task's codemod (after Task 2.1's `cbtn` icon-argument rename) and then the guard leaves 59 hits, all inside the regions listed above; none elsewhere.
 
 **Files:**
 - Create: `tests/console-no-emoji-icons.spec.ts`
@@ -1974,9 +2078,9 @@ describe('no emoji icons in the console', () => {
 });
 ```
 
-- [ ] **Step 2: Run.** `npx vitest run tests/console-no-emoji-icons.spec.ts`. Expected: a list of remaining sites (auth screens, signage panel, legacy role panels, stage monitor, toasts, command palette, mobile menu, profile edit, users modal, invoices, feedback stars, empty states).
+- [ ] **Step 2: Run.** `npx vitest run tests/console-no-emoji-icons.spec.ts`. Expected: a list of remaining sites (auth screens, signage panel and slide editor, legacy role panels, stage monitor, toasts and log suffixes, command palette, mobile menu, profile edit, users modal, invites, invoices, welcome modal, feedback stars, empty states, quick reference). If it lists a site inside a region stages 3 and 4 rewrote, that stage left a glyph behind: fix it there, in this task, and say so in the commit message.
 
-- [ ] **Step 3: Replace them.** Run this one-off codemod (not committed). Each entry must match at least once; the script fails loudly if one is missing so nothing is silently skipped:
+- [ ] **Step 3: Replace them.** Run this one-off codemod (not committed). Each entry must match at least once; if one is missing the script names it and exits without writing, so the file is never left half-edited and nothing is silently skipped:
 
 ```js
 // $SCRATCH/cd-icons.mjs
@@ -2073,24 +2177,39 @@ const REPL = [
   ["icon: '🎭', label: `Switch to ${role.toUpperCase()}`", "icon: 'user', label: `Switch to ${role}`"],
   // quick reference table
   ["? '<td class=\"qr-check\">✓</td>'", "? '<td class=\"qr-check\">' + icon('check') + '</td>'"],   // both occurrences (lines ~8560 and ~8564)
+  // sites no earlier task rewrites (found by running this codemod and the guard on main 3fd0971)
+  ['style="font-size:11px;padding:4px 10px">＋ Add Slide</button>', 'style="font-size:11px;padding:4px 10px">' + I('plus') + ' Add slide</button>'],
+  ['`${toStatus} via direct write ✓`', '`${toStatus} via direct write`'],
+  ['`RESTART → READY via /restart-session ✓`', '`RESTART → READY via /restart-session`'],
+  ['`+${minutes}min via /apply-delay ✓`', '`+${minutes}min via /apply-delay`'],
+  ['cursor:pointer;line-height:1">✕</button>', 'cursor:pointer;line-height:1" aria-label="Remove slide">' + J('x') + '</button>'],
+  ['<span class="sp-seq-tag">⟳ ${d.sequence.length} slides</span>', '<span class="sp-seq-tag">' + J('refresh') + ' ${d.sequence.length} slides</span>'],
+  ["clearDisplayOverride('${esc(d.id)}')\">⟳ Reset</button>", "clearDisplayOverride('${esc(d.id)}')\">" + J('refresh') + ' Reset</button>'],
+  ["onclick=\"openDisplayModal('add')\">＋ ${t('btn.addDisplay')}</button>", "onclick=\"openDisplayModal('add')\">" + J('plus') + " ${t('btn.addDisplay')}</button>"],
+  ['white-space:nowrap">🔗 Pair</button>', 'white-space:nowrap">' + J('link') + ' Pair</button>'],
+  ["onclick=\"openSponsorModal('add')\">＋ ${t('btn.addSponsor')}</button>", "onclick=\"openSponsorModal('add')\">" + J('plus') + " ${t('btn.addSponsor')}</button>"],
+  ["'◈ STANDING BY — STARTING SHORTLY'", "'STANDING BY: STARTING SHORTLY'"],
+  ['<p>Use the <strong>＋</strong> button above to create a new event.</p>', '<p>Use <strong>New event</strong> in the event menu to create a new event.</p>'],
+  ['flex-shrink:0">🎬</div>', 'flex-shrink:0">' + J('sparkle') + '</div>'],
+  ['`<span style="color:var(--green)">✓ Invite sent to', '`<span style="color:var(--green)">Invite sent to'],
+  ["onclick=\"openEvModal('create')\">＋ Create Your First Event</button>", "onclick=\"openEvModal('create')\">" + J('plus') + ' Create your first event</button>'],
+  ['<li>Click <strong>＋</strong> to create an event</li>', '<li>Open the event menu and choose <strong>New event</strong></li>'],
 ];
-const missing = [];
-for (const [from, to] of REPL) {
-  if (!s.includes(from)) { missing.push(from); continue; }
-  s = s.split(from).join(to);
-}
+const missing = REPL.filter(([from]) => !s.includes(from)).map(([from]) => from);
+// Nothing is written unless every entry matches: fix the entry to the current string and rerun.
+if (missing.length) { console.error('NOT FOUND (file unchanged):\n' + missing.join('\n')); process.exit(1); }
+for (const [from, to] of REPL) s = s.split(from).join(to);
 // Status prefixes on toasts and log strings ('✓ ', '⚠ ', '✕ ', '⏱ ') go; pushToast draws the icon.
 s = s.replace(/(['`])(?:✓|⚠|✕|⏱)️?\s+/g, '$1');
 fs.writeFileSync(FILE, s);
-if (missing.length) { console.error('NOT FOUND:\n' + missing.join('\n')); process.exit(1); }
 console.log('ok');
 ```
 
 ```bash
-node "$SCRATCH/cd-icons.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
+SCRATCH=<session scratchpad>; node "$SCRATCH/cd-icons.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
 ```
 
-Expected: `ok`. For any `NOT FOUND` line, the safety branch or stages 3 and 4 already changed that string: open the function named in the line, apply the same replacement by hand, and list it in the commit message. Then make the renderers use the new fields: in `renderSignagePanel()` change `` ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')} `` to `` ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${m.label}</button>`).join('')} ``, and in `renderPaletteResults()` change `<span class="cmd-item-icon">${r.icon}</span>` to `<span class="cmd-item-icon">${icon(r.icon)}</span>`. Add CSS: `.fb-star .ico { width: 22px; height: 22px; } .fb-star.active .ico, .fb-star:hover .ico { fill: currentColor; } .ce-icon .ico, .ps-icon .ico, .te-icon .ico, #empty .ei .ico { width: 32px; height: 32px; }`.
+Expected: `ok`. The script writes nothing unless every entry matches. For a `NOT FOUND` line an earlier stage changed that string: find its current form in the file (search for the glyph), change that entry's `from` (and `to`) to match, rerun, and list the adjusted entry in the commit message. Then make the renderers use the new fields: in `renderSignagePanel()` change `` ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')} `` to `` ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${m.label}</button>`).join('')} ``, and in `renderPaletteResults()` change `<span class="cmd-item-icon">${r.icon}</span>` to `<span class="cmd-item-icon">${icon(r.icon)}</span>`. Add CSS: `.fb-star .ico { width: 22px; height: 22px; } .fb-star.active .ico, .fb-star:hover .ico { fill: currentColor; } .ce-icon .ico, .ps-icon .ico, .te-icon .ico, #empty .ei .ico { width: 32px; height: 32px; }`.
 
 - [ ] **Step 4: Run.** `npx vitest run` (guard passes; ratchet: set `BUDGET`); `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts` with `0 failed` (the pairing, signage and display-modal tests still find their buttons by text). Update and review the `signage-1440` and `empty-1440` baselines.
 
@@ -2105,13 +2224,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- tests/console-no-emo
 
 ### Task 2.4: Release stage 2
 
-Same steps as Task 1.4 with branch `redesign/stage-2` and notes directory `$SCRATCH/notes/stage-2`. Freeze check first: no release task starts after 18:00 on 10 Oct; anything not live-checked by 21:00 on 10 Oct waits until after GTR; nothing is pushed on 11 Oct. The pushed range must contain only the Task 2.2 and 2.3 commits. Live check: `curl -s https://app.cuedeck.io/ | grep -o 'aria-modal="true"' | head -1` prints the string; in Chrome, open Help, then Keyboard shortcuts, press Tab repeatedly (focus stays in the dialog), press Escape (focus returns to Help); trigger no show control. Note to Sherif: "Stage 2 (components) is live: inputs, dialogs, toasts and icons." with before/after pairs for `signage-1440` and `director-1440`.
+Same steps as Task 1.4 with branch `redesign/stage-2` and notes directory `$SCRATCH/notes/stage-2`. Freeze check first: no release task starts after 18:00 on 10 Oct; anything not live-checked by 21:00 on 10 Oct waits until after GTR; nothing is pushed on 11 Oct. The pushed range must contain only the Task 2.2 and 2.3 commits. Live check: `curl -s https://app.cuedeck.io/ | grep -o 'aria-modal="true"' | head -1` prints the string; in Chrome, open Help, then Keyboard shortcuts, press Tab repeatedly (focus stays in the dialog), press Escape (focus returns to Help); trigger no show control. Note to Sherif: "Stage 2 (components) is live: inputs, dialogs, toasts and icons. Escape now also closes the Team and QR dialogs; it still never closes the setup wizard." with before/after pairs for `signage-1440` and `director-1440`. (The branch `redesign/stage-2` was created at the start of Task 2.2, see the Stage 2 heading.)
 
 ---
 
 # Stage 3: Chrome and compact list
 
-Branch: `redesign/stage-3` from `main` after Task 1.4; Task 2.1 is its first commits.
+Branch: `redesign/stage-3`, created from `main` after Task 1.4 with `git -C /Users/sheriff/AVE-Production-Console-redesign switch -c redesign/stage-3 main` (see the Stage 2 heading); Task 2.1 is its first commit.
 
 ### Task 3.1: Header and chrome
 
@@ -2119,15 +2238,16 @@ Branch: `redesign/stage-3` from `main` after Task 1.4; Task 2.1 is its first com
 - Modify `cuedeck-console.html`:
   - HTML: `<!-- BROADCAST BANNER -->` (`#bc-banner`, line 1872); `<!-- HEADER -->` the whole `#header` div (1875-2014); delete `<!-- DIAGNOSTICS -->` `#diag-bar` (2016-2022) and `<!-- ROLE BAR -->` `#role-bar` (2025-2034); in `#sidebar` delete the `#ai-agents-wrap` section (2072-2101), the `#ave-brain-wrap` section (2103-2108) and the `SERVER CLOCK` section (2110-2121); `#bc-bar` (2424-2437).
   - CSS: delete the rules for removed elements (`#diag-bar`, `.di`, `#role-bar`, `#role-bar label`, `.rbtn`, `.rbtn:hover`, `.rbtn.active`, `#ev-select-wrap`, `.ev-pill`, `.ev-pill:hover`, `.ev-pill-label`, `.ev-pill-name`, `.ev-pill-chev`, `.ev-pill-dd*`, `.ev-add-btn*`, `#users-btn`, `#users-btn:hover`, `#logout-btn*`, `#billing-btn*`, `#checkin-btn*`, `#auto-start-btn*`, `#conn-pill`, `#conn-dot*`, `#event-name`, `#sb-time`, `.ck-details`, `#presence-bar`, `.pr-role`, `.pr-dot*`, `.uc-sep`, `.uc-caret`, `#bc-bar label`, `.bc-presets`, the RTL lines for `#role-bar`, `#diag-bar`, `#presence-bar`, and in the two responsive blocks the lines for `#role-bar`, `.rbtn`, `.di`, `#diag-bar`, `#ev-select-wrap`); append the block `/* ═══ Command center header and chrome (stage 3) ═══ */`.
-  - JS: `setConn` (4955), `refreshClockUI` (4962), `refreshDiag` (4984), `refreshPresence` (5008), presence sync and `track` in `subscribeControl` (2803-2823), `setRole` (5429), `buildEvSelect`/`toggleEvDropdown`/`closeEvDropdown` (5450-5482), `toggleAutoStart` (5102), `showBCBanner`/`hideBCBanner`/`dismissBanner` (5372-5384), `BC_PRESETS`/`buildBCPresets` (5386-5402), `sendBroadcast` and `clearBroadcast` (3298-3340), `renderUserChip` (6853), `toggleProfilePanel`/`closeProfilePanel` (6895-6919), `loadSubscription` billing line (7132), `loadUserRole` role lock (7631-7637), `loadBrainInsights` (8306), `ROLE_TIPS` (7751), the Escape branch of the keydown handler.
+  - JS: `setConn` (4955), `refreshClockUI` (4962), `refreshDiag` (4984), `refreshPresence` (5008), presence sync and `track` in `subscribeControl` (2803-2823), `setRole` (5429), `buildEvSelect`/`toggleEvDropdown`/`closeEvDropdown` (5450-5482), `toggleAutoStart` (5102), `showBCBanner`/`hideBCBanner`/`dismissBanner` (5372-5384), `BC_PRESETS`/`buildBCPresets` (5386-5402), `sendBroadcast` and `clearBroadcast` (3298-3340), `armOrConfirm` (2981: optional `act` callback and the announcement), the top of `renderSessions()` (one line), `renderUserChip` (6853), `toggleProfilePanel`/`closeProfilePanel` (6895-6919), `loadSubscription` billing line (7132), `loadUserRole` role lock (7631-7637), `loadBrainInsights` (8306), `ROLE_TIPS` (7751), the Escape branch of the keydown handler.
 - Modify `cuedeck-i18n.js`: add the `cc.` keys in Step 6 to each of the four blocks; in `translateStaticDOM()` change the map entries and the help-dropdown loop (Step 7).
 - Create `tests/e2e/console-header.spec.ts`, `tests/console-i18n-keys.spec.ts`.
-- Modify `tests/e2e/console-ui.spec.ts` (tests 06-09, 21, 25), `tests/e2e/auth-flows.spec.ts` (tests 07-21 role clicks), `tests/e2e/session-management.spec.ts` (line 221), `tests/console-colour-ratchet.spec.ts`.
+- Modify `tests/e2e/console-ui.spec.ts` (tests 06-09, 21, 25), `tests/e2e/auth-flows.spec.ts` (tests 07-21 role clicks), `tests/e2e/session-management.spec.ts` (line 221), `tests/e2e/console-tokens.spec.ts` (`META_TEXT`: `'#bc-bar label'` becomes `'#bc-bar .lbl'`), `tests/console-colour-ratchet.spec.ts`. `tests/e2e/console-show-safety.spec.ts` needs no edit: the Test cue alert keeps its `title` and `eventWallClockNow()` (Step 3), and nothing else it selects on changes here.
 
 **Interfaces:**
-- Consumes: `icon()`, `tf()`, `tsHM()`, `.pill`, `.btn`, `.lbl`, tokens, `getUtcOffset(tz)`, `correctedHMS()`.
+- Consumes: `icon()`, `tf()`, `tsHM()`, `.pill`, `.btn`, `.lbl`, tokens, `getUtcOffset(tz)`, `correctedHMS()` (already event-local), `armOrConfirm`, `eventWallClockNow()`, `PRESENCE_ROLES`.
 - Produces ids: `#ev-switch`, `#event-name`, `#event-sub`, `#ev-pill-dd`, `#hdr-clock`, `#conn-pill`/`#conn-dot`/`#conn-lbl`, `#sys-pop` (contains `#dd-db #dl-db #dd-rt #dl-rt #dd-ck #dl-ck #dd-ef #dl-ef #ck-off #ck-rtt #ck-sync #ck-tick #hdr-offset #di-cnt`), `#crew-pill`/`#presence-bar`/`#crew-count`/`#crew-pop`/`#crew-list`, `#brain-wrap`/`#brain-badge`/`#brain-count`/`#brain-pop`/`#ave-brain-wrap`/`#ave-brain-cards`, `#viewas-btn`/`#viewas-lbl`/`#viewas-menu` (holds `.rbtn[data-role]`)/`#role-lock`, `#user-chip`, `#profile-panel` with `#checkin-btn #users-btn #pp-billing-btn #pp-invoices-btn #lang-switcher #auto-start-btn #ai-agents-wrap #ai-report-btn`, `#bc-chip`, `#bc-send`, `#bc-clear`, `#bc-presets-menu`.
-- Produces JS: `applyI18nAttrs(root)`, `togglePopover(id, btn)`, `closePopovers()`, `refreshSysPill()`, `eventClockHMS()`, `eventSubline(ev)`, `setBannerRead(read)`, `reopenBanner()`, `S.presenceList`, `S.bcKey`, `S.bcReadKey`, `S.brainCount`.
+- Produces JS: `applyI18nAttrs(root)`, `togglePopover(id, btn)`, `closePopovers()`, `refreshSysPill()`, `eventSubline(ev)`, `setBannerRead(read)`, `reopenBanner()`, `announce(msg)` (used by `armOrConfirm` for every armed action from here on), `_bcPending`, `renderBCSend()`, `doSendBroadcast()`, `armOrConfirm(…, act)` (optional seventh argument), `S.presenceList`, `S.bcKey`, `S.bcReadKey`, `S.brainCount`.
+- Produces DOM: `#sr-announcer` (`role="status" aria-live="assertive"`, class `.sr-only`).
 - Produces test helper `viewAs(page, role)` in `console-ui.spec.ts` and `auth-flows.spec.ts`.
 
 - [ ] **Step 1: Failing tests.** Create `tests/e2e/console-header.spec.ts`:
@@ -2181,11 +2301,14 @@ test('header: the system pill says All systems, names a failing check, and its p
   await ctx.close();
 });
 
-test('header: crew pill counts roles online and lists names', async ({ browser }) => {
+test('header: crew pill counts roles online and lists the same people', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await expect(page.locator('#crew-count')).toHaveText('Crew 3/5');
   await page.locator('#crew-pill').click();
   await expect(page.locator('#crew-list')).toContainText('Ahmed Fawzy');
+  // The list shows exactly the roles the count counts (PRESENCE_ROLES); signage is in neither.
+  await expect(page.locator('#crew-list li')).toHaveCount(3);
+  await expect(page.locator('#crew-list')).not.toContainText('Bassem Lotfy');
   await ctx.close();
 });
 
@@ -2231,17 +2354,30 @@ test('header: the broadcast banner is 28 px and collapses to a header chip once 
   await ctx.close();
 });
 
-test('header: a critical broadcast needs a second press; info sends on the first', async ({ browser }) => {
+test('header: a critical broadcast needs a second press through the shared arm; info sends on the first', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   const writes: string[] = [];
   page.on('request', r => { if (r.url().includes('/rest/v1/leod_broadcast') && r.method() !== 'GET') writes.push(r.method()); });
+  const send = page.locator('#bc-send');
   await page.locator('#bc-input').fill('Evacuate Hall B');
   await page.locator('#bc-pri').selectOption('critical');
-  await page.locator('#bc-send').click();
-  await expect(page.locator('#bc-send')).toHaveClass(/confirm-pending/);
+  await send.click();
+  await expect(send).toHaveClass(/confirm-pending/);
+  await expect(send).toHaveText('Press again to send');
+  await expect(page.locator('#sr-announcer')).toHaveText('Press again to send');   // announced like End and Cancel
   expect(writes).toEqual([]);
-  await page.locator('#bc-send').click();
+  await page.clock.runFor(1500);                                                  // survives the 1 s re-render
+  await expect(send).toHaveClass(/confirm-pending/);
+  await send.click();
   await expect.poll(() => writes.length).toBe(1);
+  await expect(send).toHaveText('Send');
+  // An arm that is not confirmed lapses after 3 s and sends nothing.
+  await page.locator('#bc-input').fill('Evacuate Hall C');
+  await send.click();
+  await page.clock.runFor(3500);
+  await expect(send).not.toHaveClass(/confirm-pending/);
+  await expect(send).toHaveText('Send');
+  expect(writes.length).toBe(1);
   await page.locator('#bc-input').fill('Doors open');
   await page.locator('#bc-pri').selectOption('info');
   await page.locator('#bc-input').press('Enter');
@@ -2351,7 +2487,7 @@ describe('redesign strings', () => {
   <div id="plan-badge"></div>
   <div class="hdr-pop-wrap" id="viewas-wrap">
     <button type="button" id="viewas-btn" class="pill" aria-haspopup="menu" aria-expanded="false" aria-controls="viewas-menu" onclick="togglePopover('viewas-menu', this)">
-      <span id="viewas-lbl">View as director</span>I(chev-down)
+      <span id="viewas-lbl">View as Director</span>I(chev-down)
     </button>
     <div id="viewas-menu" class="hdr-menu" role="menu" hidden>
       <button type="button" class="rbtn active" role="menuitemradio" aria-checked="true"  data-role="director" onclick="setRole('director');closePopovers()">director</button>
@@ -2403,16 +2539,24 @@ In `#profile-panel`, replace the `<div class="pp-actions"> … </div>` block wit
         <button id="auto-start-btn" class="pp-action" role="menuitemcheckbox" aria-checked="false" onclick="toggleAutoStart()">I(timer)<span class="pp-label" data-i18n="cc.menu.autoStart">Auto-start</span></button>
         <div id="ai-agents-wrap" class="pp-group" style="display:none">
           <div class="lbl pp-group-lbl" data-i18n="cc.menu.tools">Tools</div>
-          <button class="pp-action" role="menuitem" onclick="closeProfilePanel();ensureAgentsInited();CueDeckIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test: check signal path and connections',timestamp:new Date().toLocaleTimeString()})">I(alert)<span class="pp-label" data-i18n="cc.menu.testIncident">Test incident alert</span></button>
-          <button class="pp-action" role="menuitem" onclick="closeProfilePanel();ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(Date.now()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(Date.now()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(Date.now()+8*60000));})()">I(timer)<span class="pp-label" data-i18n="cc.menu.testCue">Test cue alert</span></button>
-          <button class="pp-action" role="menuitem" id="ai-report-btn" onclick="closeProfilePanel();ensureAgentsInited();CueDeckReportAgent.triggerFromCueDeck()">I(report)<span class="pp-label" data-i18n="cc.menu.report">Generate report</span></button>
+          <button class="pp-action" role="menuitem" title="Manually trigger an incident advisory modal" onclick="closeProfilePanel();ensureAgentsInited();CueDeckIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test: check signal path and connections',timestamp:new Date().toLocaleTimeString()})">I(alert)<span class="pp-label" data-i18n="cc.menu.testIncident">Test incident alert</span></button>
+          <button class="pp-action" role="menuitem" title="Fire a demo pre-cue modal (as if 8 min before next session)" onclick="closeProfilePanel();ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(eventWallClockNow()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(eventWallClockNow()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(eventWallClockNow()+8*60000));})()">I(timer)<span class="pp-label" data-i18n="cc.menu.testCue">Test cue alert</span></button>
+          <button class="pp-action" role="menuitem" id="ai-report-btn" title="Generate AI post-event report (auto-loads all session + incident data)" onclick="closeProfilePanel();ensureAgentsInited();CueDeckReportAgent.triggerFromCueDeck()">I(report)<span class="pp-label" data-i18n="cc.menu.report">Generate report</span></button>
         </div>
         <div class="pp-divider"></div>
         <button class="pp-action pp-danger" role="menuitem" onclick="doLogout()">I(logout)<span class="pp-label" data-i18n="cc.menu.signOut">Sign out</span></button>
       </div>
 ```
 
-Delete `#diag-bar`, `#role-bar`, and in `#sidebar` the `#ai-agents-wrap`, `#ave-brain-wrap` and `SERVER CLOCK` sections. Replace `#bc-bar` with:
+The three Tools buttons keep their `title` attributes and `onclick` code from the old sidebar buttons verbatim, apart from `closeProfilePanel();` in front and the em-dash in the incident description. In particular the Test cue alert keeps `eventWallClockNow()` (the show-safety fix: the cue engine reads the event's wall time) and `title="Fire a demo pre-cue …"`, which the safety test `Test Cue Alert counts down about 8 minutes …` clicks; it must never go back to `Date.now()`.
+
+Delete `#diag-bar`, `#role-bar`, and in `#sidebar` the `#ai-agents-wrap`, `#ave-brain-wrap` and `SERVER CLOCK` sections. Directly after `<div id="toast-container"></div>` add the live region every armed action announces into:
+
+```html
+<div id="sr-announcer" class="sr-only" role="status" aria-live="assertive"></div>
+```
+
+Replace `#bc-bar` with:
 
 ```html
 <div id="bc-bar">
@@ -2435,6 +2579,7 @@ Delete `#diag-bar`, `#role-bar`, and in `#sidebar` the `#ai-agents-wrap`, `#ave-
 
 ```css
     /* ═══ Command center header and chrome (stage 3) ═══ */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     #bc-banner { display: none; align-items: center; gap: 10px; height: 28px; padding: 0 16px; font-size: var(--fs-13); font-weight: 600; text-align: start; flex-shrink: 0; animation: none; }
     #bc-banner .bc-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #bc-banner .bc-when { color: var(--text-tertiary); font-weight: 500; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
@@ -2528,12 +2673,13 @@ function closePopovers() {
 }
 document.addEventListener('click', e => { if (!e.target.closest('.hdr-pop-wrap')) closePopovers(); });
 
-// Header clock: event-local time with seconds (spec 2.4).
-function eventClockHMS() {
-  try {
-    return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone: S.event?.timezone || undefined })
-      .format(new Date(correctedNow()));
-  } catch { return correctedHMS(); }
+// Live region for armed confirms (spec 2.3): armOrConfirm calls it for every
+// two-press action. Synchronous on purpose (a frame callback never fires under
+// the paused test clock); a trailing no-break space makes a repeat a change.
+function announce(msg) {
+  const el = document.getElementById('sr-announcer');
+  if (!el) return;
+  el.textContent = el.textContent === msg ? msg + ' ' : msg;
 }
 // "Tue 6 Oct · Cairo UTC+3"
 function eventSubline(ev) {
@@ -2587,7 +2733,7 @@ function setConn(st) {
 }
 ```
 
-`refreshClockUI`: change `document.getElementById('hdr-clock').textContent = ts;` to `document.getElementById('hdr-clock').textContent = eventClockHMS();` and delete the `sb-time` line.
+`refreshClockUI`: delete only the `document.getElementById('sb-time').textContent   = ts;` line (the sidebar clock is gone). `#hdr-clock` keeps `ts = correctedHMS()`, which is already event-local time with seconds (`eventLocalHMS`, show-safety); no second clock formatter is added.
 
 `refreshDiag`:
 
@@ -2620,7 +2766,8 @@ function refreshPresence() {
   if (cnt) cnt.textContent = tf('cc.hdr.crew', { on: online.length, all: PRESENCE_ROLES.length });
   const list = document.getElementById('crew-list');
   if (list) {
-    const people = (S.presenceList || []).filter(p => p.role);
+    // List exactly the roles the count counts, so "Crew 3/5" shows three names.
+    const people = (S.presenceList || []).filter(p => PRESENCE_ROLES.includes(p.role));
     list.innerHTML = people.length
       ? people.map(p => `<li><span class="crew-dot"></span><span>${esc(p.name || '–')}</span><span class="crew-role">${esc(t('role.' + p.role))}</span></li>`).join('')
       : `<li class="crew-none">${esc(t('cc.hdr.crewNone'))}</li>`;
@@ -2734,26 +2881,36 @@ function buildBCPresets() {
 }
 ```
 
-`sendBroadcast`: insert after `if (!msg || !S.event) return;`:
+`armOrConfirm` (show-safety, the one two-press helper): give it an optional seventh argument `act`, called instead of `transition` on the confirming press, and announce the armed label. Its signature line becomes `function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms, act) {`; in the confirming branch replace `transition(sessionId, toStatus);` with `if (act) act(); else transition(sessionId, toStatus);`; and directly after `if (btn) { btn.textContent = t(labelKey); btn.classList.add('confirm-pending'); }` add `announce(t(labelKey));`. Nothing else in it changes: End and Cancel keep their status-aware arms, and their armed label is now announced too.
+
+`sendBroadcast`: the critical send uses that same helper, keyed `'critical'` in its own map (no session status, so the arm holds until confirmed or 3 s pass). Rename the existing `async function sendBroadcast() { … }` to `async function doSendBroadcast() { … }` (body unchanged) and add above it:
 
 ```js
-  // Critical needs a second press within 3 s (spec 2.9); info and warn send at once.
-  const sendBtn = document.getElementById('bc-send');
-  if (pri === 'critical' && !_sendCritical.armed) {
-    _sendCritical.armed = true;
-    if (sendBtn) { sendBtn.classList.add('confirm-pending'); sendBtn.textContent = t('cc.bc.pressAgain'); }
-    _sendCritical.timer = setTimeout(() => {
-      _sendCritical.armed = false;
-      if (sendBtn) { sendBtn.classList.remove('confirm-pending'); sendBtn.textContent = t('cc.bc.send'); }
-    }, 3000);
+// Critical needs a second press within 3 s (spec 2.9); info and warn send at once.
+// The arm is the shared one (armOrConfirm): solid red, announced, re-render safe.
+const _bcPending = new Map();
+function sendBroadcast() {
+  const msg = document.getElementById('bc-input').value.trim();
+  const pri = document.getElementById('bc-pri').value;
+  if (!msg || !S.event) return;
+  if (pri === 'critical') {
+    armOrConfirm(_bcPending, 'critical', document.getElementById('bc-send'), null, 'cc.bc.pressAgain', 3000, doSendBroadcast);
     return;
   }
-  clearTimeout(_sendCritical.timer);
-  _sendCritical.armed = false;
-  if (sendBtn) { sendBtn.classList.remove('confirm-pending'); sendBtn.textContent = t('cc.bc.send'); }
+  doSendBroadcast();
+}
+// The Send button renders from _bcPending (like End and Cancel render from
+// theirs), so its label follows the arm, its re-renders and its timeout.
+function renderBCSend() {
+  const btn = document.getElementById('bc-send');
+  if (!btn) return;
+  const armed = _bcPending.has('critical');
+  btn.classList.toggle('confirm-pending', armed);
+  btn.textContent = t(armed ? 'cc.bc.pressAgain' : 'cc.bc.send');
+}
 ```
 
-and declare `const _sendCritical = { armed: false, timer: null };` directly above `async function sendBroadcast()`. In `clearBroadcast`, change `btn.textContent = 'CONFIRM CLEAR'` to `btn.textContent = t('confirm.confirmClear')` and both `btn.textContent = 'CLEAR'` to `btn.textContent = t('cc.bc.clear')`.
+At the very top of `renderSessions()` add `renderBCSend();` (armOrConfirm re-renders on arm, confirm and timeout). In `clearBroadcast`, change `btn.textContent = 'CONFIRM CLEAR'` to `btn.textContent = t('confirm.confirmClear')` and both `btn.textContent = 'CLEAR'` to `btn.textContent = t('cc.bc.clear')`.
 
 `renderUserChip` (neutral avatar, no per-role colours):
 
@@ -2856,6 +3013,19 @@ Escape branch of the `keydown` handler: after `closeProfilePanel();` add `closeP
 
 Each row becomes one line per block in the file's style, for example in `en`: `      'cc.hdr.allSystems': 'All systems',`.
 
+The header is where role names first appear as text ("View as …", the role-lock pill, the crew list), so their existing `role.*` values become sentence case here rather than in Task 5.2 (they are uppercase on `main`: `DIRECTOR`, `STAGE`, …). Change these values in place (Arabic unchanged; `role.av` stays `AV`):
+
+| Key | en | pl | de |
+|---|---|---|---|
+| `role.director` | Director | Reżyser | Regie |
+| `role.stage` | Stage | Scena | Bühne |
+| `role.interp` | Interp | Tłumacz | Dolm. |
+| `role.reg` | Reg | Rejestr. | Empfang |
+| `role.signage` | Signage | Ekrany | Anzeigen |
+| `role.label` | Role | Rola | Rolle |
+
+(`role.*` is used only by `translateStaticDOM()` and the new header code; no test matches the uppercase text.)
+
 - [ ] **Step 7: `translateStaticDOM()`** in `cuedeck-i18n.js`: in `map`, delete `'#role-bar > label': 'role.label',` and `'#bc-bar > label': 'bc.label',`, change `'#users-btn': 'hdr.operators',` to `'#users-btn .pp-label': 'cc.menu.team',` and `'#help-btn': 'hdr.help',` to `'#help-btn > span:not(.changelog-badge)': 'hdr.help',`. Replace the help-dropdown loop with:
 
 ```js
@@ -2899,29 +3069,32 @@ In `console-ui.spec.ts` test 06 replace the body after `bypassOverlay(page);` wi
 
 In `session-management.spec.ts` line 221 change `await expect(page.locator('.rbtn[data-role="director"]')).toBeVisible({ timeout: 5000 });` to `await expect(page.locator('#viewas-btn')).toBeVisible({ timeout: 5000 });`.
 
+In `tests/e2e/console-tokens.spec.ts` change `META_TEXT`'s `'#bc-bar label'` to `'#bc-bar .lbl'` (the composer's label is now the section-label component; the contrast check keeps running on it).
+
 - [ ] **Step 9: Run.**
 
 ```bash
 npx vitest run
-CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-header.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/e2e/ai-agents.spec.ts
+CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-header.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/e2e/ai-agents.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts
 ```
 
-Expected: vitest passes after you set the ratchet `BUDGET` to the printed count (it drops: the role colour map and header literals are gone); header 9 passed; the others pass.
+Expected: vitest passes after you set the ratchet `BUDGET` to the printed count (it drops: the role colour map and header literals are gone); header 9 passed; the others pass, including `Test Cue Alert counts down about 8 minutes for a Cairo event in a UTC browser` (the button now lives in the account menu with the same title and clock) and the END/CANCEL confirm tests (the `armOrConfirm` change adds only the announcement and the optional `act`).
 
-- [ ] **Step 10: Baselines.** `--update-snapshots` on the visual suite; review: one 52 px header with event name and "Tue 6 Oct · Cairo UTC+3", masked clock, "All systems", "Crew 3/5", "View as director", Help and avatar; no diagnostics strip or role bar; sidebar without AI buttons and server clock; composer 52 px with Presets, Send and Clear. The `stage-1440` and `av-1440` baselines show the role name pill instead of View as. Full console suite `0 failed`.
+- [ ] **Step 10: Baselines.** `--update-snapshots` on the visual suite; review: one 52 px header with event name and "Tue 6 Oct · Cairo UTC+3", masked clock, "All systems", "Crew 3/5", "View as Director", Help and avatar; no diagnostics strip or role bar; sidebar without AI buttons and server clock; composer 52 px with Presets, Send and Clear. The `stage-1440` and `av-1440` baselines show the role name pill instead of View as. Full console suite `0 failed`.
 
 - [ ] **Step 11: Commit.**
 
 ```bash
-git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-header.spec.ts tests/console-i18n-keys.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-header.spec.ts tests/console-i18n-keys.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-tokens.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 git commit -m "feat(console): new header; diagnostics and role bar fold into it; AI tools move to the account menu
 
 Event switcher button, event-local clock, All systems pill with a status
 popover, crew presence, View as for directors, account menu with Tools,
 broadcast banner that collapses to a chip, composer with a presets menu and
-a two-press critical send.
+a two-press critical send through the shared armOrConfirm, which now also
+announces every armed label.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-header.spec.ts tests/console-i18n-keys.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-header.spec.ts tests/console-i18n-keys.spec.ts tests/e2e/console-ui.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-tokens.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
 
 ### Task 3.2: Compact list
@@ -2930,14 +3103,16 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html
 - Modify `cuedeck-console.html`:
   - CSS: delete the old card rules: `/* ── SESSION CARDS ── */` `.sc`, `.sc:focus`, `.sc:focus-visible`, the per-status `.sc.status-*` rules, `.sc-top`, `.sc-num`, `.sc-title`, `.sc.status-CANCELLED .sc-title`, `.sc-meta`, `.sc-meta .spk`, `.sc-meta > span:not(.spk):not([style])`, `.sc-times`, `.tc`, `.tv`, `.tv.late`, `.delay-tag`, `.prog-wrap`, `.prog-fill`, `.prog-fill.ov`, `.live-timer`, `.lt-elapsed`, `.lt-remain`, `.lt-remain.ov`, `.arrived-tag`, `.sc.warn-amber`, `.sc.warn-red`, `.lt-remain.warn-*`, `.sc-notes-toggle*`, `.sc-notes-body*`, `.sc-mgmt`, `.sc-mgmt-btn*`, the `#delay-strip` rules, `.sc.delayed`, `.sc.delay-origin`, `.delay-break*`, `.next-up-label`, `#filter-bar`, the RTL `.sc*`/`.delay-tag` lines, the mobile `.sc-times`/`.sc-top`/`.sc-meta`/`.sc-actions` lines and the coarse-pointer `.sc-mgmt-btn`/`.sc-actions` lines; append `/* ═══ Command center compact list (stage 3) ═══ */`.
   - HTML: `<div id="filter-bar">` (2037) and the `#sessions-col` children (2045-2053).
-  - JS: `S` (2592, new fields), `renderSessions()` from `const list = document.getElementById('sessions-list');` to its end (3509-3581), `cardHTML()` (3816-3898, deleted and replaced by `rowHTML()`), `handleCardKey()` (3948-3956), `updateDelayStrip()` (3755-3777), `buildFilterBar()` (5487-5513), `toggleNotes()` (5242-5246, deleted), `renderTimeline()` (delete the line `document.getElementById('delay-strip').style.display = 'none';`), the signage branch of `renderSessions()` (same line).
+  - JS: `S` (2592, new fields), `renderSessions()` from `const list = document.getElementById('sessions-list');` to its end (3509-3581), `cardHTML()` (3887-3975 on `3fd0971`, deleted and replaced by `rowHTML()`), `buildFlags()` (4115, deleted: `cardHTML` was its only caller), `handleCardKey()` (3948-3956), `updateDelayStrip()` (3755-3777), `buildFilterBar()` (5627: OVERRUN gets a status option), `toggleNotes()` (5242-5246, deleted), `switchEvent()` (5667: reset the list state), the `// ── Fractional Seconds` 200 ms updater (5196: re-pointed at the new countdowns), the condition in the 1 s `// LOCAL TICK` (6389: also re-render while a session is on HOLD), `renderTimeline()` (delete the line `document.getElementById('delay-strip').style.display = 'none';`), the signage branch of `renderSessions()` (same line).
 - Modify `cuedeck-i18n.js`: keys in Step 6; in `translateStaticDOM()` delete the `// Filter bar Clear All button` and `// View toggle pills` blocks.
-- Create `tests/e2e/console-list.spec.ts`. Modify `tests/e2e/console-restart.spec.ts`, `tests/e2e/auth-flows.spec.ts` (test 24), `tests/console-colour-ratchet.spec.ts`.
+- Create `tests/e2e/console-list.spec.ts`. Modify `tests/e2e/console-restart.spec.ts`, `tests/e2e/auth-flows.spec.ts` (test 24), `tests/e2e/console-show-safety.spec.ts` (Step 7b), `tests/console-colour-ratchet.spec.ts`.
 
 **Interfaces:**
-- Consumes: `statusBadge`, `chipHTML`, `icon`, `tf`, `hm`, `sessionSpan`, `FINISHED`, `getNextSession`, `_endPending`, `_cancelPending`, `confirmEnd`, `confirmCancel`, `transition`, `buildButtons`, `applyFilters`, `F`.
-- Produces JS (used by 4.1, 4.2, 5.1): `canDo(s, to)`, `ACTION_ORDER`, `primaryTransition(s)`, `actionLabel(from, to)`, `transitionButtonHTML(s, to, size, fk)`, `primaryButtonHTML(s, size, fk)`, `endButtonHTML(s, size, fk)`, `cancelButtonHTML(s, size, fk)`, `liveTiming(s, nowMs)`, `countdownLabel(s, nowMs)` returning `{ text, cls, big, unit }`, `people(s)`, `speakerLine(s)`, `speakerShort(s)`, `flagsHTML(s)`, `subLine(s, showNote)`, `rowHTML(s, nowMs, ctx)`, `foldRowHTML(kind, list, open)`, `toggleFold(kind)`, `selectSession(id)`, `toggleEditMode()`, `focusKey()`, `restoreFocus(fk)`; state `S.selectedId`, `S.foldOpen`, `S.editMode`, `S.listOpened`.
-- Produces CSS: `.sc` row grid, `.sc-badge .sc-num .sc-main .sc-title-line .sc-title .sc-sub .sc-spk .sc-flag .sc-arrived .sc-notefirst .sc-room .sc-time .sc-delay .sc-act .sc-tools .sc-drawer .sc-notes-full .sc-fold .sc-anchor .sc-addrow`, `.is-selected`, `body.edit-mode`, `#fb-controls`, `.delay-chip`.
+- Consumes: `statusBadge`, `chipHTML`, `icon`, `tf`, `hm`, `tsHM`, `sessionSpan`, `FINISHED`, `getNextSession`, `isArmed`, `_endPending`, `_cancelPending` (read only through `isArmed`), `confirmEnd`, `confirmCancel` (both `armOrConfirm`), `transition`, `buildButtons`, `applyFilters`, `F`, `fmtDur`, `pad`.
+- Produces JS (used by 4.1, 4.2, 5.1): `canDo(s, to)`, `ACTION_ORDER`, `primaryTransition(s)`, `actionLabel(from, to)`, `FWD_CLASS`, `transitionButtonHTML(s, to, size, fk)`, `primaryButtonHTML(s, size, fk)`, `endButtonHTML(s, size, fk)`, `cancelButtonHTML(s, size, fk)`, `liveTiming(s, nowMs)`, `fmtRemain(ms)`, `countdownText(remain, fmt)`, `countdownLabel(s, nowMs)` returning `{ text, cls, big, unit }` (`cls` carries ` warn-amber` in the last 5 minutes and ` warn-red` in the last minute), `warnCls(cd)`, `people(s)`, `speakerLine(s)`, `speakerShort(s)`, `flagsHTML(s)`, `subLine(s, showNote)`, `rowHTML(s, nowMs, ctx)`, `foldRowHTML(kind, list, open)`, `toggleFold(kind)`, `selectSession(id)`, `toggleEditMode()`, `focusKey()`, `restoreFocus(fk)`; state `S.selectedId`, `S.foldOpen`, `S.editMode`, `S.listOpened`.
+- Produces CSS: `.sc` row grid, `.sc-badge .sc-num .sc-main .sc-title-line .sc-title .sc-sub .sc-spk .sc-flag .sc-arrived .sc-notefirst .sc-room .sc-time .sc-delay .sc-act .sc-tools .sc-drawer .sc-drawer-times .sc-notes-full .sc-fold .sc-anchor .sc-addrow`, `.is-selected`, `.warn-amber`, `.warn-red`, `body.edit-mode`, `#fb-controls`, `.delay-chip`.
+- Produces DOM: every running countdown text carries `data-cd-sid="<session id>"` and `data-cd-fmt="text"` (list) or `"big"` (band, inspector, phone); the 200 ms updater writes the final-minute tenths into exactly those elements.
+- Carried over from the cards it deletes (no spec section removes them): the 5-minute amber and 1-minute red wrap-up warnings (now on the countdown text and a 1 px ring, never on the left edge, which stays the status colour; no pulse, per the spec's motion rule) and the final-minute tenths from the 200 ms updater.
 
 - [ ] **Step 1: Failing tests.** Create `tests/e2e/console-list.spec.ts`:
 
@@ -3000,6 +3175,38 @@ test('list: one primary action per row that follows the action colour rule', asy
   await expectAct(ID(4), 'On stage', /fwd-go/);
   await expectAct(PANEL_ID, 'End…', /danger/);
   await expectAct(ID(2), 'Resume', /fwd-go/);
+  // Backward moves are secondary, never green: "Back to ready" from CALLING or HOLD.
+  for (const id of [ID(4), ID(2)]) {
+    const html = await evalPage(page, `transitionButtonHTML(S.sessions.find(x => x.id === '${id}'), 'READY', 'sm', 't')`) as string;
+    expect(html).toContain('Back to ready');
+    expect(html).not.toMatch(/\bfwd/);
+  }
+  await ctx.close();
+});
+
+test('list: wrap-up warnings at 5 and 1 minute, and tenths in the final minute', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  // The panel is scheduled for 30 minutes; place its start so that `ms` remain.
+  const setRemain = (ms: number) => evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').actual_start = new Date(correctedNow() - (30 * 60_000 - ${ms})).toISOString(); renderSessions();`);
+  const row = page.locator(`#card-${PANEL_ID}`);
+  await setRemain(4 * 60_000);
+  await expect(row.locator('.sc-time')).toHaveClass(/warn-amber/);
+  await expect(row).toHaveClass(/warn-amber/);
+  expect(await row.evaluate(el => getComputedStyle(el).borderLeftColor)).toBe('rgb(239, 68, 68)');   // the edge still means LIVE
+  await setRemain(30_000);
+  await expect(row.locator('.sc-time')).toHaveClass(/warn-red/);
+  expect(await row.evaluate(el => getComputedStyle(el).animationName)).toBe('none');                  // no pulse
+  await page.clock.runFor(400);                                                                      // two 200 ms updates
+  await expect(row.locator('[data-cd-sid]')).toHaveText(/^0:(29|30)\.\d left$/);
+  await ctx.close();
+});
+
+test('list: a held timer keeps counting when nothing is live', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').status = 'ENDED'; renderSessions();`);
+  await expect(page.locator(`#card-${ID(2)} .sc-time`)).toContainText('held 9:45');
+  await page.clock.runFor(2000);                                                                     // the 1 s tick alone, no explicit render
+  await expect(page.locator(`#card-${ID(2)} .sc-time`)).toContainText('held 9:47');
   await ctx.close();
 });
 
@@ -3058,7 +3265,7 @@ test('list: a 140-character title and nine speakers stay inside the row', async 
 });
 ```
 
-- [ ] **Step 2: Run, expect failure.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-list.spec.ts`. Expected: 9 failed (cards are 150 px tall, no `.sc-fold`, no `.sc-act`).
+- [ ] **Step 2: Run, expect failure.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-list.spec.ts`. Expected: 11 failed (cards are 150 px tall, no `.sc-fold`, no `.sc-act`, no `transitionButtonHTML`, no `[data-cd-sid]`, and the held timer freezes because the tick only re-renders for LIVE and OVERRUN).
 
 - [ ] **Step 3: Markup.** Replace `<div id="filter-bar"><!-- populated by buildFilterBar() --></div>` with:
 
@@ -3106,28 +3313,34 @@ const ACTION_KEYS = {
 };
 function actionLabel(from, to) { const k = ACTION_KEYS[from + '>' + to]; return k ? t(k) : t('status.' + to); }
 // Action colours (controller ruling): Set ready and anything that puts a session on
-// stage are green, Call speaker is yellow; red is only for End/Cancel and the armed state.
-const FWD_CLASS = { READY: 'fwd fwd-ready', CALLING: 'fwd fwd-calling', LIVE: 'fwd fwd-go' };
+// stage are green (.fwd-go), Call speaker is yellow; red is only for End/Cancel and
+// the armed state. Keyed by move: backward moves (Back to ready, Back to planned,
+// HOLD to CALLING) and Reinstate are secondary.
+const FWD_CLASS = {
+  'PLANNED>READY': 'fwd fwd-ready', 'READY>CALLING': 'fwd fwd-calling',
+  'READY>LIVE': 'fwd fwd-go', 'CALLING>LIVE': 'fwd fwd-go', 'HOLD>LIVE': 'fwd fwd-go',
+};
 function transitionButtonHTML(s, to, size, fk) {
   if (to === 'ENDED') return endButtonHTML(s, size, fk);
   if (to === 'CANCELLED') return cancelButtonHTML(s, size, fk);
-  const forward = ['READY', 'CALLING', 'LIVE'].includes(to) && !(s.status === 'HOLD' && to !== 'LIVE');
-  const cls = to === 'HOLD' ? 'hold' : forward ? FWD_CLASS[to] : '';
+  const cls = to === 'HOLD' ? 'hold' : (FWD_CLASS[s.status + '>' + to] || '');
   return `<button type="button" class="btn ${size} ${cls}" data-fk="${fk}-${to}-${s.id}" onclick="event.stopPropagation();transition('${s.id}','${to}')">${to === 'HOLD' ? icon('pause') : ''}${esc(actionLabel(s.status, to))}</button>`;
 }
 function primaryButtonHTML(s, size, fk) {
   const to = primaryTransition(s);
   return to ? transitionButtonHTML(s, to, size, fk) : '';
 }
-// Two-press End and Cancel: the armed state comes from the safety branch's maps.
+// Two-press End and Cancel through the show-safety helpers: isArmed() reads the
+// arm for this session's (normalised) status, so an END armed on LIVE still
+// shows armed after the flip to OVERRUN, and a stale arm never shows.
 function endButtonHTML(s, size, fk) {
   if (!canDo(s, 'ENDED')) return '';
-  const armed = _endPending.has(s.id);
+  const armed = isArmed(_endPending, s);
   return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-end-${s.id}" onclick="event.stopPropagation();confirmEnd('${s.id}',this)">${esc(armed ? t('confirm.confirmEnd') : t('cc.act.end'))}</button>`;
 }
 function cancelButtonHTML(s, size, fk) {
   if (!canDo(s, 'CANCELLED')) return '';
-  const armed = _cancelPending.has(s.id);
+  const armed = isArmed(_cancelPending, s);
   return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-cancel-${s.id}" onclick="event.stopPropagation();confirmCancel('${s.id}',this)">${esc(armed ? t('confirm.confirmCancel') : t('cc.act.cancel'))}</button>`;
 }
 
@@ -3138,16 +3351,34 @@ function liveTiming(s, nowMs) {
   const remain = durMs - elapsed;
   return { elapsed, durMs, remain, overrun: remain < 0, pct: Math.max(0, Math.min(100, (elapsed / Math.max(1, durMs)) * 100)) };
 }
+// Remaining time as every countdown shows it: m:ss, and m:ss.t (tenths) in the
+// final minute. One formatter for the 1 s render and the 200 ms updater, so the
+// two never disagree.
+function fmtRemain(ms) {
+  const abs = Math.abs(ms);
+  if (abs >= 60_000) return fmtDur(ms);
+  return `0:${pad(Math.floor(abs / 1000))}.${Math.floor((abs % 1000) / 100)}`;
+}
+// fmt 'text': list cell ("19:15 left", "+10:45 over"); fmt 'big': band, inspector, phone ("19:15", "+10:45").
+function countdownText(remain, fmt) {
+  const v = fmtRemain(remain);
+  if (fmt === 'big') return remain < 0 ? '+' + v : v;
+  return remain < 0 ? tf('cc.time.over', { time: v }) : tf('cc.time.left', { time: v });
+}
+// " warn-amber" / " warn-red" from a countdown, for the element that shows it.
+function warnCls(cd) { return (cd && / warn-(amber|red)/.exec(cd.cls || '')?.[0]) || ''; }
 // "19:57 left", "+10:02 over", "held 3:12"; null when the session is not running.
+// Wrap-up warnings carried over from the old cards: amber under 5 minutes, red under 1.
 function countdownLabel(s, nowMs) {
   if (s.status === 'LIVE' || s.status === 'OVERRUN') {
     const tm = liveTiming(s, nowMs);
     if (!tm) return null;
     if (tm.overrun || s.status === 'OVERRUN') {
-      const over = fmtDur(Math.min(tm.remain, 0));
-      return { text: tf('cc.time.over', { time: over }), cls: 'is-over', big: '+' + over, unit: t('cc.time.overUnit') };
+      const r = Math.min(tm.remain, -1);   // an OVERRUN session always reads "+…" (also after a nudge)
+      return { text: countdownText(r, 'text'), cls: 'is-over', big: countdownText(r, 'big'), unit: t('cc.time.overUnit') };
     }
-    return { text: tf('cc.time.left', { time: fmtDur(tm.remain) }), cls: 'is-live', big: fmtDur(tm.remain), unit: t('cc.time.leftUnit') };
+    const warn = tm.remain < 60_000 ? ' warn-red' : tm.remain < 300_000 ? ' warn-amber' : '';
+    return { text: countdownText(tm.remain, 'text'), cls: 'is-live' + warn, big: countdownText(tm.remain, 'big'), unit: t('cc.time.leftUnit') };
   }
   if (s.status === 'HOLD') {
     if (!s.state_changed_at) return { text: t('cc.time.onHold'), cls: 'is-held', big: '–', unit: t('cc.time.onHold') };
@@ -3193,8 +3424,9 @@ function rowHTML(s, nowMs, ctx) {
   const sel = S.selectedId === s.id;
   const cd = countdownLabel(s, nowMs);
   const delayed = (s.cumulative_delay || 0) > 0;
+  const running = s.status === 'LIVE' || s.status === 'OVERRUN';
   const timeCell = cd
-    ? `<span class="sc-time ${cd.cls}" data-timer>${esc(cd.text)}<small>${sessionSpan(s)}</small></span>`
+    ? `<span class="sc-time ${cd.cls}" data-timer><span class="cd-txt"${running ? ` data-cd-sid="${s.id}" data-cd-fmt="text"` : ''}>${esc(cd.text)}</span><small>${sessionSpan(s)}</small></span>`
     : `<span class="sc-time">${sessionSpan(s)}${delayed ? `<small>${esc(tf('cc.list.was', { time: hm(s.planned_start) }))}</small>` : ''}</span>`;
   const tools = isDirector ? `<span class="sc-tools" onclick="event.stopPropagation()">
       <input type="checkbox" class="batch-chk" data-sid="${s.id}" aria-label="${esc(tf('cc.list.selectFor', { title: s.title }))}" onclick="toggleBatchSelect('${s.id}',this.checked)" ${_batchSelected.has(s.id) ? 'checked' : ''}>
@@ -3203,10 +3435,11 @@ function rowHTML(s, nowMs, ctx) {
       <button type="button" class="btn ghost sm icon-only" data-fk="edit-${s.id}" title="${esc(t('cc.list.edit'))}" aria-label="${esc(t('cc.list.edit'))}" onclick="openSessModal('edit','${s.id}')">${icon('edit')}</button>
     </span>` : '';
   const showNote = ctx.liveIds.has(s.id) || ctx.nextIds.has(s.id);
+  // The drawer keeps every control and the actual start (event time) until the inspector takes over in 4.2.
   const drawer = sel
-    ? `<div class="sc-drawer" onclick="event.stopPropagation()">${buildButtons(s)}${s.notes && s.notes.trim() ? `<div class="sc-notes-full">${esc(s.notes)}</div>` : ''}</div>`
+    ? `<div class="sc-drawer" onclick="event.stopPropagation()">${s.actual_start ? `<div class="sc-drawer-times">${esc(t('time.started'))} ${tsHM(s.actual_start)}</div>` : ''}${buildButtons(s)}${s.notes && s.notes.trim() ? `<div class="sc-notes-full">${esc(s.notes)}</div>` : ''}</div>`
     : '';
-  return `<div class="sc status-${s.status}${sel ? ' is-selected' : ''}" id="card-${s.id}" tabindex="0" data-fk="row-${s.id}"
+  return `<div class="sc status-${s.status}${warnCls(cd)}${sel ? ' is-selected' : ''}" id="card-${s.id}" tabindex="0" data-fk="row-${s.id}"
       aria-label="${esc(s.title)}, ${esc(t('status.' + s.status))}"${sel ? ' aria-current="true"' : ''}
       onclick="selectSession('${s.id}')" onkeydown="handleCardKey(event,'${s.id}')">
     <span class="sc-badge">${statusBadge(s.status)}</span>
@@ -3366,7 +3599,7 @@ function updateDelayStrip() {
 }
 ```
 
-`buildFilterBar()`: keep its option-building lines (including the safety branch's "Active" status option) and make these changes: add `const ctl = document.getElementById('fb-controls'); if (!ctl) return;` after the `bar` check and write `ctl.innerHTML = …` instead of `bar.innerHTML = …`; add `const isDirector = S.role === 'director' || S.userRole === 'director';`; give the search input `aria-label="' + t('filter.searchPlaceholder') + '"`; replace the `filter-toggle-btn`, `fb-clear`, view pill and `tl-auto-toast` pieces of the string with:
+`buildFilterBar()`: keep its option-building lines (including the show-safety "Active" status option, `<option value="ACTIVE">`, which the safety boot spec expects as the stage and av default) and make these changes: add `'OVERRUN'` to `statuses` after `'LIVE'` (`const statuses = ['PLANNED','READY','CALLING','LIVE','OVERRUN','HOLD','ENDED','CANCELLED'];`), so a status filter can show an overrunning session (choosing "LIVE" alone hides it, as on `main`); add `const ctl = document.getElementById('fb-controls'); if (!ctl) return;` after the `bar` check and write `ctl.innerHTML = …` instead of `bar.innerHTML = …`; add `const isDirector = S.role === 'director' || S.userRole === 'director';`; give the search input `aria-label="' + t('filter.searchPlaceholder') + '"`; replace the `filter-toggle-btn`, `fb-clear` and view pill pieces of the string with:
 
 ```js
     '<button type="button" id="filter-toggle-btn" class="btn sm" onclick="toggleFilters()">' + icon('chev-right') + ' Filters</button>' +
@@ -3385,6 +3618,48 @@ function updateDelayStrip() {
 ```
 
 In `renderTimeline()` and in the signage branch of `renderSessions()` delete `document.getElementById('delay-strip').style.display = 'none';`.
+
+Delete `function buildFlags(s) { … }` (its only caller was `cardHTML`; `flagsHTML` replaces it).
+
+Re-point the 200 ms final-minute updater at the new countdowns. Replace the whole block that starts `// ── Fractional Seconds (final 60s, 200ms interval) ──` (the `setInterval` over `.lt-remain[data-sid]`, whose elements no longer exist) with:
+
+```js
+// ── Fractional seconds (final 60 s, 200 ms): every countdown marked data-cd-sid ──
+// List rows (fmt "text"), band lanes, the inspector and phone cards (fmt "big").
+setInterval(() => {
+  const nowMs = correctedNow();
+  document.querySelectorAll('[data-cd-sid]').forEach(el => {
+    const s = S.sessions.find(x => x.id === el.dataset.cdSid);
+    if (!s || (s.status !== 'LIVE' && s.status !== 'OVERRUN')) return;
+    const tm = liveTiming(s, nowMs);
+    if (!tm || Math.abs(tm.remain) >= 60_000) return;
+    el.textContent = countdownText(s.status === 'OVERRUN' ? Math.min(tm.remain, -1) : tm.remain, el.dataset.cdFmt);
+  });
+}, 200);
+```
+
+In the 1 s `// LOCAL TICK`, replace
+
+```js
+  // Re-render if any LIVE/OVERRUN session for live timer
+  if (S.sessions.some(s => s.status === 'LIVE' || s.status === 'OVERRUN')) renderSessions();
+```
+
+with
+
+```js
+  // Re-render while a timer is on screen: live countdowns and the held timer ("held m:ss").
+  if (S.sessions.some(s => ['LIVE', 'OVERRUN', 'HOLD'].includes(s.status))) renderSessions();
+```
+
+(Task 4.1 widens this once the band shows "in N min".)
+
+In `switchEvent()`, after the line `F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch`, add:
+
+```js
+  // The list of the new event opens at its first unfinished row, nothing selected or unfolded.
+  S.listOpened = false; S.selectedId = null; S.foldOpen = { ENDED: false, CANCELLED: false };
+```
 
 - [ ] **Step 5: CSS.** Delete the rules listed under Files and append:
 
@@ -3436,9 +3711,15 @@ In `renderTimeline()` and in the signage branch of `renderSessions()` delete `do
     .sc-room { min-width: 0; }
     .sc-time { display: grid; font-variant-numeric: tabular-nums; color: var(--text-secondary); font-size: var(--fs-13); }
     .sc-time small { font-size: var(--fs-11); color: var(--text-tertiary); font-weight: 400; }
-    .sc-time.is-live { color: var(--st-live-fg); font-weight: 700; }
+    .sc-time.is-live { color: var(--text-primary); font-weight: 700; }
     .sc-time.is-over { color: var(--st-overrun-fg); font-weight: 700; }
     .sc-time.is-held { color: var(--st-hold-fg); font-weight: 700; }
+    /* Wrap-up warnings (from the old cards): text colour and a ring, never the status edge, no pulse */
+    .sc-time.warn-amber { color: var(--st-hold-fg); }
+    .sc-time.warn-red   { color: var(--st-live-fg); }
+    .sc.warn-amber { box-shadow: inset 0 0 0 1px var(--st-hold-line); }
+    .sc.warn-red   { box-shadow: inset 0 0 0 1px var(--st-live); }
+    .sc-drawer-times { font-size: var(--fs-12); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
     .sc-delay { font-size: var(--fs-12); color: var(--st-hold-fg); font-variant-numeric: tabular-nums; }
     .sc-act { justify-self: end; display: flex; gap: 6px; }
     .sc-tools { display: none; gap: 2px; align-items: center; flex: none; }
@@ -3544,24 +3825,254 @@ In `tests/e2e/auth-flows.spec.ts` test 24 replace `await page.locator('button.fw
     await page.locator(`#card-${process.env.TEST_SESSION_ID} .sc-drawer button.fwd-go`).first().click();
 ```
 
+- [ ] **Step 7b: Show-safety specs (same commit).** The cards' `.sc-actions` now exist only in the selected row's drawer, the batch checkbox shows on hover, `.sc-times` and `.delay-tag` are gone, and a delay no longer draws a top line (spec 2.2: the left edge is status, the delay has its own column). Edit `tests/e2e/console-show-safety.spec.ts` as follows; every assertion keeps its meaning, and the labels move into one constant that Tasks 4.2 and 5.2 update.
+
+(a) Directly below `const live = (o: Sess = {}) => …;` add:
+
+```ts
+// Where a session's controls sit. Stage 3: the selected row's drawer
+// (buildButtons). Task 4.2 points this at the inspector; the assertions that
+// use it do not change.
+async function controls(page: Page, id: string) {
+  await page.evaluate((sid) => { (0, eval)('S').selectedId = sid; (window as any).renderSessions(); }, id);
+  return page.locator(`#card-${id} .sc-drawer .sc-actions`);
+}
+// Labels as those controls render them (updated by Tasks 4.2 and 5.2).
+const L = { end: 'END SESSION', armedEnd: 'CONFIRM END', cancel: 'CANCEL', armedCancel: 'CONFIRM CANCEL', hold: 'HOLD', endAll: 'END ALL' };
+```
+
+(b) Replace everything from `// ── 1. END / CANCEL confirm survives the 1 s re-render` down to and including the closing `}` of the `for (const status of ['LIVE', 'OVERRUN'])` loop under `// ── 2. HOLD before END in LIVE and OVERRUN` with:
+
+```ts
+// ── 1. END / CANCEL confirm survives the 1 s re-render ────────────────────
+test.describe('END and CANCEL confirm', () => {
+  test('armed END on a live card keeps its confirm label through several ticks, then ends on the second click', async ({ page }) => {
+    await setup(page, [live()]);
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
+    await page.clock.runFor(1500);
+    const armed = ctl.locator('button.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
+    await armed.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
+  test('an END armed on LIVE is dropped when the session moves to HOLD; one press then does not end it', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
+    await expect(ctl.locator('.confirm-pending')).toHaveCount(1);
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      const row = { ...St.sessions[0], status: 'HOLD', version: 4 };
+      (window as any).onSessionChange({ eventType: 'UPDATE', new: row, old: {} });
+    });
+    // Checked at once: the 3 s arm timeout must not be what clears it. Nothing on the page stays armed.
+    expect(await page.locator('.confirm-pending').count()).toBe(0);
+    await ctl.locator('button', { hasText: L.end }).click();
+    expect(await calls(page)).toEqual([]);
+    await expect(ctl.locator('button.confirm-pending')).toHaveText(L.armedEnd);
+  });
+
+  test('an END armed just before the end time still confirms after LIVE flips to OVERRUN', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    const ctl = await controls(page, 'live1');
+    const endBtn = ctl.locator('button', { hasText: new RegExp(`${L.end}|${L.armedEnd}`) });
+    await endBtn.click();
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      (window as any).onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'OVERRUN', version: 4 }, old: {} });
+    });
+    await expect(endBtn).toHaveText(L.armedEnd);
+    await endBtn.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
+  test('an END arm does not come back after LIVE to HOLD to LIVE; one press only arms', async ({ page }) => {
+    await setup(page, [live({ version: 3 })]);
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      const w = window as any;
+      w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'HOLD', version: 4 }, old: {} });
+      w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'LIVE', version: 5 }, old: {} });
+    });
+    expect(await page.locator('.confirm-pending').count()).toBe(0);
+    await expect(ctl.locator('button', { hasText: L.end })).toHaveCount(1);
+    await ctl.locator('button', { hasText: L.end }).click();
+    expect(await calls(page)).toEqual([]);
+    await expect(ctl.locator('button.confirm-pending')).toHaveText(L.armedEnd);
+  });
+
+  test('an armed CANCEL holds for 3 s like END', async ({ page }) => {
+    await setup(page, [sess('ready1', 1, { status: 'READY' })]);
+    const ctl = await controls(page, 'ready1');
+    await ctl.locator('button', { hasText: L.cancel }).click();
+    await page.clock.runFor(2500);
+    const armed = ctl.locator('button.confirm-pending');
+    expect(await armed.count()).toBe(1);
+    await armed.click();
+    expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
+  });
+
+  test('armed END returns to its normal label after the timeout', async ({ page }) => {
+    await setup(page, [live()]);
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
+    await page.clock.runFor(3500);
+    await expect(page.locator('.confirm-pending')).toHaveCount(0);
+    await expect(ctl.locator('button', { hasText: L.end })).toHaveCount(1);
+    expect(await calls(page)).toEqual([]);
+  });
+
+  test('armed CANCEL on a ready card survives the re-render caused by a live session', async ({ page }) => {
+    await setup(page, [live(), sess('ready1', 2, { status: 'READY' })]);
+    const ctl = await controls(page, 'ready1');
+    await ctl.locator('button', { hasText: L.cancel }).click();
+    await page.clock.runFor(1500);
+    const armed = ctl.locator('button.confirm-pending');
+    await expect(armed).toHaveText(L.armedCancel);
+    await armed.click();
+    expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
+  });
+
+  test('the sidebar quick-action END stays armed through several ticks', async ({ page }) => {
+    await setup(page, [live()]);
+    await page.locator('#ctx-actions .ctx-btn', { hasText: 'END SESSION' }).click();
+    await page.clock.runFor(1500);
+    const armed = page.locator('#ctx-actions .ctx-btn.confirm-pending');
+    await expect(armed).toHaveText('CONFIRM END');
+    await armed.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
+  test('the End in a live row stays armed through several ticks', async ({ page }) => {
+    await setup(page, [live()]);
+    await page.locator('#card-live1 .sc-act .btn.danger').click();
+    await page.clock.runFor(1500);
+    const armed = page.locator('#card-live1 .sc-act .btn.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
+    await armed.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
+  test('the batch END ALL button shows a visible armed state', async ({ page }) => {
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1').hover();          // editing tools show on hover (spec 2.2)
+    await page.locator('#card-live1 .batch-chk').check();
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await expect(btn).toHaveClass(/confirm-pending/);
+    await expect(btn).toHaveText(L.armedEnd);
+    await page.clock.runFor(3500);
+    await expect(btn).not.toHaveClass(/confirm-pending/);
+    await expect(btn).toHaveText(L.endAll);
+  });
+});
+
+// ── Batch selection and event switches ─────────────────────────────────
+test.describe('batch actions', () => {
+  test('a batch only counts sessions that exist in the current event', async ({ page }) => {
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1').hover();
+    await page.locator('#card-live1 .batch-chk').check();
+    await page.evaluate(() => (window as any).toggleBatchSelect('ghost-from-another-event', true));
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await btn.click();
+    await expect.poll(() => calls(page)).toEqual([['live1', 'ENDED']]);
+    await expect(page.locator('#toast-container')).toContainText('ENDED: 1/1');
+  });
+
+  test('switching event clears the batch selection and its armed button', async ({ page }) => {
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.evaluate(() => { (0, eval)('S').events = [{ id: 'ev-1', name: 'One' }, { id: 'ev-2', name: 'Two', timezone: 'UTC' }]; });
+    await page.locator('#card-live1').hover();
+    await page.locator('#card-live1 .batch-chk').check();
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await expect(btn).toHaveClass(/confirm-pending/);
+    await page.evaluate(() => (window as any).switchEvent('ev-2'));
+    await expect(page.locator('#batch-bar')).toBeHidden();
+    await expect(btn).not.toHaveClass(/confirm-pending/);
+    await expect(btn).toHaveText(L.endAll);
+    // Selecting in the new event and pressing once only arms again.
+    await page.evaluate(() => {
+      const St = (0, eval)('S');
+      St.sessions = [{ ...St.sessions[0], id: 'n1', event_id: 'ev-2', status: 'LIVE' }];
+      (window as any).renderSessions();
+    });
+    await page.locator('#card-n1').hover();
+    await page.locator('#card-n1 .batch-chk').check();
+    await btn.click();
+    expect(await calls(page)).toEqual([]);
+  });
+});
+
+// ── 2. HOLD before END in LIVE and OVERRUN ────────────────────────────────
+for (const status of ['LIVE', 'OVERRUN']) {
+  test(`${status}: HOLD comes before END in the session's controls and in the sidebar quick actions`, async ({ page }) => {
+    await setup(page, [live({ status })]);
+    const card = await (await controls(page, 'live1')).locator(':scope > button').allTextContents();
+    expect(card.slice(0, 2)).toEqual([L.hold, L.end]);
+    const ctx = await page.locator('#ctx-actions .ctx-btn').allTextContents();
+    expect(ctx.slice(0, 2).map(s => s.trim())).toEqual(['HOLD', 'END SESSION']);
+  });
+}
+```
+
+(c) Replace the test `STARTED shows the actual start in Cairo time` with (spec 4: times as HH:MM; the actual start sits with the session's controls):
+
+```ts
+  test('STARTED shows the actual start in Cairo time', async ({ page }) => {
+    await setup(page, [live({ actual_start: '2026-10-06T11:31:00Z' })], { event: cairo });
+    await controls(page, 'live1');
+    await expect(page.locator('#card-live1 .sc-drawer-times')).toHaveText(/14:31$/);
+  });
+```
+
+(d) Replace the test `a delayed READY card keeps the READY left edge and shows the delay as a top line` with (spec 2.2: "delay never recolours it; delay shows in the delay column"):
+
+```ts
+test('a delayed READY row keeps the READY left edge and shows the delay in its own column', async ({ page }) => {
+  await setup(page, [sess('d', 1, { status: 'READY', cumulative_delay: 5, scheduled_start: '11:05:00', scheduled_end: '11:35:00' })]);
+  const css = await page.locator('#card-d').evaluate(e => {
+    const cs = getComputedStyle(e);
+    return { left: cs.borderLeftColor, leftW: cs.borderLeftWidth, top: cs.borderTopColor };
+  });
+  expect(css.left).toBe('rgb(52, 211, 153)');   // --st-ready
+  expect(css.leftW).toBe('4px');
+  expect(css.top).not.toBe('rgb(251, 146, 60)'); // the delay no longer paints an edge
+  await expect(page.locator('#card-d .sc-delay')).toHaveText('+5');
+  await expect(page.locator('#card-d .sc-time small')).toHaveText('was 11:00');
+});
+```
+
+The other tests in the file (sidebar active session, stage monitor, log, time zone, HOLD badge `#card-h .badge`, reduced motion `#card-live1` and `#card-live1 .badge`, arrival, Test cue, CSV, no view switch `#card-p2 .badge`, wizard) select on markup the rows keep and stay as they are. `tests/e2e/console-show-safety-boot.spec.ts` needs no edit here: its `#sessions-list .sc` ids are the rows' ids, and the "Active" default keeps ENDED and CANCELLED out of the list (no fold rows render for them).
+
 - [ ] **Step 8: Run.**
 
 ```bash
-CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/console-confirm.spec.ts tests/e2e/console-forbidden.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-timeline-autoswitch.spec.ts
+CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/console-confirm.spec.ts tests/e2e/console-forbidden.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-timeline-autoswitch.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts
 npx vitest run
 ```
 
-Expected: list 9 passed; the rest pass; vitest passes after `BUDGET` is set to the printed (lower) count.
+Expected: list 11 passed; the rest pass (show-safety: one more test than before, the row End); vitest passes after `BUDGET` is set to the printed (lower) count.
 
-- [ ] **Step 9: Baselines and layout check.** `--update-snapshots`; review: 56 px rows with badge, number, title, speaker line with line icons, room chip, HH:MM, delay, one action; "1 completed" at the top and "1 cancelled" at the bottom; the anchor divider before #7; the delay chip at the right of the filter row; the armed-end baseline shows "Press again to end" (or the safety branch's armed label) in the LIVE row. Full console suite `0 failed`.
+- [ ] **Step 9: Baselines and layout check.** `--update-snapshots`; review: 56 px rows with badge, number, title, speaker line with line icons, room chip, HH:MM, delay, one action; "1 completed" at the top and "1 cancelled" at the bottom; the anchor divider before #7; the delay chip at the right of the filter row; the armed-end baseline shows the armed End in the LIVE row, solid red, labelled `CONFIRM END` (the value of `confirm.confirmEnd` until Task 4.2 changes it to "Press again to end"). Full console suite `0 failed`.
 
 - [ ] **Step 10: Commit.**
 
 ```bash
-git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-show-safety.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 git commit -m "feat(console): compact session list with folded finished sessions and one action per row
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+Wrap-up warnings (5 min amber, 1 min red) and final-minute tenths carry
+over from the cards; the tick also re-renders a held timer. Show-safety
+specs follow the controls into the selected row's drawer.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-list.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-show-safety.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
 
 ### Task 3.3: Release stage 3 (with Task 2.1)
@@ -3582,7 +4093,8 @@ Branch: `redesign/stage-4` from `main` after Task 3.3.
   - CSS: `#main` (line 538), `#sessions-col` (539), `#sidebar` width (540-544); the responsive `max-width: 1279px` block (`#main` line added); append `/* ═══ Command center layout and band (stage 4) ═══ */`.
   - JS: new section `// COMMAND CENTER: now and next band (stage 4)`; the top of `renderSessions()`; `onFilterChange()` (5516).
 - Modify `cuedeck-i18n.js` (Step 6 keys).
-- Modify `tests/e2e/console-boot-mock.ts` (no change needed to data; `fourRoomSessions`, `roomlessSessions`, `longTitleSessions` already exist), `tests/e2e/console-header.spec.ts` (first test, Step 7), `tests/e2e/console-visual.spec.ts` (two cases), `tests/console-colour-ratchet.spec.ts`.
+- Modify `tests/e2e/console-boot-mock.ts`: add `manySessions()` (Step 1); `fourRoomSessions`, `roomlessSessions`, `longTitleSessions` already exist. Modify `tests/e2e/console-header.spec.ts` (first test, Step 7), `tests/e2e/console-visual.spec.ts` (two cases), `tests/console-colour-ratchet.spec.ts`.
+- Modify `cuedeck-console.html` `// LOCAL TICK`: the condition from Task 3.2 widens to any unfinished session, because the band's "in N min" is a visible timer too.
 - Create `tests/e2e/console-band.spec.ts`.
 
 **Interfaces:**
@@ -3590,7 +4102,26 @@ Branch: `redesign/stage-4` from `main` after Task 3.3.
 - Produces JS (used by 4.2, 4.3, 5.1): `BAND_ROLES`, `NOW_RANK`, `ROOM_NONE`, `roomOf(s)`, `myRoom()`, `setMyRoom(room)`, `roomsInOrder()`, `laneFor(room)` returning `{ room, now, next }`, `bandLanes()`, `untilText(s)`, `minsUntil(s)`, `renderBand()`, `laneHTML(lane, nowMs, many)`, `nextRowHTML(lane, over, tm)`, `laneChipHTML(lane)`, `toggleLane(room)`; state `S.laneOpen`.
 - Produces DOM: `#main-col`, `#band.band` with `.lane.is-live|is-over|is-hold|is-calling|is-idle`, `.lane-room`, `.lane-now`, `.lane-next`, `.lane-what`, `.lane-title`, `.lane-who`, `.lane-count`, `.lane-big`, `.lane-unit`, `.lane-ctrl`, `.lane-lead`, `.end-slot`, `.lane-risk`, `.warnchip`, `.lane-chips`, `.lane-chip`.
 
-- [ ] **Step 1: Failing tests.** Create `tests/e2e/console-band.spec.ts`:
+- [ ] **Step 1: Failing tests.** Add to `tests/e2e/console-boot-mock.ts`, after `longTitleSessions()`:
+
+```ts
+// The demo plus six afternoon sessions, so the list is longer than the screen
+// and "at least 8 rows visible" is a real limit, not the whole list.
+export function manySessions(): Sess[] {
+  const extra: [string, string, string, string][] = [
+    ['Retail Media Networks at the Airport', 'Main Stage', '14:30:00', '15:00:00'],
+    ['Panel: Arrivals Duty Free After Two Years', 'Hall B', '15:00:00', '15:45:00'],
+    ['Loyalty Programmes for Transit Passengers', 'Main Stage', '15:15:00', '15:45:00'],
+    ['Workshop: Planogram Basics for Gate Stores', 'Hall B', '16:00:00', '16:45:00'],
+    ['Closing Remarks', 'Main Stage', '16:00:00', '16:15:00'],
+    ['Networking Coffee', 'Hall B', '16:45:00', '17:00:00'],
+  ];
+  return [...demoSessions(), ...extra.map(([title, room, a, b], i) => sess(11 + i, { title, type: 'Talk', room, status: 'PLANNED', version: 1,
+    planned_start: a, planned_end: b, scheduled_start: a, scheduled_end: b }))];
+}
+```
+
+Create `tests/e2e/console-band.spec.ts`:
 
 ```ts
 // tests/e2e/console-band.spec.ts
@@ -3598,7 +4129,7 @@ Branch: `redesign/stage-4` from `main` after Task 3.3.
 // or a next session; End always in the same slot; knock-on when a session
 // runs over; more than three rooms collapse the idle ones to chips.
 import { test, expect } from '@playwright/test';
-import { openConsole, evalPage, ID, PANEL_ID, overrunSessions, noLiveSessions, fourRoomSessions, roomlessSessions, longTitleSessions } from './console-boot-mock';
+import { openConsole, evalPage, ID, PANEL_ID, overrunSessions, noLiveSessions, fourRoomSessions, roomlessSessions, longTitleSessions, manySessions } from './console-boot-mock';
 
 test('band: one lane per active room with now and next', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
@@ -3707,9 +4238,34 @@ test('band: stays visible in the timeline view and for stage operators puts thei
   await ctx.close();
 });
 
-test('layout: at 1440x900 both lanes and at least 8 list rows are on screen', async ({ browser }) => {
+test('band: "in N min" keeps counting when nothing is running', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { sessions: noLiveSessions(), broadcast: null });
+  const ms = page.locator('#band .lane[data-room="Main Stage"]');
+  await expect(ms).toContainText('in 25 min');
+  // Move the synced clock a minute on and let only the 1 s tick render (no explicit
+  // renderSessions; FROZEN_AT + 1 s stays clear of the 60 s clock resync).
+  await evalPage(page, 'S.clockOffset = 60_000');
+  await page.clock.runFor(1000);
+  await expect(ms).toContainText('in 24 min');
+  await ctx.close();
+});
+
+test('band: the final minute shows tenths and the wrap-up colour in the lane', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  const colBottom = await page.locator('#sessions-col').evaluate(el => el.getBoundingClientRect().bottom);
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').actual_start = new Date(correctedNow() - (30 * 60_000 - 30_000)).toISOString(); renderSessions();`);
+  await page.clock.runFor(400);
+  const lane = page.locator('#band .lane[data-room="Main Stage"]');
+  await expect(lane.locator('.lane-big')).toHaveText(/^0:(29|30)\.\d$/);
+  await expect(lane.locator('.lane-count')).toHaveClass(/warn-red/);
+  await ctx.close();
+});
+
+test('layout: at 1440x900 both lanes and at least 8 list rows are on screen', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { sessions: manySessions() });
+  const col = page.locator('#sessions-col');
+  expect(await col.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);   // the list really is longer than the screen
+  const colBottom = await col.evaluate(el => el.getBoundingClientRect().bottom);
+  // List rows: session rows plus the folded "N completed" row (a 34 px row in spec 2.2).
   const rows = await page.locator('#sessions-list .sc, #sessions-list .sc-fold').evaluateAll((els, bottom) => els.filter(e => e.getBoundingClientRect().bottom <= (bottom as number)).length, colBottom);
   expect(rows).toBeGreaterThanOrEqual(8);
   for (const room of ['Main Stage', 'Hall B']) {
@@ -3720,7 +4276,7 @@ test('layout: at 1440x900 both lanes and at least 8 list rows are on screen', as
 });
 ```
 
-- [ ] **Step 2: Run, expect failure.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-band.spec.ts`. Expected: 10 failed (`#band` missing).
+- [ ] **Step 2: Run, expect failure.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-band.spec.ts`. Expected: 12 failed (`#band` missing).
 
 - [ ] **Step 3: Markup.** Delete the `<div id="filter-bar">…</div>` line above `<!-- SIDEBAR TOGGLE + BACKDROP -->`. Change the start of `<div id="main">` to:
 
@@ -3835,7 +4391,7 @@ function laneHTML(l, nowMs, many) {
       <div class="lane-now">
         ${statusBadge(s.status)}
         <span class="lane-what"><span class="lane-title" title="${esc(s.title)}">#${s.sort_order} ${esc(s.title)}</span><span class="lane-who">${who}</span></span>
-        <span class="lane-count" data-timer><span class="lane-big">${esc(cd.big)}</span><span class="lane-unit">${esc(cd.unit)}</span></span>
+        <span class="lane-count${warnCls(cd)}" data-timer><span class="lane-big"${(s.status === 'LIVE' || s.status === 'OVERRUN') ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span><span class="lane-unit">${esc(cd.unit)}</span></span>
         <span class="lane-ctrl"><span class="lane-lead">${lead}</span><span class="act-gap" aria-hidden="true"></span>${end}</span>
       </div>
       ${l.next ? nextRowHTML(l, over, tm) : ''}
@@ -3883,6 +4439,21 @@ At the very top of `renderSessions()` (before the signage branch) insert:
   restoreFocus(fkTop);
 ```
 
+In the 1 s `// LOCAL TICK`, replace the Task 3.2 lines
+
+```js
+  // Re-render while a timer is on screen: live countdowns and the held timer ("held m:ss").
+  if (S.sessions.some(s => ['LIVE', 'OVERRUN', 'HOLD'].includes(s.status))) renderSessions();
+```
+
+with
+
+```js
+  // Re-render while any timer is on screen: live and held countdowns, and the
+  // band's "in N min", which every unfinished session can show.
+  if (S.sessions.some(s => !FINISHED.includes(s.status))) renderSessions();
+```
+
 In `onFilterChange()`, after `F.room = …;` add `if ((S.role === 'stage' || S.role === 'av') && F.room) { setMyRoom(F.room); return; }` (setMyRoom renders).
 
 - [ ] **Step 5: CSS.** Change `#main { … }` to `#main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; overflow: hidden; background: var(--bg); }`, `#sessions-col` to `#sessions-col { overflow-y: auto; min-height: 0; padding: 8px 16px 16px; background: var(--bg); }`, and in `#sidebar { … }` replace `width: 280px;` with `width: auto; min-width: 0;`. In the `max-width: 1279px` block add `#main { grid-template-columns: minmax(0, 1fr); }`. Append:
@@ -3927,6 +4498,8 @@ In `onFilterChange()`, after `F.room = …;` add `if ((S.role === 'stage' || S.r
     .lane.is-calling .lane-now { background: var(--st-calling-wash); }
     .lane.is-over .lane-big { color: var(--st-overrun-fg); }
     .lane.is-hold .lane-big { color: var(--st-hold-fg); }
+    .lane-count.warn-amber .lane-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the list */
+    .lane-count.warn-red   .lane-big { color: var(--st-live-fg); }
     @keyframes lane-over { 50% { box-shadow: inset 4px 0 0 transparent; } }
     .lane-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px; border-top: 1px solid var(--border-divider); }
     .lane-chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; max-width: 360px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-section); background: var(--card); color: var(--text-secondary); font: 500 var(--fs-12) var(--font-sans); cursor: pointer; }
@@ -3940,7 +4513,8 @@ In `onFilterChange()`, after `F.room = …;` add `if ((S.role === 'stage' || S.r
       .lane-next-state, .lane-who, .lane-unit { display: none; }
       .lane-big { font-size: var(--fs-20); }
       .lane-lead { width: 96px; }
-      .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { width: 112px; }
+      /* End keeps its 148 px slot: the armed label "Press again to end" (Task 4.2)
+         measures 142 px at md and would be clipped in a 112 px slot. */
     }
 ```
 
@@ -3976,7 +4550,7 @@ In `tests/e2e/console-visual.spec.ts` add to `CASES`:
 
 and import `fourRoomSessions`.
 
-- [ ] **Step 8: Run.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-band.spec.ts tests/e2e/console-header.spec.ts tests/e2e/console-list.spec.ts` (band 10 passed, header 9, list 9) and `npx vitest run` (set `BUDGET`).
+- [ ] **Step 8: Run.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-band.spec.ts tests/e2e/console-header.spec.ts tests/e2e/console-list.spec.ts` (band 12 passed, header 9, list 11) and `npx vitest run` (set `BUDGET`). Then the two `console-show-safety*` specs: all pass (sessions without a room get one "No room" lane; nothing they select on moves).
 
 - [ ] **Step 9: Baselines.** `--update-snapshots`; review the 14 PNGs: two lanes under the header (Hall B HOLD amber, Main Stage LIVE red wash), countdown masked, Hold, a divider and End in the same place in both lanes; the 1280 lanes on one line each; four rooms with Terrace as a chip. Full console suite `0 failed`.
 
@@ -3993,15 +4567,15 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html
 
 **Files:**
 - Modify `cuedeck-console.html`:
-  - HTML: `#sidebar` content (2055-2131 after stage 3): keep `#checklist-wrap`; replace `#ctx-wrap` + `#ctx-actions` with `<section id="ctx-wrap" class="insp" aria-labelledby="insp-title"></section>`; replace `#log-panel` (Step 3); add `<div id="sr-announcer" class="sr-only" role="status" aria-live="assertive"></div>` right after `<div id="toast-container" …></div>`.
+  - HTML: `#sidebar` content (2055-2131 after stage 3): keep `#checklist-wrap`; replace `#ctx-wrap` + `#ctx-actions` with `<section id="ctx-wrap" class="insp" aria-labelledby="insp-title"></section>`; replace `#log-panel` (Step 3). (`#sr-announcer` and `.sr-only` already exist from Task 3.1.)
   - CSS: delete `#ctx-wrap`, `.ctx-title*`, `.ctx-sub*`, `#ctx-actions`, `.ctx-btn*` (keep `.ctx-section-lbl`, `.ctx-booth*`, `.ctx-lang-chip`), `#log-panel*`, `#log-feed`, `.le*`, `.log-export-btn*`; append `/* ═══ Command center inspector and log (stage 4) ═══ */`.
-  - JS: `S` (new fields); `buildCtxPanel()` renamed `buildRoleCtxPanel()` with its director/stage and av branches deleted; new `buildCtxPanel()`; `rowHTML()` (selection and drawer); `selectSession()`; `renderSessions()` top; `confirmEnd()`/`confirmCancel()` arming branches; `buildButtons()` deleted; `renderLog()` replaced.
+  - JS: `S` (new fields); `buildCtxPanel()` renamed `buildRoleCtxPanel()` with its director/stage and av branches deleted; new `buildCtxPanel()`; `rowHTML()` (selection and drawer); `selectSession()`; `renderSessions()` top; `buildButtons()` deleted; `getBtnCfg()`, `getBtnOverride()`, `BTN_CFG` and `BTN_LABEL_OVERRIDE` deleted (their only callers were `buildButtons` and the deleted director branch); `renderLog()` replaced; `ROLE_TIPS.stage[0].text`. `confirmEnd()`/`confirmCancel()` and `armOrConfirm()` are not touched: since Task 3.1 `armOrConfirm` announces the armed label and it always re-rendered.
 - Modify `cuedeck-i18n.js`: Step 6 keys; `confirm.confirmEnd`, `confirm.confirmCancel` values.
-- Create `tests/e2e/console-inspector.spec.ts`. Modify `tests/e2e/console-restart.spec.ts`, `tests/e2e/auth-flows.spec.ts` (test 24), `tests/e2e/console-components.spec.ts` (last test), `tests/e2e/console-list.spec.ts` (selection test), `tests/console-colour-ratchet.spec.ts`.
+- Create `tests/e2e/console-inspector.spec.ts`. Modify `tests/e2e/console-restart.spec.ts`, `tests/e2e/auth-flows.spec.ts` (test 24), `tests/e2e/console-components.spec.ts` (last test), `tests/e2e/console-list.spec.ts` (selection test), `tests/e2e/console-tokens.spec.ts` (`META_TEXT`), `tests/e2e/console-show-safety.spec.ts` and `tests/e2e/console-show-safety-boot.spec.ts` (Step 7b), `tests/console-colour-ratchet.spec.ts`.
 
 **Interfaces:**
-- Consumes: everything from 3.2 and 4.1, plus `canRestartSession`, `openRestartModal`, `markArrived`, `nudgeSession`, `applyDelay`, `reorderSession`, `openSessModal`, `openStageMonitor`, `openStageTimerDisplay`, `exportLog`, `S.log`.
-- Produces JS: `INSPECTOR_ROLES`, `URGENCY`, `mostUrgentSession()`, `inspectorSession()`, `renderInspector()`, `inspectorHTML(s, nowMs)`, `monitorRowHTML()`, `buildRoleCtxPanel()`, `announce(msg)`, `logKind(action)`, `LOG_FILTER`, `setLogFilter(f)`, `logDetail(e)`, `renderLog()`; state `S.inspectedId`, `S.urgentKey`, `S.inspMoreOpen`, `S.logFilter`.
+- Consumes: everything from 3.2 and 4.1 (including `NOW_RANK`, `warnCls`, `isArmed`), `announce` (3.1), plus `canRestartSession`, `openRestartModal`, `markArrived`, `nudgeSession`, `applyDelay`, `reorderSession`, `openSessModal`, `openStageMonitor`, `openStageTimerDisplay`, `exportLog`, `S.log`, `trunc`.
+- Produces JS: `INSPECTOR_ROLES`, `mostUrgentSession()`, `inspectorSession()`, `renderInspector()`, `inspectorHTML(s, nowMs)`, `monitorRowHTML()`, `buildRoleCtxPanel()`, `logKind(action)`, `LOG_FILTER`, `setLogFilter(f)`, `logDetail(e)`, `renderLog()`; state `S.inspectedId`, `S.urgentKey`, `S.inspMoreOpen`, `S.logFilter`.
 - Produces DOM: `#ctx-wrap.insp` with `#insp-title`, `.insp-head`, `.insp-title`, `.insp-chips`, `.insp-flags`, `.insp-speakers`, `.insp-times`, `.insp-count`, `.insp-big`, `.prog`, `.insp-notes`, `#ctx-actions.insp-controls` holding `.insp-primary`, `.insp-time`, `.insp-monitor`, `#insp-more`; `#log-panel` with `.log-chip[data-f]` and `#log-feed .lg`.
 
 - [ ] **Step 1: Failing tests.** Create `tests/e2e/console-inspector.spec.ts`:
@@ -4110,6 +4684,29 @@ test('log: filters, own times, newest first, at least 240 px at 1440x900', async
   await ctx.close();
 });
 
+test('inspector: the final minute shows tenths and the wrap-up colour', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').actual_start = new Date(correctedNow() - (30 * 60_000 - 30_000)).toISOString(); renderSessions();`);
+  await page.clock.runFor(400);
+  await expect(insp(page).locator('.insp-big')).toHaveText(/^0:(29|30)\.\d$/);
+  await expect(insp(page).locator('.insp-count')).toHaveClass(/warn-red/);
+  await ctx.close();
+});
+
+test('layout: at 1280x720 the armed End label fits its slot in the band and the inspector', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 1280, height: 720 } });
+  await insp(page).locator('.insp-primary .btn.danger').click();
+  for (const sel of ['#band .lane[data-room="Main Stage"] .lane-now .btn.danger', '#ctx-wrap .insp-primary .btn.danger']) {
+    const b = page.locator(sel);
+    await expect(b, sel).toHaveText('Press again to end');
+    expect(await b.evaluate(el => el.scrollWidth <= el.clientWidth), `${sel} text clipped`).toBe(true);
+  }
+  // The 320 px rail also fits a READY session's row (forward action, gap, empty End slot).
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  expect(await insp(page).locator('.insp-primary').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await ctx.close();
+});
+
 test('layout: 1280x720 fits the band, six rows and a 200 px log', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { viewport: { width: 1280, height: 720 } });
   expect((await page.locator('#sidebar').boundingBox())!.width).toBe(320);
@@ -4125,7 +4722,7 @@ test('layout: 1280x720 fits the band, six rows and a 200 px log', async ({ brows
 });
 ```
 
-- [ ] **Step 2: Run, expect failure.** Expected: 9 failed (no `.insp-title`, log has no chips).
+- [ ] **Step 2: Run, expect failure.** Expected: 11 failed (no `.insp-title`, log has no chips, no `.insp-big`).
 
 - [ ] **Step 3: Markup.** In `#sidebar`, delete the `<!-- Context Panel -->` `#ctx-wrap` div and the `<div id="ctx-actions"></div>` line and put in their place (after `#checklist-wrap` stays first, so move `#checklist-wrap` above it if needed):
 
@@ -4151,7 +4748,7 @@ Replace `#log-panel` with (`I(name)` written out as the literal SVG `<svg class=
     </div>
 ```
 
-Add `<div id="sr-announcer" class="sr-only" role="status" aria-live="assertive"></div>` after the toast container.
+(`#sr-announcer` already exists since Task 3.1; nothing to add here.)
 
 - [ ] **Step 4: JS.** Add to `S`: `inspectedId: null, urgentKey: '', inspMoreOpen: false, logFilter: 'all',`. Rename the existing `function buildCtxPanel()` to `function buildRoleCtxPanel()` and delete its `if (role === 'director' || role === 'stage') { … } else if (role === 'av') { … } else ` prefix so the chain starts at `if (role === 'signage') {`. Delete `buildButtons()`. Add the section:
 
@@ -4160,21 +4757,13 @@ Add `<div id="sr-announcer" class="sr-only" role="status" aria-live="assertive">
 // COMMAND CENTER: inspector and log (stage 4)
 // ═══════════════════════════════════════════════════
 const INSPECTOR_ROLES = ['director', 'stage', 'av'];
-const URGENCY = { OVERRUN: 0, LIVE: 1, HOLD: 2, CALLING: 3 };
-// Live region for the armed confirm (spec 2.3). Synchronous on purpose; a
-// trailing no-break space makes a repeated message count as a change.
-function announce(msg) {
-  const el = document.getElementById('sr-announcer');
-  if (!el) return;
-  el.textContent = el.textContent === msg ? msg + '\u00A0' : msg;
-}
-// OVERRUN > LIVE > HOLD > CALLING > the next READY (spec 2.3)
+// OVERRUN > LIVE > HOLD > CALLING > the next READY (spec 2.3). NOW_RANK (4.1)
+// is the one urgency order; ties go to run-of-show order, as on main.
 function mostUrgentSession() {
-  const ranked = S.sessions.filter(s => s.status in URGENCY)
-    .sort((a, b) => URGENCY[a.status] - URGENCY[b.status] || a.sort_order - b.sort_order);
+  const ranked = S.sessions.filter(s => s.status in NOW_RANK)
+    .sort((a, b) => NOW_RANK[a.status] - NOW_RANK[b.status] || a.sort_order - b.sort_order);
   if (ranked.length) return ranked[0];
-  return S.sessions.filter(s => s.status === 'READY')
-    .sort((a, b) => toMins(a.scheduled_start) - toMins(b.scheduled_start) || a.sort_order - b.sort_order)[0] || null;
+  return S.sessions.filter(s => s.status === 'READY').sort((a, b) => a.sort_order - b.sort_order)[0] || null;
 }
 // Follows the user's selection; when the most urgent session changes (another
 // session or a new status) it returns there, unless the selected session has an
@@ -4184,7 +4773,8 @@ function inspectorSession() {
   const key = urgent ? `${urgent.id}:${urgent.status}` : '';
   if (key !== S.urgentKey) {
     S.urgentKey = key;
-    const armed = S.selectedId && (_endPending.has(S.selectedId) || _cancelPending.has(S.selectedId));
+    const sel = S.selectedId && S.sessions.find(s => s.id === S.selectedId);
+    const armed = !!sel && (isArmed(_endPending, sel) || isArmed(_cancelPending, sel));
     if (!armed) S.selectedId = null;
   }
   return (S.selectedId && S.sessions.find(s => s.id === S.selectedId)) || urgent;
@@ -4212,8 +4802,8 @@ function inspectorHTML(s, nowMs) {
   const times = `<div class="insp-row insp-times"><span>${esc(t('cc.insp.scheduled'))} ${sessionSpan(s)}</span>`
     + (plannedDiffers ? `<span>${esc(t('cc.insp.planned'))} ${hm(s.planned_start)}–${hm(s.planned_end)}</span>` : '')
     + (s.actual_start ? `<span>${esc(t('cc.insp.started'))} ${tsHM(s.actual_start)}</span>` : '') + `</div>`;
-  const countdown = cd ? `<div class="insp-count${over ? ' is-over' : s.status === 'HOLD' ? ' is-held' : ''}" data-timer>
-      <span class="insp-big">${esc(cd.big)}</span>
+  const countdown = cd ? `<div class="insp-count${over ? ' is-over' : s.status === 'HOLD' ? ' is-held' : ''}${warnCls(cd)}" data-timer>
+      <span class="insp-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span>
       <span class="insp-unit">${esc(tm && !over ? tf('cc.insp.elapsed', { time: fmtDur(tm.elapsed) }) : cd.unit)}</span></div>
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}` : '';
   const notes = s.notes && s.notes.trim() ? `<div class="insp-notes">${icon('note')}<span>${esc(s.notes)}</span></div>` : '';
@@ -4305,7 +4895,9 @@ function renderLog() {
   if (!rows.length) { feed.innerHTML = `<div class="lg-empty">${esc(t('cc.log.empty'))}</div>`; return; }
   feed.innerHTML = rows.slice(0, 60).map(e => {
     const k = logKind(e.action);
-    return `<div class="lg lg-${k}"><span class="lg-when">${esc(tsHM(e.ts))}</span><span class="lg-kind">${esc(t('cc.log.k.' + k))}</span><span class="lg-what">${esc(logDetail(e))}</span></div>`;
+    // An action the log does not classify shows its own name (escaped), so no event is reduced to "Event".
+    const kind = k === 'other' ? trunc(String(e.action || ''), 24) : t('cc.log.k.' + k);
+    return `<div class="lg lg-${k}"><span class="lg-when">${esc(tsHM(e.ts))}</span><span class="lg-kind">${esc(kind)}</span><span class="lg-what">${esc(logDetail(e))}</span></div>`;
   }).join('');
 }
 ```
@@ -4325,13 +4917,16 @@ function selectSession(id) {
 }
 ```
 
-In the arming branch of `confirmEnd()` (the branch that adds the session to `_endPending`), add as its last two lines `announce(t('confirm.confirmEnd'));` and `renderSessions();`; in the arming branch of `confirmCancel()` add `announce(t('confirm.confirmCancel'));` and `renderSessions();`.
+`confirmEnd()` and `confirmCancel()` stay one-line delegates to `armOrConfirm()`, which already re-renders on arm, confirm and timeout and (since Task 3.1) announces the armed label into `#sr-announcer`; nothing to add here.
+
+Delete `function getBtnCfg() { … }`, `function getBtnOverride() { … }` and the two lines `const BTN_CFG = getBtnCfg();` / `const BTN_LABEL_OVERRIDE = getBtnOverride();` with their comment: after `buildButtons()` and the director branch of the old `buildCtxPanel()` go, nothing reads them (`grep -n "getBtnCfg\|getBtnOverride\|BTN_CFG\|BTN_LABEL_OVERRIDE" cuedeck-console.html` prints nothing afterwards). Labels now come from `actionLabel()` and `cc.act.*` only.
+
+In `ROLE_TIPS.stage`, the first tip still describes the old cards ("Use the action buttons in the sidebar to ARM, CALL, and GO LIVE."): change its `text` to `'Each row is a session with its next action. Select a row to see all of its controls on the right.'`.
 
 - [ ] **Step 5: CSS.** Delete the rules listed under Files; append:
 
 ```css
     /* ═══ Command center inspector and log (stage 4) ═══ */
-    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     #sidebar { display: flex; flex-direction: column; overflow-y: auto; background: var(--panel); border-inline-start: 1px solid var(--border-section); }
     .insp { display: grid; gap: 10px; align-content: start; padding: 14px 16px; border-bottom: 1px solid var(--border-section); overflow-y: auto; max-height: calc(100% - 240px); flex: 0 1 auto; }
     .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -4345,6 +4940,8 @@ In the arming branch of `confirmEnd()` (the branch that adds the session to `_en
     .insp-big { font: 700 var(--fs-insp-countdown)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
     .insp-count.is-over .insp-big { color: var(--st-overrun-fg); }
     .insp-count.is-held .insp-big { color: var(--st-hold-fg); }
+    .insp-count.warn-amber .insp-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the list and band */
+    .insp-count.warn-red   .insp-big { color: var(--st-live-fg); }
     .insp-unit { font-size: var(--fs-12); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
     .prog { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
     .prog i { display: block; height: 100%; background: var(--st-live); }
@@ -4352,7 +4949,8 @@ In the arming branch of `confirmEnd()` (the branch that adds the session to `_en
     .insp-notes { display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-12); color: var(--text-secondary); white-space: pre-wrap; }
     .insp-controls { display: grid; gap: 10px; }
     .insp-primary { flex-wrap: nowrap; }
-    .insp-primary .btn.danger, .insp-primary .end-slot { margin-inline-start: auto; width: 148px; overflow: hidden; text-overflow: ellipsis; }
+    /* End's slot fits the armed label "Press again to end" at lg (about 164 px) */
+    .insp-primary .btn.danger, .insp-primary .end-slot { margin-inline-start: auto; width: 172px; overflow: hidden; text-overflow: ellipsis; }
     .insp-more > summary { list-style: none; width: max-content; }
     .insp-more > summary::-webkit-details-marker { display: none; }
     .insp-more-list { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; }
@@ -4377,6 +4975,11 @@ In the arming branch of `confirmEnd()` (the branch that adds the session to `_en
       .insp { max-height: calc(100% - 200px); gap: 8px; padding: 12px; }
       .insp-notes span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
       #log-panel { flex-basis: 200px; min-height: 200px; }
+      /* 320 px rail (296 px inside): the primary row drops to md so a forward
+         action, the 20 px gap and End's 148 px slot (armed label 142 px) fit */
+      .insp-primary .btn { height: var(--btn-md); padding: 0 12px; font-size: var(--fs-13); }
+      .insp-primary .btn.danger, .insp-primary .end-slot { width: 148px; }
+      .insp-primary .act-gap { margin-left: 0; }
     }
 ```
 
@@ -4443,25 +5046,144 @@ async function openControls(page: Page, id: string) {
 ```
 
   - `tests/e2e/console-list.spec.ts` "click, Enter and arrow keys select a row": the selection now also shows in the inspector; add at its end `await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Case Study: Rebuilding the Hurghada Arrivals Store');`.
+  - `tests/e2e/console-tokens.spec.ts`: change `META_TEXT`'s `'#ctx-sub'` to `'#ctx-wrap .insp-times'` (the inspector's meta line replaces the old sub line; the 4.5:1 check keeps running on it).
 
-- [ ] **Step 8: Run.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/console-confirm.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts` (all pass; inspector 9) and `npx vitest run` (set `BUDGET`).
+- [ ] **Step 7b: Show-safety specs (same commit).** `#ctx-title`, `#ctx-actions .ctx-btn`, `.le`, the drawer and `buildButtons` are gone, the armed labels change (Step 6) and log rows show HH:MM (spec 4: seconds only on running timers and the header clock). Edit `tests/e2e/console-show-safety.spec.ts` (as left by Task 3.2):
+
+(a) Replace the `controls()` helper and the `L` constant with:
+
+```ts
+// Where a session's controls sit. Stage 4: the inspector shows the selected
+// session with every control (More menu open). The assertions do not change.
+async function controls(page: Page, id: string) {
+  await page.evaluate((sid) => { const St = (0, eval)('S'); St.selectedId = sid; St.inspMoreOpen = true; (window as any).renderSessions(); }, id);
+  return page.locator('#ctx-wrap #ctx-actions');
+}
+// Labels as those controls render them (cc.act.* and the new confirm.* values).
+const L = { end: 'End…', armedEnd: 'Press again to end', cancel: 'Cancel session', armedCancel: 'Press again to cancel', hold: 'Hold', endAll: 'END ALL' };
+```
+
+(b) Replace the test `the sidebar quick-action END stays armed through several ticks` (the sidebar quick actions are now the inspector, which the tests above already cover) with the same check on the other place End lives, the band:
+
+```ts
+  test('the band End stays armed through several ticks', async ({ page }) => {
+    await setup(page, [live()]);
+    await page.locator('#band .lane-now .btn.danger').click();
+    await page.clock.runFor(1500);
+    const armed = page.locator('#band .lane-now .btn.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
+    await armed.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+```
+
+(c) Replace the `for (const status of ['LIVE', 'OVERRUN'])` loop under `// ── 2. HOLD before END in LIVE and OVERRUN` with:
+
+```ts
+for (const status of ['LIVE', 'OVERRUN']) {
+  test(`${status}: HOLD comes before END in the band and in the inspector`, async ({ page }) => {
+    await setup(page, [live({ status })]);
+    const order = (sel: string) => page.locator(sel).evaluate(el => [...el.children].map(c =>
+      c.classList.contains('act-gap') ? 'gap' : (c.textContent || '').trim()));
+    expect(await order('#band .lane .lane-now .lane-ctrl')).toEqual([L.hold, 'gap', L.end]);
+    expect(await order('#ctx-wrap .insp-primary')).toEqual([L.hold, 'gap', L.end]);
+  });
+}
+```
+
+(d) Replace the `test.describe('sidebar active session', …)` block with:
+
+```ts
+// ── Inspector "most urgent session": urgency order, controls act on it ──
+test.describe('sidebar active session', () => {
+  test('the only active session is on HOLD: the panel shows it and Resume/End target it', async ({ page }) => {
+    await setup(page, [
+      sess('done', 1, { status: 'ENDED', title: 'Keynote', actual_start: iso(-60), actual_end: iso(-20) }),
+      sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
+      sess('later', 3, { status: 'PLANNED', title: 'Case study' }),
+    ]);
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Workshop');
+    await page.locator('#ctx-wrap .insp-primary button', { hasText: 'Resume' }).click();
+    await page.locator('#ctx-wrap .insp-primary .btn.danger').click();
+    await page.locator('#ctx-wrap .insp-primary .btn.confirm-pending').click();
+    expect(await calls(page)).toEqual([['held', 'LIVE'], ['held', 'ENDED']]);
+  });
+
+  test('HOLD plus a READY session: the HOLD one is shown', async ({ page }) => {
+    await setup(page, [
+      sess('ready', 1, { status: 'READY', title: 'Pricing talk' }),
+      sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
+    ]);
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Workshop');
+    await expect(page.locator('#ctx-wrap .insp-primary button').first()).toHaveText('Resume');
+  });
+
+  test('OVERRUN outranks LIVE, which outranks HOLD', async ({ page }) => {
+    await setup(page, [
+      sess('held', 1, { status: 'HOLD', title: 'Held' }),
+      live({ title: 'Live' }),
+      sess('over', 3, { status: 'OVERRUN', title: 'Over', actual_start: iso(-40) }),
+    ]);
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Over');
+  });
+});
+```
+
+(e) In the test `loaded log rows keep their own time; a broadcast row shows its message`, replace its four lines from `const rows = await page.locator('#log-feed .le').allTextContents();` to `expect(rows[1]).toContain('09:05:07');` with:
+
+```ts
+  const rows = await page.locator('#log-feed .lg').allTextContents();
+  const whens = await page.locator('#log-feed .lg .lg-when').allTextContents();
+  expect(whens.slice(0, 2)).toEqual(['09:06', '09:05']);   // each row its own time (HH:MM, spec 4)
+  expect(rows[0]).toContain('Hall B on hold: projector signal lost');
+  expect(rows[0]).not.toContain('{');
+```
+
+(f) In the test `STARTED shows the actual start in Cairo time`, replace its last two lines (`await controls(page, 'live1');` and the `.sc-drawer-times` assertion) with:
+
+```ts
+    await expect(page.locator('#ctx-wrap .insp-times')).toContainText('14:31');
+```
+
+The test `a malicious action name in the event log is shown as text, not HTML` stays as it is: an unclassified action keeps its own (escaped) name in the row's kind cell (Step 4), so `#log-feed` still contains `<img src=x` as text and no `img` element.
+
+In `tests/e2e/console-show-safety-boot.spec.ts`, in the test `the director's event log is at least 200 px tall at …`, replace
+
+```ts
+      const row = page.locator('#log-feed .le', { hasText: 'BROADCAST' }).first();
+      await expect(row).toContainText('14:32:00');
+```
+
+with
+
+```ts
+      const row = page.locator('#log-feed .lg.lg-broadcast').first();
+      await expect(row.locator('.lg-when')).toHaveText('14:32');   // its own time, event zone (Cairo), HH:MM
+```
+
+(the `Hall B on hold: projector signal lost` assertion below it stays).
+
+- [ ] **Step 8: Run.** `CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/console-confirm.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts` (all pass; inspector 11) and `npx vitest run` (set `BUDGET`).
 
 - [ ] **Step 9: Baselines.** `--update-snapshots`; review: the rail shows the inspector (badge, title, chips, speakers, times, masked countdown, progress, note, Hold | End, time row, monitor row, More) and the log with chips below it, visible at 1440 and 1280; the armed baseline shows "Press again to end" in the band, the row and the inspector at once. Full console suite `0 failed`.
 
 - [ ] **Step 10: Commit.**
 
 ```bash
-git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 git commit -m "feat(console): inspector with fixed control slots and an event log with filters
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+Show-safety specs follow End, Cancel, Hold and the log rows into the
+inspector and the band; armed labels read Press again to end/cancel.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-inspector.spec.ts tests/e2e/console-restart.spec.ts tests/e2e/auth-flows.spec.ts tests/e2e/console-components.spec.ts tests/e2e/console-list.spec.ts tests/e2e/console-tokens.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/console-show-safety-boot.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
 
 ### Task 4.3: Timeline view
 
 **Files:**
 - Modify `cuedeck-console.html`: `renderTimeline()` (replaced whole, including `statusColor` from Task 1.2 staying above it); `S` (`tlFit: false,`); the `/* ── Timeline view (PR-020) */` CSS block (`#timeline-wrap` to `.tl-bar-label`) replaced.
-- Modify `cuedeck-i18n.js` (Step 4 keys). Create `tests/e2e/console-timeline.spec.ts`. Modify `tests/e2e/console-visual.spec.ts` (one case).
+- Modify `cuedeck-i18n.js` (Step 4 keys). Create `tests/e2e/console-timeline.spec.ts`. Modify `tests/e2e/console-visual.spec.ts` (one case) and `tests/e2e/console-show-safety.spec.ts` (the NOW-line test, Step 4b).
 
 **Interfaces:**
 - Consumes: `statusColor`, `roomsInOrder`, `roomOf`, `ROOM_NONE`, `eventNowMinutes`, `selectSession`, `S.inspectedId`, `hm`, `addMinutes`, `toMins`, `sessionSpan`, `applyFilters`.
@@ -4635,15 +5357,37 @@ Replace the timeline CSS block with:
 
 - [ ] **Step 4: Strings:** `cc.tl.fitDay` (Fit day | عرض اليوم كاملاً | Cały dzień | Ganzer Tag), `cc.tl.now` (Now | الآن | Teraz | Jetzt). Add `{ name: 'timeline-overrun-1440', sc: { sessions: overrunSessions() }, prep: `setViewMode('timeline')` },` to the visual `CASES`.
 
-- [ ] **Step 5: Run.** Timeline spec 5 passed; tokens spec still passes (`rect.tl-bar` fill from CSS); vitest passes.
+- [ ] **Step 4b: Show-safety NOW-line test (same commit).** The new window (NOW −1 h to +3 h, 240 minutes) draws 30-minute ticks, so the safety test's `14:45` tick no longer exists and its `tick('14:45')!` would throw. The assertion keeps its meaning (the NOW line sits at 14:40 Cairo time between two ticks) against the 14:30 and 15:00 ticks. In `tests/e2e/console-show-safety.spec.ts`, test `the timeline NOW line follows Cairo time`, replace
+
+```ts
+      return line ? { x: Number(line.getAttribute('x1')), t1430: Number(tick('14:30')!.getAttribute('x')), t1445: Number(tick('14:45')!.getAttribute('x')) } : null;
+    });
+    expect(pos).not.toBeNull();
+    // 14:40 Cairo sits two thirds of the way from 14:30 to 14:45.
+    expect(pos!.x).toBeCloseTo(pos!.t1430 + (pos!.t1445 - pos!.t1430) * (10 / 15), 0);
+```
+
+with
+
+```ts
+      return line ? { x: Number(line.getAttribute('x1')), t1430: Number(tick('14:30')!.getAttribute('x')), t1500: Number(tick('15:00')!.getAttribute('x')) } : null;
+    });
+    expect(pos).not.toBeNull();
+    // 14:40 Cairo sits one third of the way from 14:30 to 15:00 (30-minute ticks since stage 4).
+    expect(pos!.x).toBeCloseTo(pos!.t1430 + (pos!.t1500 - pos!.t1430) * (10 / 30), 0);
+```
+
+(At 14:40 the window is 13:40 to 17:40, so the ticks are 14:00, 14:30, 15:00 and on; both sessions, 14:00 to 15:30, are inside it.)
+
+- [ ] **Step 5: Run.** Timeline spec 5 passed; tokens spec still passes (`rect.tl-bar` fill from CSS); both `console-show-safety*` specs pass, and so does `console-timeline-autoswitch.spec.ts` (no view switch); vitest passes.
 - [ ] **Step 6: Baselines.** `--update-snapshots`; review `timeline-1440`, `timeline-overrun-1440`, `browser-cairo-1440`: dark labels on solid bars, NOW line between 11:30 and 12:00, hatched overrun, the band above. Full console suite `0 failed`.
 - [ ] **Step 7: Commit.**
 
 ```bash
-git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-timeline.spec.ts tests/e2e/console-visual.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-timeline.spec.ts tests/e2e/console-visual.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 git commit -m "feat(console): timeline with 40 px lanes, NOW window, planned outline and hatched overrun
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-timeline.spec.ts tests/e2e/console-visual.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-timeline.spec.ts tests/e2e/console-visual.spec.ts tests/e2e/console-show-safety.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
 
 ### Task 4.4: Release stage 4
@@ -4702,6 +5446,18 @@ test('phone: the Now card for the chosen room has a 40 px countdown and two 48 p
   for (const b of await btns.all()) expect(Math.round((await b.boundingBox())!.height)).toBe(48);
   await expect(page.locator('#phone-now .ph-next-card')).toContainText('Duty Free Pricing After the Currency Float');
   await expect(page.locator('#phone-now .ph-row').first()).toBeVisible();
+  // the final minute shows tenths here too
+  await evalPage(page, `S.sessions.find(x => x.status === 'LIVE').actual_start = new Date(correctedNow() - (30 * 60_000 - 30_000)).toISOString(); renderSessions();`);
+  await page.clock.runFor(400);
+  await expect(card.locator('.ph-big')).toHaveText(/^0:(29|30)\.\d$/);
+  await ctx.close();
+});
+
+test('phone: the room picker is not rebuilt by the 1 s re-render', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { ...PHONE, role: 'stage' });
+  await evalPage(page, `window.__opt = document.querySelector('#room-pick option')`);
+  await page.clock.runFor(2000);                       // two ticks with a LIVE session, each calling renderPhoneNow
+  expect(await evalPage(page, `document.querySelector('#room-pick option') === window.__opt`)).toBe(true);
   await ctx.close();
 });
 
@@ -4770,14 +5526,26 @@ function setPhoneTab(tab) {
   if (tab === 'send') document.getElementById('bc-input')?.focus();
 }
 
+// renderPhoneNow runs on every 1 s render. Rewriting the options each time
+// would close a picker the operator has open, so the options are rebuilt only
+// when the room list changes, and the value is set only when it differs and
+// the picker does not have focus.
 function renderRoomPick() {
   const sel = document.getElementById('room-pick');
   if (!sel) return;
   const isDirector = S.role === 'director' || S.userRole === 'director';
   const mine = myRoom() || '';
   const rooms = roomsInOrder();
-  sel.innerHTML = (isDirector ? `<option value="">${esc(t('misc.allRooms'))}</option>` : '')
-    + rooms.map(r => `<option value="${esc(r)}"${r === mine ? ' selected' : ''}>${esc(r === ROOM_NONE ? t('cc.band.noRoom') : r)}</option>`).join('');
+  const key = (isDirector ? '*|' : '|') + rooms.join('|');
+  let rebuilt = false;
+  if (sel.dataset.key !== key) {
+    sel.dataset.key = key;
+    sel.innerHTML = (isDirector ? `<option value="">${esc(t('misc.allRooms'))}</option>` : '')
+      + rooms.map(r => `<option value="${esc(r)}">${esc(r === ROOM_NONE ? t('cc.band.noRoom') : r)}</option>`).join('');
+    rebuilt = true;
+  }
+  const want = mine || (isDirector ? '' : null);   // an operator without a room keeps the browser's first option
+  if (want !== null && (rebuilt || document.activeElement !== sel) && sel.value !== want) sel.value = want;
 }
 
 function phoneLaneHTML(l, nowMs) {
@@ -4800,7 +5568,7 @@ function phoneLaneHTML(l, nowMs) {
     nowCard = `<article class="ph-card ph-now-card ${over ? 'is-over' : 'is-' + s.status.toLowerCase()}">
       <div class="ph-card-head"><span class="lbl">${esc(tf('cc.ph.nowIn', { room: roomName }))}</span>${statusBadge(s.status)}</div>
       <div class="ph-title">${esc(s.title)}</div>
-      <div class="ph-count" data-timer><span class="ph-big">${esc(cd.big)}</span><span class="ph-unit">${esc(cd.unit)}</span></div>
+      <div class="ph-count${warnCls(cd)}" data-timer><span class="ph-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span><span class="ph-unit">${esc(cd.unit)}</span></div>
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}
       <div class="ph-meta">${esc(speakerShort(s))}${s.speaker_arrived ? ` · ${esc(t('cc.list.arrived'))}` : ''}</div>
       ${s.notes && s.notes.trim() ? `<div class="ph-meta">${icon('note')}<span>${esc(s.notes.trim().split('\n')[0])}</span></div>` : ''}
@@ -4898,6 +5666,8 @@ At the top of `renderSessions()`, right after `renderBand();`, add `renderPhoneN
       .ph-big { font: 700 var(--fs-40)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); }
       .ph-now-card.is-over .ph-big { color: var(--st-overrun-fg); }
       .ph-now-card.is-hold .ph-big { color: var(--st-hold-fg); }
+      .ph-count.warn-amber .ph-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as on desktop */
+      .ph-count.warn-red   .ph-big { color: var(--st-live-fg); }
       .ph-unit, .ph-meta { display: flex; gap: 6px; align-items: center; font-size: var(--fs-12); color: var(--text-tertiary); }
       .ph-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
       .ph-actions .btn, .ph-next-card .btn { width: 100%; height: 48px; }
@@ -4911,7 +5681,7 @@ At the top of `renderSessions()`, right after `renderBand();`, add `renderPhoneN
     }
 ```
 
-- [ ] **Step 7: Run.** Phone spec 5 passed. Add `{ name: 'stage-390', sc: { role: 'stage', viewport: { width: 390, height: 844 }, touch: true } },` to the visual `CASES`; `--update-snapshots`; review `director-390` (two room blocks, tabs) and `stage-390` (one room, Hold and End 48 px). Full console suite `0 failed`.
+- [ ] **Step 7: Run.** Phone spec 6 passed; both `console-show-safety*` specs pass. Add `{ name: 'stage-390', sc: { role: 'stage', viewport: { width: 390, height: 844 }, touch: true } },` to the visual `CASES`; `--update-snapshots`; review `director-390` (two room blocks, tabs) and `stage-390` (one room, Hold and End 48 px). Full console suite `0 failed`.
 
 - [ ] **Step 8: Commit.**
 
@@ -4927,7 +5697,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html
 **Files:**
 - Modify `cuedeck-i18n.js`: the en, pl and de values in Step 3; the three Arabic values with em-dashes; `sign.pushAll`; `translateStaticDOM()` help loop deleted.
 - Modify `cuedeck-console.html`: the strings in Step 4; the skip link and band focus target (Step 5); `.rbtn` and help-dropdown labels get `data-i18n`; `.toast-close` size.
-- Create `tests/console-copy.spec.ts`, `tests/e2e/console-a11y.spec.ts`. Modify `tests/e2e/session-management.spec.ts` (lines 131, 233).
+- Create `tests/console-copy.spec.ts`, `tests/e2e/console-a11y.spec.ts`. Modify `tests/e2e/session-management.spec.ts` (lines 131, 233) and `tests/e2e/console-show-safety.spec.ts` (`L.endAll`, Step 6). (`role.*` values were made sentence case in Task 3.1.)
 
 **Interfaces:**
 - Consumes: all earlier stages.
@@ -5050,10 +5820,14 @@ test('a11y: interactive targets are at least 24 px on desktop', async ({ browser
 });
 
 test('a11y: reduced motion stops every animation', async ({ browser }) => {
-  const { ctx, page } = await openConsole(browser, { sessions: overrunSessions(), reducedMotion: 'reduce' });
-  await evalPage(page, `S.rtStatus = 'error'; refreshDiag(); renderSessions();`);
-  expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
-  await ctx.close();
+  // Control run: the same state without the preference does animate (CALLING ring,
+  // OVERRUN lane, connection lost), so a zero below means the rule worked.
+  for (const [pref, check] of [['no-preference', (n: number) => expect(n).toBeGreaterThan(0)], ['reduce', (n: number) => expect(n).toBe(0)]] as const) {
+    const { ctx, page } = await openConsole(browser, { sessions: overrunSessions(), reducedMotion: pref });
+    await evalPage(page, `S.rtStatus = 'error'; refreshDiag(); renderSessions();`);
+    check(await page.evaluate(() => document.getAnimations().length));
+    await ctx.close();
+  }
 });
 
 test('layout: Arabic mirrors the band and keeps End last in reading order', async ({ browser }) => {
@@ -5134,12 +5908,6 @@ test('copy: no visible button, menu item, title or label is written in capitals'
 | `sign.globalOverride` | Global display override | Globalne nadpisanie | Globale Überschreibung |
 | `sign.sponsorLibrary` | Sponsor library | Biblioteka sponsorów | Sponsoren-Bibliothek |
 | `sign.pushAll` | Push to all | | |
-| `role.director` | Director | Reżyser | Regie |
-| `role.stage` | Stage | Scena | Bühne |
-| `role.interp` | Interp | Tłumacz | Dolm. |
-| `role.reg` | Reg | Rejestr. | Empfang |
-| `role.signage` | Signage | Ekrany | Anzeigen |
-| `role.label` | Role | Rola | Rolle |
 | `filter.clearAll` | Clear all | | |
 | `disp.addDisplay` | Add display | | |
 | `disp.editDisplay` | Edit display | | |
@@ -5233,7 +6001,6 @@ const REPL = [
   ['`CueDeck — ${name}`', '`CueDeck: ${name}`'],
   ["'CueDeck — Message'", "'CueDeck: message'"],
   ['\'<option value="">— none —</option>\'', '\'<option value="">None</option>\''],
-  ["director: 'Full control — all transitions", "director: 'Full control: all transitions"],
   ["Let's get your first event ready — it only takes 2 minutes.", "Let's get your first event ready. It only takes 2 minutes."],
   ['operators instantly — pick a priority and hit Send.', 'operators instantly: pick a priority and press Send.'],
   ['details and actions here — including the Stage Monitor', 'details and actions here, including the stage monitor'],
@@ -5246,8 +6013,11 @@ const REPL = [
   ["'Failed to send feedback — try again'", "'Could not send feedback. Try again.'"],
   ["'Back online — syncing...'", "'Back online: syncing…'"],
 ];
-const missing = [];
-for (const [from, to] of REPL) { if (!s.includes(from)) { missing.push(from); continue; } s = s.split(from).join(to); }
+// Every entry must match before anything is written. ('Full control — all transitions'
+// occurs twice, in the role card and in ROLE_DESCRIPTIONS; its one entry replaces both.)
+const missing = REPL.filter(([from]) => !s.includes(from)).map(([from]) => from);
+if (missing.length) { console.error('NOT FOUND (file unchanged):\n' + missing.join('\n')); process.exit(1); }
+for (const [from, to] of REPL) s = s.split(from).join(to);
 // Stage monitor (layout unchanged, spec non-goal): only its em-dashes go.
 s = s.replace(/'— STANDBY'/g, "'Standby'").replace(/>— STANDBY</g, '>Standby<')
      .replace(/(STANDING BY|Standing by)\s*—\s*/g, '$1: ')
@@ -5255,16 +6025,15 @@ s = s.replace(/'— STANDBY'/g, "'Standby'").replace(/>— STANDBY</g, '>Standby
      .replace(/class="sm-footer-evt">—</, 'class="sm-footer-evt">–<')
      .replace(/\|\| '—'\)/g, "|| '–')");
 fs.writeFileSync(FILE, s);
-if (missing.length) { console.error('NOT FOUND:\n' + missing.join('\n')); process.exit(1); }
 console.log('ok');
 ```
 
 ```bash
-node "$SCRATCH/cd-copy.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
+SCRATCH=<session scratchpad>; node "$SCRATCH/cd-copy.mjs" /Users/sheriff/AVE-Production-Console-redesign/cuedeck-console.html
 npx vitest run tests/console-copy.spec.ts
 ```
 
-Expected: `ok`, then the copy spec passes. For any `NOT FOUND` line (an earlier stage or the safety branch already changed that string) search the file for the remaining `—` near it, apply the same rule (colon, comma or full stop; `–` for an empty value), and list it in the commit message. Also: give each `#help-dropdown .hd-label` span a `data-i18n` attribute (`help.shortcuts`, `help.quickRef`, `help.whatsNew`, `help.docs`, `help.feedback`, `help.contact`, `help.about`) and each `#viewas-menu .rbtn` a `data-i18n="role.<role>"`; in `.lf-title` CSS replace `letter-spacing: .08em;` with `letter-spacing: 0;`; add `#plan-badge { text-transform: uppercase; letter-spacing: var(--ls-badge); }`; append `text-transform:uppercase;` to the inline style of the Suspended span; set `.toast-close { min-width: 24px; min-height: 24px; }`.
+Expected: `ok` (checked on `3fd0971`: every entry matches; the earlier duplicate `director: 'Full control — all transitions` entry is gone because the first `Full control` entry already replaces both occurrences, which made the script exit 1 every time), then the copy spec passes. For a `NOT FOUND` line (an earlier stage changed that string) the file is unchanged: find the string's current form, fix that entry, rerun, and list it in the commit message. If the copy spec still lists an em-dash, apply the same rule by hand (colon, comma or full stop; `–` for an empty value). Also: give each `#help-dropdown .hd-label` span a `data-i18n` attribute (`help.shortcuts`, `help.quickRef`, `help.whatsNew`, `help.docs`, `help.feedback`, `help.contact`, `help.about`) and each `#viewas-menu .rbtn` a `data-i18n="role.<role>"`; in `.lf-title` CSS replace `letter-spacing: .08em;` with `letter-spacing: 0;`; add `#plan-badge { text-transform: uppercase; letter-spacing: var(--ls-badge); }`; append `text-transform:uppercase;` to the inline style of the Suspended span; set `.toast-close { min-width: 24px; min-height: 24px; }`.
 
 - [ ] **Step 5: Skip link and band focus.** Insert as the first child of `<body>`:
 
@@ -5283,7 +6052,7 @@ Give `<section id="band" …>` and `<div id="sessions-list">` the attribute `tab
 
 String `cc.a11y.skip`: Skip to now and next | انتقل إلى الآن والتالي | Przejdź do sekcji Teraz i dalej | Zu Jetzt und danach springen.
 
-- [ ] **Step 6: Tests that select on exact text (same commit).** In `tests/e2e/session-management.spec.ts` lines 131 and 233 change `toHaveText('New Session')` to `toHaveText('New session')`. The other text selectors named in the design-system audit keep passing without change and are rerun here: `console-ui` (`button:has-text("SEND")`, `text=GLOBAL DISPLAY OVERRIDE`, `text=REGISTERED DISPLAYS` are case-insensitive), `console-pairing` (`Reset key`, `Click again to reset key`), `console-confirm`, `console-restart` (`Restart this session?`, the READY sentence), `console-forbidden` (`Delay applied`, `2 sessions shifted +5m`, `Updated by another operator`), `auth-flows`.
+- [ ] **Step 6: Tests that select on exact text (same commit).** In `tests/e2e/session-management.spec.ts` lines 131 and 233 change `toHaveText('New Session')` to `toHaveText('New session')`. In `tests/e2e/console-show-safety.spec.ts` change `endAll: 'END ALL'` in the `L` constant to `endAll: 'End all'` (the batch button's text after Step 4; the two batch tests check that the button returns to its own label after the arm, which is unchanged). The other text selectors named in the design-system audit keep passing without change and are rerun here: `console-ui` (`button:has-text("SEND")`, `text=GLOBAL DISPLAY OVERRIDE`, `text=REGISTERED DISPLAYS` are case-insensitive), `console-pairing` (`Reset key`, `Click again to reset key`), `console-confirm`, `console-restart` (`Restart this session?`, the READY sentence), `console-forbidden` (`Delay applied`, `2 sessions shifted +5m`, `Updated by another operator`), `auth-flows`.
 
 - [ ] **Step 7: Run.**
 
@@ -5292,24 +6061,19 @@ npx vitest run
 CONSOLE_BASE=http://127.0.0.1:7291 npx playwright test -c playwright.console.config.ts
 ```
 
-Expected: vitest all pass (copy 3, i18n keys 5, ratchet with the new `BUDGET`); Playwright `0 failed` including a11y 7. If the target-size test lists a control, raise that control to 24 px with a rule next to its component CSS; if the tab-order test lists a region out of order, the DOM order is wrong, not the test.
+Expected: vitest all pass (copy 3, i18n keys 6, ratchet with the new `BUDGET`); Playwright `0 failed` including a11y 7. If the target-size test lists a control, raise that control to 24 px with a rule next to its component CSS; if the tab-order test lists a region out of order, the DOM order is wrong, not the test.
 
 - [ ] **Step 8: Baselines.** `--update-snapshots`; review every PNG for sentence-case labels and no em-dashes.
 
-- [ ] **Step 9: Commit (two commits).**
+- [ ] **Step 9: Commit (one commit for the task; no hunk staging).**
 
 ```bash
-git add cuedeck-i18n.js cuedeck-console.html tests/console-copy.spec.ts tests/e2e/session-management.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
-git commit -m "feat(console): sentence case in every language and no em-dashes
+git status --short
+git add cuedeck-i18n.js cuedeck-console.html tests/console-copy.spec.ts tests/e2e/console-a11y.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-show-safety.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
+git commit -m "feat(console): sentence case and no em-dashes in every language; skip link, labels, toggle state, 24 px targets
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-i18n.js cuedeck-console.html tests/console-copy.spec.ts tests/e2e/session-management.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
-git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-a11y.spec.ts
-git commit -m "feat(console): skip link, labelled icon buttons, toggle state, 24 px targets
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-a11y.spec.ts
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-i18n.js cuedeck-console.html tests/console-copy.spec.ts tests/e2e/console-a11y.spec.ts tests/e2e/session-management.spec.ts tests/e2e/console-show-safety.spec.ts tests/console-colour-ratchet.spec.ts tests/e2e/__screenshots__/console-visual.spec.ts
 ```
-
-(Stage the copy hunks with `git add -p cuedeck-console.html cuedeck-i18n.js` for the first commit.)
 
 ### Task 5.3: Release stage 5
 
@@ -5347,11 +6111,11 @@ Same steps as Task 1.4 with branch `redesign/stage-5` and notes directory `$SCRA
 | 2.5 Timeline | 40 px lanes, HH:MM labels with tooltip, NOW −1 h to +3 h and Fit day, planned outline, overrun hatched, dark text on solid fills, event-local NOW, click selects, band stays | 4.3 |
 | 2.6 1280×720 | One-line lanes, 320 px inspector, notes collapsed, log ≥ 200 | 4.1 (CSS), 4.2 (CSS and test) |
 | 2.7 Phone | 48 px header with room picker, one-line banner that expands, Now card (2 lines, countdown, progress, speakers, note, two 48 px buttons, time adjust), Next card, Later rows, folded finished, tabs Now/Schedule/Log/Send, directors per room | 5.1 |
-| 2.8 Roles | Director all; stage Active filter and own room first; AV flags prominent; interp/reg/signage panels kept | 4.1 (room first), 4.2 (permissions, AV flags, role panels), safety branch (Active) |
+| 2.8 Roles | Director all; stage Active filter and own room first; AV flags prominent; interp/reg/signage panels kept | 4.1 (room first), 4.2 (permissions, AV flags, role panels), show-safety on `main` (Active, kept by 3.2's filter bar) |
 | 2.9 Broadcast | 28 px banner with priority colour and icon, time, collapses to a chip; composer 52 px, presets menu without emoji, Enter sends info and warn, critical two presses | 3.1 |
 | 3 Components | Button, badge, chip, section label, input/select, card/row, modal, toast, status pill, icons | 2.1, 2.2, 2.3, 3.2 (row) |
 | 4 Copy | Sentence case in every language, uppercase via CSS only, no em-dashes (including "starting now"), HH:MM, `–` for empty | 3.x and 4.x (new strings), 2.3 ("starting now"), 5.2 |
-| 5 Accessibility | Keyboard reach, skip link, tab order, labelled icon buttons, aria-pressed, live regions, focus ring, target sizes | 1.2 (ring), 2.2 (dialogs, toasts), 3.1 (buttons), 4.2 (armed confirm), 5.2 |
+| 5 Accessibility | Keyboard reach, skip link, tab order, labelled icon buttons, aria-pressed, live regions, focus ring, target sizes | 1.2 (ring), 2.2 (dialogs, toasts), 3.1 (buttons; armed confirms announced through `armOrConfirm`), 4.2, 5.2 |
 | 6 Stages | Harness first and stable; ratchet; one commit per component; screenshot review, full e2e, review, live check, note per stage; order of value; freeze | 0.1, 0.2, 1.1, 2.1/2.2 commits, every release task, Execution order section |
 | 7 Risks | Tests that select by class/text updated in the same commit; `.sc-meta` chip rule removed with the cards; modals keep inline display; parallel sessions | 2.1, 3.1, 3.2, 4.2, 5.2 (named tests); 3.2 deletes `.sc-meta > span:not(.spk):not([style])`; 2.2 keeps `style.display`; worktree and explicit paths |
 | 8 Decisions | All five stages before GTR with the 10 Oct freeze; two-press confirm (no hold); AI tools in the account menu under Tools | Release tasks; 4.2; 3.1 |
@@ -5372,7 +6136,7 @@ Searched the plan for "TBD", "TODO", "similar to task", "as needed", "handle edg
 
 ## Name consistency
 
-Checked across tasks: `tf`, `icon`, `statusBadge`, `chipHTML`, `hm`, `tsHM`, `sessionSpan`, `FINISHED` (2.1); `applyI18nAttrs`, `togglePopover`, `closePopovers`, `refreshSysPill`, `eventClockHMS`, `eventSubline`, `setBannerRead`, `reopenBanner` (3.1); `focusKey`, `restoreFocus`, `canDo`, `ACTION_ORDER`, `primaryTransition`, `actionLabel`, `transitionButtonHTML`, `primaryButtonHTML`, `endButtonHTML`, `cancelButtonHTML`, `liveTiming`, `countdownLabel`, `people`, `speakerLine`, `speakerShort`, `flagsHTML`, `subLine`, `rowHTML`, `foldRowHTML`, `toggleFold`, `selectSession`, `toggleEditMode` (3.2); `BAND_ROLES`, `NOW_RANK`, `ROOM_NONE`, `roomOf`, `myRoom`, `setMyRoom`, `roomsInOrder`, `laneFor`, `bandLanes`, `minsUntil`, `untilText`, `renderBand`, `laneHTML`, `nextRowHTML`, `laneChipHTML`, `toggleLane` (4.1); `INSPECTOR_ROLES`, `URGENCY`, `announce`, `mostUrgentSession`, `inspectorSession`, `monitorRowHTML`, `inspectorHTML`, `renderInspector`, `buildCtxPanel` (now a wrapper), `buildRoleCtxPanel`, `logKind`, `LOG_FILTER`, `setLogFilter`, `logDetail`, `renderLog` (4.2); `statusColor` (1.2), `toggleTlFit` (4.3); `isPhone`, `setPhoneTab`, `renderRoomPick`, `phoneLaneHTML`, `renderPhoneNow` (5.1); `initModalManager` (2.2). State fields: `S.selectedId`, `S.foldOpen`, `S.editMode`, `S.listOpened` (3.2), `S.laneOpen` (4.1), `S.inspectedId`, `S.urgentKey`, `S.inspMoreOpen`, `S.logFilter` (4.2), `S.tlFit` (4.3), `S.phoneTab` (5.1), `S.presenceList`, `S.bcKey`, `S.bcReadKey`, `S.brainCount` (3.1). Every test name quoted in Review Focus exists verbatim in its task. No local variable is named `t` in any new code.
+Checked across tasks: `tf`, `icon`, `statusBadge`, `chipHTML`, `hm`, `tsHM`, `sessionSpan`, `FINISHED` (2.1); `applyI18nAttrs`, `togglePopover`, `closePopovers`, `refreshSysPill`, `eventSubline`, `setBannerRead`, `reopenBanner`, `announce`, `_bcPending`, `renderBCSend`, `doSendBroadcast`, `armOrConfirm(…, act)` (3.1); `focusKey`, `restoreFocus`, `canDo`, `ACTION_ORDER`, `primaryTransition`, `actionLabel`, `transitionButtonHTML`, `primaryButtonHTML`, `endButtonHTML`, `cancelButtonHTML`, `liveTiming`, `fmtRemain`, `countdownText`, `warnCls`, `countdownLabel`, `people`, `speakerLine`, `speakerShort`, `flagsHTML`, `subLine`, `rowHTML`, `foldRowHTML`, `toggleFold`, `selectSession`, `toggleEditMode` (3.2); `BAND_ROLES`, `NOW_RANK`, `ROOM_NONE`, `roomOf`, `myRoom`, `setMyRoom`, `roomsInOrder`, `laneFor`, `bandLanes`, `minsUntil`, `untilText`, `renderBand`, `laneHTML`, `nextRowHTML`, `laneChipHTML`, `toggleLane` (4.1); `INSPECTOR_ROLES`, `mostUrgentSession` (ranks with `NOW_RANK`), `inspectorSession`, `monitorRowHTML`, `inspectorHTML`, `renderInspector`, `buildCtxPanel` (now a wrapper), `buildRoleCtxPanel`, `logKind`, `LOG_FILTER`, `setLogFilter`, `logDetail`, `renderLog` (4.2); `statusColor` (1.2), `toggleTlFit` (4.3); `isPhone`, `setPhoneTab`, `renderRoomPick`, `phoneLaneHTML`, `renderPhoneNow` (5.1); `initModalManager` (2.2). State fields: `S.selectedId`, `S.foldOpen`, `S.editMode`, `S.listOpened` (3.2), `S.laneOpen` (4.1), `S.inspectedId`, `S.urgentKey`, `S.inspMoreOpen`, `S.logFilter` (4.2), `S.tlFit` (4.3), `S.phoneTab` (5.1), `S.presenceList`, `S.bcKey`, `S.bcReadKey`, `S.brainCount` (3.1). Show-safety names are used as they exist on `main`: `isArmed`, `armOrConfirm`, `armState`, `dropStaleArms`, `eventClockParts`, `eventLocalHMS`, `eventNowMinutes`, `eventWallClockNow`, `correctedHMS`, `fmtTS`, `ROLE_FILTER_DEFAULT`; no task reads `_endPending`/`_cancelPending` except through `isArmed`, and no task adds a second arming implementation. Every test name quoted in Review Focus exists verbatim in its task. No local variable is named `t` in any new code.
 
 ## Spec ambiguities resolved
 
@@ -5391,3 +6155,63 @@ Checked across tasks: `tf`, `icon`, `statusBadge`, `chipHTML`, `hm`, `tsHM`, `se
 13. **Status strings.** `status.*` values keep their source text because badges are uppercased by CSS and status names appear as names inside sentences (for example the restart dialog); the copy test allows status words.
 14. **Freeze hours.** "Evening of 10 Oct" is made concrete as: no release task starts after 18:00 and nothing not live-checked by 21:00 ships, in Sherif's local time.
 15. **Display page.** "Adopt the shared status tokens" is applied to status labels only; the presenter timer's remaining-time colours are not statuses and stay.
+
+## Revision log (2026-10-06)
+
+Revised against `main` @ `3fd0971` (the worktree `/Users/sheriff/AVE-Production-Console-redesign`, branch `feat/console-redesign`, with the merged show-safety fixes), working through every row of `.superpowers/sdd/2026-10-06-command-center-redesign/preflight.md`. Checks run for this revision, not assumed: the Task 0.1 pre-flight greps (all `ok` on `3fd0971`); the display-page replacement strings (each occurs once); the Task 2.3 codemod run verbatim from this plan on a copy of `main` (`ok`), then the guard, which leaves 59 hits, every one inside a region Tasks 3.1, 3.2, 4.1 or 4.2 rewrite; the Task 5.2 copy codemod run verbatim (`ok`, exit 0) and the em-dashes left after it (all in rewritten regions); `getBtnCfg`/`getBtnOverride`/`BTN_*` callers; `role.*` callers; the batch arm's label source; the stage monitor's overrun colour source (`var(--magenta)`); the `.sc.delayed` rule.
+
+| # | Pre-flight reference | Finding | Resolution | Where |
+|---|---|---|---|---|
+| 1 | Pair 1; 0.1(a); 0.2 | `git fetch cuedeck origin` is invalid | Two commands, `git fetch cuedeck` and `git fetch origin`, everywhere; 0.2 also checks `main..origin/main` | Global Constraints; 0.1 Step 1; 0.2 Step 2 |
+| 2 | Pair 1; 0.1(d); §3.17 | The worktree already exists on `feat/console-redesign`; `git worktree add` would fail | 0.1 no longer creates it: it checks the worktree is at `main`, then `git switch -c redesign/stage-0` | Global Constraints; 0.1 Steps 1 and 2 |
+| 3 | 0.1(b); §3.1 | Pre-flight greps `_endPending.has`, which does not exist | Greps the real names: `isArmed`, `armOrConfirm`, `armState`, `dropStaleArms`, `eventWallClockNow`, `eventLocalHMS` and the rest (10 `ok` on `3fd0971`) | 0.1 Step 1 |
+| 4 | 0.1(c); §3.2 | `eventLocalHM` matched only by prefix; `eventWallClockNow` missing from the table | Interface table rewritten with the real show-safety names and how to use them | "Show-safety interfaces on `main`" |
+| 5 | 0.1(e); §3.17 | Screenshot mock duplicates `console-boot-harness.ts`; safety specs owned by no task | Mock kept separate on purpose (frozen clock and data; changing the harness would change what the safety specs prove), stated in 0.1; file map now lists both safety specs and the harness with the tasks that edit them | 0.1 Files; File map |
+| 6 | 0.1(f) | `MASK_SELECTORS` names elements that later vanish | Kept (a mask that matches nothing is harmless); comment says so; new countdowns sit in `[data-timer]` | 0.1 Step 5 |
+| 7 | 0.2 | Safety merge already pushed | Step 5 expects only doc commits and the harness commit, and says the safety merge must not appear | 0.2 Step 5 |
+| 8 | Pair 2; 1.1 | Budget 504, not 506; 78 replacements; 426 after | Numbers updated to the measured values | 1.1 Steps 2, 4, 6 |
+| 9 | Pair 6; 4.1(a) | File map says 4.1 extends the mock, 4.1 says no change | 4.1 now really extends it (`manySessions()`, see #36); wording consistent | File map; 4.1 Files and Step 1 |
+| 10 | Pair 26; 2.3; §4.9 | The 2.3 guard could never pass: 14+ glyph sites covered by no task | 16 entries added (slide editor, log suffixes, signage tags and buttons, stage monitor standby, empty-state and quick-reference "＋", welcome icon, invite toast, first-event button); verified by running the codemod and the guard on `main`: the 59 remaining hits are all in regions 3.1/3.2/4.1/4.2 rewrite; `buildFlags` (5 hits) is deleted in 3.2 | 2.3 intro, Steps 2 and 3; 3.2 Step 4 |
+| 11 | 2.3 | Codemod wrote the file, then exited 1 on NOT FOUND (half-edited file) | Both codemods (2.3, 5.2) check every entry first and write nothing unless all match; instructions say to fix the entry and rerun | 2.3 Step 3; 5.2 Step 4 |
+| 12 | Pair 30; 3.1(c); §3.6; §4.1 | `_sendCritical` was a parallel arm, unannounced | Critical send calls `armOrConfirm` (new optional `act` callback, keyed `'critical'` in `_bcPending`); the Send button renders from the map (`renderBCSend`, called from `renderSessions`); `armOrConfirm` announces every armed label; test covers arm, announcement, re-render, confirm and 3 s lapse | 3.1 Interfaces, Steps 1 and 5 |
+| 13 | Pair 33; 3.2(d); §4.6 | 1 s tick re-rendered only with LIVE/OVERRUN: held timer and "in N min" froze | 3.2 adds HOLD to the condition; 4.1 widens it to any unfinished session (the band's "in N min"); tests `list: a held timer keeps counting…` and `band: "in N min" keeps counting…` render only through the tick | 3.2 Step 4; 4.1 Files, Steps 1 and 4 |
+| 14 | Pair 35; 3.2(c); §4.3 | Deleting `cardHTML` dropped the 5-min amber / 1-min red wrap-up warnings and left the 200 ms tenths updater pointing at nothing | `countdownLabel` carries `warn-amber`/`warn-red` (text colour plus a 1 px ring; the left edge stays the status colour; no pulse, per the spec's motion rule); one formatter (`fmtRemain`/`countdownText`) for the 1 s render and the 200 ms updater, which is re-pointed at `[data-cd-sid]` in the list, band, inspector and phone; tests in 3.2, 4.1, 4.2, 5.1 | 3.2 Interfaces, Steps 1, 4, 5; 4.1 Step 4/5; 4.2 Steps 1, 4, 5; 5.1 |
+| 15 | Pair 38; 4.1(b); §4.4 | Armed "Press again to end" (142 px) clipped in the 112 px band slot at 1280 | Band End keeps its 148 px slot at every width (lead 96 at ≤1439); inspector End slot 172 px at lg, and at ≤1439 the primary row drops to md with a 148 px End and a 20 px gap so a READY row fits the 320 px rail; test checks `scrollWidth <= clientWidth` for both at 1280 | 4.1 Step 5; 4.2 Steps 1 and 5 |
+| 16 | Pair 43; 5.1 | `#room-pick` options rewritten every tick (closes an open picker) | Options rebuilt only when the room list changes; value set only when it differs and the picker is not focused (or right after a rebuild); test checks the option node survives two ticks | 5.1 Steps 1 and 4 |
+| 17 | Pair 44; 2.4; 3.3 | `redesign/stage-2` and `redesign/stage-3` had no creation command | `git -C … switch -c redesign/stage-3 main` (after 1.4) and `… redesign/stage-2 main` (after 4.4) | Stage 2 heading; Stage 3 heading; 2.4 |
+| 18 | Pair 44; 1.4 | `$SCRATCH` never defined | Defined in Global Constraints; every command that uses it sets it in the same command | Global Constraints; 1.1, 2.3, 5.2 commands |
+| 19 | 1.2(a) | Display-page patterns `isHold2 ? '#f97316'` etc. do not occur literally; `ov ? '#ef4444'` occurs 3 times | Four exact strings (whitespace as in the file, each occurring once) for the two stage-timer functions; the presenter timer (lines 839, 847) explicitly untouched; the display test asserts both | 1.2 Files, Steps 1 and 8 |
+| 20 | 1.2(b); §3.10 | Three safety assertions fail after 1.2 | Step 9b updates them to the new token values with the same meaning (monitor overrun magenta, READY left edge, amber delay line) | 1.2 Step 9b, Step 11 |
+| 21 | 1.2(c) | Text-contrast test skipped missing elements | Missing element now fails; `META_TEXT` is updated by the tasks that remove an element (3.1 `#bc-bar .lbl`, 4.2 `#ctx-wrap .insp-times`) | 1.2 Step 1; 3.1 Step 8; 4.2 Step 7 |
+| 22 | 1.2(d) | Focus-ring test checked one input | Walks 40 Tab stops and requires the ring on every one (and at least 10 distinct controls visited) | 1.2 Step 1 |
+| 23 | §3.10; §4.1 | 1.2's global reduced-motion rule duplicated the safety rule | 1.2 deletes the safety block; the safety reduced-motion test keeps checking the behaviour | 1.2 Files and Step 6 |
+| 24 | 2.1; 2.2; 5.2; §4.7 | `git add -p` (interactive) plus pathspec commits cannot give per-component commits | One commit per task with the components listed in the body; `git add -p` banned in Global Constraints (1.2 keeps its three whole-file commits) | Global Constraints; 2.1 Step 10; 2.2 Step 7; 5.2 Step 9 |
+| 25 | 2.1; §4.12 | "Back to ready" rendered solid green | `FWD_CLASS` is keyed by move (`PLANNED>READY`, `READY>CALLING`, `READY>LIVE`, `CALLING>LIVE`, `HOLD>LIVE`); backward moves are secondary; list test asserts it | 3.2 Steps 1 and 4 |
+| 26 | 2.2; §4.10 | Field rule hit checkboxes, radios, colour and file inputs | Selector excludes them with `:not()`; test mounts a probe card | 2.2 Steps 1 and 3 |
+| 27 | 2.2; §4.11 | Generic Escape silently started closing wizard, welcome, qr, users | Wizard and welcome carry `data-esc="off"` (their backdrop click skips onboarding); Team and QR now close on Escape, stated in the task and the stage 2 note; test guards the wizard | 2.2 Steps 1 and 4; 2.4 |
+| 28 | 3.1(a); §3.7 | Test cue alert reverted to `Date.now()` and lost its `title` | All three Tools buttons keep their titles and code verbatim (`eventWallClockNow()`); safety test passes unchanged | 3.1 Files and Step 3 |
+| 29 | 3.1(b); §3.8; §4.1 | `eventClockHMS` duplicated `eventLocalHMS`/`correctedHMS` | Dropped; `#hdr-clock` keeps `correctedHMS()` | 3.1 Interfaces and Step 5 |
+| 30 | 3.1(d); §4.13 | Crew list showed signage, count excluded it | List filtered to `PRESENCE_ROLES`; test asserts 3 names, no signage | 3.1 Steps 1 and 5 |
+| 31 | 3.1(e) | `role.*` uppercase until 5.2, shown in the stage 3 header | `role.*` sentence case moved into 3.1 (en, pl, de); removed from the 5.2 table | 3.1 Step 6; 5.2 Step 3 |
+| 32 | 3.2(a); 4.2(b); §3.3; §3.4 | `_endPending.has(s.id)` in `endButtonHTML`, `cancelButtonHTML`, `inspectorSession` | All read `isArmed(pending, s)` with the session object; Global Constraints forbid `.has` | 3.2 Step 4; 4.2 Step 4 |
+| 33 | 3.2(b); §3.9 | `buildFilterBar` text named a removed `tl-auto-toast`; no OVERRUN option; interp default unstated | Mention removed; OVERRUN option added; interface table says stage, av and interp default to Active | 3.2 Step 4; interface table |
+| 34 | 3.2(e) | `S.listOpened` never reset on event switch | `switchEvent` resets `listOpened`, `selectedId`, `foldOpen` | 3.2 Step 4 |
+| 35 | 3.2(f); §3.11; §3.12 | ~14 safety tests break in 3.2 (`.sc-actions`, hidden `.batch-chk`, `.sc-times`, `.delay-tag`, delay top line) | Step 7b: `controls()` helper and label constant `L`, hover before `.check()`, page-wide "nothing armed" checks, drawer shows the actual start (HH:MM), delayed-row test rewritten to spec 2.2 (status edge kept, delay in its column, no edge colour), new test for the row's own End | 3.2 Steps 4 and 7b |
+| 36 | 4.1(c); §4.2 | 8-row test passed only because the demo has 8 elements | Uses `manySessions()` (14 sessions) and asserts the list overflows before counting visible rows | 4.1 Step 1 |
+| 37 | 4.2(a); §3.5 | `announce` targeted arming branches that do not exist | `announce(t(labelKey))` goes into `armOrConfirm` (in 3.1), which already re-renders; 4.2 adds nothing to `confirmEnd`/`confirmCancel` | 3.1 Step 5; 4.2 Step 4 |
+| 38 | 4.2(c); §3.14 | New `renderLog` dropped `.le`, seconds and the raw action text | Unclassified actions keep their escaped name in the row (the XSS safety test keeps proving escaping); safety and boot specs move to `.lg` and HH:MM (spec 4: seconds only on running timers and the clock), still asserting each row's own time in the event zone | 4.2 Steps 4 and 7b |
+| 39 | 4.2(d); §3.13 | `#ctx-title` and `#ctx-actions .ctx-btn` consumers removed | Step 7b rewrites the sidebar tests against `#ctx-wrap .insp-title` and `.insp-primary`, Hold-before-End against band and inspector, the quick-action test against the band End | 4.2 Step 7b |
+| 40 | 4.2(e) | READY tie-break by scheduled start, `main` uses run order | `mostUrgentSession` ties by `sort_order` | 4.2 Step 4 |
+| 41 | 4.2(f); §3.16 | `confirm.confirmEnd/Cancel` change breaks `CONFIRM END` assertions (cards and batch) | Labels live in the safety spec's `L` constant, updated in 4.2 (armed) and 5.2 (`End all`) | 3.2 Step 7b; 4.2 Step 7b; 5.2 Step 6 |
+| 42 | §3.15; 4.3 | New 30-minute ticks remove the `14:45` tick the safety NOW-line test needs | Step 4b measures against 14:30 and 15:00 (one third), same meaning | 4.3 Step 4b |
+| 43 | Pair 39; §4.1 | `NOW_RANK` and `URGENCY` identical (and a third copy in `buildCtxPanel`) | `URGENCY` removed, 4.2 ranks with `NOW_RANK`; the third copy goes with the deleted director branch | 4.2 Interfaces and Step 4 |
+| 44 | §4.1 | `tsHM` duplicated the cached event formatter | `tsHM` uses `eventClockParts` | 2.1 Step 4 |
+| 45 | Pair 19; §4.1 | `getBtnCfg`/`getBtnOverride` dead after 4.2 | Deleted in 4.2 with `BTN_CFG`/`BTN_LABEL_OVERRIDE`, with a grep check | 4.2 Files and Step 4 |
+| 46 | 5.2; §4.8 | `cd-copy.mjs` overlapping "Full control" entry made it exit 1 every time | Dead entry removed; script run verbatim on `main`: `ok` | 5.2 Step 4 |
+| 47 | 5.2 | "i18n keys 5", spec file has 6 tests | 6 | 5.2 Step 7 |
+| 48 | §4.2 | 5.2 reduced-motion test had no control run | Same scenario without the preference must animate first | 5.2 Step 1 |
+| 49 | §4.14 | Stage onboarding tip still says "action buttons in the sidebar" | `ROLE_TIPS.stage[0].text` rewritten in 4.2 | 4.2 Step 4 |
+| 50 | §4.15 | Trailer fixed to Opus 5.5 regardless of session model | Trailer is the one the session's system reminder gives | Global Constraints |
+| 51 | §4.2 | `display-status-tokens` only string-matches | Kept as a source check (the display page has no harness) but extended to the stage-timer and presenter-timer strings so a wrong file-wide replace fails | 1.2 Step 1 |
+
+Accepted as they are, with the reason for each: the ratchet's "kept tight" test forcing a budget edit per task (intended: it is what makes the ratchet go down); the lead/gap/End composition written in band, inspector and phone (three layouts, small templates); `btn.*` strings translated in 5.2 though some are unused after 4.2 (harmless); the phone "Later" rows re-rendering each second (no focusable or open control in them); `clearBroadcast`'s own pre-existing arm (not new, outside this plan's scope).
