@@ -1,6 +1,6 @@
 # Command center redesign: direction B (Now and next)
 
-Date: 2026-10-06. Status: direction B chosen by Sherif ("fix the safety bugs now, then go with option B"). This spec needs his approval before planning.
+Date: 2026-10-06. Status: direction B chosen by Sherif ("fix the safety bugs now, then go with option B"). Spec approved with decisions in section 8.
 Demo: https://claude.ai/artifact/WqQ6EYTKocovRAVFqo7eLp (tab "B · Now and next").
 Inputs: four specialist audits run on 66 screenshots of the console at 2x with GTR example data (visual and contrast, layout and information architecture, live show operations, design system), 6 Oct 2026. Their raw reports and measurement scripts live in the session scratchpad (`console-audit/`, `viz/`, `ds_scan.py`); the numbers below are copied from them.
 Separate and first: the show-safety bug fixes (branch `fix/show-safety`), which this redesign builds on.
@@ -184,7 +184,7 @@ Every interactive element reachable by keyboard (event switcher and account chip
 
 Each stage: Playwright screenshot diffs reviewed, the full console e2e suite green, a review, a live check on app.cuedeck.io, and a short note to Sherif with before and after screenshots. Stages 1 to 3 are visible improvements on their own; nothing ships half a layout.
 
-**Timing against GTR (12 Oct).** The safety fixes ship first. Stages 0 to 2 can land before the event if reviews are clean; stages 3 to 5 change where buttons are and should land after GTR so operators are not retrained mid-week, unless Sherif chooses otherwise.
+**Timing against GTR (12 Oct), decided 2026-10-06: all five stages before GTR.** The safety fixes ship first. Each stage ships as soon as it is reviewed and live-checked. Code freeze: nothing new ships after the evening of 10 Oct; a stage not fully reviewed and live-checked by then waits until after GTR. 11 Oct is a rehearsal day on the finished console (every status, delay, overrun, broadcast, stage monitor, phone). Order of value if time runs short: stage 1 (lines and colour) and stage 3 (header and compact list) first, then 4, then 2 and 5.
 
 ## 7. Risks
 - Tests select by class and exact text (listed in the design-system audit: `auth-flows`, `console-pairing`, `console-confirm`, `session-*`, `console-ui`); each stage updates the affected specs in the same commit.
@@ -192,7 +192,7 @@ Each stage: Playwright screenshot diffs reviewed, the full console e2e suite gre
 - The Escape handler and boot checks read `style.display`; modals stay on inline display until those readers move in the same commit.
 - Parallel sessions edit `cuedeck-console.html`; each stage branches from the latest main and merges promptly.
 
-## 8. Decisions for Sherif before planning
-1. Release timing: stages 0 to 2 before GTR and 3 to 5 after (recommended), or everything after GTR, or everything before.
-2. Destructive confirm: two presses (recommended for now, matches today) or press and hold for End.
-3. AI test tools: move into the account menu (recommended) or remove from the console entirely.
+## 8. Decisions (Sherif, 2026-10-06)
+1. Release: all five stages before GTR, with the 10 Oct evening code freeze above.
+2. Destructive confirm: two presses (the fixed, re-render-safe version from the safety branch). Press and hold is not built.
+3. AI test tools: moved into the account menu under "Tools", away from show controls.
