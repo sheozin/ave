@@ -8,7 +8,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/checkin-app.css">
 <style>
-html,body{background:#111113;color:#F5F5F7;height:100%;margin:0}
+html,body{background:#111113;color:#F5F5F7;height:100%;margin:0;overflow-x:hidden;-webkit-text-size-adjust:100%}
 /* One screen, no scrolling: the page is exactly the visible viewport (dvh,
    falling back to vh), header pinned top, code box and footer pinned
    bottom, and the camera, start button and verdict centred in between. */
@@ -42,7 +42,9 @@ html,body{background:#111113;color:#F5F5F7;height:100%;margin:0}
 .sx-v.wait{background:#2C2C2E;color:#E5E5EA}
 .sx-v.idle{background:#1C1C1E;color:#A1A1A6}
 .sx-man{display:flex;gap:8px}
-.sx-man input{flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid #3A3A3C;background:#1C1C1E;color:#F5F5F7;padding:0 12px;font:inherit;font-size:15px}
+/* 16px or more: iOS Safari zooms the whole page into any smaller text box
+   on tap, which pushed this screen sideways in the 2026-10-06 test. */
+.sx-man input{flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid #3A3A3C;background:#1C1C1E;color:#F5F5F7;padding:0 12px;font:inherit;font-size:16px}
 .sx-man button,.sx-btn{height:44px;border-radius:12px;border:0;background:#2C2C2E;color:#F5F5F7;font:inherit;font-weight:600;padding:0 14px;cursor:pointer}
 .sx-note{font-size:13px;color:#A1A1A6;line-height:1.5}
 .sx-err{font-size:14px;color:#FF9F9F;line-height:1.45}
@@ -92,7 +94,7 @@ html,body{background:#111113;color:#F5F5F7;height:100%;margin:0}
     <h1>Pair this phone</h1>
     <p class="sx-note">At the check-in desk, an organizer or desk lead taps <b>Kiosk or scanner</b>, chooses <b>Door scanner phone</b> and reads you a code. Type it here.</p>
     <form id="pair-form" style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
-      <input class="sx-code" id="pair-code" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-label="Pairing code">
+      <input class="sx-code" id="pair-code" name="pairing-code" inputmode="text" autocomplete="off" autocorrect="off" enterkeyhint="go" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" aria-label="Pairing code">
       <button class="sx-start" id="pair-btn">Pair</button>
     </form>
     <div class="sx-err" id="pair-err"></div>
@@ -114,7 +116,7 @@ html,body{background:#111113;color:#F5F5F7;height:100%;margin:0}
       </div>
     </div>
     <form class="sx-man" id="man-form" autocomplete="off">
-      <input id="man-code" placeholder="Or type the code from the email" aria-label="QR code" spellcheck="false" autocapitalize="off">
+      <input id="man-code" name="guest-code" placeholder="Or type a guest's code" aria-label="Guest's code" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" inputmode="text" enterkeyhint="go">
       <button id="man-btn">Check</button>
     </form>
     <div class="sx-err" id="scan-err"></div>
@@ -431,6 +433,10 @@ $('man-form').addEventListener('submit', (e) => {
   e.preventDefault();
   unlockAudio();
   const v = $('man-code').value; $('man-code').value = '';
+  // Close the keyboard so the verdict is in view, and undo any scroll iOS
+  // made to show the box above the keyboard.
+  $('man-code').blur();
+  window.scrollTo(0, 0);
   seen.delete(normalizeToken(v) || '');   // a Map: typing the same code twice on purpose is allowed
   handle(v, false);
 });
