@@ -10,18 +10,23 @@
 //   POST { action: 'config', code }    -> what the page needs to render
 //   POST { action: 'register', code, first_name, last_name, email, company,
 //          answers, consent, turnstile_token, website }
+//   POST { action: 'confirm', code, token }   the link from the email
 //
-// A registration answers exactly one of:
-//   { status: 'ok' }                         live: "check your email"
-//   { status: 'ok', test: true, code: 'B4K2C7' }   test mode, new guest
-//   { status: 'ok', test: true }             test mode, already listed
-//   { status: 'full' | 'closed' | 'test_cap' }
-// "Already registered" is indistinguishable from "registered" in live mode:
-// both say check your email, and the QR goes to the address ON FILE.
+// DOUBLE OPT-IN (migration 101, after the security review of 100). A live
+// registration answers { status: 'check_email' } for every address, new,
+// pending or already listed, and the only email it can cause is the
+// fixed-text confirmation in _shared/registration-confirm-email.ts. The
+// guest joins the list, and gets the QR, when the address owner confirms.
+//   register -> { status: 'check_email' }               live, always
+//               { status: 'ok', test: true, code? }     test mode, no email
+//               { status: 'full' | 'closed' | 'test_cap' }
+//   confirm  -> { status: 'registered', first_name }    (also for 'already')
+//               { status: 'invalid' | 'full' | 'closed' }
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { sendQrEmailsForAttendees } from '../_shared/qr-email.ts'
+import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed } from '../_shared/checkin-policy.ts'
 import {
   isRegistrationCode, validateRegistration, shortCode, mayResend, type Question,
@@ -43,9 +48,24 @@ async function hmacHex(key: string, input: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function clientIp(req: Request): string {
-  return (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+// The client IP as the platform saw it. The LEFT-most X-Forwarded-For entry
+// is whatever the client sent (Cloudflare appends, it does not replace), so
+// it is never used: cf-connecting-ip first, else the right-most entry.
+// Null when neither exists, and the caller refuses rather than pooling
+// everyone into one bucket.
+function clientIp(req: Request): string | null {
+  const cf = (req.headers.get('cf-connecting-ip') ?? '').trim()
+  if (cf) return cf
+  const parts = (req.headers.get('x-forwarded-for') ?? '').split(',').map(x => x.trim()).filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : null
 }
+
+const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+async function sha256Hex(s: string): Promise<string> {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
+  return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/
 
 async function turnstileOk(secret: string, token: string, ip: string): Promise<boolean> {
   if (!token || token.length > 4096) return false
@@ -53,10 +73,12 @@ async function turnstileOk(secret: string, token: string, ip: string): Promise<b
     const form = new FormData()
     form.append('secret', secret)
     form.append('response', token)
-    if (ip !== 'unknown') form.append('remoteip', ip)
+    form.append('remoteip', ip)
     const r = await fetch(TURNSTILE_VERIFY, { method: 'POST', body: form })
     const j = await r.json()
-    return j?.success === true && ALLOWED_HOSTS.has(String(j.hostname ?? ''))
+    // action binds the token to this form: a token minted by the sign-in
+    // widget (same site key) is not accepted here.
+    return j?.success === true && ALLOWED_HOSTS.has(String(j.hostname ?? '')) && j.action === 'register'
   } catch (e) {
     console.error('checkin-register: turnstile verify failed', (e as Error).message)
     return false
@@ -81,6 +103,7 @@ Deno.serve(async (req) => {
 
   let body: Record<string, unknown>
   try { body = await req.json() } catch { return json({ error: 'Bad request' }, 400) }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'Bad request' }, 400)
   if (body._ping) return json({ pong: true })
 
   const code = body.code
@@ -108,6 +131,14 @@ Deno.serve(async (req) => {
 
   // ── config ──────────────────────────────────────────────────────
   if (body.action === 'config') {
+    // TEMPORARY (2026-10-06): which IP headers this platform sets, as
+    // booleans only, to confirm clientIp() reads the right one. Remove once
+    // verified.
+    {
+      const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map(x => x.trim()).filter(Boolean)
+      const cf = req.headers.get('cf-connecting-ip')
+      console.log('checkin-register: ip headers', JSON.stringify({ cf: !!cf, xff_n: xff.length, cf_is_last: !!cf && cf === xff[xff.length - 1], cf_is_first: !!cf && cf === xff[0], x_real: !!req.headers.get('x-real-ip') }))
+    }
     // The same closing rules checkin_web_register applies; the database is
     // the authority at submit time, this is so the page can say so first.
     let state: 'open' | 'closed' | 'full' = 'open'
@@ -126,6 +157,31 @@ Deno.serve(async (req) => {
       questions: questions.map(q => ({ id: q.id, label: q.label, type: q.type, required: q.required, options: q.options })),
       turnstile_site_key: TURNSTILE_SITE_KEY,
     })
+  }
+
+  // ── confirm ─────────────────────────────────────────────────────
+  // The caller holds the token from the emailed link, so is the address
+  // owner. No Turnstile: the token is 256 bits and single use.
+  if (body.action === 'confirm') {
+    const token = typeof body.token === 'string' ? body.token : ''
+    if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const { data: out, error } = await sb.rpc('checkin_web_confirm', { p_code: code, p_token_hash: await sha256Hex(token) })
+    if (error || !out) {
+      console.error('checkin-register: confirm failed', error?.code ?? 'no result')
+      return json({ error: 'Something went wrong. Please try the link again.' }, 500)
+    }
+    const status = String(out.status)
+    if (status === 'not_found') return json({ error: 'not_found' }, 404)
+    if (status !== 'registered' && status !== 'already') return json({ status })
+    const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null } | null
+    // 'already': the owner of an address already on the list gets their QR
+    // again, at most every 10 minutes.
+    if (attendee && (status === 'registered' || mayResend(attendee.qr_email_sent_at, Date.now()))) {
+      const res = await sendQrEmailsForAttendees(sb, { name: event.name, date: event.date, venue: event.venue }, [attendee])
+      if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
+    }
+    console.log('checkin-register: confirmed (' + status + '), event', ent.event_id)
+    return json({ status: 'registered', first_name: String(out.first_name ?? '') })
   }
 
   if (body.action !== 'register') return json({ error: 'Bad request' }, 400)
@@ -154,10 +210,14 @@ Deno.serve(async (req) => {
   if (str(body.website).trim()) {
     console.warn('checkin-register: honeypot filled, event', ent.event_id)
     await pad()
-    return json(test ? { status: 'ok', test: true } : { status: 'ok' })
+    return json(test ? { status: 'ok', test: true } : { status: 'check_email' })
   }
 
   const ip = clientIp(req)
+  if (!ip) {
+    console.error('checkin-register: no client IP header; refusing')
+    return json({ error: 'Registration is not available right now' }, 503)
+  }
   if (!(await turnstileOk(secret, str(body.turnstile_token), ip))) {
     return json({ error: 'Please complete the check that you are not a robot, then try again.', code: 'captcha' }, 400)
   }
@@ -169,13 +229,15 @@ Deno.serve(async (req) => {
     return json({ error: 'Too many registrations from this connection just now. Please try again in a few minutes.' }, 429)
   }
 
-  const { data: out, error: regErr } = await sb.rpc('checkin_web_register', {
+  const raw = crypto.getRandomValues(new Uint8Array(32))
+  const token = b64url(raw)
+  const { data: out, error: regErr } = await sb.rpc('checkin_web_request', {
     p_code: code, p_first_name: form.first_name, p_last_name: form.last_name,
-    p_email: form.email, p_company: form.company, p_answers: answers,
+    p_email: form.email, p_company: form.company, p_answers: answers, p_token_hash: await sha256Hex(token),
   })
   if (regErr || !out) {
     // Code only: the message of a constraint error can carry the address.
-    console.error('checkin-register: register failed', regErr?.code ?? 'no result')
+    console.error('checkin-register: request failed', regErr?.code ?? 'no result')
     return json({ error: 'Registration failed. Please try again.' }, 500)
   }
 
@@ -183,27 +245,23 @@ Deno.serve(async (req) => {
   if (status === 'full' || status === 'closed' || status === 'test_cap') return json({ status })
   if (status === 'not_found') return json({ error: 'not_found' }, 404)
 
-  const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null } | null
-  const ev = { name: event.name, date: event.date, venue: event.venue }
-
-  if (status === 'registered' && attendee) {
-    if (!test) {
-      const res = await sendQrEmailsForAttendees(sb, ev, [attendee])
-      if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
-    }
-    console.log('checkin-register: registered, event', ent.event_id, test ? '(test)' : '')
-    await pad()
-    // No email in test mode (test mode is not free QR delivery), so the
-    // organizer trying the page sees the code on screen instead.
-    return json(test ? { status: 'ok', test: true, code: shortCode(attendee.qr_token) } : { status: 'ok' })
+  if (test) {
+    // Test mode: immediate, never any email (test mode is not free email
+    // delivery). A new guest sees their code on screen.
+    console.log('checkin-register: test registration (' + status + '), event', ent.event_id)
+    return json(status === 'registered' ? { status: 'ok', test: true, code: shortCode(String(out.qr_token)) } : { status: 'ok', test: true })
   }
 
-  // duplicate: re-send to the address on file, at most once per 10 minutes.
-  if (!test && attendee && mayResend(attendee.qr_email_sent_at, Date.now())) {
-    const res = await sendQrEmailsForAttendees(sb, ev, [attendee])
-    if (res.some(r => r.status === 'error')) console.error('checkin-register: QR re-send failed, attendee', attendee.id)
+  if (out.send === true) {
+    const link = 'https://app.cuedeck.io/r/' + code + '?t=' + token
+    const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link)
+    // After the response where the runtime allows it, so how long the mail
+    // provider takes is not visible in the answer.
+    const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+    if (rt) rt.waitUntil(sending); else await sending
   }
-  console.log('checkin-register: already registered, event', ent.event_id)
+  console.log('checkin-register: confirmation ' + (out.send === true ? 'sent' : 'not sent (throttled)') + ', event', ent.event_id)
+  // The same answer, after the same floor, whether a mail went or not.
   await pad()
-  return json(test ? { status: 'ok', test: true } : { status: 'ok' })
+  return json({ status: 'check_email' })
 })

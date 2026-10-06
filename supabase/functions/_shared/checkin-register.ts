@@ -30,7 +30,13 @@ export const MAX_ANSWER = 500
 // Same rules as the kiosk (checkin-self-register): a name needs a letter in
 // any script, email is something@something.something with no spaces.
 const HAS_LETTER = /\p{L}/u
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+// A plain addr-spec only. Rejecting <>()[]\\,;:" stops 'x<victim@y>' and
+// list-shaped strings, which a mail API would parse as a different recipient
+// than the one stored and de-duplicated (security review of migration 100).
+const EMAIL_SHAPE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:"]+$/
+// A name is printed in the guest's QR email, so nothing shaped like a link:
+// no @, slash or backslash, and no domain-like 'word.tld'.
+const LINKISH = /[@/\\]|[\p{L}\p{N}-]\.\p{L}{2,}/u
 const CODE_SHAPE = /^[A-HJ-NP-Z2-9]{10}$/
 
 export function isRegistrationCode(code: unknown): code is string {
@@ -52,11 +58,11 @@ export function validateRegistration(
 
   if (!first) errors.push('first_name')
   else if (first.length > MAX_NAME) errors.push('first_name_too_long')
-  else if (!HAS_LETTER.test(first)) errors.push('first_name_invalid')
+  else if (!HAS_LETTER.test(first) || LINKISH.test(first)) errors.push('first_name_invalid')
 
   if (!last) errors.push('last_name')
   else if (last.length > MAX_NAME) errors.push('last_name_too_long')
-  else if (!HAS_LETTER.test(last)) errors.push('last_name_invalid')
+  else if (!HAS_LETTER.test(last) || LINKISH.test(last)) errors.push('last_name_invalid')
 
   if (!email) errors.push('email')
   else if (email.length > MAX_EMAIL || !EMAIL_SHAPE.test(email)) errors.push('email_format')

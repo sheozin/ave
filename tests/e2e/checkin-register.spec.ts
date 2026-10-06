@@ -17,19 +17,21 @@ const CONFIG = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-async function setup(page: Page, opts: { config?: unknown; configStatus?: number; register?: (b: Record<string, unknown>) => { status?: number; body: unknown } } = {}) {
+type Handler = (b: Record<string, unknown>) => { status?: number; body: unknown };
+async function setup(page: Page, opts: { config?: unknown; configStatus?: number; register?: Handler; confirm?: Handler } = {}) {
   const sent: Record<string, unknown>[] = [];
   await page.route('https://challenges.cloudflare.com/**', r => r.fulfill({
     contentType: 'application/javascript',
     // Like the real widget, a reset runs the check again and issues a new token.
-    body: `window.turnstile = { render(el, o) { this.o = o; setTimeout(() => o.callback('ts-token'), 0); return 1; },
+    body: `window.turnstile = { render(el, o) { this.o = o; window.__tsAction = o.action; setTimeout(() => o.callback('ts-token'), 0); return 1; },
                                 reset() { setTimeout(() => this.o.callback('ts-token'), 0); } };
            setTimeout(() => window.onTurnstileLoad && window.onTurnstileLoad(), 0);`,
   }));
   await fn(page, 'checkin-register', (b) => {
     if (b.action === 'config') return { status: opts.configStatus ?? 200, body: opts.config ?? CONFIG() };
     sent.push(b);
-    return opts.register ? opts.register(b) : { body: { status: 'ok' } };
+    if (b.action === 'confirm') return opts.confirm ? opts.confirm(b) : { body: { status: 'registered', first_name: 'Maya' } };
+    return opts.register ? opts.register(b) : { body: { status: 'check_email' } };
   });
   page.on('dialog', d => { throw new Error('native dialog: ' + d.message()); });
   return sent;
@@ -55,6 +57,8 @@ test('renders the event and its questions, and registers', async ({ page }) => {
   await page.fill('[name="q:diet"]', 'Vegetarian');
   await page.click('#submit');
   await expect(page.locator('#done-h')).toHaveText('Check your email');
+  await expect(page.locator('#done-p')).toContainText('Nothing is registered until you confirm');
+  expect(await page.evaluate(() => (window as unknown as { __tsAction: string }).__tsAction)).toBe('register');
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({
     action: 'register', code: CODE, first_name: 'Maya', last_name: 'Lindqvist', email: 'maya@example.com',
@@ -123,4 +127,34 @@ test('inputs are 16px so iOS does not zoom, and the honeypot is off screen', asy
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
   const hp = await page.locator('[name=website]').boundingBox();
   expect(hp!.x).toBeLessThan(-1000);
+});
+
+
+// ── the emailed link (double opt-in, migration 101) ──────────────────
+const TOKEN = 'A'.repeat(40) + '_-z';
+
+test('the emailed link asks for a button press, then registers and drops the token', async ({ page }) => {
+  const sent = await setup(page);
+  await page.goto(URL_ + '&t=' + TOKEN);
+  await expect(page.locator('#confirm')).toBeVisible();
+  await expect(page.locator('#cf-name')).toHaveText('Northwind Summit 2026');
+  expect(sent).toHaveLength(0);              // opening the link alone does nothing
+  await page.click('#cf-btn');
+  await expect(page.locator('#done-h')).toHaveText('You are registered, Maya');
+  expect(sent).toEqual([expect.objectContaining({ action: 'confirm', code: CODE, token: TOKEN })]);
+  expect(page.url()).not.toContain('t=');
+});
+
+test('an expired or used link says so', async ({ page }) => {
+  await setup(page, { confirm: () => ({ body: { status: 'invalid' } }) });
+  await page.goto(URL_ + '&t=' + TOKEN);
+  await page.click('#cf-btn');
+  await expect(page.locator('#closed-h')).toHaveText('This link has expired or was already used');
+});
+
+test('a full event at confirm time says so', async ({ page }) => {
+  await setup(page, { confirm: () => ({ body: { status: 'full' } }) });
+  await page.goto(URL_ + '&t=' + TOKEN);
+  await page.click('#cf-btn');
+  await expect(page.locator('#closed-h')).toHaveText('Registration is full');
 });

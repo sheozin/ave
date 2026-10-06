@@ -81,3 +81,45 @@ Included in the per-event price. No separate charge.
 
 Paid tickets, waitlists, email verification links, editing a registration,
 Eventbrite/Ticket Tailor import.
+
+## Revision after the security review (same day, migration 101)
+
+The review of migration 100 found that the single-step form would email a
+QR code carrying submitter-typed text (the first name) from our domain to any
+address, with no proof its owner asked: the shape of the September
+invoice-phishing incident on CueQuote. It also found a client-controlled IP
+in the rate limit, a membership leak at capacity, an email pattern that let
+`x<victim@y>` through, a per-IP limit that would lock out a venue's shared
+Wi-Fi, and consent recorded for people who never gave it. Decisions 2, 3 and
+5 are replaced by:
+
+- **Double opt-in for live events.** Submitting stores a pending request
+  (`leod_checkin_web_pending`) and sends one fixed-text confirmation email
+  that contains nothing the submitter typed. The attendee is created, with
+  `consent_at`, only when the address owner opens the link AND presses
+  Confirm (a mail scanner opening the link registers nobody). Links work once,
+  for 48 hours; a daily cron deletes unconfirmed requests (job registered in
+  `leod_checkin_jobs`).
+- **One answer for everyone.** Every live submission answers "check your
+  email", for a new, pending or already listed address. Capacity answers
+  "full" for everyone. An already listed owner who confirms gets their QR
+  again (at most every 10 minutes).
+- **Mail budget.** At most one confirmation per pending request per 10
+  minutes, and 3 per address per 24 hours across all events, with plus-tags
+  folded (`victim+1@x` and `victim+2@x` share one budget).
+- **Rate limit** per (event, IP), 20 per 10 minutes, plus 300 per event per
+  hour. The IP comes from `cf-connecting-ip`, else the right-most
+  `X-Forwarded-For` entry; a request with neither is refused.
+- **Turnstile** tokens must carry `action: 'register'`, so a sign-in token
+  is not accepted.
+- **Field rules.** Emails must be a plain addr-spec (no `<>()[]\,;:"`); names
+  may not contain `@`, `/` or a domain-like `word.tld`.
+- **CSP** on `/r/*`: no inline script, and only Cloudflare Turnstile and the
+  Supabase function origin besides self.
+- **Guard G14** (`checkin_web_paths_private`): no `checkin_web_*` function
+  executable by anon/authenticated, and every `leod_checkin_web_*` table has RLS
+  on and no grants. The guard is written by name pattern, so new ones are
+  covered.
+
+Test mode is unchanged: immediate, no email of any kind, 25 rows, code on
+screen, cleared at go-live.

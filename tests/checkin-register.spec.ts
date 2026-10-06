@@ -27,6 +27,16 @@ const cases: [string, typeof ok, string[]][] = [
   ['answer too long', { ...ok, answers: { track: 'Tech', diet: 'd'.repeat(501) } }, ['q:diet']],
   ['no consent', { ...ok, consent: false }, ['consent']],
   ['consent as a string is not consent', { ...ok, consent: 'true' as unknown as boolean }, ['consent']],
+  // Security review of migration 100: nothing that turns into a different
+  // recipient, and no link-shaped text in a name that is printed in an email.
+  ['a display-name address', { ...ok, email: 'x<victim@evil.com>' }, ['email_format']],
+  ['a list-shaped address', { ...ok, email: 'a@x.io,b@y.io' }, ['email_format']],
+  ['a quoted local part', { ...ok, email: '"a b"@x.io' }, ['email_format']],
+  ['a plus-tagged address is fine', { ...ok, email: 'maya+expo@example.com' }, []],
+  ['a domain in the first name', { ...ok, first_name: 'Verify at evil.example' }, ['first_name_invalid']],
+  ['a URL in the last name', { ...ok, last_name: 'http://x' }, ['last_name_invalid']],
+  ['an address as a name', { ...ok, first_name: 'a@b' }, ['first_name_invalid']],
+  ['real names with punctuation', { ...ok, first_name: "J.R. Mary-Ann", last_name: "O'Brien St. John" }, []],
 ];
 
 describe('validateRegistration', () => {
