@@ -48,16 +48,13 @@ async function hmacHex(key: string, input: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// The client IP as the platform saw it. The LEFT-most X-Forwarded-For entry
-// is whatever the client sent (Cloudflare appends, it does not replace), so
-// it is never used: cf-connecting-ip first, else the right-most entry.
-// Null when neither exists, and the caller refuses rather than pooling
-// everyone into one bucket.
+// The client IP as Cloudflare saw it. Verified on this platform 2026-10-06:
+// cf-connecting-ip is always set, equals the client, and cannot be forged
+// (Cloudflare rejects a request that sends it). X-Forwarded-For is not used:
+// its right-most entries are proxies, so taking one would pool every guest
+// into one bucket. Null when absent, and the caller refuses.
 function clientIp(req: Request): string | null {
-  const cf = (req.headers.get('cf-connecting-ip') ?? '').trim()
-  if (cf) return cf
-  const parts = (req.headers.get('x-forwarded-for') ?? '').split(',').map(x => x.trim()).filter(Boolean)
-  return parts.length ? parts[parts.length - 1] : null
+  return (req.headers.get('cf-connecting-ip') ?? '').trim() || null
 }
 
 const b64url = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -131,14 +128,6 @@ Deno.serve(async (req) => {
 
   // ── config ──────────────────────────────────────────────────────
   if (body.action === 'config') {
-    // TEMPORARY (2026-10-06): which IP headers this platform sets, as
-    // booleans only, to confirm clientIp() reads the right one. Remove once
-    // verified.
-    {
-      const xff = (req.headers.get('x-forwarded-for') ?? '').split(',').map(x => x.trim()).filter(Boolean)
-      const cf = req.headers.get('cf-connecting-ip')
-      console.log('checkin-register: ip headers', JSON.stringify({ cf: !!cf, xff_n: xff.length, cf_is_last: !!cf && cf === xff[xff.length - 1], cf_is_first: !!cf && cf === xff[0], x_real: !!req.headers.get('x-real-ip') }))
-    }
     // The same closing rules checkin_web_register applies; the database is
     // the authority at submit time, this is so the page can say so first.
     let state: 'open' | 'closed' | 'full' = 'open'
