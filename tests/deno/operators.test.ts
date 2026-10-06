@@ -217,7 +217,7 @@ Deno.test('invite: the email names the event, the inviter and the role, and Supa
   assert(m.html.includes('Dana Director has invited you to work on') && m.html.includes('the Stage role'), 'body')
   assert(m.html.includes('https://stub.local/verify?token=inv&amp;type=invite'), 'link')
   const log = tables.leod_event_log[0] as { payload: Row }
-  assert(log.payload.event_id === EV_OURS, 'log ' + JSON.stringify(log))
+  assert(log.payload.event_id === EV_OURS && log.payload.event_named === 'Gala <b>2026</b>', 'log ' + JSON.stringify(log))
 })
 
 Deno.test("invite: another team's event is never named", async () => {
@@ -227,6 +227,23 @@ Deno.test("invite: another team's event is never named", async () => {
   const m = emails[0] as { subject: string; html: string }
   assert(!m.subject.includes('Their Secret Launch') && !m.html.includes('Their Secret Launch'), 'leaked ' + m.subject)
   assert(m.subject === "You're invited to join a team on CueDeck", 'subject ' + m.subject)
+})
+
+Deno.test("invite: with no event sent, the team's only active event is named", async () => {
+  setup()
+  tables.leod_events = [{ id: '30000000-0000-4000-8000-000000000003', created_by: OWNER, name: 'GTR North Africa 2026', date: '2026-11-10', active: true },
+                        { id: '30000000-0000-4000-8000-000000000004', created_by: OWNER, name: 'Old Event', date: '2025-01-01', active: false }]
+  const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av' })
+  assert(r.status === 200, JSON.stringify(r))
+  assert((emails[0] as { subject: string }).subject === "You're invited to GTR North Africa 2026 on CueDeck", (emails[0] as { subject: string }).subject)
+})
+
+Deno.test('invite: with no event sent and two active events, none is guessed', async () => {
+  setup()
+  tables.leod_events = [{ id: '30000000-0000-4000-8000-000000000003', created_by: OWNER, name: 'Event A', date: null, active: true },
+                        { id: '30000000-0000-4000-8000-000000000005', created_by: OWNER, name: 'Event B', date: null, active: true }]
+  const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av' })
+  assert(r.status === 200 && (emails[0] as { subject: string }).subject === "You're invited to join a team on CueDeck", JSON.stringify(emails[0]))
 })
 
 Deno.test('invite: a team gets 20 invitations per 24 hours, then 429 before anything is created', async () => {

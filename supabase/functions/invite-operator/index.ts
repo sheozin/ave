@@ -118,6 +118,15 @@ Deno.serve(async (req) => {
     if (evErr) console.error('invite-operator: event read failed', evErr.code)
     else if (ev && ev.created_by === teamOwner) event = { name: ev.name, date: ev.date }
   }
+  // No usable event sent (a console tab older than this feature, the setup
+  // wizard, an invite from a page with no event open): if the team has
+  // exactly one active event, that is the one the person is joining.
+  if (!event) {
+    const { data: evs, error: evsErr } = await sb.from('leod_events')
+      .select('id, name, date').eq('created_by', teamOwner).eq('active', true).limit(2)
+    if (evsErr) console.error('invite-operator: team events read failed', evsErr.code)
+    else if (evs && evs.length === 1) event = { name: evs[0].name, date: evs[0].date }
+  }
 
   // ── Create the account and its link; Supabase sends no email ───
   const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
@@ -200,7 +209,7 @@ Deno.serve(async (req) => {
     action:        'OPERATOR_INVITED',
     operator_id:   user.id,
     operator_role: 'director',
-    payload:       { invited_email: email, assigned_role: role, invited_user_id: newId, team_owner: teamOwner, event_id: event ? eventId : null },
+    payload:       { invited_email: email, assigned_role: role, invited_user_id: newId, team_owner: teamOwner, event_id: eventId, event_named: event?.name ?? null },
     server_time_ms: Date.now(),
   })
   if (logErr) console.error('OPERATOR_INVITED log failed:', logErr.message)
