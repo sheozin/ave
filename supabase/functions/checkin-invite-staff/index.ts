@@ -16,17 +16,13 @@
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { sendEmail }    from '../_shared/resend.ts'
+import { sendInviteEmail } from '../_shared/invite-email.ts'
 import { isUuid, loadCallerRole, removeVerdict, GRANT_ROLES, type GrantRole } from '../_shared/checkin-roles.ts'
 import {
   archivedVerdict, archiveVerdict, inviteRoleVerdict, likeEscape, normalizeInviteEmail, removeResponse, staffGate,
   transferVerdict, visibleStaff, type GateVerdict,
 } from '../_shared/checkin-gates.ts'
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-}
 
 const ACTIONS = ['list', 'invite', 'remove', 'transfer_owner', 'archive_event']
 
@@ -48,7 +44,7 @@ Deno.serve(async (req) => {
   if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
 
   const { data: caller, error: callerErr } = await sb.from('leod_users')
-    .select('active').eq('id', user.id).maybeSingle()
+    .select('active, name, email').eq('id', user.id).maybeSingle()
   if (callerErr) return json({ error: callerErr.message }, 500)
   if (!caller || caller.active === false) return json({ error: 'Account inactive' }, 403)
 
@@ -62,7 +58,7 @@ Deno.serve(async (req) => {
   const role = callerRole.role
 
   const { data: ev, error: evErr } = await sb.from('leod_events')
-    .select('name, created_by, created_via, active').eq('id', event_id).maybeSingle()
+    .select('name, date, created_by, created_via, active').eq('id', event_id).maybeSingle()
   if (evErr) return json({ error: evErr.message }, 500)
   if (!ev) return json({ error: 'Event not found' }, 404)
   const live = archivedVerdict(action, ev.active)
@@ -198,6 +194,7 @@ Deno.serve(async (req) => {
   let needsLink = false        // existing account that has never signed in
   let unconfirmed = false
   let alreadyGranted = false
+  let newLink = ''             // the invite link of an account made just now
   if (existing) {
     userId = existing.id
     const { data: cur, error: curErr } = await sb.from('leod_checkin_operators')
@@ -221,16 +218,19 @@ Deno.serve(async (req) => {
   } else {
     const logFail = await logInvite()
     if (logFail) return logFail
-    const { data: inv, error: invErr } = await sb.auth.admin.inviteUserByEmail(email, {
-      data: { checkin_staff: 'true', name },
-      redirectTo: `${appUrl}/checkin`,
+    // generateLink, not inviteUserByEmail: Supabase's own invite email is a
+    // generic template that cannot name the event. The link is sent below.
+    const { data: inv, error: invErr } = await sb.auth.admin.generateLink({
+      type: 'invite', email,
+      options: { data: { checkin_staff: 'true', name }, redirectTo: `${appUrl}/checkin` },
     })
-    if (invErr || !inv?.user) {
+    if (invErr || !inv?.user || !inv.properties?.action_link) {
       console.error('checkin-invite-staff: invite failed', invErr?.code ?? invErr?.status ?? 'unknown')
       return json({ error: 'Could not send the invitation' }, 502)
     }
     userId = inv.user.id
     isNew = true
+    newLink = inv.properties.action_link
   }
 
   if (!alreadyGranted) {
@@ -239,7 +239,18 @@ Deno.serve(async (req) => {
     if (grantErr) return json({ error: grantErr.message }, 500)
   }
 
-  if (needsLink) {
+  const mail = {
+    to: email, product: 'checkin' as const, eventName: ev.name, eventDate: ev.date ?? null,
+    inviterName: caller.name || caller.email || null, roleText: 'access to ' + what,
+  }
+
+  if (isNew) {
+    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: newLink, actionLabel: 'Accept the invitation' })
+    if (mailErr) {
+      console.error('checkin-invite-staff: invite email failed for event', event_id, mailErr)
+      return json({ error: 'Could not send the invitation' }, 502)
+    }
+  } else if (needsLink) {
     const { data: link, error: linkErr } = await sb.auth.admin.generateLink({
       type: unconfirmed ? 'invite' : 'recovery',
       email,
@@ -250,27 +261,13 @@ Deno.serve(async (req) => {
       console.error('checkin-invite-staff: invite link failed', linkErr?.code ?? linkErr?.status ?? 'no link')
       return json({ error: 'Could not send the invitation' }, 502)
     }
-    const { error: mailErr } = await sendEmail({
-      to: email,
-      subject: 'Your CueDeck Check-in invitation',
-      html: `<p>You have been invited to ${what} for <b>${escapeHtml(ev.name)}</b>.</p>` +
-            `<p><a href="${escapeHtml(actionLink)}">Accept the invitation and set your password</a></p>` +
-            `<p>This link works once. If it has expired, ask the organizer to invite you again.</p>`,
-      fromName: 'CueDeck Check-in',
-    })
+    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: actionLink, actionLabel: 'Accept the invitation' })
     if (mailErr) {
       console.error('checkin-invite-staff: invite link email failed for event', event_id, mailErr)
       return json({ error: 'Could not send the invitation' }, 502)
     }
-  } else if (!isNew) {
-    const safeName = ev.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 80)
-    const { error: mailErr } = await sendEmail({
-      to: email,
-      subject: `You've been added to ${safeName} check-in`,
-      html: `<p>You can now open ${what} for <b>${escapeHtml(ev.name)}</b>.</p>` +
-            `<p><a href="${appUrl}/checkin">Open CueDeck Check-in</a> and sign in with your CueDeck login.</p>`,
-      fromName: 'CueDeck Check-in',
-    })
+  } else {
+    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: `${appUrl}/checkin`, actionLabel: 'Open CueDeck Check-in', existingAccount: true })
     // The grant is in place; a lost notice is not worth failing the
     // request over, but it must be visible.
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)

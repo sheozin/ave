@@ -11,6 +11,7 @@ const FN_DIR = new URL('../../supabase/functions/', import.meta.url).href
 
 Deno.env.set('SUPABASE_URL', 'http://stub.local')
 Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'service-role-stub')
+Deno.env.set('RESEND_API_KEY', 're_stub_key_for_tests') // api.resend.com is stubbed below
 
 const OWNER    = '20000000-0000-4000-8000-000000000001'
 const OP_DIR   = '20000000-0000-4000-8000-000000000002' // director invited by OWNER
@@ -24,6 +25,7 @@ const PENDING  = '20000000-0000-4000-8000-000000000007' // pending, on OWNER's t
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 let invited: { email: string; data: Row }[]
+let emails: Row[] = []
 let banned: string[]
 let authAdmin: { method: string; id: string }[]
 // created_at the stubbed invite reports: now (a new account) unless a test says otherwise
@@ -48,6 +50,12 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   const method = (init?.method ?? req?.method ?? 'GET').toUpperCase()
   const headers = new Headers(init?.headers ?? req?.headers)
   const rawBody = init?.body ?? (req ? await req.clone().text() : undefined)
+  if (url.host === 'api.resend.com') {
+    const b = JSON.parse(String(rawBody ?? '{}'))
+    emails.push(b)
+    if (failOn['RESEND']) return reply(failOn['RESEND'].status, failOn['RESEND'].body)
+    return reply(200, { id: 'email-stub' })
+  }
   if (url.host !== 'stub.local') return reply(599, { message: 'unexpected network call ' + url.host })
   const key = `${method} ${url.pathname}`
   if (failOn[key]) return reply(failOn[key].status, failOn[key].body)
@@ -55,7 +63,9 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     const id = (headers.get('Authorization') ?? '').replace('Bearer ', '')
     return reply(200, { id, email: id + '@stub.test', aud: 'authenticated' })
   }
-  if (url.pathname === '/auth/v1/invite') {
+  // invite-operator makes the account with generate_link (type invite) and
+  // sends its own email; /invite is kept for anything still calling it.
+  if (url.pathname === '/auth/v1/invite' || url.pathname === '/auth/v1/admin/generate_link') {
     const b = JSON.parse(String(rawBody ?? '{}'))
     invited.push({ email: b.email, data: b.data })
     // handle_new_auth_user: INSERT ... ON CONFLICT (id) DO NOTHING, role director
@@ -64,7 +74,8 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     else if (!users.some(u => u.id === inviteAs.id)) {
       users.push({ id: inviteAs.id, email: b.email, role: 'director', invited_by: null, active: true, name: '' })
     }
-    return reply(200, { id: inviteAs.id, email: b.email, aud: 'authenticated', created_at: inviteCreatedAt ?? new Date().toISOString() })
+    return reply(200, { id: inviteAs.id, email: b.email, aud: 'authenticated', created_at: inviteCreatedAt ?? new Date().toISOString(),
+      action_link: 'https://stub.local/verify?token=inv&type=invite' })
   }
   const adminUser = url.pathname.match(/^\/auth\/v1\/admin\/users\/(.+)$/)
   if (adminUser) {
@@ -142,6 +153,7 @@ async function call(fn: string, as: string, body: Row): Promise<{ status: number
 
 function setup() {
   invited = []
+  emails = []
   banned = []
   authAdmin = []
   inviteCreatedAt = null
@@ -176,6 +188,46 @@ Deno.test('invite: the new operator gets the role and team, not the trigger\'s d
   assert(u?.role === 'stage' && u.invited_by === OWNER && u.active === true && u.name === 'New Crew',
     'row is ' + JSON.stringify(u))
   assert(tables.leod_users.filter(x => x.id === NEW_ID).length === 1, 'duplicate rows')
+})
+
+const EV_OURS   = '30000000-0000-4000-8000-000000000001'
+const EV_THEIRS = '30000000-0000-4000-8000-000000000002'
+function withEvents() {
+  tables.leod_events.push({ id: EV_OURS, created_by: OWNER, name: 'Gala <b>2026</b>', date: '2026-10-18' },
+                          { id: EV_THEIRS, created_by: STRANGER, name: 'Their Secret Launch', date: '2026-11-01' })
+  tables.leod_users.find(u => u.id === OP_DIR)!.name = 'Dana Director'
+}
+
+Deno.test('invite: the email names the event, the inviter and the role, and Supabase sends nothing itself', async () => {
+  setup(); withEvents()
+  const r = await call('invite-operator', OP_DIR, { email: 'crew@x.test', role: 'stage', event_id: EV_OURS })
+  assert(r.status === 200, JSON.stringify(r))
+  assert(emails.length === 1, 'emails ' + emails.length)
+  const m = emails[0] as { subject: string; html: string; to: string }
+  assert(m.to === 'crew@x.test', 'to ' + m.to)
+  assert(m.subject === "You're invited to Gala b2026/b on CueDeck", 'subject ' + m.subject)
+  assert(m.html.includes('Gala &lt;b&gt;2026&lt;/b&gt;') && !m.html.includes('<b>2026'), 'escaping')
+  assert(m.html.includes('Dana Director has invited you to work on') && m.html.includes('the Stage role'), 'body')
+  assert(m.html.includes('https://stub.local/verify?token=inv&amp;type=invite'), 'link')
+  const log = tables.leod_event_log[0] as { payload: Row }
+  assert(log.payload.event_id === EV_OURS, 'log ' + JSON.stringify(log))
+})
+
+Deno.test("invite: another team's event is never named", async () => {
+  setup(); withEvents()
+  const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av', event_id: EV_THEIRS })
+  assert(r.status === 200, JSON.stringify(r))
+  const m = emails[0] as { subject: string; html: string }
+  assert(!m.subject.includes('Their Secret Launch') && !m.html.includes('Their Secret Launch'), 'leaked ' + m.subject)
+  assert(m.subject === "You're invited to join a team on CueDeck", 'subject ' + m.subject)
+})
+
+Deno.test('invite: a failed invitation email withdraws the new account', async () => {
+  setup(); withEvents()
+  failOn['RESEND'] = { status: 500, body: { message: 'provider down' } }
+  const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av', event_id: EV_OURS })
+  assert(r.status === 502, JSON.stringify(r))
+  assert(authAdmin.some(a => a.method === 'DELETE' && a.id === NEW_ID), 'not deleted ' + JSON.stringify(authAdmin))
 })
 
 Deno.test('invite: an invited director invites into the owner\'s team', async () => {

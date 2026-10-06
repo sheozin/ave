@@ -305,8 +305,11 @@ describe('handlers route through the shared gates', () => {
     ]) expect(s).toContain(call);
     // The invite log row is written before any send.
     expect(s.indexOf('await logInvite()')).toBeGreaterThan(0);
-    expect(s.indexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
-    expect(s.lastIndexOf('await logInvite()')).toBeLessThan(s.indexOf('inviteUserByEmail('));
+    // (New accounts are made with generateLink, which also creates the
+    // account; there is no inviteUserByEmail any more.)
+    expect(s).not.toContain('inviteUserByEmail(');
+    expect(s.indexOf('await logInvite()')).toBeLessThan(s.indexOf('generateLink('));
+    expect(s.lastIndexOf('await logInvite()')).toBeLessThan(s.indexOf('generateLink('));
   });
   it('checkin-add-walk-in refuses an archived event before the insert', () => {
     const s = src('checkin-add-walk-in');

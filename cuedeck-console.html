@@ -6794,7 +6794,9 @@ async function inviteOperator() {
 
   try {
     const { data, error } = await sb.functions.invoke('invite-operator', {
-      body: { email, role, name: name || undefined },
+      // The open event is named in the invitation (the server names it only
+      // if this director's team owns it).
+      body: { email, role, name: name || undefined, event_id: S.event?.id },
     });
 
     if (error) {
@@ -8036,7 +8038,7 @@ async function wizNext() {
         const name = document.getElementById('wiz-inv-name')?.value?.trim() || '';
         const role = document.getElementById('wiz-inv-role')?.value || 'stage';
         try {
-          await sb.functions.invoke('invite-operator', { body: { email, name, role } });
+          await sb.functions.invoke('invite-operator', { body: { email, name, role, event_id: S.event?.id } });
           const uid = S.user?.id || 'anon';
           localStorage.setItem(CK_KEY + uid + '_invited', '1');
         } catch (_) { /* non-blocking — skip is fine */ }

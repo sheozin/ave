@@ -98,6 +98,14 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   }
   if (url.pathname === '/auth/v1/admin/generate_link' && method === 'POST') {
     const b = JSON.parse(String(init?.body ?? '{}'))
+    const known = Object.values(world.authUsers ?? {}).find(u => String((u as Row).email).toLowerCase() === String(b.email).toLowerCase())
+    if (b.type === 'invite' && !known) {
+      // An invite link for a new address creates the account, as /invite did
+      // (checkin-invite-staff makes new accounts this way so it can send its
+      // own email naming the event).
+      ;(world.invites ??= []).push({ email: b.email, data: b.data })
+      return reply(200, { action_link: 'https://stub.local/verify?token=new&type=invite', id: NEW_USER, email: b.email, aud: 'authenticated', user_metadata: b.data })
+    }
     ;(world.links ??= []).push(b)
     return reply(200, { action_link: 'https://stub.local/verify?token=abc&type=' + b.type, id: 'x', email: b.email })
   }
@@ -1097,4 +1105,13 @@ Deno.test(`${WI}: an inactive account is a 403`, async () => {
   walkSetup('test'); world.tables.leod_users[0].active = false
   const r = await call(WI, BODY[WI])
   assert(r.status === 403 && walkIns().length === 0, JSON.stringify(r))
+})
+
+Deno.test(`${IS} invite: a new address gets our email naming the event, not Supabase's generic one`, async () => {
+  staffSetup('organizer', { eventName: 'Northwind Summit 2026' })
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'fresh@stub.test', role: 'crew' })
+  assert(r.status === 200, JSON.stringify(r))
+  const m = world.emails![0] as { subject: string; html: string }
+  assert(m && m.subject === "You're invited to Northwind Summit 2026 check-in", 'subject ' + m?.subject)
+  assert(m.html.includes('access to the check-in desk') && m.html.includes('token=new'), m.html)
 })
