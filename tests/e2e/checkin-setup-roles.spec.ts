@@ -342,6 +342,7 @@ test('page design: an uploaded cover is re-encoded and saved with the details', 
       host_name: a.p_host_name, description: a.p_description, address: a.p_address, brand_color: a.p_brand_color,
       cover_path: a.p_cover_path, logo_path: a.p_logo_path, show_programme: a.p_show_programme }; });
   });
+  await expect(page.locator('#rg-save-design')).toBeVisible();
   await page.locator('#rg-host').fill('Northwind Events');
   await page.locator('#rg-desc').fill('A day of talks.');
   await page.locator('#rg-addr').fill('Main St 1');
@@ -368,6 +369,9 @@ test('page design: a non-image file is refused before upload', async ({ page }) 
   await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
     await page.route(/\/storage\/v1\/object\/checkin-public\//, r => { uploaded = true; return r.fulfill({ status: 200, body: '{}' }); });
   });
+  // Wait for the step to open: opening it clears the design messages.
+  await expect(page.locator('#p-register')).toBeVisible();
+  await expect(page.locator('#rg-save-design')).toBeVisible();
   await page.locator('#rg-logo-file').setInputFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>') });
   await expect(page.locator('#rg-design-err')).toHaveText('Use a JPEG, PNG or WebP image.');
   expect(uploaded).toBe(false);
