@@ -161,6 +161,8 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-alerts[hidden]{display:none}
 .ck-alerts ul{margin:6px 0 0;padding-left:18px;font-size:13.5px;line-height:1.6;color:var(--t2)}
 .ck-alerts li.fresh{color:var(--t1);font-weight:600}
+.ck-alerts li.undone{color:var(--t3)}
+.undone-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--t2);background:var(--pg);border-radius:6px;padding:1px 6px;margin-right:6px}
 
 /* ── SCAN / SEARCH FIELD ──────────────────────────
    One field for both inputs: a USB scanner types the token and sends
@@ -1705,7 +1707,14 @@ function renderDeskAlerts(list) {
   alertSeen = new Set(list.map(a => a.id));
   const items = list.slice(0, ALERTS_SHOWN).map(a => {
     const li = document.createElement('li');
-    li.textContent = alertMod.alertLine(a, S.eventTz);
+    if (!a.still_in) {
+      li.classList.add('undone');
+      const tag = document.createElement('span');
+      tag.className = 'undone-tag';
+      tag.textContent = 'Undone';
+      li.appendChild(tag);
+    }
+    li.appendChild(document.createTextNode(alertMod.alertLine(a, S.eventTz)));
     if (fresh.has(a.id)) {
       li.className = 'fresh';
       setTimeout(() => li.classList.remove('fresh'), ALERT_FRESH_MS);
@@ -2333,7 +2342,10 @@ async function undoCheckin(attendee) {
   await idbPutAll(STORE_ROSTER, [a]);
   await renderPendingCount();
   renderCount();
-  flushOutbox();   // not awaited: the desk must not wait on the network
+  // Not awaited: the desk must not wait on the network. Once the undo has
+  // gone, the alert list re-reads so an undone VIP shows as undone now
+  // rather than at the next 60-second refresh.
+  Promise.resolve(flushOutbox()).then(() => { if (alertEvent) loadDeskAlerts(); });
   return true;
 }
 

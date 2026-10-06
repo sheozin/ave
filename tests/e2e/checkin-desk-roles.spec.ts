@@ -595,7 +595,8 @@ test('a desk lead sees arrival alerts and the scan field keeps focus', async ({ 
   await expect(page.locator('#st-alerts')).toBeVisible();
   await expect(items).toHaveCount(2);
   await expect(items.nth(0)).toHaveText('10:59 Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2');
-  await expect(items.nth(1)).toHaveText('10:40 Jan <i>Undone</i> (VIP) checked in, since undone');
+  await expect(items.nth(1)).toHaveText('Undone10:40 Jan <i>Undone</i> (VIP) checked in, since undone');
+  await expect(items.nth(1)).toHaveClass(/undone/);
   // The first load is history, not news: nothing is highlighted.
   await expect(page.locator('#st-alert-list li.fresh')).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement && document.activeElement.id)).toBe('scan');

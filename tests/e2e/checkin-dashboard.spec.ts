@@ -306,7 +306,10 @@ test('an organizer sees arrival alerts, undone ones marked', async ({ page }) =>
   const items = page.locator('#alert-list li');
   await expect(items).toHaveCount(2);
   await expect(items.nth(0)).toHaveText('10:07 Ewa Sample (Speaker, Contoso Demo) just checked in at Desk 2');
-  await expect(items.nth(1)).toHaveText('10:01 Jan Undone (VIP) checked in, since undone');
+  await expect(items.nth(1)).toHaveText('Undone10:01 Jan Undone (VIP) checked in, since undone');
+  await expect(items.nth(1)).toHaveClass('undone');
+  await expect(items.nth(1).locator('.undone-tag')).toHaveText('Undone');
+  await expect(items.nth(0)).not.toHaveClass('undone');
   await expect(page.locator('#cb-empty')).toHaveText('No guest on the list has a company.');
 });
 

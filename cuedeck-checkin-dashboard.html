@@ -45,6 +45,8 @@
 .msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin-bottom:8px;background:var(--acsf);color:var(--ac)}
 .msg.warn{background:var(--amsf);color:var(--am)}
 .gaps{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
+#alert-list li.undone{color:var(--t3,#A1A1A6)}
+.undone-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--t2,#6E6E73);background:var(--pg,#F5F5F7);border-radius:6px;padding:1px 6px;margin-right:6px}
 .cb-f{display:flex;gap:6px;flex-wrap:wrap}
 .chip{height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--t1);color:#fff}
@@ -315,7 +317,14 @@ async function loadAlerts() {
   $('alerts').hidden = false;
   if (error) { $('alert-empty').hidden = false; $('alert-empty').textContent = 'Could not refresh alerts: ' + error.message; return; }
   const list = data || [];
-  $('alert-list').replaceChildren(...list.map(a => el('li', null, alertLine(a, EV.timezone))));
+  // An undone check-in keeps its line (the alert happened) but reads as
+  // undone at a glance: greyed, with a tag in front.
+  $('alert-list').replaceChildren(...list.map(a => {
+    const li = el('li', a.still_in ? null : 'undone');
+    if (!a.still_in) li.appendChild(el('span', 'undone-tag', 'Undone'));
+    li.appendChild(document.createTextNode(alertLine(a, EV.timezone)));
+    return li;
+  }));
   $('alert-empty').hidden = list.length > 0;
   $('alert-empty').textContent = can(ROLE, 'edit_details')
     ? 'No alerts yet. Choose the ticket types to watch in Setup, Event details.'
