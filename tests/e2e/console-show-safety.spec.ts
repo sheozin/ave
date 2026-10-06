@@ -278,7 +278,8 @@ test.describe('stage monitor', () => {
   test('overrun shows a plus sign, the OVERRUN label and the magenta colour', async ({ page }) => {
     await setup(page, [live({ status: 'OVERRUN', actual_start: iso(-40) })]); // 30 min slot, 40 min in
     const m = await monitor(page);
-    expect(m.timer).toBe('+10:00');
+    // The page clock runs in real time after install, so allow a second or two of drift under load.
+    expect(m.timer).toMatch(/^\+10:0[0-3]$/);
     expect(m.label).toBe('OVERRUN');
     expect(m.timerColor).toBe('rgb(255, 0, 168)');
   });
