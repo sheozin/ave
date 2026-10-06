@@ -143,6 +143,13 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-sync.clear{background:var(--gnsf);border-color:var(--gnbd);color:var(--gn)}
 .ck-sync.wait{background:var(--amsf);border-color:var(--ambd);color:var(--am)}
 .ck-hd-actions{flex:none;display:flex;flex-wrap:wrap;gap:8px;max-width:100%}
+/* The header actions are buttons, styled as the dashboard's and Setup's
+   (.btn-s in checkin-app.css). Scoped here: .ck-quiet elsewhere on the desk
+   (inside a verdict) stays a text link. */
+.ck-hd-actions{align-items:center}
+.ck-hd-actions .ck-quiet{display:inline-flex;align-items:center;height:36px;padding:0 14px;border:1px solid var(--bd2);border-radius:10px;background:var(--sf);color:var(--t1);font-size:13px;font-weight:600;white-space:nowrap;text-decoration:none}
+.ck-hd-actions .ck-quiet:hover{background:var(--pg);text-decoration:none}
+.ck-hd-actions .ck-quiet:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 .ck-body{flex:1;padding:32px 24px;display:flex;justify-content:center;align-items:flex-start}
 .ck-panel{
   width:100%;max-width:720px;background:var(--sf);border:1px solid var(--bd);
