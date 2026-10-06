@@ -62,7 +62,7 @@ Text on a solid status fill is `#0A0E14` (5.14 to 12.63:1). Worst pair ΔE 21.3 
 
 **Space and shape.** Space 4/8/12/16/24/32. Row heights 32/40/48/56/64. Radius 4 (chips), 8 (buttons, inputs, cards), 12 (modals, phone cards), 999 (pills). Buttons 32 px desktop, 48 px on `pointer: coarse`.
 
-**Motion.** Only exceptions animate (CALLING ring, OVERRUN lane, connection lost). All animation off under `prefers-reduced-motion: reduce`.
+**Motion.** Only exceptions animate (CALLING ring, OVERRUN lane, connection lost). All animation off under `prefers-reduced-motion: reduce`. Countdowns keep their existing wrap-up cues without animation: amber under 5 min, red under 1 min, tenths of a second in the final minute.
 
 ## 2. Layout at 1440×900
 
@@ -162,7 +162,7 @@ Same structure; band lanes compress to one line (now and next side by side, 44 p
 - **Section label**: one class, 11/700, .06em uppercase, `--text-tertiary`, consistent inset; text passes through `t()`.
 - **Input/select**: 32 px (36 broadcast), `--input-bg`, control border, radius 8, focus ring; no inline `outline:none`.
 - **Card/row**: as 2.2; radius 8; section border; 4 px status edge.
-- **Modal**: `role="dialog"`, `aria-modal`, labelled, focus trap, focus returns on close, one generic Escape handler, overlay surface, radius 12, footer buttons md with primary on the right.
+- **Modal**: `role="dialog"`, `aria-modal`, labelled, focus trap, focus returns on close, one generic Escape handler (the setup wizard and welcome modals opt out with `data-esc="off"`, because closing them skips onboarding), overlay surface, radius 12, footer buttons md with primary on the right.
 - **Toast**: radius 8, status colours from tokens, container `aria-live` (assertive for errors); errors stay until dismissed or 8 s.
 - **Status pill**: one component for system and connection state; label names what failed.
 - **Icons**: one inline SVG line set (16 px, `stroke: currentColor`) replacing every emoji used as an icon in the console (list in the visual audit: broadcast, team, notes, report, stream, rec, languages, mics, remote, anchor, timer, alert, monitor, presets, help menu, auth screens, signage overrides, command palette, empty states).
@@ -177,7 +177,7 @@ Every interactive element reachable by keyboard (event switcher and account chip
 
 0. **Screenshot baseline harness** (about half a day). The audit's capture spec becomes a `toHaveScreenshot` suite at 1440, 1280 and 390 for each role and state, with the clock frozen, animations disabled and live timers masked. Must be stable (3 runs, zero diff) before stage 1.
 1. **Tokens** (about 1 day). Aliases become references, exact-match literals become tokens (zero pixel diff), then the deliberate palette change (new surfaces, borders, text, status set, one blue, one red). JS `STATUS_COLOR` reads CSS. A CI check fails when the count of hard-coded colours outside `:root` rises (ratchet down).
-2. **Components** (2 to 3 days). Buttons, badges, chips, labels, inputs, modals, toasts, pills, icons; one commit per component; keep class names tests rely on (`confirm-pending`, `.primary`, `.rbtn[data-role]`, `btn-*` until the tests are updated in the same commit).
+2. **Components** (2 to 3 days). Buttons, badges, chips, labels, inputs, modals, toasts, pills, icons; one commit per task, with the components listed in the commit body; keep class names tests rely on (`confirm-pending`, `.primary`, `.rbtn[data-role]`, `btn-*` until the tests are updated in the same commit).
 3. **Chrome and list** (2 days). New header with the status popover, role bar and diagnostics strip removed, compact rows, folded finished sessions, HH:MM times, editing tools on hover, AI tools moved to the menu.
 4. **Band and inspector** (2 to 3 days). Now and next band, inspector with fixed control slots, log with filters, timeline adjustments.
 5. **Phone and copy** (1 to 2 days). Phone layout and tabs, sentence case i18n in every language, em-dash removal, accessibility items.
