@@ -96,6 +96,17 @@ Deno.serve(async (req) => {
     )
   }
 
+  // ── Rate limit: 20 invitations per team per 24 hours ──────────
+  // The email is ours now, not Supabase's, so Supabase's own invite rate
+  // limit no longer applies. Counted from the audit log before anything is
+  // created or sent; a failed count refuses rather than sends.
+  const since = new Date(Date.now() - 24 * 3600e3).toISOString()
+  const { count: sent, error: countErr } = await sb.from('leod_event_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', 'OPERATOR_INVITED').eq('payload->>team_owner', teamOwner).gte('ts', since)
+  if (countErr) { console.error('invite-operator: invite count failed', countErr.code); return json(503, { error: 'Could not send the invitation right now. Try again shortly.' }) }
+  if ((sent ?? 0) >= 20) return json(429, { error: 'Your team has sent 20 invitations in the last 24 hours. Try again later.', code: 'invite_rate' })
+
   // ── The event to name in the invitation ───────────────────────
   // Only an event the director's team owns: a forged id must not put another
   // team's event name into an email to an address the caller chose.

@@ -37,7 +37,10 @@ let failOn: Record<string, { status: number; body: Row }> = {}
 function rowFilter(url: URL): (r: Row) => boolean {
   const tests: ((r: Row) => boolean)[] = []
   for (const [k, v] of url.searchParams) {
-    if (v.startsWith('eq.')) tests.push(r => String(r[k]) === v.slice(3))
+    // 'payload->>key' reads inside a json column, as PostgREST does.
+    const get = (r: Row) => { const m = k.match(/^(\w+)->>(\w+)$/); return m ? (r[m[1]] as Row | undefined)?.[m[2]] : r[k] }
+    if (v.startsWith('eq.')) tests.push(r => String(get(r)) === v.slice(3))
+    if (v.startsWith('gte.')) tests.push(r => String(get(r) ?? '') >= v.slice(4))
   }
   return (r: Row) => tests.every(fn => fn(r))
 }
@@ -90,6 +93,10 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   const rows = (tables[table] ??= [])
   const match = rowFilter(url)
   const wantRows = (headers.get('Prefer') ?? '').includes('return=representation')
+  if (method === 'HEAD') {
+    // count: 'exact', head: true
+    return new Response(null, { status: 200, headers: { 'Content-Range': `*/${rows.filter(match).length}` } })
+  }
   if (method === 'GET') {
     let hit = rows.filter(match)
     const limit = url.searchParams.get('limit')
@@ -220,6 +227,32 @@ Deno.test("invite: another team's event is never named", async () => {
   const m = emails[0] as { subject: string; html: string }
   assert(!m.subject.includes('Their Secret Launch') && !m.html.includes('Their Secret Launch'), 'leaked ' + m.subject)
   assert(m.subject === "You're invited to join a team on CueDeck", 'subject ' + m.subject)
+})
+
+Deno.test('invite: a team gets 20 invitations per 24 hours, then 429 before anything is created', async () => {
+  setup(); withEvents()
+  const recent = new Date(Date.now() - 3600e3).toISOString()
+  const old = new Date(Date.now() - 30 * 3600e3).toISOString()
+  for (let i = 0; i < 20; i++) tables.leod_event_log.push({ id: i, action: 'OPERATOR_INVITED', ts: recent, payload: { team_owner: OWNER } })
+  tables.leod_event_log.push({ id: 99, action: 'OPERATOR_INVITED', ts: recent, payload: { team_owner: STRANGER } })
+  const r = await call('invite-operator', OP_DIR, { email: 'one.more@x.test', role: 'av' })
+  assert(r.status === 429 && r.body.code === 'invite_rate', JSON.stringify(r))
+  assert(invited.length === 0 && emails.length === 0, 'created or sent anyway')
+  // Older than 24 hours does not count.
+  tables.leod_event_log.forEach(l => { if (l.payload && (l.payload as Row).team_owner === OWNER) l.ts = old })
+  const r2 = await call('invite-operator', OP_DIR, { email: 'one.more@x.test', role: 'av' })
+  assert(r2.status === 200, JSON.stringify(r2))
+})
+
+Deno.test('invite: a link-shaped event or inviter name is left out of the email', async () => {
+  setup(); withEvents()
+  tables.leod_events.push({ id: '30000000-0000-4000-8000-000000000009', created_by: OWNER, name: 'Account locked, verify at evil.example', date: null })
+  tables.leod_users.find(u => u.id === OWNER)!.name = 'support@evil.example'
+  const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av', event_id: '30000000-0000-4000-8000-000000000009' })
+  assert(r.status === 200, JSON.stringify(r))
+  const m = emails[0] as { subject: string; html: string; text: string }
+  assert(!/evil\.example/.test(m.subject + m.html + m.text), 'link text sent: ' + m.subject)
+  assert(m.subject === "You're invited to join a team on CueDeck" && m.html.includes('You have been invited'), m.subject)
 })
 
 Deno.test('invite: a failed invitation email withdraws the new account', async () => {

@@ -24,6 +24,18 @@ export interface InviteEmail {
   existingAccount?: boolean       // already has a login: no password step
 }
 
+// Organizer-typed names travel to an address the inviter chose, from our
+// domain, so nothing link-shaped may ride along (the shape of the September
+// invoice-phishing incident): a name that looks like a URL, an address or a
+// 'word.tld' is left out and the generic wording is used. Checked after NFKC
+// with format characters removed, as on the registration page.
+// A bare slash is allowed ("Season 2026/27"); a domain, scheme, www or @ is not.
+const LINKISH = /@|https?:|www\.|[\p{L}\p{N}-][.。｡]\p{L}{2,}/iu
+export function safeName(s: string | null | undefined): string | null {
+  const t = (s ?? '').normalize('NFKC').replace(/\p{Cf}/gu, '').replace(/\s+/g, ' ').trim()
+  return t && !LINKISH.test(t) ? t : null
+}
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 // For the subject (a header): no line breaks or header-like characters.
 const line = (s: string | null | undefined, n = 80) => (s ?? '').replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, n)
@@ -37,9 +49,10 @@ function fmtDate(iso: string | null | undefined): string {
 }
 
 export function renderInviteEmail(m: InviteEmail): { subject: string; html: string; text: string } {
-  const event = line(m.eventName)
-  const eventBody = flat(m.eventName)
-  const inviter = flat(m.inviterName, 60)
+  const eventName = safeName(m.eventName)
+  const event = line(eventName)
+  const eventBody = flat(eventName)
+  const inviter = flat(safeName(m.inviterName), 60)
   const date = fmtDate(m.eventDate)
   const area = m.product === 'checkin' ? 'check-in' : 'CueDeck'
   const subject = event
