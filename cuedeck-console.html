@@ -5445,6 +5445,8 @@ function dismissToast(el) {
   const idx = _toastQueue.indexOf(el);
   if (idx !== -1) _toastQueue.splice(idx, 1);
   el.classList.add('toast-out');
+  // Under reduced motion no exit animation runs, so animationend never fires.
+  if (!el.getAnimations().length) { el.remove(); return; }
   el.addEventListener('animationend', () => el.remove(), { once: true });
 }
 
