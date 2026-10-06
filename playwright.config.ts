@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Screenshot baselines are recorded on macOS with system Chrome
+  // (playwright.console.config.ts); CI's Linux Chromium cannot match them.
+  testIgnore: /console-visual\.spec\.ts$/,
   fullyParallel: false,  // CueDeck UI tests share state — run sequentially
   retries: 1,
   reporter: 'list',
