@@ -2,14 +2,14 @@
 // Spec 2.1: one lane per room with a LIVE, OVERRUN, HOLD or CALLING session
 // or a next session; End always in the same slot; knock-on when a session
 // runs over; more than three rooms collapse the idle ones to chips.
-import { test, expect } from '@playwright/test';
-import { openConsole, evalPage, ID, PANEL_ID, overrunSessions, noLiveSessions, fourRoomSessions, roomlessSessions, longTitleSessions, manySessions } from './console-boot-mock';
+import { test, expect, type Page } from '@playwright/test';
+import { openConsole, evalPage, textContrast, ID, PANEL_ID, overrunSessions, noLiveSessions, fourRoomSessions, roomlessSessions, longTitleSessions, manySessions } from './console-boot-mock';
 
 test('band: one lane per active room with now and next', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   const lanes = page.locator('#band .lane');
   await expect(lanes).toHaveCount(2);
-  await expect(lanes.nth(0).locator('.lane-room')).toHaveText('Hall B');   // alphabetical: no room order on the event
+  await expect(lanes.nth(0).locator('.lane-room')).toHaveText('Main Stage');   // running order: #1 and #3 are on Main Stage, Hall B starts at #2
   const ms = page.locator('#band .lane[data-room="Main Stage"]');
   await expect(ms).toHaveClass(/is-live/);
   await expect(ms.locator('.lane-title')).toHaveText('#3 Panel: Airport Retail in Cairo, Casablanca and Tunis');
@@ -105,8 +105,9 @@ test('band: Not arrived shows when the next speaker is due within 10 minutes', a
 
 test('band: stays visible in the timeline view and for stage operators puts their room first', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { role: 'stage' });
-  await evalPage(page, `setMyRoom('Main Stage')`);
-  await expect(page.locator('#band .lane').first()).toHaveAttribute('data-room', 'Main Stage');
+  await expect(page.locator('#band .lane').first()).toHaveAttribute('data-room', 'Main Stage');   // running order
+  await evalPage(page, `setMyRoom('Hall B')`);
+  await expect(page.locator('#band .lane').first()).toHaveAttribute('data-room', 'Hall B');      // the operator's room first
   await evalPage(page, `setViewMode('timeline')`);
   await expect(page.locator('#band')).toBeVisible();
   await ctx.close();
@@ -206,9 +207,118 @@ test('layout: at 1280x720 the overrun next half keeps Push following and the nex
     const bb = (await b.boundingBox())!;
     expect(bb.x + bb.width).toBeLessThanOrEqual(lb.x + lb.width);
   }
-  // and nothing in the next half overlaps: the title ends before the first button starts
+  // and nothing in the next half overlaps: the title and risk line never covers a button
   const what = (await lane.locator('.lane-next-what').boundingBox())!;
-  const first = (await lane.locator('.lane-next button').first().boundingBox())!;
-  expect(what.x + what.width).toBeLessThanOrEqual(first.x);
+  for (const b of await lane.locator('.lane-next button').all()) {
+    const bb = (await b.boundingBox())!;
+    const apart = what.x + what.width <= bb.x || bb.x + bb.width <= what.x || what.y + what.height <= bb.y || bb.y + bb.height <= what.y;
+    expect(apart).toBe(true);
+  }
   await ctx.close();
+});
+
+
+// ── Round 1: closing the gaps to the approved demo ──────────────────────────
+
+test('band: rooms follow the running order (first session), with No room last', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { sessions: fourRoomSessions() });
+  await expect(page.locator('#band .lane')).toHaveCount(3);
+  expect(await page.locator('#band .lane').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.room))).toEqual(['Main Stage', 'Hall B', 'Hall C']);
+  // #2 (Hall B, on hold) moves to no room: the No room lane still comes last although it runs earliest.
+  await evalPage(page, `S.sessions.find(x => x.id === '${ID(2)}').room = null; renderSessions();`);
+  const rooms = await page.locator('#band .lane').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.room));
+  expect(rooms).toEqual(['Main Stage', 'Hall B', 'Hall C', '']);   // Hall B keeps #4 and #7; Terrace (idle) is a chip; No room last
+  await ctx.close();
+});
+
+const box = async (page: Page, sel: string) => (await page.locator(sel).boundingBox())!;
+for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
+  test(`band controls (${locale}): demo-sized Hold and End, aligned in every lane, armed End never clipped and solid red on LIVE and after the flip to OVERRUN`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { locale });
+    const ms = '#band .lane[data-room="Main Stage"] .lane-now';
+    const hb = '#band .lane[data-room="Hall B"] .lane-now';
+    // At rest: compact (the demo: Hold about 75, End… 62), and the same slots in both lanes.
+    const msEnd = await box(page, `${ms} .btn.danger`), hbEnd = await box(page, `${hb} .btn.danger`);
+    if (locale === 'en') { expect(msEnd.width).toBeLessThanOrEqual(70); expect((await box(page, `${ms} .lane-lead`)).width).toBeLessThanOrEqual(90); }
+    expect(Math.abs(msEnd.x - hbEnd.x)).toBeLessThan(1);
+    expect(Math.abs(msEnd.width - hbEnd.width)).toBeLessThan(1);
+    expect(Math.abs((await box(page, `${ms} .lane-lead`)).x - (await box(page, `${hb} .lane-lead`)).x)).toBeLessThan(1);
+    for (const sel of [`${ms} .lane-lead .btn`, `${hb} .lane-lead .btn`, `${ms} .btn.danger`, `${hb} .btn.danger`])
+      expect(await page.locator(sel).evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    // Armed on LIVE: full label, solid red on hover, right edge where it was, Hold still left of it.
+    const end = page.locator(`${ms} .btn.danger`);
+    await end.click();
+    await page.clock.runFor(1100);
+    const check = async () => {
+      await expect(end).toHaveClass(/confirm-pending/);
+      expect(await end.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      expect(await end.textContent()).toBe(await evalPage(page, `t('confirm.confirmEnd')`));
+      await end.hover();
+      expect(await end.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+      const e = await box(page, `${ms} .btn.danger`), h = await box(page, `${ms} .lane-lead`);
+      const lane = await box(page, '#band .lane[data-room="Main Stage"]');
+      if (locale === 'ar') {   // RTL: End sits at the inline end (left) and grows to the right
+        expect(Math.abs(e.x - msEnd.x)).toBeLessThan(1);
+        expect(e.x + e.width).toBeLessThan(h.x);
+        expect(e.x).toBeGreaterThanOrEqual(lane.x);
+      } else {
+        expect(Math.abs((e.x + e.width) - (msEnd.x + msEnd.width))).toBeLessThan(1);
+        expect(h.x + h.width).toBeLessThan(e.x);
+        expect(e.x + e.width).toBeLessThanOrEqual(lane.x + lane.width);
+      }
+    };
+    await check();
+    // The talk reaches its end time while armed: OVERRUN keeps the same arm and the same slots.
+    await evalPage(page, `onSessionChange({ eventType: 'UPDATE', new: { ...S.sessions.find(x => x.id === '${PANEL_ID}'), status: 'OVERRUN', version: 99 }, old: {} })`);
+    await expect(page.locator('#band .lane[data-room="Main Stage"]')).toHaveClass(/is-over/);
+    await check();
+    await ctx.close();
+  });
+}
+
+test('band: at 1440 the Main Stage now title fits untruncated, as in the demo', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const title = page.locator('#band .lane[data-room="Main Stage"] .lane-title');
+  await expect(title).toHaveText('#3 Panel: Airport Retail in Cairo, Casablanca and Tunis');
+  expect(await title.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await ctx.close();
+});
+
+test('band: held count is light amber and overrun count light magenta, both readable on the lane wash', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  expect(await page.locator('.lane.is-hold .lane-big').evaluate(el => getComputedStyle(el).color)).toBe('rgb(253, 186, 116)');
+  expect(await textContrast(page, '.lane.is-hold .lane-big')).toBeGreaterThanOrEqual(4.5);
+  await ctx.close();
+  const o = await openConsole(browser, { sessions: overrunSessions() });
+  expect(await o.page.locator('.lane.is-over .lane-big').evaluate(el => getComputedStyle(el).color)).toBe('rgb(245, 208, 254)');
+  expect(await textContrast(o.page, '.lane.is-over .lane-big')).toBeGreaterThanOrEqual(4.5);
+  await o.ctx.close();
+});
+
+test('band: now row at least 58 px and next row at least 40 px at 1440', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  for (const room of ['Main Stage', 'Hall B']) {
+    expect((await box(page, `#band .lane[data-room="${room}"] .lane-now`)).height).toBeGreaterThanOrEqual(58);
+    expect((await box(page, `#band .lane[data-room="${room}"] .lane-next`)).height).toBeGreaterThanOrEqual(40);
+  }
+  await ctx.close();
+});
+
+test('layout: at 1280x720 the now title has at least 200 px, and in overrun the next half still shows its title and the risk', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 1280, height: 720 } });
+  for (const room of ['Main Stage', 'Hall B'])
+    expect((await box(page, `#band .lane[data-room="${room}"] .lane-title`)).width).toBeGreaterThanOrEqual(200);
+  await ctx.close();
+  const o = await openConsole(browser, { sessions: overrunSessions(), viewport: { width: 1280, height: 720 } });
+  const next = o.page.locator('#band .lane[data-room="Main Stage"] .lane-next');
+  const title = next.locator('.lane-next-title');
+  expect(((await title.textContent()) || '').trim()).toMatch(/^#5 /);
+  expect((await title.boundingBox())!.width).toBeGreaterThanOrEqual(40);
+  const risk = next.locator('.lane-risk');
+  await expect(risk).toHaveText('12:05 now 12:15, at risk');
+  expect(await risk.evaluate(el => el.scrollWidth <= el.clientWidth + 0.5)).toBe(true);
+  const rb = (await risk.boundingBox())!, nb = (await next.boundingBox())!;
+  expect(rb.x).toBeGreaterThanOrEqual(nb.x);
+  expect(rb.x + rb.width).toBeLessThanOrEqual(nb.x + nb.width);
+  await o.ctx.close();
 });

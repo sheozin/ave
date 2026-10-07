@@ -45,6 +45,7 @@
       --st-calling:   #FACC15; --st-calling-bg:   rgba(250,204,21,.16);  --st-calling-fg:   #FDE047; --st-calling-line:   rgba(250,204,21,.55);  --st-calling-wash: rgba(250,204,21,.08);
       --st-live:      #EF4444; --st-live-bg:      rgba(239,68,68,.16);   --st-live-fg:      #FCA5A5; --st-live-line:      rgba(239,68,68,.55);   --st-live-wash:    rgba(239,68,68,.08);
       --st-overrun:   #E879F9; --st-overrun-bg:   rgba(232,121,249,.16); --st-overrun-fg:   #F5D0FE; --st-overrun-line:   rgba(232,121,249,.6);  --st-overrun-wash: rgba(232,121,249,.14);
+      --st-hold-count: #FDBA74;   /* held countdown in the band (approved demo): 9.5:1 on the hold wash */
       --st-hold:      #FB923C; --st-hold-bg:      rgba(251,146,60,.16);  --st-hold-fg:      #FED7AA; --st-hold-line:      rgba(251,146,60,.55);  --st-hold-wash:    rgba(251,146,60,.08);
       --st-ended:     #64748B; --st-ended-bg:     rgba(100,116,139,.16); --st-ended-fg:     #A3ACB9; --st-ended-line:     rgba(100,116,139,.55);
       --st-cancelled: #4B5563; --st-cancelled-bg: transparent;           --st-cancelled-fg: #8B94A3; --st-cancelled-line: var(--border-divider);
@@ -1678,12 +1679,21 @@
     .lane-big { font: 700 var(--fs-28)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
     .lane-unit { font: 700 var(--fs-11)/1.2 var(--font-sans); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary); }
     .lane-ctrl { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-    .lane-lead { display: inline-flex; width: 112px; justify-content: flex-end; }
+    /* Demo-sized controls (md, natural width: Hold about 75, End… 62). Each slot's min-width is
+       the longest label it can show in the page language, so Hold and End line up in every
+       lane; the armed End grows to the left from the same right edge and is never clipped. */
+    .lane-now { --lane-lead-w: 84px; --lane-end-w: 62px; }
+    :lang(ar) .lane-now { --lane-lead-w: 92px; --lane-end-w: 62px; }
+    :lang(pl) .lane-now, :lang(de) .lane-now { --lane-lead-w: 117px; --lane-end-w: 95px; }
+    .lane-lead { display: inline-flex; flex: none; min-width: var(--lane-lead-w); justify-content: flex-end; }
     .lane-lead .btn { width: 100%; }
-    .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { width: 148px; overflow: hidden; text-overflow: ellipsis; }
-    .end-slot { display: inline-block; width: 148px; height: 1px; }
-    .lane-next-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .lane-next-title { color: var(--text-primary); font-weight: 600; }
+    .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { flex: none; min-width: var(--lane-end-w); white-space: nowrap; }
+    .end-slot { display: inline-block; height: 1px; }
+    .lane-next-what { display: flex; min-width: 0; white-space: nowrap; }
+    .lane-next-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 600; }
+    /* Short of room, title and time share the cut; in overrun the at-risk text stays whole */
+    .lane-next-when { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+    .lane-next.has-push .lane-next-when { flex: none; }
     .lane-next-state { display: inline-flex; align-items: center; }
     .lane-risk { color: var(--st-live-fg); }
     .warnchip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--r-badge); background: var(--st-live-bg); color: var(--danger-fg); font: 700 var(--fs-11) var(--font-sans); letter-spacing: var(--ls-badge); text-transform: uppercase; }
@@ -1694,7 +1704,7 @@
     .lane.is-hold    .lane-now { background: var(--st-hold-wash); }
     .lane.is-calling .lane-now { background: var(--st-calling-wash); }
     .lane.is-over .lane-big { color: var(--st-overrun-fg); }
-    .lane.is-hold .lane-big { color: var(--st-hold-fg); }
+    .lane.is-hold .lane-big { color: var(--st-hold-count); }
     .lane-count.warn-amber .lane-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the list */
     .lane-count.warn-red   .lane-big { color: var(--st-live-fg); }
     @keyframes lane-over { 50% { box-shadow: inset 4px 0 0 transparent; } }
@@ -1709,11 +1719,14 @@
       .lane-next { min-height: 44px; border-top: 0; border-inline-start: 1px dashed var(--border-divider); padding: 4px 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
       .lane-next-state, .lane-who, .lane-unit { display: none; }
       .lane-big { font-size: var(--fs-20); }
-      .lane-lead { width: 96px; }
-      .lane-next.has-push { grid-template-columns: minmax(0, 1fr) auto; }   /* Push following + the next action need the room at 1280 */
+      /* Room for the now title (at least 200 px at 1280): a narrower room column and gaps */
+      .lane { grid-template-columns: 88px minmax(0, 1fr); }
+      .lane-room { padding: 4px 8px; }
+      .lane-now { column-gap: 8px; }
+      .lane-now .lane-ctrl { gap: 6px; }
+      /* Overrun: the next half takes two lines, title and risk above, Push following and the next action below */
+      .lane-next.has-push { grid-template-columns: minmax(0, 1fr); row-gap: 2px; padding-block: 4px; }
       .lane-next.has-push .lbl { display: none; }
-      /* End keeps its 148 px slot: the armed label "Press again to end" (Task 4.2)
-         measures 142 px at md and would be clipped in a 112 px slot. */
     }
     /* Phone (until the stage 5 phone layout): the room above, now and next stacked, controls on their own line */
     @media (max-width: 767px) {
@@ -4016,15 +4029,18 @@ function setMyRoom(room) {
   } catch { /* storage blocked: order stays alphabetical */ }
   renderSessions();
 }
-// Event room order when the event has one, else alphabetical; the operator's room first.
+// Event room order when the event has one, else running order (the room's first
+// session by sort_order, as in the approved demo); No room last; the operator's room first.
 function roomsInOrder() {
-  const rooms = [...new Set(S.sessions.map(roomOf))];
+  const first = new Map();
+  for (const s of S.sessions) { const r = roomOf(s); first.set(r, Math.min(first.get(r) ?? Infinity, s.sort_order ?? Infinity)); }
+  const rooms = [...first.keys()];
   const pref = Array.isArray(S.event?.rooms) ? S.event.rooms : null;
   rooms.sort((a, b) => {
-    if (pref) { const ia = pref.indexOf(a), ib = pref.indexOf(b); if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); }
     if (a === ROOM_NONE) return 1;
     if (b === ROOM_NONE) return -1;
-    return a.localeCompare(b);
+    if (pref) { const ia = pref.indexOf(a), ib = pref.indexOf(b); if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); }
+    return (first.get(a) - first.get(b)) || a.localeCompare(b);
   });
   const mine = myRoom();
   if (mine && rooms.includes(mine)) { rooms.splice(rooms.indexOf(mine), 1); rooms.unshift(mine); }
@@ -4113,7 +4129,7 @@ function nextRowHTML(l, over, tm) {
   const notArrived = hasSpeaker && !n.speaker_arrived && minsUntil(n) <= 10;
   return `<div class="lane-next${push ? ' has-push' : ''}">
     <span class="lbl">${esc(t('cc.band.next'))}</span>
-    <span class="lane-next-what"><span class="lane-next-title">#${n.sort_order} ${esc(n.title)}</span> · ${when}</span>
+    <span class="lane-next-what"><span class="lane-next-title">#${n.sort_order} ${esc(n.title)}</span><span class="lane-next-when"> · ${when}</span></span>
     <span class="lane-next-state">${notArrived ? `<span class="warnchip">${icon('user')}${esc(t('cc.band.notArrived'))}</span>` : statusBadge(n.status)}</span>
     <span class="lane-ctrl">${push}${primaryButtonHTML(n, 'sm', 'band-next')}</span>
   </div>`;
