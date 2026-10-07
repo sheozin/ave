@@ -2,7 +2,7 @@
 // Spec 2.2: 58 px rows (the approved demo) on a fixed grid, left edge = status, finished
 // sessions folded, HH:MM times, one primary action, tools on hover, selection.
 import { test, expect } from '@playwright/test';
-import { openConsole, evalPage, ID, PANEL_ID, longTitleSessions } from './console-boot-mock';
+import { openConsole, evalPage, ID, PANEL_ID, longTitleSessions, demoSessions } from './console-boot-mock';
 
 test('list: rows are 58 px on a seven-column grid and the left edge is the status colour', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
@@ -159,7 +159,7 @@ test('list: type matches the approved demo (14 px semibold title, 12 px speaker 
   const row = page.locator(`#card-${ID(6)}`);
   expect(await row.locator('.sc-title').evaluate(el => [getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight])).toEqual(['14px', '600']);
   expect(await row.locator('.sc-sub').evaluate(el => getComputedStyle(el).fontSize)).toBe('12px');
-  await expect(row.locator('.sc-spk')).toHaveText('Tarek Nassar · Gateline Digital');
+  await expect(row.locator('.sc-who')).toHaveText('Tarek Nassar · Gateline Digital');
   const a = (await page.locator(`#card-${ID(5)}`).boundingBox())!;
   const b = (await row.boundingBox())!;
   expect(Math.round(b.y - (a.y + a.height))).toBe(6);
@@ -226,3 +226,51 @@ test('roles: a role-locked operator cannot switch role from the command palette;
   expect(await evalPage(page, 'S.role')).toBe('stage');
   await ctx.close();
 });
+
+// 5.2b (4), owner bug 7 Oct: "Peter Matza · Council Member, Association of Corporate Treasurers (ACT) ✓ arriv".
+// The arrival state sits right after the name and never shrinks; the long remainder ellipsizes.
+const LONG_CO = 'Council Member, Association of Corporate Treasurers (ACT) and Regional Policy Board';
+function longCompanySessions() {
+  return demoSessions().map(x =>
+    x.id === ID(5) ? { ...x, speaker: 'Peter Matza', company: LONG_CO, speaker_arrived: true }
+    : x.id === ID(4) ? { ...x, speaker: 'Peter Matza', company: LONG_CO, speaker_arrived: false }
+    : x);
+}
+for (const locale of ['en', 'de'] as const) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }]) {
+    test(`list: ${locale} ${viewport.width}: a long company never hides the arrival state`, async ({ browser }) => {
+      expect(LONG_CO.length).toBeGreaterThanOrEqual(70);
+      const { ctx, page } = await openConsole(browser, { locale, viewport, sessions: longCompanySessions() });
+      for (const [id, marker, key] of [[ID(5), '.sc-arrived', 'cc.list.arrived'], [ID(4), '.sc-notarrived', 'cc.list.notArrived']] as const) {
+        const row = page.locator(`#card-${id}`);
+        const m = row.locator(`.sc-sub ${marker}`);
+        await expect(m).toHaveText(await evalPage(page, `t('${key}')`) as string);
+        const geo = await row.evaluate((el, sel) => {
+          const r = (q: string) => el.querySelector(q)!.getBoundingClientRect();
+          const mk = el.querySelector(`.sc-sub ${sel}`) as HTMLElement;
+          const rest = el.querySelector('.sc-sub .sc-spk-rest') as HTMLElement;
+          const name = el.querySelector('.sc-sub .sc-spk') as HTMLElement;
+          return {
+            markerWhole: mk.scrollWidth <= mk.clientWidth,
+            markerRight: r(`.sc-sub ${sel}`).right, markerLeft: r(`.sc-sub ${sel}`).left,
+            nameRight: name.getBoundingClientRect().right,
+            subLeft: r('.sc-sub').left, subRight: r('.sc-sub').right,
+            mainRight: r('.sc-main').right, chipLeft: r('.sc-room .chip').left,
+            restEllipsis: getComputedStyle(rest).textOverflow === 'ellipsis' && rest.scrollWidth > rest.clientWidth,
+            restTitle: rest.closest('[title]')?.getAttribute('title') || '',
+            whoRight: r('.sc-sub .sc-who').right,
+          };
+        }, marker);
+        expect(geo.markerWhole, `${id} marker clipped`).toBe(true);
+        expect(geo.markerLeft).toBeGreaterThanOrEqual(geo.nameRight);   // right after the name
+        expect(geo.markerRight).toBeLessThanOrEqual(geo.subRight);       // inside the title column, not cut by it
+        expect(geo.subRight).toBeLessThanOrEqual(geo.mainRight);
+        expect(geo.subRight).toBeLessThanOrEqual(geo.chipLeft);          // never runs into the room column
+        expect(geo.whoRight).toBeLessThanOrEqual(geo.chipLeft);
+        expect(geo.restEllipsis, `${id} remainder does not end in an ellipsis`).toBe(true);
+        expect(geo.restTitle).toContain(LONG_CO);                        // the full text in its tooltip
+      }
+      await ctx.close();
+    });
+  }
+}

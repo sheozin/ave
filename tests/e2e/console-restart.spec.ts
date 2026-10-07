@@ -263,3 +263,20 @@ test('I2: undo still works on an unchanged ENDED session', async ({ page }) => {
   const s = await evalPage(page, `JSON.stringify(S.sessions.find(x => x.id === '${STARTED}'))`);
   expect(JSON.parse(s as string)).toMatchObject({ status: 'LIVE', actual_end: null, version: 6 });
 });
+
+// 5.2b (5): the status in the undo toast is translated, as every other status word.
+test('I2b: the undo toast names the status in the page language', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('cuedeck_locale', 'pl'));
+  await setup(page);
+  await evalPage(page, `
+    const s = S.sessions.find(x => x.id === '${STARTED}');
+    s.status = 'LIVE'; renderSessions();
+    transition('${STARTED}', 'ENDED');
+  `);
+  await expect(page.locator('#undo-bar')).toBeVisible();
+  patchRows = [{ id: STARTED }];
+  await page.locator('#undo-btn').click();
+  const want = await evalPage(page, `t('toast.reverted') + ' ' + t('status.LIVE')`) as string;
+  expect(want).toBe('Przywrócono do NA ŻYWO');
+  await expect(toasts(page)).toContainText(want);
+});

@@ -1506,9 +1506,16 @@
     .sc-title { font-size: var(--fs-14); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .sc-sub { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-12); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
     .sc-sub > * { flex: none; }
-    .sc-spk, .sc-notefirst { flex: 0 1 auto !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    /* As in the approved demo the speaker line keeps its room; flags and the note after it give way */
-    .sc-spk { flex: 0 0 auto !important; max-width: 100%; }
+    /* 5.2b (owner bug 7 Oct): name and arrival state never shrink; the remainder (company, other
+       names) ellipsizes. Flags and the note take only what the speaker leaves (basis 0), so they
+       give way first, as in the demo. */
+    .sc-who { flex: 0 1 auto !important; display: flex; align-items: center; min-width: 0; white-space: pre; }
+    .sc-who > * { flex: none; }
+    .sc-who > .sc-flag { margin-inline-start: 8px; }
+    .sc-spk-rest { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .sc-extra { flex: 1 1 0 !important; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
+    .sc-extra > * { flex: none; }
+    .sc-notefirst { flex: 0 1 auto !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .sc-notefirst > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .sc-flag { display: inline-flex; align-items: center; gap: 3px; }
     .sc-flag .ico { width: 14px; height: 14px; }
@@ -1596,7 +1603,8 @@
     .lane-what { display: grid; gap: 2px; min-width: 0; }
     .lane-title { font-size: var(--fs-16); font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .lane-who { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-12); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
-    .lane-spk { overflow: hidden; text-overflow: ellipsis; }
+    .lane-who > * { flex: none; }
+    .lane-who > .sc-who { flex: 0 1 auto; }
     .lane-flags { display: inline-flex; gap: 10px; color: var(--text-primary); font-weight: 600; }
     .lane-count { display: grid; justify-items: end; gap: 2px; }
     .lane-big { font: 700 var(--fs-28)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
@@ -3261,7 +3269,7 @@ async function executeUndo() {
   }
   const s = cur;
   s.status = prevStatus; s.actual_end = null; s.version = ver + 1; renderSessions();
-  pushToast(`${t('toast.reverted')} ${prevStatus}`, 'success');
+  pushToast(`${t('toast.reverted')} ${t('status.' + prevStatus)}`, 'success');
   pushLog('UNDO', `reverted to ${prevStatus}`, sessionId);
 }
 
@@ -4082,14 +4090,6 @@ function countdownLabel(s, nowMs) {
 }
 
 function people(s) { return Array.isArray(s.people) ? s.people.filter(p => p && p.name) : []; }
-// "Salma Khoury · Rivaline Beauty Group" (as in the approved demo); a panel lists its people.
-function speakerLine(s) {
-  const p = people(s);
-  if (p.length > 1) return peopleSummary(p);
-  const name = p.length ? p[0].name : (s.speaker || '');
-  const co = p.length ? p[0].company : s.company;
-  return name && co ? `${name} · ${co}` : name;
-}
 // "Dina Farouk (moderator) +3"
 function speakerShort(s) {
   const p = people(s);
@@ -4108,18 +4108,41 @@ function flagsHTML(s) {
   if (s.remote)         f.push(`<span class="sc-flag">${icon('remote')}${esc(t('cc.flag.remote'))}</span>`);
   return f.join('');
 }
+// The speaker line split for the arrival state (5.2b, owner bug 7 Oct): the lead name, then
+// the rest (" · company" or ", other names"). short: a panel as "lead +3" (band).
+function speakerParts(s, short) {
+  const p = people(s);
+  if (p.length > 1) {
+    const mods = p.filter(x => x.role === 'moderator'), others = p.filter(x => x.role !== 'moderator');
+    const names = [...mods.map(x => `${x.name} (${t('cc.list.moderator')})`), ...others.map(x => x.name)];
+    if (short) return { name: speakerShort(s), rest: '' };   // "Dina Farouk (moderator) +3" stays whole
+    return { name: names[0], rest: ', ' + names.slice(1).join(', ') };
+  }
+  const name = p.length ? p[0].name : (s.speaker || '');
+  const co = p.length ? p[0].company : s.company;
+  return { name, rest: name && co ? ` · ${co}` : '' };
+}
+// "Name ✓ arrived · company…": the arrival state right after the name never shrinks; the
+// remainder ellipsizes, with the whole line in the tooltip. Shared by the list and the band.
+function whoHTML(s, short, arrivedHTML) {
+  const { name, rest } = speakerParts(s, short);
+  if (!name) return '';
+  // After the arrival state a panel's other names read "· Karim Benali, …", like a company.
+  const tail = arrivedHTML && rest.startsWith(', ') ? ' · ' + rest.slice(2) : rest;
+  return `<span class="sc-who" dir="auto" title="${esc(name + rest)}"><span class="sc-spk">${esc(name)}</span>${arrivedHTML}`
+    + (tail ? `<span class="sc-spk-rest">${esc(tail)}</span>` : '') + `</span>`;
+}
 function subLine(s, showNote) {
-  const spk = speakerLine(s);
   // Arrival: "arrived" once marked; "not arrived" while the speaker is being called (demo).
-  const arrived = !spk ? ''
-    : s.speaker_arrived ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>`
+  const arrived = s.speaker_arrived ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>`
     : s.status === 'CALLING' ? `<span class="sc-flag sc-notarrived">${esc(t('cc.list.notArrived'))}</span>` : '';
   const note = s.notes && s.notes.trim()
     ? (showNote
         ? `<span class="sc-flag sc-notefirst">${icon('note')}<span>${esc(s.notes.trim().split('\n')[0])}</span></span>`
         : `<span class="sc-flag" title="${esc(t('cc.list.note'))}">${icon('note')}</span>`)
     : '';
-  return `${spk ? `<span class="sc-spk">${esc(spk)}</span>` : ''}${arrived}${flagsHTML(s)}${note}`;
+  const extra = flagsHTML(s) + note;
+  return whoHTML(s, false, arrived) + (extra ? `<span class="sc-extra">${extra}</span>` : '');
 }
 
 function rowHTML(s, nowMs, ctx) {
@@ -4303,10 +4326,9 @@ function laneHTML(l, nowMs, many) {
   const cls = over ? 'is-over' : s.status === 'LIVE' ? 'is-live' : s.status === 'HOLD' ? 'is-hold' : 'is-calling';
   const cd = countdownLabel(s, nowMs) || { big: hm(s.scheduled_start), unit: untilText(s) };
   // A panel shows its lead and a count; one speaker shows name and company (approved demo).
-  const spk = people(s).length > 1 ? speakerShort(s) : speakerLine(s);
   const who = S.role === 'av'
     ? `<span class="lane-flags">${flagsHTML(s)}</span>`
-    : `<span class="lane-spk">${esc(spk)}</span>${s.speaker_arrived && spk ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : ''}`;
+    : whoHTML(s, true, s.speaker_arrived ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : '');
   // Fixed slots: [lead: Hold for LIVE/OVERRUN, else the forward action] | gap | [End or an empty slot]
   const lead = (s.status === 'LIVE' || s.status === 'OVERRUN')
     ? (canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'md', 'band', 'band-lead:' + l.room) : '')
@@ -5097,7 +5119,7 @@ async function batchTransition(toStatus) {
     } catch {}
   }
   clearBatchSelection();
-  pushToast(`${toStatus}: ${success}/${count} sessions`, success === count ? 'success' : 'warn');
+  pushToast(tf('cc.batch.result', { status: t('status.' + toStatus), done: success, n: count }), success === count ? 'success' : 'warn');
 }
 
 // Rows: click, Enter or Space select; ArrowUp/ArrowDown move the selection (spec 2.2).

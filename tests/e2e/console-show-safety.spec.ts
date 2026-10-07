@@ -190,7 +190,23 @@ test.describe('batch actions', () => {
     await btn.click();
     await btn.click();
     await expect.poll(() => calls(page)).toEqual([['live1', 'ENDED']]);
-    await expect(page.locator('#toast-container')).toContainText('ENDED: 1/1');
+    // One of one succeeded, read in the page's own words (5.2b: no English left in the toast).
+    const want = await page.evaluate(() => (0, eval)(`tf('cc.batch.result', { status: t('status.ENDED'), done: 1, n: 1 })`));
+    expect(want).toContain('1/1');
+    await expect(page.locator('#toast-container')).toContainText(want);
+  });
+
+  test('the batch result toast is in the page language', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('cuedeck_locale', 'pl'));
+    await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1').hover();
+    await page.locator('#card-live1 .batch-chk').check();
+    const btn = page.locator('#batch-bar [data-batch="ENDED"]');
+    await btn.click();
+    await btn.click();
+    await expect.poll(() => calls(page)).toEqual([['live1', 'ENDED']]);
+    await expect(page.locator('#toast-container')).toContainText('ZAKOŃCZONE: 1/1 sesji');
+    await expect(page.locator('#toast-container')).not.toContainText('sessions');
   });
 
   test('switching event clears the batch selection and its armed button', async ({ page }) => {
