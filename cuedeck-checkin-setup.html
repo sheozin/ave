@@ -916,6 +916,7 @@ $('gi-send').onclick = async () => {
     const { data, error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'send' } });
     if (error) { $('gi-err').textContent = await fnError(error); break; }
     total += data.sent; failed += data.failed;
+    if (data.capped) { $('gi-err').textContent = 'You have sent 1,000 invitations in the last 24 hours, the most one event can send in a day. The rest can go out tomorrow.'; break; }
     if (!data.remaining || !data.sent) break;
   }
   b.disabled = false;

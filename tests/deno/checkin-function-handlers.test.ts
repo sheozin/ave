@@ -1586,3 +1586,14 @@ Deno.test(`${RG} rsvp: a plus-one with a link for a name is refused before the d
   const r = await guest({ action: 'rsvp', code: 'VTQBZ3ENFV', token: LINK_TOKEN, going: true, plus_ones: [{ first_name: 'evil.com', last_name: 'X' }] })
   assert(r.status === 400 && !world.rpcCalls.some(c => c.name === 'checkin_web_rsvp'), JSON.stringify(r))
 })
+
+Deno.test(`${IG} limits: a resend too soon is refused with a reason; the daily cap stops a batch`, async () => {
+  invSetup()
+  world.rpcResult.checkin_web_invite_issue = { status: 'too_soon' }
+  const r = await call(IG, { event_id: EVENT, action: 'resend', attendee_ids: ['e2000000-0000-4000-8000-000000000001'] })
+  assert(r.status === 429 && r.body.code === 'too_soon' && !(world.emails?.length), JSON.stringify(r))
+  invSetup()
+  world.rpcResult.checkin_web_invite_issue = { status: 'daily_cap' }
+  const r2 = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r2.status === 200 && r2.body.capped === true && r2.body.remaining === 0 && !(world.emails?.length), JSON.stringify(r2))
+})

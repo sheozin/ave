@@ -18,6 +18,7 @@ BEGIN
   VALUES (E, 'Gina', 'Guest', 'gina@example.invalid', 'tok-119', 'import', false) RETURNING id INTO v_g;
   PERFORM checkin_web_invite_issue(E, v_g, H1);
   PERFORM checkin_web_rsvp(v_code, H1, true, '[]');
+  UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
   PERFORM checkin_web_invite_issue(E, v_g, H2);
   IF checkin_web_invite_view(v_code, H1)->>'status' <> 'ok' THEN RAISE EXCEPTION 'previous link within 48 h'; END IF;
   -- After 48 hours only the latest link works.

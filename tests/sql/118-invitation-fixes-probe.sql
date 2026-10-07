@@ -34,6 +34,7 @@ BEGIN
   IF checkin_web_rsvp(v_code, H1, true, '[]')->>'status' <> 'closed' THEN RAISE EXCEPTION 'deadline ignored'; END IF;
   IF checkin_web_rsvp(v_code, H1, false, '[]')->>'status' <> 'not_going' THEN RAISE EXCEPTION 'not going after deadline'; END IF;
   -- 3. A resend keeps the old link; a failed resend restores it alone.
+  UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
   PERFORM checkin_web_invite_issue(E, v_g, H2);
   IF checkin_web_invite_view(v_code, H1)->>'status' <> 'ok' OR checkin_web_invite_view(v_code, H2)->>'status' <> 'ok' THEN RAISE EXCEPTION 'both links should work'; END IF;
   PERFORM checkin_web_invite_unissue(v_g, H2);

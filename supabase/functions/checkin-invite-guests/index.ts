@@ -130,12 +130,16 @@ Deno.serve(async (req) => {
     ids = (rows ?? []).map(r => r.id).filter(id => !done.has(id))
   }
   const todo = ids.slice(0, BATCH)
-  let sent = 0, failed = 0
+  let sent = 0, failed = 0, tooSoon = 0, capped = false
   for (const id of todo) {
     const token = b64url(crypto.getRandomValues(new Uint8Array(32)))
     const hash = await sha256Hex(token)
     const { data: out, error } = await sb.rpc('checkin_web_invite_issue', { p_event_id: event_id, p_attendee_id: id, p_token_hash: hash })
     if (error || !out) { console.error('checkin-invite-guests: issue failed', error?.code); failed++; continue }
+    // Limits (migration 120): one per guest every 10 minutes, five in all,
+    // 1,000 per event a day.
+    if (out.status === 'daily_cap') { capped = true; break }
+    if (out.status === 'too_soon' || out.status === 'limit') { tooSoon++; continue }
     if (out.status !== 'issued') continue
     const m = inviteEmail(e, String(out.first_name), base + '#i=' + token)
     const { error: mailErr } = await sendEmail({ to: String(out.email), subject: m.subject, html: m.html, fromName })
@@ -149,5 +153,9 @@ Deno.serve(async (req) => {
     sent++
   }
   console.log('checkin-invite-guests:', action, 'sent', sent, 'failed', failed, 'event', event_id)
-  return json({ ok: failed === 0, sent, failed, remaining: action === 'send' ? Math.max(0, ids.length - todo.length) : 0 })
+  if (action === 'resend' && !sent && tooSoon) {
+    return json({ error: 'This guest was invited less than 10 minutes ago, or has already been sent five invitations.', code: 'too_soon' }, 429)
+  }
+  return json({ ok: failed === 0, sent, failed, skipped: tooSoon, capped,
+                remaining: action === 'send' && !capped ? Math.max(0, ids.length - todo.length) : 0 })
 })
