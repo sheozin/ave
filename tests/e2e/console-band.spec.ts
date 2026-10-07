@@ -197,3 +197,18 @@ test('layout: in Arabic at 1440x900 the rail is on screen beside the band, not s
   expect(rail.x + rail.width).toBeLessThanOrEqual(band.x + 1);   // RTL: the rail sits left of the main column
   await ctx.close();
 });
+
+test('layout: at 1280x720 the overrun next half keeps Push following and the next action inside the lane', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { sessions: overrunSessions(), viewport: { width: 1280, height: 720 } });
+  const lane = page.locator('#band .lane[data-room="Main Stage"]');
+  const lb = (await lane.boundingBox())!;
+  for (const b of await lane.locator('.lane-next button').all()) {
+    const bb = (await b.boundingBox())!;
+    expect(bb.x + bb.width).toBeLessThanOrEqual(lb.x + lb.width);
+  }
+  // and nothing in the next half overlaps: the title ends before the first button starts
+  const what = (await lane.locator('.lane-next-what').boundingBox())!;
+  const first = (await lane.locator('.lane-next button').first().boundingBox())!;
+  expect(what.x + what.width).toBeLessThanOrEqual(first.x);
+  await ctx.close();
+});

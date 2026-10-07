@@ -1710,6 +1710,8 @@
       .lane-next-state, .lane-who, .lane-unit { display: none; }
       .lane-big { font-size: var(--fs-20); }
       .lane-lead { width: 96px; }
+      .lane-next.has-push { grid-template-columns: minmax(0, 1fr) auto; }   /* Push following + the next action need the room at 1280 */
+      .lane-next.has-push .lbl { display: none; }
       /* End keeps its 148 px slot: the armed label "Press again to end" (Task 4.2)
          measures 142 px at md and would be clipped in a 112 px slot. */
     }
@@ -4109,7 +4111,7 @@ function nextRowHTML(l, over, tm) {
   }
   const hasSpeaker = !!(n.speaker || people(n).length);
   const notArrived = hasSpeaker && !n.speaker_arrived && minsUntil(n) <= 10;
-  return `<div class="lane-next">
+  return `<div class="lane-next${push ? ' has-push' : ''}">
     <span class="lbl">${esc(t('cc.band.next'))}</span>
     <span class="lane-next-what"><span class="lane-next-title">#${n.sort_order} ${esc(n.title)}</span> · ${when}</span>
     <span class="lane-next-state">${notArrived ? `<span class="warnchip">${icon('user')}${esc(t('cc.band.notArrived'))}</span>` : statusBadge(n.status)}</span>
