@@ -79,6 +79,8 @@ async function sha256Hex(s: string): Promise<string> {
   return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/
+// (125) Where a visitor came from: 'direct', 'embed', 'invite' or a campaign tag.
+const REF = /^[a-z0-9_-]{1,32}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function turnstileOk(secret: string, token: string, ip: string): Promise<boolean> {
@@ -145,6 +147,17 @@ Deno.serve(async (req) => {
 
   // ── config ──────────────────────────────────────────────────────
   if (body.action === 'config') {
+    // (125) One unique visitor a day, counted from a salted hash of the IP
+    // (never stored as an address). After the response where possible.
+    const ref = typeof body.ref === 'string' && REF.test(body.ref) ? body.ref : 'direct'
+    const visitIp = clientIp(req)
+    if (visitIp) {
+      const counting = hmacHex(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? 'cuedeck', 'checkin-view:' + visitIp)
+        .then(h => sb.rpc('checkin_web_count_view', { p_code: code, p_source: ref, p_ip_hash: h }))
+        .then(({ error }) => { if (error) console.error('checkin-register: view not counted', error.code) })
+      const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+      if (rt) rt.waitUntil(counting); else await counting
+    }
     // The same closing rules checkin_web_register applies; the database is
     // the authority at submit time, this is so the page can say so first.
     let state: 'open' | 'closed' | 'full' | 'waitlist' = 'open'
@@ -243,6 +256,13 @@ Deno.serve(async (req) => {
     if (!lang || !email) return
     const { error } = await sb.rpc('checkin_web_set_lang', { p_event_id: ent.event_id, p_email: email, p_lang: lang })
     if (error) console.error('checkin-register: language not recorded', error.code)
+  }
+
+  // (125) A guest's source, once: an earlier one is never overwritten.
+  const setSource = async (ids: string[], src: string) => {
+    if (!ids.length || !REF.test(src)) return
+    const { error } = await sb.from('leod_checkin_attendees').update({ reg_source: src }).in('id', ids).is('reg_source', null)
+    if (error) console.error('checkin-register: source not recorded', error.code)
   }
 
   // Per (event, IP) budget shared by register, preview and confirm.
@@ -353,6 +373,7 @@ Deno.serve(async (req) => {
     const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null }
     const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
     await rememberLang(attendee.email)
+    await setSource([attendee.id, ...plusOnes.map(p => p.id)], 'invite')
     // Test mode never emails guests; live, the ticket goes out (again at
     // most every 10 minutes) and any new plus-ones' tickets with it.
     if (!test) {
@@ -389,7 +410,12 @@ Deno.serve(async (req) => {
     const token = typeof body.token === 'string' ? body.token : ''
     if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
     const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
-    const { data: out, error } = await sb.rpc('checkin_web_confirm', { p_code: code, p_token_hash: await sha256Hex(token) })
+    const tokenHash = await sha256Hex(token)
+    // (125) The request's source, read before confirm deletes the request.
+    const { data: pend } = await sb.from('leod_checkin_web_pending').select('ref').eq('event_id', ent.event_id)
+      .or('token_hash.eq.' + tokenHash + ',prev_token_hash.eq.' + tokenHash).maybeSingle()
+    const ref = pend?.ref ?? null
+    const { data: out, error } = await sb.rpc('checkin_web_confirm', { p_code: code, p_token_hash: tokenHash })
     if (error || !out) {
       console.error('checkin-register: confirm failed', error?.code ?? 'no result')
       return json({ error: 'Something went wrong. Please try the link again.' }, 500)
@@ -398,6 +424,10 @@ Deno.serve(async (req) => {
     if (status === 'not_found') return json({ error: 'not_found' }, 404)
     // (109) A paid ticket: an order, new or found by this link.
     if (status === 'payment_required' || status === 'order') {
+      if (status === 'payment_required' && ref) {
+        const { error: refErr } = await sb.from('leod_checkin_web_orders').update({ ref }).eq('id', String(out.order_id)).is('ref', null)
+        if (refErr) console.error('checkin-register: order source not recorded', refErr.code)
+      }
       try {
         return await orderReply(String(out.order_id))
       } catch (e) {
@@ -420,6 +450,7 @@ Deno.serve(async (req) => {
     // again, at most every 10 minutes.
     const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
     await rememberLang(attendee?.email)
+    if (attendee && status === 'registered') await setSource([attendee.id, ...plusOnes.map(p => p.id)], ref ?? 'direct')
     if (attendee && (status === 'registered' || mayResend(attendee.qr_email_sent_at, Date.now()))) {
       const brand = await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue })
       const res = await sendQrEmailsForAttendees(sb, brand, [attendee])
@@ -509,6 +540,13 @@ Deno.serve(async (req) => {
     return json(held ? { status: 'ok', test: true, held } : { status: 'ok', test: true })
   }
 
+  // (125) The request remembers where the guest came from.
+  const regRef = typeof body.ref === 'string' && REF.test(body.ref) ? body.ref : null
+  if (regRef && status === 'pending') {
+    const { error: refErr } = await sb.from('leod_checkin_web_pending').update({ ref: regRef })
+      .eq('event_id', ent.event_id).eq('token_hash', await sha256Hex(token)).is('ref', null)
+    if (refErr) console.error('checkin-register: request source not recorded', refErr.code)
+  }
   if (out.send === true) {
     // Token in the fragment: browsers never send it to a server, so it stays
     // out of request logs and click-tracking redirects.

@@ -229,6 +229,18 @@
     </div>
     <h3 class="sc-h">Where your guests came from</h3>
     <div class="src" id="rp-src"></div>
+    <div id="an-box">
+      <h3 class="sc-h">Registration page</h3>
+      <p class="sc-p" id="an-note"></p>
+      <div class="src" id="an-stats"></div>
+      <div id="an-chart" style="margin-top:14px"></div>
+      <div class="row2" style="gap:18px;margin-top:14px;align-items:start">
+        <div><b style="font-size:14px">Sources</b><div style="overflow-x:auto"><table class="tbl" style="margin-top:6px"><thead><tr><th>Source</th><th>Visitors</th><th>Registered</th></tr></thead><tbody id="an-src"></tbody></table></div>
+          <p class="small" style="margin-top:8px">Tag a link to see where people come from: add <code>?ref=newsletter</code> (or any word) to your registration link.</p></div>
+        <div id="an-more" style="display:grid;gap:10px"></div>
+      </div>
+      <div class="err" id="an-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-details" hidden>
@@ -694,9 +706,77 @@ function renderReports() {
   $('rp-export').hidden = !can(ROLE, 'export');
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
+  renderAnalytics();
   $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
+
+// ── registration analytics (migration 125) ──
+const SRC_NAMES = { direct: 'Direct link', embed: 'Form on your website', invite: 'Invitations' };
+async function renderAnalytics() {
+  $('an-err').textContent = '';
+  const { data: a, error } = await sb.rpc('checkin_registration_analytics', { p_event_id: EVENT_ID });
+  if (error) { $('an-err').textContent = error.message; return; }
+  const g = a.guests || {};
+  const conv = a.visitors ? Math.round(g.registered / a.visitors * 1000) / 10 : null;
+  const pct = (x, of) => of ? Math.round(x / of * 100) + '%' : '0%';
+  $('an-note').textContent = (a.test ? 'Test mode: counts show test registrations until you go live. ' : '')
+    + 'Visitors are counted once a day each, without cookies.';
+  const stat = (label, value, sub) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, value)); if (sub) d.append(el('small', null, sub)); return d; };
+  $('an-stats').replaceChildren(
+    stat('Visitors', String(a.visitors || 0)),
+    stat('Registered', String(g.registered || 0), conv == null ? '' : conv + '% of visitors'),
+    stat('Checked in', String(g.checked_in || 0), pct(g.checked_in || 0, g.total || 0) + ' of ' + (g.total || 0) + ' guests'),
+    stat('QR emails sent', String(g.qr_sent || 0)));
+  // Last 30 days: visitors (light) and registrations (dark) per day.
+  const days = [], vis = {}, reg = {};
+  for (const x of a.visitors_by_day || []) vis[x.day] = x.n;
+  for (const x of a.registrations_by_day || []) reg[x.day] = x.n;
+  for (let i = 29; i >= 0; i--) days.push(new Date(Date.now() - i * 864e5).toISOString().slice(0, 10));
+  const max = Math.max(1, ...days.map(d => Math.max(vis[d] || 0, reg[d] || 0)));
+  const W = 600, H = 120, bw = W / 30;  // labels sit outside the drawing, so they keep their size
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', '100%');
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Visitors and registrations over the last 30 days');
+  days.forEach((d, i) => {
+    for (const [v, fill, inset] of [[vis[d] || 0, 'var(--acsf)', 1], [reg[d] || 0, 'var(--ac)', bw * 0.28]]) {
+      if (!v) continue;
+      const h = Math.max(2, v / max * H);
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', String(i * bw + inset)); r.setAttribute('width', String(bw - inset * 2)); r.setAttribute('y', String(H - h)); r.setAttribute('height', String(h));
+      r.setAttribute('rx', '2'); r.setAttribute('fill', fill);
+      const t = document.createElementNS(NS, 'title'); t.textContent = d + ': ' + (vis[d] || 0) + ' visitors, ' + (reg[d] || 0) + ' registered'; r.append(t);
+      svg.append(r);
+    }
+  });
+  const ends = el('div', 'small'); ends.style.cssText = 'display:flex;justify-content:space-between;margin-top:2px';
+  ends.append(el('span', null, fmtDate(days[0])), el('span', null, fmtDate(days[29])));
+  const legend = el('div', 'small'); legend.textContent = 'Last 30 days. Light: visitors. Dark: registrations.';
+  $('an-chart').replaceChildren(svg, ends, legend);
+  // Sources: visitors and registrations side by side.
+  const srcs = {};
+  for (const x of a.visitors_by_source || []) (srcs[x.source] ??= { v: 0, r: 0 }).v = x.n;
+  for (const x of a.registrations_by_source || []) (srcs[x.source] ??= { v: 0, r: 0 }).r = x.n;
+  const rows = Object.entries(srcs).sort((x, y) => (y[1].r - x[1].r) || (y[1].v - x[1].v));
+  $('an-src').replaceChildren(...(rows.length ? rows.map(([k, v]) => { const tr = el('tr'); tr.append(el('td', null, SRC_NAMES[k] || k), el('td', null, String(v.v)), el('td', null, String(v.r))); return tr; })
+    : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No visitors yet.'); td.colSpan = 3; tr.append(td); return tr; })()]));
+  // Invitations, tickets, waitlist: only what applies to this event.
+  const card = (title, lines) => { const d = el('div'); d.style.cssText = 'border:1px solid var(--bd);border-radius:12px;padding:12px 14px'; d.append(el('b', null, title)); for (const l of lines) d.append(el('div', 'small', l)); return d; };
+  const more = [];
+  const inv = a.invitations || {};
+  if (inv.sent) more.push(card('Invitations', [inv.sent + ' sent', inv.going + ' coming · ' + inv.not_going + ' not coming · ' + inv.no_answer + ' no answer yet']));
+  const o = a.orders || {};
+  if (o.paid || o.paying || o.abandoned || o.refunded) {
+    const rev = Object.entries(o.revenue || {}).map(([c, v]) => fmtMoney(v, c)).join(' + ') || fmtMoney(0, 'eur');
+    more.push(card('Ticket sales', [o.paid + ' paid, ' + rev, (o.abandoned || 0) + ' left before paying' + (o.paying ? ' · ' + o.paying + ' paying now' : '') + (o.refunded ? ' · ' + o.refunded + ' refunded' : '')]));
+  }
+  const h = a.held || {};
+  if (h.waitlist || h.approval) more.push(card('Waiting', [(h.waitlist || 0) + ' on the waitlist · ' + (h.approval || 0) + ' awaiting approval']));
+  if (g.plus_ones) more.push(card('Plus-ones', [g.plus_ones + ' guests brought by others']));
+  const e = a.emails || {};
+  if (e.reminders || e.thankyous) more.push(card('Automatic emails', [(e.reminders || 0) + ' reminders · ' + (e.thankyous || 0) + ' thank-yous']));
+  $('an-more').replaceChildren(...more);
+}
 
 // The preview follows the form as it is typed, before Save.
 function renderPreview() {

@@ -654,3 +654,26 @@ test('registration tab: the automatic waitlist switch shows with the waitlist an
   await expect(page.locator('#held-ok')).toContainText('moves up by itself');
   expect(set[0]).toMatchObject({ p_event_id: EVENT_ID, p_on: true });
 });
+
+test('reports tab: registration analytics show visitors, conversion, sources and sales', async ({ page }) => {
+  const day = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  await page.setViewportSize({ width: 1280, height: 1400 });
+  await open(page, { role: 'organizer', status: 'live' }, 'reports', STAFF, async () => {
+    await rpc(page, 'checkin_registration_analytics', { test: false, visitors: 400,
+      visitors_by_source: [{ source: 'direct', n: 250 }, { source: 'linkedin', n: 100 }, { source: 'embed', n: 50 }],
+      visitors_by_day: [{ day: day(3), n: 120 }, { day: day(1), n: 280 }],
+      registrations_by_day: [{ day: day(3), n: 20 }, { day: day(1), n: 30 }],
+      registrations_by_source: [{ source: 'direct', n: 30 }, { source: 'linkedin', n: 15 }, { source: 'embed', n: 5 }],
+      guests: { total: 80, registered: 50, plus_ones: 6, imported: 24, walk_ins: 0, checked_in: 40, qr_sent: 74 },
+      held: { waitlist: 3, approval: 0 }, invitations: { sent: 24, going: 18, not_going: 2, no_answer: 4 },
+      orders: { paid: 12, paying: 1, abandoned: 4, refunded: 1, revenue: { eur: 58800 } }, emails: { reminders: 70, thankyous: 0 } });
+  });
+  await expect(page.locator('#an-stats')).toContainText('400');
+  await expect(page.locator('#an-stats')).toContainText('12.5% of visitors');
+  await expect(page.locator('#an-src tr', { hasText: 'Form on your website' })).toContainText('50');
+  await expect(page.locator('#an-src tr', { hasText: 'linkedin' })).toContainText('15');
+  await expect(page.locator('#an-more')).toContainText('12 paid');
+  await expect(page.locator('#an-more')).toContainText('4 left before paying');
+  await expect(page.locator('#an-chart rect')).toHaveCount(4);
+  await page.locator('#an-box').screenshot({ path: '/private/tmp/claude-501/-Users-sheriff/c9550fac-82d8-442e-9240-0a373142a028/scratchpad/tix/analytics.png' });
+});
