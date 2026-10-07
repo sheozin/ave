@@ -207,3 +207,8 @@ Measured before that request, in the real console at 1440x900, and a release blo
 - List row min height 58 px; about 10 rows visible with the band in place.
 - Header clock 26 px bold, one header row of 52 px.
 - Times as HH:MM; seconds only on running timers.
+
+## 10. Ruling: the inspector never jumps (7 Oct)
+
+Overrides section 2.3 where they differ. The inspector never changes away from a session the operator selected while that session exists in the current event (ended, cancelled or filtered out still count as existing). It picks the most urgent session automatically only when nothing is selected, the selected session is deleted, or the event switches. A more urgent session is signalled by the band (and optionally a link in the inspector header), never by moving controls. Reason: an automatic LIVE to OVERRUN flip swapped "Call speaker" for Hold under the operator's pointer.
+
