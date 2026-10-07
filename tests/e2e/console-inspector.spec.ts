@@ -335,3 +335,78 @@ test('log: rows read as plain words, never raw JSON or the database action name'
   await expect(feed.locator('.lg.lg-delay').first()).toContainText('+5 min');
   await ctx.close();
 });
+
+// 5.2b (3), owner 7 Oct: the event log can be minimised to one row, per viewer.
+test('log: open by default; minimised it is one 40 to 44 px row and the inspector gets the height', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const toggle = page.locator('#log-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveAttribute('data-fk', 'log-toggle');
+  expect((await page.locator('#log-panel').boundingBox())!.height).toBeGreaterThanOrEqual(240);
+  const inspBefore = (await page.locator('#ctx-wrap').boundingBox())!.height;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  const h = (await page.locator('#log-panel').boundingBox())!.height;
+  expect(h).toBeGreaterThanOrEqual(40);
+  expect(h).toBeLessThanOrEqual(44);
+  await expect(page.locator('#log-feed')).toBeHidden();
+  await expect(page.locator('#log-panel .log-filters')).toBeHidden();
+  await expect(page.locator('#log-title')).toHaveText('Event log');
+  await expect(page.locator('#log-latest')).toContainText('realtime channel connected');
+  expect(await evalPage(page, `localStorage.getItem('cd.logMin')`)).toBe('1');
+  expect((await page.locator('#ctx-wrap').boundingBox())!.height).toBeGreaterThan(inspBefore);
+  // a click on the row reopens it
+  await page.locator('#log-latest').click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#log-feed')).toBeVisible();
+  expect(await evalPage(page, `localStorage.getItem('cd.logMin')`)).toBe('0');
+  await ctx.close();
+});
+
+test('log: a new entry while minimised updates the latest line and counts what is new', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#log-toggle').click();
+  await expect(page.locator('#log-new')).toBeHidden();
+  await evalPage(page, `pushLog('BROADCAST', 'Doors open in five minutes', null)`);
+  await expect(page.locator('#log-new')).toHaveText('1 new');
+  await expect(page.locator('#log-latest')).toContainText('Doors open in five minutes');
+  await expect(page.locator('#log-latest .lg-kind')).toHaveText('Broadcast');
+  await evalPage(page, `pushLog('DELAY', '+5 min', null); pushLog('ERROR', 'Signage push failed', null)`);
+  await expect(page.locator('#log-new')).toHaveText('3 new');
+  await expect(page.locator('#log-latest')).toContainText('Signage push failed');
+  // reopening clears the count
+  await page.locator('#log-toggle').click();
+  await page.locator('#log-toggle').click();
+  await expect(page.locator('#log-new')).toBeHidden();
+  await ctx.close();
+});
+
+test('log: the minimised state survives a reload, and a new count is translated', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { locale: 'de' });
+  await page.locator('#log-toggle').click();
+  await page.reload();
+  await expect(page.locator('#log-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#log-feed')).toBeHidden();
+  await expect(page.locator('#log-toggle')).toHaveAttribute('aria-label', await evalPage(page, `t('cc.log.expand')`) as string);
+  await evalPage(page, `pushLog('BROADCAST', 'x', null)`);
+  await expect(page.locator('#log-new')).toHaveText(await evalPage(page, `tf('cc.log.new', { n: 1 })`) as string);
+  expect(await evalPage(page, `t('cc.log.new')`)).not.toBe('cc.log.new');
+  await ctx.close();
+});
+
+test('log: blocked storage leaves the log open', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } }); S.logMin = readLogMin(); applyLogMin();`);
+  await expect(page.locator('#log-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await page.locator('#log-toggle').click();   // a write that throws still toggles for this page
+  await expect(page.locator('#log-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await ctx.close();
+});
+
+test('log: on a phone the Log tab shows the full log even when minimised on desktop', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 390, height: 844 }, touch: true });
+  await evalPage(page, `S.logMin = true; applyLogMin(); setPhoneTab('log')`);
+  await expect(page.locator('#log-feed')).toBeVisible();
+  await expect(page.locator('#log-toggle')).toBeHidden();
+  await ctx.close();
+});

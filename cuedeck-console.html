@@ -1766,7 +1766,21 @@
     .ctx-sub { font-size: var(--fs-12); color: var(--text-tertiary); }
     .ctx-btn { width: 100%; justify-content: flex-start; }
     #log-panel { flex: 1 0 240px; min-height: 240px; display: flex; flex-direction: column; overflow: hidden; }
-    .log-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 6px; }
+    .log-head { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px 10px; }
+    .log-head .log-export { margin-inline-start: auto; }
+    /* Minimised (5.2b): one 44 px row with the label, the latest entry and the count of new ones;
+       the inspector takes the height the log gave up. Per viewer (cd.logMin); never on a phone. */
+    #log-panel.is-min { flex: 0 0 44px; min-height: 44px; height: 44px; margin-top: auto; border-top: 1px solid var(--border-section); }
+    #log-panel.is-min .log-head { height: 44px; padding-block: 0; cursor: pointer; }
+    #log-panel.is-min .log-filters, #log-panel.is-min #log-feed, #log-panel.is-min .log-export { display: none; }
+    #log-panel.is-min #log-toggle .ico { transform: rotate(180deg); }
+    #sidebar.log-min .insp { max-height: calc(100% - 44px); }
+    .log-latest { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; white-space: nowrap; font-size: var(--fs-12); color: var(--text-secondary); }
+    .log-latest[hidden], .log-new[hidden] { display: none; }
+    .log-latest .lg-when { flex: none; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+    .log-latest .lg-kind { flex: none; font-weight: 700; font-size: var(--fs-11); letter-spacing: var(--ls-badge); text-transform: uppercase; color: var(--text-tertiary); }
+    .log-latest .lg-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .log-new { flex: none; width: auto; }
     .log-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
     .log-chip { height: 24px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-divider); background: transparent; color: var(--text-secondary); font: 600 var(--fs-12) var(--font-sans); cursor: pointer; }
     .log-chip:hover { background: var(--raised); color: var(--text-primary); }
@@ -1832,6 +1846,7 @@
       body[data-ph-tab="schedule"] #sidebar, body[data-ph-tab="schedule"] #band { display: none; }
       body[data-ph-tab="log"] #main-col, body[data-ph-tab="log"] #checklist-wrap { display: none !important; }
       body[data-ph-tab="log"][data-ph-insp="1"] #ctx-wrap { display: none; }   /* the inspector's controls are on the Now tab */
+      #log-toggle { display: none; }   /* the Log tab is the whole log; minimising is a desktop preference */
       body[data-ph-tab="log"] #sidebar { position: static; transform: none; width: auto; max-width: none; box-shadow: none; border: 0; }
       body[data-ph-tab="send"] #bc-bar { display: flex; flex-wrap: wrap; height: auto; gap: 8px; padding: 12px; position: fixed; inset-inline: 0; bottom: 56px; z-index: 150; background: var(--overlay); border-top: 1px solid var(--border-section); border-radius: var(--r-modal) var(--r-modal) 0 0; }
       #bc-bar > .lbl, #bc-bar .bc-presets, #bc-bar .bc-char { display: none; }
@@ -2359,9 +2374,12 @@
 
     <!-- Log -->
     <div id="log-panel" aria-labelledby="log-title">
-      <div class="log-head">
+      <div class="log-head" onclick="if (S.logMin && !event.target.closest('#log-toggle')) toggleLogMin()">
+        <button type="button" id="log-toggle" class="btn sm ghost icon-only" data-fk="log-toggle" aria-expanded="true" aria-controls="log-feed" aria-label="Minimise event log" onclick="toggleLogMin()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg></button>
         <span class="lbl" id="log-title" data-i18n="cc.log.title">Event log</span>
-        <button type="button" class="btn sm ghost" onclick="exportLog()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span data-i18n="cc.log.export">Export CSV</span></button>
+        <span id="log-latest" class="log-latest" hidden></span>
+        <span id="log-new" class="pill-count log-new" hidden></span>
+        <button type="button" class="btn sm ghost log-export" onclick="exportLog()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span data-i18n="cc.log.export">Export CSV</span></button>
       </div>
       <div class="log-filters" role="group" aria-labelledby="log-title">
         <button type="button" class="log-chip" data-f="all" aria-pressed="true" onclick="setLogFilter('all')" data-i18n="cc.log.all">All</button>
@@ -2869,6 +2887,8 @@ const S = {
   inspectedId:     null,   // session the inspector shows this render (selection or most urgent)
   tlFit: false,
   logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
+  logMin:          false,  // event log minimised (per viewer, cd.logMin; 5.2b)
+  logNew:          0,      // log entries since it was minimised
   foldOpen:        { ENDED: false, CANCELLED: false },
   laneOpen:        {},
   editMode:        false,  // "Edit run of show": editing tools on every row
@@ -3047,6 +3067,7 @@ async function loadLog(eventId) {
     .eq('event_id', eventId).order('ts', { ascending: false }).limit(25);
   if (S.event && S.event.id !== eventId) return;
   if (data) data.reverse().forEach(r => pushLogFromRow(r));
+  S.logNew = 0;   // loading the log is not news: the count is of entries since minimising
 }
 
 // ═══════════════════════════════════════════════════
@@ -4413,7 +4434,9 @@ function toggleLane(room) { S.laneOpen[room] = !S.laneOpen[room]; renderSessions
 const PHONE_MQ = window.matchMedia('(max-width: 767px)');
 function isPhone() { return PHONE_MQ.matches; }
 document.body.dataset.phTab = 'now';
-PHONE_MQ.addEventListener('change', () => renderSessions());
+PHONE_MQ.addEventListener('change', () => { applyLogMin(); renderSessions(); });
+S.logMin = readLogMin();
+applyLogMin();
 const PH_LATER_MAX = 5;
 
 function setPhoneTab(tab) {
@@ -4739,20 +4762,54 @@ function logDetail(e) {
   if (logKind(e.action) === 'state') d = d.replace(LOG_STATUS_RE, st => t('status.' + st).toLocaleLowerCase(CueDeckI18n.getLocale()));
   return who + d.replace(/\s*→\s*/g, ` ${t('cc.log.to')} `);
 }
+// Minimisable log (5.2b): a per-viewer preference, open when storage is unavailable.
+function readLogMin() { try { return localStorage.getItem('cd.logMin') === '1'; } catch { return false; } }
+function toggleLogMin() {
+  S.logMin = !S.logMin;
+  S.logNew = 0;
+  try { localStorage.setItem('cd.logMin', S.logMin ? '1' : '0'); } catch { /* storage blocked: this page only */ }
+  applyLogMin();
+}
+function applyLogMin() {
+  const min = !!S.logMin && !isPhone();   // the phone's Log tab always shows the whole log
+  document.getElementById('log-panel')?.classList.toggle('is-min', min);
+  document.getElementById('sidebar')?.classList.toggle('log-min', min);
+  const btn = document.getElementById('log-toggle');
+  if (btn) {
+    const label = t(min ? 'cc.log.expand' : 'cc.log.minimise');
+    btn.setAttribute('aria-expanded', String(!min));
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  }
+  renderLogMini();
+}
+// The minimised row: the latest entry (time, kind, text) and how many arrived since minimising.
+function renderLogMini() {
+  const latest = document.getElementById('log-latest'), fresh = document.getElementById('log-new');
+  if (!latest || !fresh) return;
+  const min = !!S.logMin && !isPhone();
+  const e = S.log[0];
+  latest.hidden = !min || !e;
+  if (min && e) latest.innerHTML = logRowInner(e);
+  fresh.hidden = !min || !S.logNew;
+  if (min && S.logNew) fresh.textContent = tf('cc.log.new', { n: S.logNew });
+}
+function logRowInner(e) {
+  const k = logKind(e.action);
+  // An action the log does not classify, or one that is not an action name at all, shows its own
+  // name (escaped), so no event is reduced to "Event" and nothing odd hides behind a kind label.
+  const named = /^[A-Z][A-Z_-]*$/.test(String(e.action || ''));
+  const kind = k === 'other' || !named ? trunc(String(e.action || ''), 24) : t('cc.log.k.' + k);
+  return `<span class="lg-when">${esc(tsHM(e.ts))}</span><span class="lg-kind">${esc(kind)}</span><span class="lg-what">${esc(logDetail(e))}</span>`;
+}
 function renderLog() {
+  renderLogMini();
   const feed = document.getElementById('log-feed');
   if (!feed) return;
   const keep = LOG_FILTER[S.logFilter] || LOG_FILTER.all;
   const rows = S.log.filter(e => keep(logKind(e.action)));
   if (!rows.length) { feed.innerHTML = `<div class="lg-empty">${esc(t('cc.log.empty'))}</div>`; return; }
-  feed.innerHTML = rows.slice(0, 60).map(e => {
-    const k = logKind(e.action);
-    // An action the log does not classify, or one that is not an action name at all, shows its own
-    // name (escaped), so no event is reduced to "Event" and nothing odd hides behind a kind label.
-    const named = /^[A-Z][A-Z_-]*$/.test(String(e.action || ''));
-    const kind = k === 'other' || !named ? trunc(String(e.action || ''), 24) : t('cc.log.k.' + k);
-    return `<div class="lg lg-${k}"><span class="lg-when">${esc(tsHM(e.ts))}</span><span class="lg-kind">${esc(kind)}</span><span class="lg-what">${esc(logDetail(e))}</span></div>`;
-  }).join('');
+  feed.innerHTML = rows.slice(0, 60).map(e => `<div class="lg lg-${logKind(e.action)}">${logRowInner(e)}</div>`).join('');
 }
 
 // ═══════════════════════════════════════════════════
@@ -6426,6 +6483,7 @@ function getNextSession(sessions, liveSession) {
 function pushLog(action, detail, sessionId, ts) {
   S.log.unshift({ action, detail, sessionId, ts: ts ?? correctedNow() });
   if (S.log.length > 60) S.log.pop();
+  if (S.logMin) S.logNew = (S.logNew || 0) + 1;
   renderLog();
 
   // Desktop notification for key events when tab is not focused
