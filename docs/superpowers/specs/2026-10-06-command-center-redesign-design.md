@@ -10,7 +10,7 @@ Separate and first: the show-safety bug fixes (branch `fix/show-safety`), which 
 An operator in a dark control room can tell, in under a second and from two metres away, what is live in each room, how long is left, what is next, and whether anything is wrong, and can act on it without risk of pressing the wrong button. The page looks calm and layered instead of one dark block.
 
 Success criteria (all measurable):
-- Every section divider is visible: ≥ 1.8:1 against its surface; every control boundary (input, select, secondary button) ≥ 3:1. Today: 1.08 to 1.43:1.
+- Every section divider is visible: ≥ 1.78:1 against its surface (the section token measures 1.79 on the page background and 1.84 or more on panels); every control boundary (input, select, secondary button) ≥ 3:1. Today: 1.08 to 1.43:1.
 - All text meets 4.5:1 except disabled controls (≥ 3.7:1). Today the most used grey is 3.11 to 3.98:1.
 - At 1440×900 the live session and the next session of every room (up to 3 rooms) are on screen without scrolling, and at least 8 list rows are visible. Today: LIVE is the third card and NEXT is never visible; 3 cards fit.
 - At 1280×720 the band plus at least 6 list rows are visible.

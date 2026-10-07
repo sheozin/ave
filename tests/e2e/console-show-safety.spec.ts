@@ -281,7 +281,7 @@ test.describe('stage monitor', () => {
     // The page clock runs in real time after install, so allow a second or two of drift under load.
     expect(m.timer).toMatch(/^\+10:0[0-3]$/);
     expect(m.label).toBe('OVERRUN');
-    expect(m.timerColor).toBe('rgb(255, 0, 168)');
+    expect(m.timerColor).toBe('rgb(232, 121, 249)'); // --st-overrun
   });
 
   test('with two rooms running the monitor shows the most urgent and stays on it', async ({ page }) => {
@@ -385,8 +385,8 @@ test('a delayed READY card keeps the READY left edge and shows the delay as a to
     const cs = getComputedStyle(e);
     return { left: cs.borderLeftColor, top: cs.borderTopColor, topW: cs.borderTopWidth };
   });
-  expect(css.left).toBe('rgb(34, 197, 94)');
-  expect(css.top).toBe('rgb(249, 115, 22)');
+  expect(css.left).toBe('rgb(52, 211, 153)');  // --st-ready
+  expect(css.top).toBe('rgb(251, 146, 60)');   // .sc.delayed uses --amber = --st-hold
   expect(css.topW).toBe('2px');
   await expect(page.locator('#card-d .delay-tag')).toHaveText('+5min');
 });
@@ -398,15 +398,35 @@ test('the HOLD badge is solid, not blinking', async ({ page }) => {
   expect(anim).toBe('none');
 });
 
-test('reduced motion stops badge and card pulses', async ({ page }) => {
+// Badges and cards no longer pulse (stage 1), so this checks what still
+// animates without the preference: an armed END, the reconnecting dot and
+// overlay, and the onboarding pulse on the add-event button. The
+// no-preference run is the control: it proves the states really animate.
+async function motionState(page: Page) {
+  await setup(page, [live()]);
+  await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+  return page.evaluate(() => {
+    (0, eval)('onDisconnect(); buildEvSelect([]);');
+    const name = (sel: string) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).animationName : 'missing'; };
+    return {
+      names: [name('#card-live1 .confirm-pending'), name('#conn-dot'), name('#rc-overlay'), name('.ev-add-btn.rbtn-pulse')],
+      running: document.getAnimations().length,
+    };
+  });
+}
+
+test('without reduced motion the armed END, reconnecting state and onboarding pulse animate (control)', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const m = await motionState(page);
+  expect(m.names).toEqual(['pulse-confirm', 'blink', 'blink', 'pulse-ring']);
+  expect(m.running).toBeGreaterThan(0);
+});
+
+test('reduced motion stops every animation an operator would otherwise see', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await setup(page, [live(), sess('r', 2, { status: 'READY' })]);
-  const names = await page.evaluate(() => [
-    getComputedStyle(document.querySelector('#card-live1')!).animationName,
-    getComputedStyle(document.querySelector('#card-live1 .badge')!).animationName,
-    getComputedStyle(document.querySelector('#card-r .badge')!).animationName,
-  ]);
-  expect(names).toEqual(['none', 'none', 'none']);
+  const m = await motionState(page);
+  expect(m.names).toEqual(['none', 'none', 'none', 'none']);
+  expect(m.running).toBe(0);
 });
 
 test('a failed arrival write reverts, says so and does not log it as confirmed', async ({ page }) => {
