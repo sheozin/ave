@@ -2,7 +2,7 @@
 // Signed-in boot of cuedeck-console.html for the redesign specs: a stored
 // supabase-js session, every REST/RPC/Edge Function call answered by
 // context.route, a fake realtime WebSocket that reports SUBSCRIBED, the
-// supabase-js CDN served from node_modules, Stripe and Google Fonts blocked,
+// supabase-js CDN served from node_modules, Inter served from tests/fixtures, Stripe blocked,
 // and the page clock frozen at 11:40:45 event-local (Africa/Cairo).
 // Fictional data (GTR North Africa demo), never real customers.
 import { expect, type Browser, type BrowserContext, type Page, type Route } from '@playwright/test';
@@ -167,6 +167,9 @@ export interface Scenario {
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const SUPABASE_UMD = path.resolve(__dirname, '../../node_modules/@supabase/supabase-js/dist/umd/supabase.js');
+const FONTS = path.resolve(__dirname, '../fixtures/fonts');
+// Supabase requests the page has sent and not yet had answered (see afterBootReread).
+const sbInFlight = new WeakMap<Page, number>();
 
 export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<{ ctx: BrowserContext; page: Page }> {
   const role = sc.role ?? 'director';
@@ -257,7 +260,20 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   // External CDNs: deterministic and offline.
   await ctx.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', r =>
     r.fulfill({ status: 200, contentType: 'application/javascript', body: fs.readFileSync(SUPABASE_UMD, 'utf8') }));
-  await ctx.route(/^https:\/\/(js\.stripe\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)\//, r => r.abort());
+  await ctx.route(/^https:\/\/js\.stripe\.com\//, r => r.abort());
+  // Inter as operators get it: Google's CSS for the console's @import and its
+  // latin + latin-ext files, byte for byte (tests/fixtures/fonts, SIL OFL).
+  // Without it, layout specs measured the system fallback (SF on a Mac,
+  // DejaVu on CI Linux) and passed or failed by machine.
+  await ctx.route(/^https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, r => {
+    const url = r.request().url();
+    if (url.startsWith('https://fonts.googleapis.com/css2?family=Inter:'))
+      return r.fulfill({ status: 200, contentType: 'text/css', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(path.join(FONTS, 'inter.css'), 'utf8') });
+    const m = url.match(/^https:\/\/fonts\.gstatic\.com\/s\/inter\/v20\/([\w-]+\.woff2)$/);
+    const file = m && path.join(FONTS, m[1]);
+    if (!file || !fs.existsSync(file)) return r.abort();   // other subsets (cyrillic, greek, vietnamese) are not used
+    return r.fulfill({ status: 200, contentType: 'font/woff2', headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(file) });
+  });
   await ctx.route('https://ave-brain.vercel.app/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"insights":[]}' }));
 
   const json = (r: Route, body: unknown, status = 200) =>
@@ -299,11 +315,21 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   });
 
   const page = await ctx.newPage();
+  sbInFlight.set(page, 0);
+  const isSb = (r: { url(): string }) => r.url().startsWith(SB + '/');
+  page.on('request', r => { if (isSb(r)) sbInFlight.set(page, sbInFlight.get(page)! + 1); });
+  const done = (r: { url(): string }) => { if (isSb(r)) sbInFlight.set(page, sbInFlight.get(page)! - 1); };
+  page.on('requestfinished', done);
+  page.on('requestfailed', done);
   page.on('dialog', d => { throw new Error('native dialog opened: ' + d.message()); });
   await page.goto(`${BASE}/cuedeck-console.html`);
   await page.waitForFunction(() => document.getElementById('loading-overlay')?.style.display === 'none', null, { timeout: 30_000 });
   await page.waitForFunction(() => (document.getElementById('conn-lbl')?.textContent || '').length > 0);
   await page.waitForTimeout(1500);
+  // Every layout number assumes Inter; fail loudly rather than measure a fallback.
+  const inter = await page.evaluate(async () => { await document.fonts.ready;
+    return [...document.fonts].some(f => f.family.replace(/["']/g, '') === 'Inter' && f.status === 'loaded'); });
+  if (!inter) throw new Error('Inter did not load: the console would be measured in a fallback font');
   if (unmocked.length) console.log('[unmocked]', [...new Set(unmocked)].join(', '));
   await freeze(page);
   return { ctx, page };
@@ -324,6 +350,26 @@ export async function freeze(page: Page) {
 }
 
 export const evalPage = (page: Page, code: string) => page.evaluate((c) => (0, eval)(c), code);
+
+// freeze()'s jump to FROZEN_AT looks like a laptop waking from sleep (the 1 s
+// tick sees a ~43 s gap), so the console runs syncClock (three RPCs 200 ms
+// apart on the page clock) and then re-reads the sessions. That re-read
+// overwrites any realtime update pushed before it lands. It needs page-clock
+// time AND real network time, so a fixed runFor() lost the race on slow CI.
+// Step the clock only while no Supabase request is in flight, until the
+// re-read has been applied (loadSnapshot stamps S.lastSyncAt with page time).
+export async function afterBootReread(page: Page) {
+  const deadline = Date.now() + 15_000;
+  for (let advanced = 0; ;) {
+    if (await page.evaluate((f) => (0, eval)('S').lastSyncAt >= f, FROZEN_AT)) return;
+    const inFlight = sbInFlight.get(page) ?? 0;
+    if (Date.now() > deadline || advanced > 3000) throw new Error(`boot re-read not applied (page clock +${advanced} ms, ${inFlight} requests in flight)`);
+    if (inFlight > 0) { await page.waitForTimeout(10); continue; }
+    await page.clock.runFor(50);
+    advanced += 50;
+    await page.waitForTimeout(5);
+  }
+}
 
 // Live timers are masked even though the clock is frozen (spec stage 0).
 // The card timers ('.lt-remain', '.lt-elapsed') went with stage 3; '#sb-time'

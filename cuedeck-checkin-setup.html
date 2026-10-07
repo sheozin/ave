@@ -229,6 +229,18 @@
     </div>
     <h3 class="sc-h">Where your guests came from</h3>
     <div class="src" id="rp-src"></div>
+    <div id="an-box">
+      <h3 class="sc-h">Registration page</h3>
+      <p class="sc-p" id="an-note"></p>
+      <div class="src" id="an-stats"></div>
+      <div id="an-chart" style="margin-top:14px"></div>
+      <div class="row2" style="gap:18px;margin-top:14px;align-items:start">
+        <div><b style="font-size:14px">Sources</b><div style="overflow-x:auto"><table class="tbl" style="margin-top:6px"><thead><tr><th>Source</th><th>Visitors</th><th>Registered</th></tr></thead><tbody id="an-src"></tbody></table></div>
+          <p class="small" style="margin-top:8px">Tag a link to see where people come from: add <code>?ref=newsletter</code> (or any word) to your registration link.</p></div>
+        <div id="an-more" style="display:grid;gap:10px"></div>
+      </div>
+      <div class="err" id="an-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-details" hidden>
@@ -259,6 +271,26 @@
       <div class="err" id="ot-err"></div>
     </div>
     <div class="ok" id="ot-ok"></div>
+    <div id="wh-box">
+      <h3 class="sc-h">Integrations</h3>
+      <p class="sc-p">Send guests, check-ins and ticket sales to your own tools as they happen: Zapier, Make, your CRM or your own server. CueDeck calls your address (a webhook) for the events you choose. Only live events send.</p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Address</th><th>Sends</th><th>Last delivery</th><th></th></tr></thead><tbody id="wh-body"></tbody></table></div>
+      <div style="border:1px solid var(--bd);border-radius:14px;padding:14px;margin-top:12px;display:grid;gap:10px">
+        <div class="field"><label for="wh-url">Webhook address</label><input id="wh-url" placeholder="https://hooks.zapier.com/..." maxlength="500" autocomplete="off"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:14px">
+          <label><input type="checkbox" value="guest.created" class="wh-t" checked> New guest</label>
+          <label><input type="checkbox" value="guest.checked_in" class="wh-t" checked> Check-in</label>
+          <label><input type="checkbox" value="order.paid" class="wh-t"> Ticket paid</label>
+          <label><input type="checkbox" value="invitation.answered" class="wh-t"> Invitation answered</label>
+        </div>
+        <p style="margin:0"><button class="btn btn-p" id="wh-add" type="button">Add webhook</button></p>
+        <div id="wh-secret" hidden style="background:var(--amsf);border-radius:10px;padding:10px 12px;font-size:13px"></div>
+      </div>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:14px;font-weight:600">Checking that a call came from CueDeck</summary>
+        <p class="small" style="margin:8px 0">Each call carries <code>X-CueDeck-Signature: t=&lt;time&gt;,v1=&lt;signature&gt;</code>. The signature is HMAC-SHA256 of <code>&lt;time&gt;.&lt;body&gt;</code> with your signing secret, in hex. Compare it, and refuse calls older than five minutes. Calls that fail are retried after 1, 5, 30, 120 and 360 minutes.</p>
+      </details>
+      <div class="ok" id="wh-ok"></div><div class="err" id="wh-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-attendees" hidden>
@@ -694,9 +726,77 @@ function renderReports() {
   $('rp-export').hidden = !can(ROLE, 'export');
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
+  renderAnalytics();
   $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
+
+// ── registration analytics (migration 125) ──
+const SRC_NAMES = { direct: 'Direct link', embed: 'Form on your website', invite: 'Invitations' };
+async function renderAnalytics() {
+  $('an-err').textContent = '';
+  const { data: a, error } = await sb.rpc('checkin_registration_analytics', { p_event_id: EVENT_ID });
+  if (error) { $('an-err').textContent = error.message; return; }
+  const g = a.guests || {};
+  const conv = a.visitors ? Math.round(g.registered / a.visitors * 1000) / 10 : null;
+  const pct = (x, of) => of ? Math.round(x / of * 100) + '%' : '0%';
+  $('an-note').textContent = (a.test ? 'Test mode: counts show test registrations until you go live. ' : '')
+    + 'Visitors are counted once a day each, without cookies.';
+  const stat = (label, value, sub) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, value)); if (sub) d.append(el('small', null, sub)); return d; };
+  $('an-stats').replaceChildren(
+    stat('Visitors', String(a.visitors || 0)),
+    stat('Registered', String(g.registered || 0), conv == null ? '' : conv + '% of visitors'),
+    stat('Checked in', String(g.checked_in || 0), pct(g.checked_in || 0, g.total || 0) + ' of ' + (g.total || 0) + ' guests'),
+    stat('QR emails sent', String(g.qr_sent || 0)));
+  // Last 30 days: visitors (light) and registrations (dark) per day.
+  const days = [], vis = {}, reg = {};
+  for (const x of a.visitors_by_day || []) vis[x.day] = x.n;
+  for (const x of a.registrations_by_day || []) reg[x.day] = x.n;
+  for (let i = 29; i >= 0; i--) days.push(new Date(Date.now() - i * 864e5).toISOString().slice(0, 10));
+  const max = Math.max(1, ...days.map(d => Math.max(vis[d] || 0, reg[d] || 0)));
+  const W = 600, H = 120, bw = W / 30;  // labels sit outside the drawing, so they keep their size
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', '100%');
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Visitors and registrations over the last 30 days');
+  days.forEach((d, i) => {
+    for (const [v, fill, inset] of [[vis[d] || 0, 'var(--acsf)', 1], [reg[d] || 0, 'var(--ac)', bw * 0.28]]) {
+      if (!v) continue;
+      const h = Math.max(2, v / max * H);
+      const r = document.createElementNS(NS, 'rect');
+      r.setAttribute('x', String(i * bw + inset)); r.setAttribute('width', String(bw - inset * 2)); r.setAttribute('y', String(H - h)); r.setAttribute('height', String(h));
+      r.setAttribute('rx', '2'); r.setAttribute('fill', fill);
+      const t = document.createElementNS(NS, 'title'); t.textContent = d + ': ' + (vis[d] || 0) + ' visitors, ' + (reg[d] || 0) + ' registered'; r.append(t);
+      svg.append(r);
+    }
+  });
+  const ends = el('div', 'small'); ends.style.cssText = 'display:flex;justify-content:space-between;margin-top:2px';
+  ends.append(el('span', null, fmtDate(days[0])), el('span', null, fmtDate(days[29])));
+  const legend = el('div', 'small'); legend.textContent = 'Last 30 days. Light: visitors. Dark: registrations.';
+  $('an-chart').replaceChildren(svg, ends, legend);
+  // Sources: visitors and registrations side by side.
+  const srcs = {};
+  for (const x of a.visitors_by_source || []) (srcs[x.source] ??= { v: 0, r: 0 }).v = x.n;
+  for (const x of a.registrations_by_source || []) (srcs[x.source] ??= { v: 0, r: 0 }).r = x.n;
+  const rows = Object.entries(srcs).sort((x, y) => (y[1].r - x[1].r) || (y[1].v - x[1].v));
+  $('an-src').replaceChildren(...(rows.length ? rows.map(([k, v]) => { const tr = el('tr'); tr.append(el('td', null, SRC_NAMES[k] || k), el('td', null, String(v.v)), el('td', null, String(v.r))); return tr; })
+    : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No visitors yet.'); td.colSpan = 3; tr.append(td); return tr; })()]));
+  // Invitations, tickets, waitlist: only what applies to this event.
+  const card = (title, lines) => { const d = el('div'); d.style.cssText = 'border:1px solid var(--bd);border-radius:12px;padding:12px 14px'; d.append(el('b', null, title)); for (const l of lines) d.append(el('div', 'small', l)); return d; };
+  const more = [];
+  const inv = a.invitations || {};
+  if (inv.sent) more.push(card('Invitations', [inv.sent + ' sent', inv.going + ' coming · ' + inv.not_going + ' not coming · ' + inv.no_answer + ' no answer yet']));
+  const o = a.orders || {};
+  if (o.paid || o.paying || o.abandoned || o.refunded) {
+    const rev = Object.entries(o.revenue || {}).map(([c, v]) => fmtMoney(v, c)).join(' + ') || fmtMoney(0, 'eur');
+    more.push(card('Ticket sales', [o.paid + ' paid, ' + rev, (o.abandoned || 0) + ' left before paying' + (o.paying ? ' · ' + o.paying + ' paying now' : '') + (o.refunded ? ' · ' + o.refunded + ' refunded' : '')]));
+  }
+  const h = a.held || {};
+  if (h.waitlist || h.approval) more.push(card('Waiting', [(h.waitlist || 0) + ' on the waitlist · ' + (h.approval || 0) + ' awaiting approval']));
+  if (g.plus_ones) more.push(card('Plus-ones', [g.plus_ones + ' guests brought by others']));
+  const e = a.emails || {};
+  if (e.reminders || e.thankyous) more.push(card('Automatic emails', [(e.reminders || 0) + ' reminders · ' + (e.thankyous || 0) + ' thank-yous']));
+  $('an-more').replaceChildren(...more);
+}
 
 // The preview follows the form as it is typed, before Save.
 function renderPreview() {
@@ -716,7 +816,49 @@ for (const id of ['rg-host', 'rg-color', 'rg-color-pick']) $(id).addEventListene
 $('banner-go').onclick = () => go('golive');
 
 // ── 1. details ───────────────────────────────────────────
+// ── webhooks (migration 126) ──
+const WH_NAMES = { 'guest.created': 'New guest', 'guest.checked_in': 'Check-in', 'order.paid': 'Ticket paid', 'invitation.answered': 'Invitation answered' };
+async function renderWebhooks() {
+  const { data, error } = await sb.rpc('checkin_webhooks_list', { p_event_id: EVENT_ID });
+  if (error) { $('wh-err').textContent = error.message; return; }
+  $('wh-body').replaceChildren(...(data.length ? data.map(w => {
+    const tr = el('tr');
+    const a = el('td'); a.append(el('div', 'nm', w.url.replace(/^https:\/\//, '')));
+    const last = el('td'); last.append(el('span', 'tag ' + (!w.last_status ? 't-wait' : w.last_status === 'ok' ? 't-in' : 't-test'), !w.last_status ? 'None yet' : w.last_status === 'ok' ? 'Delivered' : 'Failing'));
+    if (w.last_status && w.last_status !== 'ok') last.append(el('div', 'em', w.last_status));
+    if (w.failed) last.append(el('div', 'em', w.failed + ' gave up after retries'));
+    const acts = el('td'); acts.style.whiteSpace = 'nowrap';
+    const test = el('button', 'btn btn-s', 'Send test'); test.type = 'button';
+    test.onclick = async () => {
+      const { error: e } = await sb.rpc('checkin_webhook_test', { p_event_id: EVENT_ID, p_id: w.id });
+      if (e) { $('wh-err').textContent = e.message; return; }
+      $('wh-ok').textContent = 'Test queued. It arrives within a minute.';
+    };
+    const del = el('button', 'link', 'Remove'); del.type = 'button'; del.style.marginLeft = '10px';
+    del.onclick = async () => {
+      if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = 'Click again'; setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Remove'; }, 3500); return; }
+      const { error: e } = await sb.rpc('checkin_webhook_delete', { p_event_id: EVENT_ID, p_id: w.id });
+      if (e) { $('wh-err').textContent = e.message; return; }
+      renderWebhooks();
+    };
+    acts.append(test, del);
+    tr.append(a, el('td', null, w.topics.map(t => WH_NAMES[t] || t).join(', ')), last, acts);
+    return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No webhooks yet.'); td.colSpan = 4; tr.append(td); return tr; })()]));
+}
+$('wh-add').onclick = async () => {
+  $('wh-ok').textContent = ''; $('wh-err').textContent = ''; $('wh-secret').hidden = true;
+  const topics = [...document.querySelectorAll('.wh-t:checked')].map(x => x.value);
+  const { data, error } = await sb.rpc('checkin_webhook_add', { p_event_id: EVENT_ID, p_url: $('wh-url').value.trim(), p_topics: topics });
+  if (error) { $('wh-err').textContent = error.message; return; }
+  $('wh-url').value = '';
+  // The secret is shown once, here, and never again.
+  $('wh-secret').replaceChildren(el('b', null, 'Signing secret (shown once, copy it now): '), el('code', null, data.secret));
+  $('wh-secret').hidden = false;
+  renderWebhooks();
+};
 function renderDetails() {
+  renderWebhooks();
   $('d-name').value = EV.name; $('d-date').value = EV.date; $('d-venue').value = EV.venue || '';
   $('d-start').value = (EV.event_start || '09:00').slice(0, 5); $('d-end').value = (EV.event_end || '18:00').slice(0, 5);
   const sel = $('d-tz'); sel.replaceChildren();

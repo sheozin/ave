@@ -95,6 +95,7 @@ const PAY_KEY = 'cuedeck-pay:' + code;
 const fromStripe = EMBED ? null : back.has('paid') ? 'paid' : back.has('unpaid') ? 'unpaid' : null;
 if (!token && fromStripe) { try { token = sessionStorage.getItem(PAY_KEY) || ''; } catch { /* storage blocked */ } }
 let config = null;
+let REF_SRC = 'direct';
 
 async function call(body) {
   const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code, lang: LANG }) });
@@ -431,7 +432,7 @@ $('form').addEventListener('submit', async (ev) => {
   try {
     const t = await turnstileToken();
     if (!t) { message(tr('The security check did not finish. Reload the page and try again.')); return; }
-    const r = await call({ action: 'register', ...v, website: $('form').elements.website.value, turnstile_token: t });
+    const r = await call({ action: 'register', ref: REF_SRC, ...v, website: $('form').elements.website.value, turnstile_token: t });
     const b = r.body;
     if (r.status === 200 && b.status === 'check_email') { card('done'); return; }
     if (r.status === 200 && b.status === 'ok') {
@@ -640,7 +641,11 @@ $('iv-no').addEventListener('click', () => answerInvite(false));
   setLang('auto');
   if (!isRegistrationCode(code)) return solo(...NOT_ACTIVE());
   let r;
-  try { r = await call({ action: 'config' }); }
+  // (125) Where this visitor came from, for the organizer's analytics.
+  const qs = new URLSearchParams(location.search);
+  const tag = String(qs.get('ref') || qs.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+  REF_SRC = EMBED ? 'embed' : inviteToken ? 'invite' : tag || 'direct';
+  try { r = await call({ action: 'config', ref: REF_SRC }); }
   catch { return solo(tr('Could not load this page'), tr('Check your connection and reload.')); }
   if (r.status === 404) return solo(...NOT_ACTIVE());
   if (r.status !== 200) return solo(tr('Registration is not available right now'), tr('Please try again in a few minutes.'));

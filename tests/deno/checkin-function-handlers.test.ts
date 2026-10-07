@@ -186,7 +186,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -1668,4 +1668,65 @@ Deno.test('checkin-held auto: moves each due event and records the run', async (
   assert(r.status === 200 && r.body.detail === 'released 1', JSON.stringify(r))
   assert(String(world.emails?.[0]?.to) === 'wes@stub.test', 'ticket not emailed')
   assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not ok')
+})
+
+// ── Webhooks (126) ──────────────────────────────────────────────────
+import { isPrivateIp } from '../../supabase/functions/_shared/net-guard.ts'
+const WH = 'checkin-webhooks'
+Deno.test('webhooks: private, loopback, link-local and metadata addresses are refused', () => {
+  for (const ip of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.20.1.1', '192.168.1.5', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1',
+                    // (127) the spellings that hid a private address
+                    '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:7f00:1', '::127.0.0.1', '64:ff9b::a00:1', '64:ff9b::10.0.0.1', '2002:a00:1::1', '2001:0:4136::1',
+                    'ff02::1', 'fec0::1', '2001:db8::1', '198.18.0.1', '203.0.113.5', '192.0.2.1', '::', 'not-an-ip', '1:2:3',
+                    // the ranges a deny-list missed: now refused because they are not global unicast
+                    '64:ff9b:1::a00:1', '::ffff:0:a00:1', '100::1', '192.88.99.1', '2001:2::1', '2001:10::1', '3fff::1', '3fff:fff::1', '4000::1'])
+    assert(isPrivateIp(ip), ip + ' should be private')
+  for (const ip of ['93.184.216.34', '1.1.1.1', '2606:4700::1111', '2a00:1450:4001:82a::200e', '64:ff9b::808:808', '::ffff:8.8.8.8']) assert(!isPrivateIp(ip), ip + ' should be public')
+})
+function whSetup(resolveTo: string[]) {
+  setup('none')
+  world.rpcResult.checkin_webhooks_cron_ok = true
+  world.rpcResult.checkin_webhook_result = 'sent'
+  world.rpcResult.checkin_webhooks_due = [{ id: 7, topic: 'guest.created', payload: { topic: 'guest.created', data: { first_name: 'Ana' } },
+    url: 'https://hooks.example.com/in', secret: 'whsec_test' }]
+  ;(Deno as unknown as { resolveDns: unknown }).resolveDns = async (_h: string, t: string) => (t === 'A' ? resolveTo : [])
+}
+Deno.test(`${WH}: a delivery is signed and its result recorded`, async () => {
+  whSetup(['93.184.216.34'])
+  let got: { headers: Headers; body: string } | null = null
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).startsWith('https://hooks.example.com')) {
+      got = { headers: new Headers(init?.headers), body: String(init?.body) }
+      return new Response('ok', { status: 200 })
+    }
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(WH, {})
+    assert(r.status === 200 && String(r.body.detail).startsWith('sent 1'), JSON.stringify(r))
+    const sig = got!.headers.get('X-CueDeck-Signature')!
+    const [, t, v1] = sig.match(/^t=(\d+),v1=([0-9a-f]{64})$/)!
+    const k = await crypto.subtle.importKey('raw', new TextEncoder().encode('whsec_test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const want = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(t + '.' + got!.body)))).map(b => b.toString(16).padStart(2, '0')).join('')
+    assert(v1 === want, 'signature does not verify')
+    assert(got!.headers.get('X-CueDeck-Event') === 'guest.created', 'event header')
+    const res = world.rpcCalls.find(c => c.name === 'checkin_webhook_result')!
+    assert(res.args.p_ok === true && res.args.p_id === 7, JSON.stringify(res.args))
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${WH}: a name resolving to a private address is never called`, async () => {
+  whSetup(['10.1.2.3'])
+  let called = false
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).startsWith('https://hooks.example.com')) { called = true; return new Response('ok') }
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    await call(WH, {})
+    assert(!called, 'called a private address')
+    const res = world.rpcCalls.find(c => c.name === 'checkin_webhook_result')!
+    assert(res.args.p_ok === false && String(res.args.p_detail).includes('private'), JSON.stringify(res.args))
+  } finally { globalThis.fetch = real }
 })

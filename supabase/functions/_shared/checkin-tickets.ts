@@ -20,7 +20,7 @@ export type Order = {
   id: string; event_id: string; ticket_name: string; first_name: string; last_name: string; email: string
   amount_cents: number; currency: string; fee_cents: number; stripe_account_id: string
   checkout_session_id: string | null; payment_intent: string | null; status: 'open' | 'expired' | 'paid' | 'refunded'
-  expires_at: string; attendee_id: string | null
+  expires_at: string; attendee_id: string | null; ref?: string | null
 }
 
 export type SessionView = { status: string | null; payment_status: string | null; payment_intent: string | null; url: string | null; order_id: string | null }
@@ -115,6 +115,11 @@ export async function completeOrder(sb: Sb, order: Order, paymentIntent: string 
   if (error || !out) throw new Error('order_paid: ' + (error?.message ?? 'no result'))
   if (out.status === 'refunded') return { kind: 'refunded' }
   const att = out.attendee ?? null
+  // (125) The paying guest keeps the source of their request.
+  if (att && out.first === true) {
+    const { error: srcErr } = await sb.from('leod_checkin_attendees').update({ reg_source: order.ref ?? 'direct' }).eq('id', att.id).is('reg_source', null)
+    if (srcErr) console.error('checkin-tickets: source not recorded', srcErr.code)
+  }
   // The order is paid whatever happens to the email: a failure here is
   // logged, never turned into "payment failed". The ticket stays on the
   // guest's link, and the organizer can resend from Emails.
@@ -157,7 +162,7 @@ export async function settleOrder(st: StripeClient, sb: Sb, order: Order): Promi
 
 export async function loadOrder(sb: Sb, id: string): Promise<Order | null> {
   const { data, error } = await sb.from('leod_checkin_web_orders')
-    .select('id, event_id, ticket_name, first_name, last_name, email, amount_cents, currency, fee_cents, stripe_account_id, checkout_session_id, payment_intent, status, expires_at, attendee_id')
+    .select('id, event_id, ticket_name, first_name, last_name, email, amount_cents, currency, fee_cents, stripe_account_id, checkout_session_id, payment_intent, status, expires_at, attendee_id, ref')
     .eq('id', id).maybeSingle()
   if (error) throw new Error('order read: ' + error.message)
   return data as Order | null
