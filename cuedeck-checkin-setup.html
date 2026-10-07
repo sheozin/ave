@@ -278,6 +278,13 @@
       <div><b>Drop a CSV to add people</b><p>You'll see who will be added, updated or skipped before anything is saved. Columns: first name, last name, email, company, ticket type.</p></div></label>
     <div class="preview" id="imp-prev" hidden></div>
     <div class="err" id="att-err"></div>
+    <div id="sp-box" hidden>
+      <h3 class="sc-h">Speakers from your run of show</h3>
+      <div class="toggle"><div><b>Tell the production console when a speaker arrives</b><p>When a guest whose name matches a speaker checks in, their session shows the speaker as arrived in the console. Panels count once everyone on them is in.</p></div><label class="sw"><input type="checkbox" id="sp-on"><span></span></label></div>
+      <p class="small" id="sp-sum"></p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Speaker</th><th>Session</th><th>Status</th></tr></thead><tbody id="sp-body"></tbody></table></div>
+      <div class="err" id="sp-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-register" hidden>
@@ -592,7 +599,7 @@ function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'badges', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
+  ({ overview: renderOverview, details: renderDetails, attendees: () => { renderAttendees(); renderSpeakers(); }, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
@@ -814,6 +821,32 @@ function statusTag(a) {
   if (a.checked_in_at) return el('span', 'tag ' + (isLive() ? 't-in' : 't-test'), isLive() ? 'Checked in' : 'Test check-in');
   return el('span', 'em', 'Expected');
 }
+// ── speakers linked to the console (migration 112) ──
+async function renderSpeakers() {
+  const { data, error } = await sb.rpc('checkin_speaker_links', { p_event_id: EVENT_ID });
+  if (error) { $('sp-box').hidden = false; $('sp-err').textContent = error.message; return; }
+  const people = data.people || [];
+  $('sp-box').hidden = !people.length;
+  if (!people.length) return;
+  $('sp-on').checked = !!data.enabled;
+  const missing = people.filter(p => !p.on_list).length, arrived = people.filter(p => p.arrived).length;
+  $('sp-sum').textContent = people.length + (people.length === 1 ? ' speaker' : ' speakers') + ' in the run of show'
+    + (arrived ? ', ' + arrived + ' arrived' : '')
+    + (missing ? '. ' + missing + ' not on the guest list by that exact name: add them, or check the spelling, so their arrival can reach the console.' : ', all on the guest list.');
+  $('sp-body').replaceChildren(...people.map(p => {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('div', 'nm', p.name), el('div', 'em', p.role));
+    const ses = el('td'); ses.append(el('div', null, p.session), el('div', 'em', p.time || ''));
+    const st = el('td'); st.append(el('span', 'tag ' + (p.arrived ? 't-in' : p.on_list ? 't-sent' : 't-test'), p.arrived ? 'Arrived' : p.on_list ? 'On the guest list' : 'Not on the guest list'));
+    tr.append(who, ses, st);
+    return tr;
+  }));
+}
+$('sp-on').onchange = async () => {
+  $('sp-err').textContent = '';
+  const { error } = await sb.rpc('checkin_set_speaker_link', { p_event_id: EVENT_ID, p_on: $('sp-on').checked });
+  if (error) { $('sp-err').textContent = error.message; $('sp-on').checked = !$('sp-on').checked; }
+};
 function renderAttendees() {
   $('att-export').hidden = !can(ROLE, 'export');
   const q = $('att-q').value.trim().toLowerCase();

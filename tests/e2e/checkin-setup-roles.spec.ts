@@ -598,3 +598,21 @@ test('badges tab: the designer previews at the stock size and saves the design',
   await expect(page.locator('#bd-ok')).toContainText('Saved.');
   expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_design: { w: 148, h: 105, qr: true, name: 'split', colors: { VIP: '#C9A227' } } });
 });
+
+test('guests tab: speakers from the run of show show who is on the list and who arrived', async ({ page }) => {
+  const set: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'attendees', STAFF, async () => {
+    await rpc(page, 'checkin_speaker_links', { enabled: true, people: [
+      { name: 'Ana Kowalska', role: 'speaker', session: 'Keynote', time: '09:00', on_list: true, arrived: true },
+      { name: 'Ben Lee', role: 'moderator', session: 'Panel', time: '10:00', on_list: true, arrived: false },
+      { name: 'Cleo Park', role: 'panelist', session: 'Panel', time: '10:00', on_list: false, arrived: false } ] });
+    await rpc(page, 'checkin_set_speaker_link', (a) => { set.push(a); return a.p_on; });
+  });
+  await expect(page.locator('#sp-box')).toBeVisible();
+  await expect(page.locator('#sp-sum')).toContainText('3 speakers in the run of show, 1 arrived. 1 not on the guest list');
+  await expect(page.locator('#sp-body tr', { hasText: 'Cleo Park' })).toContainText('Not on the guest list');
+  await expect(page.locator('#sp-body tr', { hasText: 'Ana Kowalska' })).toContainText('Arrived');
+  await page.locator('#sp-on').evaluate((e: HTMLInputElement) => e.click());
+  await expect.poll(() => set.length).toBe(1);
+  expect(set[0]).toMatchObject({ p_event_id: EVENT_ID, p_on: false });
+});
