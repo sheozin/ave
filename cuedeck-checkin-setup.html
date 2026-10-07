@@ -52,6 +52,8 @@
 .bp-top{display:flex;align-items:center;gap:8px;padding:12px 14px}
 .bp-mark{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:10px;overflow:hidden}
 .bp-mark img{width:100%;height:100%;object-fit:contain;background:#fff}
+.vh-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
+.rg-img.drag{outline:2px dashed var(--ac);outline-offset:-4px}
 .bp-cover{margin:0 14px;height:110px;border-radius:12px;overflow:hidden}
 .bp-cover img{width:100%;height:100%;object-fit:cover}
 .bp-body{padding:12px 14px 16px;display:grid;gap:10px}
@@ -173,11 +175,12 @@
     <div class="field"><label for="rg-addr">Venue address</label><input id="rg-addr" maxlength="200" placeholder="Street, city. Used for the Maps link" autocomplete="off"></div>
     <div class="field"><label for="rg-desc">About the event</label><textarea id="rg-desc" maxlength="2000" rows="4" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="What the day is about, who it is for, what to bring"></textarea></div>
     <div class="row2" style="gap:12px;align-items:start">
-      <div class="field"><label>Cover image</label><div class="rg-img" id="rg-cover-box"><img id="rg-cover-img" alt="Cover image preview" hidden><span id="rg-cover-none" class="small">Wide image, at least 1600 px. JPEG, PNG or WebP.</span></div>
-        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-cover-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-cover-rm" hidden>Remove</button></div></div>
-      <div class="field"><label>Logo</label><div class="rg-img rg-img-logo" id="rg-logo-box"><img id="rg-logo-img" alt="Logo preview" hidden><span id="rg-logo-none" class="small">Square works best.</span></div>
-        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-logo-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-logo-rm" hidden>Remove</button></div></div>
+      <div class="field"><label>Cover image</label><div class="rg-img" id="rg-cover-box"><img id="rg-cover-img" alt="Cover image preview" hidden><span id="rg-cover-none" class="small">Wide image, at least 1600 px. Click Upload or drop an image here.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-s" type="button" id="rg-cover-pick">Upload</button><input type="file" id="rg-cover-file" class="vh-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" tabindex="-1" aria-hidden="true"><button class="btn btn-g" type="button" id="rg-cover-rm" hidden>Remove</button></div></div>
+      <div class="field"><label>Logo</label><div class="rg-img rg-img-logo" id="rg-logo-box"><img id="rg-logo-img" alt="Logo preview" hidden><span id="rg-logo-none" class="small">Square works best. Click Upload or drop it here.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-s" type="button" id="rg-logo-pick">Upload</button><input type="file" id="rg-logo-file" class="vh-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" tabindex="-1" aria-hidden="true"><button class="btn btn-g" type="button" id="rg-logo-rm" hidden>Remove</button></div></div>
     </div>
+    <p class="small" id="rg-img-msg" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     <div class="toggle"><div><b>Show the programme</b><p>Guests see your sessions and times from the run of show, and they follow any delays. Only for events you run in CueDeck.</p></div><label class="sw"><input type="checkbox" id="rg-prog"><span></span></label></div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn btn-p" id="rg-save-design" type="button">Save design</button><span class="small" id="rg-design-state"></span></div>
     <div class="err" id="rg-design-err"></div><div class="ok" id="rg-design-ok"></div>
@@ -1157,10 +1160,15 @@ function reencode(file, kind) {
     img.src = URL.createObjectURL(file);
   });
 }
+// Status next to the images, where the person is looking, not by Save.
+const imgMsg = (text, bad) => { const m = $('rg-img-msg'); m.textContent = text; m.style.color = bad ? '#B3261E' : ''; };
 async function uploadImg(kind, file) {
   $('rg-design-err').textContent = ''; $('rg-design-ok').textContent = '';
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { $('rg-design-err').textContent = 'Use a JPEG, PNG or WebP image.'; return; }
-  if (file.size > 25 * 1024 * 1024) { $('rg-design-err').textContent = 'That image is over 25 MB. Choose a smaller one.'; return; }
+  // HEIC (iPhone photos) is offered so the picker shows them; the browser
+  // decodes it below where it can (Safari), and says so where it cannot.
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) { imgMsg('Use a JPEG, PNG or WebP image.', true); return; }
+  if (file.size > 25 * 1024 * 1024) { imgMsg('That image is over 25 MB. Choose a smaller one.', true); return; }
+  imgMsg('Uploading ' + (kind === 'cover' ? 'cover' : 'logo') + '…');
   $('rg-design-state').textContent = 'Uploading…';
   try {
     const { blob, type, ext } = await reencode(file, kind);
@@ -1170,10 +1178,23 @@ async function uploadImg(kind, file) {
     if (error) throw new Error(error.message);
     RG_IMG[kind] = path; showImg(kind); renderPreview();
     $('rg-design-state').textContent = 'Uploaded. Save design to publish it.';
-  } catch (e) { $('rg-design-state').textContent = ''; $('rg-design-err').textContent = e.message; }
+    imgMsg((kind === 'cover' ? 'Cover' : 'Logo') + ' uploaded. Press Save design to publish it.');
+  } catch (e) {
+    $('rg-design-state').textContent = '';
+    imgMsg(/not an image we can read/.test(e.message) && /hei[cf]/i.test(file.type + file.name)
+      ? 'This browser cannot read HEIC photos. Export the photo as JPEG, or upload it from Safari or your phone.' : e.message, true);
+  }
 }
-$('rg-cover-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('cover', f); };
-$('rg-logo-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('logo', f); };
+// A real button opening a visually hidden input: a <label> around a
+// display:none input is ignored by some mobile browsers.
+for (const kind of ['cover', 'logo']) {
+  $('rg-' + kind + '-pick').onclick = () => $('rg-' + kind + '-file').click();
+  $('rg-' + kind + '-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg(kind, f); };
+  const box = $('rg-' + kind + '-box');
+  box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag'); });
+  box.addEventListener('dragleave', () => box.classList.remove('drag'));
+  box.addEventListener('drop', (e) => { e.preventDefault(); box.classList.remove('drag'); const f = e.dataTransfer?.files?.[0]; if (f) uploadImg(kind, f); });
+}
 $('rg-cover-rm').onclick = () => { RG_IMG.cover = null; showImg('cover'); renderPreview(); $('rg-design-state').textContent = 'Save design to publish the change.'; };
 $('rg-logo-rm').onclick = () => { RG_IMG.logo = null; showImg('logo'); renderPreview(); $('rg-design-state').textContent = 'Save design to publish the change.'; };
 $('rg-color-pick').oninput = () => { $('rg-color').value = $('rg-color-pick').value.toUpperCase(); };

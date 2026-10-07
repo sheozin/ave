@@ -373,8 +373,30 @@ test('page design: a non-image file is refused before upload', async ({ page }) 
   await expect(page.locator('#p-branding')).toBeVisible();
   await expect(page.locator('#rg-save-design')).toBeVisible();
   await page.locator('#rg-logo-file').setInputFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>') });
-  await expect(page.locator('#rg-design-err')).toHaveText('Use a JPEG, PNG or WebP image.');
+  await expect(page.locator('#rg-img-msg')).toHaveText('Use a JPEG, PNG or WebP image.');
   expect(uploaded).toBe(false);
+});
+
+test('page design: the Upload buttons open the file picker, and an image can be dropped on its box', async ({ page }) => {
+  const uploads: string[] = [];
+  await open(page, { role: 'organizer' }, 'branding', STAFF, async () => {
+    await page.route(/\/storage\/v1\/object\/checkin-public\//, async r => { uploads.push(new URL(r.request().url()).pathname); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"Key":"x"}' }); });
+  });
+  await expect(page.locator('#rg-save-design')).toBeVisible();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNAMDAFGbBPzUPg4gAAAAAElFTkSuQmCC', 'base64');
+  // A real click on the visible button, as a person (or a phone) does it.
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#rg-logo-pick').click()]);
+  await chooser.setFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#rg-img-msg')).toHaveText('Logo uploaded. Press Save design to publish it.');
+  await expect(page.locator('#rg-logo-img')).toBeVisible();
+  // Drop onto the cover box.
+  const dt = await page.evaluateHandle((b64) => {
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const d = new DataTransfer(); d.items.add(new File([bin], 'cover.png', { type: 'image/png' })); return d;
+  }, png.toString('base64'));
+  await page.locator('#rg-cover-box').dispatchEvent('drop', { dataTransfer: dt });
+  await expect(page.locator('#rg-img-msg')).toHaveText('Cover uploaded. Press Save design to publish it.');
+  expect(uploads.map(u => u.split('/').pop()!.replace(/-[0-9a-f]{16}/, ''))).toEqual(['logo.png', 'cover.jpg']);
 });
 
 
