@@ -24,6 +24,7 @@ const code = (location.pathname.match(/^\/[re]\/([^/]+)\/?$/) || [])[1] || new U
 // they open on CueDeck's own page, where nobody can overlay them.
 const EMBED = /^\/e\//.test(location.pathname) || new URLSearchParams(location.search).get('embed') === '1';
 if (EMBED) {
+  document.documentElement.classList.add('embed');
   document.body.classList.add('embed');
   for (const a of document.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; }
   const post = () => { try { parent.postMessage({ type: 'cuedeck:height', height: Math.ceil(document.documentElement.scrollHeight) }, '*'); } catch { /* not framed */ } };
