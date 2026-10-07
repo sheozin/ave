@@ -3,7 +3,7 @@
 // selection; fixed control slots; two-press End that survives re-renders and
 // is announced; time row; organised sections (5.2b); log with filters always visible.
 import { test, expect } from '@playwright/test';
-import { openConsole, evalPage, ID, PANEL_ID } from './console-boot-mock';
+import { openConsole, evalPage, afterBootReread, ID, PANEL_ID } from './console-boot-mock';
 
 const insp = (page: import('@playwright/test').Page) => page.locator('#ctx-wrap');
 
@@ -126,7 +126,7 @@ test('inspector: READY shows Next step with Call speaker and Go live now, one Ma
   expect(await evalPage(page, `'inspMoreOpen' in S`)).toBe(false);
   // Session: edit, move and back to planned; Cancel on its own line at the end edge
   for (const label of ['Edit', 'Move up', 'Move down', 'Back to planned']) {
-    await expect(insp(page).locator('.insp-session .btn', { hasText: label })).toHaveCount(1);
+    await expect(insp(page).locator('.insp-session').getByRole('button', { name: label, exact: true })).toHaveCount(1);   // arrows by aria-label
   }
   await ctx.close();
 });
@@ -410,3 +410,104 @@ test('log: on a phone the Log tab shows the full log even when minimised on desk
   await expect(page.locator('#log-toggle')).toBeHidden();
   await ctx.close();
 });
+
+// 5.2b fix round 1 (1): the inspector's arrival toggle changes its label in place, so it
+// takes the press guard, and a write in flight for that session takes no second press.
+test('inspector: a double-click on Mark arrived writes once, with true, and stays arrived', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const writes: unknown[] = [];
+  page.on('request', r => { if (r.method() === 'PATCH' && r.url().includes('/rest/v1/leod_sessions')) writes.push(r.postDataJSON()); });
+  await afterBootReread(page);    // the boot re-read would otherwise restore the fixture's arrival
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  await insp(page).locator('[data-fk="insp-arrive"]').dblclick();
+  await page.clock.runFor(1100);
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([{ speaker_arrived: true }]);
+  await expect(insp(page).locator('.who-state')).toHaveText('Arrived');
+  expect(await evalPage(page, `S.sessions.find(x => x.id === '${ID(5)}').speaker_arrived`)).toBe(true);
+  await ctx.close();
+});
+
+test('inspector: a press while the arrival write is in flight is ignored; a failure restores the value from before the press', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  const out = await evalPage(page, `(async () => {
+    const real = sb.from.bind(sb);
+    let release; const gate = new Promise(r => { release = r; });
+    let n = 0;
+    sb.from = (tb) => tb !== 'leod_sessions' ? real(tb) : { update: () => ({ eq: async () => { n++; await gate; return { error: { message: 'offline' } }; } }) };
+    const a = markArrived('${ID(5)}', true);
+    const b = markArrived('${ID(5)}', false);   // overlapping press: ignored
+    release(); await a; await b;
+    sb.from = real;
+    return [n, S.sessions.find(x => x.id === '${ID(5)}').speaker_arrived];
+  })()`);
+  expect(out).toEqual([1, false]);
+  await ctx.close();
+});
+
+// 5.2b fix round 1 (3): an error is visible in the one-line log.
+test('log: minimised, an error shows in the error colour and turns the new badge red', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#log-toggle').click();
+  const errColour = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--st-live-fg').trim());
+  const rgb = await page.evaluate(c => { const d = document.createElement('div'); d.style.color = c; document.body.appendChild(d); const v = getComputedStyle(d).color; d.remove(); return v; }, errColour);
+  await evalPage(page, `pushLog('BROADCAST', 'Doors open', null)`);
+  await expect(page.locator('#log-new')).not.toHaveClass(/is-err/);
+  expect(await page.locator('#log-latest .lg-kind').evaluate(el => getComputedStyle(el).color)).not.toBe(rgb);
+  await evalPage(page, `pushLog('ERROR', 'Signage push failed', null)`);
+  expect(await page.locator('#log-latest .lg-kind').evaluate(el => getComputedStyle(el).color)).toBe(rgb);
+  // the open log uses the same token for an error kind
+  await expect(page.locator('#log-new')).toHaveClass(/is-err/);
+  await evalPage(page, `pushLog('DELAY', '+5 min', null)`);
+  await expect(page.locator('#log-new')).toHaveText('3 new');
+  await expect(page.locator('#log-new')).toHaveClass(/is-err/);                 // an error arrived since minimising
+  expect(await page.locator('#log-latest .lg-kind').evaluate(el => getComputedStyle(el).color)).not.toBe(rgb);
+  await page.locator('#log-toggle').click();
+  expect(await page.locator('#log-feed .lg-error .lg-kind').first().evaluate(el => getComputedStyle(el).color)).toBe(rgb);
+  await page.locator('#log-toggle').click();
+  await evalPage(page, `pushLog('DELAY', '+5 min', null)`);
+  await expect(page.locator('#log-new')).not.toHaveClass(/is-err/);             // reset on reopening
+  await ctx.close();
+});
+
+// 5.2b fix round 1 (4), owner: the Session row fits one line at the real rail widths in every
+// language (Move up and Move down are icon-only with a translated name); Cancel stays apart.
+for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }]) {
+    test(`inspector: ${locale} ${viewport.width}: the Session row is one line for READY, LIVE and ENDED`, async ({ browser }) => {
+      const { ctx, page } = await openConsole(browser, { locale, viewport });
+      for (const id of [ID(5), PANEL_ID, ID(1)]) {
+        await evalPage(page, `selectSession('${id}')`);
+        const row = await insp(page).locator('.insp-session').evaluate(el => {
+          const btns = [...el.querySelectorAll('.insp-sbtns .btn')] as HTMLElement[];
+          const c = el.querySelector('.insp-cancel .btn') as HTMLElement | null;
+          return {
+            n: btns.length, tops: [...new Set(btns.map(b => b.offsetTop))],
+            clipped: btns.filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent),
+            minW: Math.min(...btns.map(b => b.getBoundingClientRect().width)),
+            // the end edge: right in ltr, left in rtl (Arabic)
+            cancel: c ? { top: c.getBoundingClientRect().top, end: getComputedStyle(el).direction === 'rtl' ? c.getBoundingClientRect().left : c.getBoundingClientRect().right } : null,
+            rowBottom: Math.max(...btns.map(b => b.getBoundingClientRect().bottom)),
+            end: getComputedStyle(el).direction === 'rtl' ? el.getBoundingClientRect().left : el.getBoundingClientRect().right,
+          };
+        });
+        expect(row.n, id).toBeGreaterThanOrEqual(4);
+        expect(row.tops, `${id} wraps`).toHaveLength(1);
+        expect(row.clipped, id).toEqual([]);
+        expect(row.minW).toBeGreaterThanOrEqual(32);
+        if (row.cancel) {
+          expect(row.cancel.top).toBeGreaterThan(row.rowBottom);
+          expect(Math.abs(row.cancel.end - row.end)).toBeLessThanOrEqual(1);
+        }
+      }
+      for (const [fk, key] of [['insp-up', 'cc.list.moveUp'], ['insp-down', 'cc.list.moveDown']]) {
+        const name = await evalPage(page, `t('${key}')`) as string;
+        await expect(insp(page).locator(`[data-fk="${fk}"]`)).toHaveAttribute('aria-label', name);
+        await expect(insp(page).locator(`[data-fk="${fk}"]`)).toHaveAttribute('title', name);
+        await expect(insp(page).locator(`[data-fk="${fk}"] svg use`)).toHaveAttribute('href', fk === 'insp-up' ? '#i-arrow-up' : '#i-arrow-down');
+      }
+      await ctx.close();
+    });
+  }
+}

@@ -1407,6 +1407,8 @@
     .hdr-menu[hidden], .hdr-pop[hidden], #brain-wrap[hidden], #bc-chip[hidden], #role-lock[hidden], #viewas-btn[hidden], #displays-btn[hidden] { display: none; }
     /* 5.2b: Displays sits left of View as; below 1440 it is the monitor icon and the count */
     #displays-btn .pill-count { margin-inline-start: 2px; }
+    #displays-btn.is-active { background: var(--raised); border-color: var(--accent); color: var(--text-primary); }
+    #mobile-menu #mm-displays.is-active { background: var(--raised); color: var(--text-primary); }
     #mm-displays .pill-count { margin-inline-start: 8px; }
     @media (max-width: 1439px) { #displays-btn .displays-lbl { display: none; } }
     .hdr-menu button, .ev-pill-dd button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font: 500 var(--fs-13) var(--font-sans); text-align: start; text-transform: none; letter-spacing: 0; cursor: pointer; }
@@ -1758,7 +1760,8 @@
     .insp-grp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .insp-monitor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .insp-monitor > .btn { width: 100%; min-width: 0; }
-    .insp-sbtns { gap: 6px; }
+    .insp-sbtns { gap: 6px; }   /* one line: Edit, the two arrows, then the status's own move or Restart */
+    .insp-sbtns .btn.icon-only { min-width: 32px; }
     /* Cancel: alone at the end edge, apart from the others */
     .insp-cancel { display: flex; justify-content: flex-end; padding-top: 6px; }
     .insp-empty { margin: 0; color: var(--text-tertiary); font-size: var(--fs-13); }
@@ -1781,6 +1784,8 @@
     .log-latest .lg-kind { flex: none; font-weight: 700; font-size: var(--fs-11); letter-spacing: var(--ls-badge); text-transform: uppercase; color: var(--text-tertiary); }
     .log-latest .lg-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .log-new { flex: none; width: auto; }
+    .log-latest.lg-error .lg-kind { color: var(--st-live-fg); }   /* as the open log shows an error */
+    .log-new.is-err { background: var(--st-live); color: var(--on-solid); }   /* an error arrived since minimising */
     .log-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
     .log-chip { height: 24px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-divider); background: transparent; color: var(--text-secondary); font: 600 var(--fs-12) var(--font-sans); cursor: pointer; }
     .log-chip:hover { background: var(--raised); color: var(--text-primary); }
@@ -2889,6 +2894,7 @@ const S = {
   logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
   logMin:          false,  // event log minimised (per viewer, cd.logMin; 5.2b)
   logNew:          0,      // log entries since it was minimised
+  logNewErr:       false,  // one of them was an error
   foldOpen:        { ENDED: false, CANCELLED: false },
   laneOpen:        {},
   editMode:        false,  // "Edit run of show": editing tools on every row
@@ -3068,6 +3074,7 @@ async function loadLog(eventId) {
   if (S.event && S.event.id !== eventId) return;
   if (data) data.reverse().forEach(r => pushLogFromRow(r));
   S.logNew = 0;   // loading the log is not news: the count is of entries since minimising
+  S.logNewErr = false;
 }
 
 // ═══════════════════════════════════════════════════
@@ -3625,13 +3632,22 @@ async function applyDelay(sessionId, minutes) {
   pushToast(tf(affected.length === 1 ? 'cc.toast.delayOne' : 'cc.toast.delayMany', { n: affected.length, m: minutes }), 'success');
 }
 
+// One arrival write per session at a time (5.2b fix round 1): a press while one is in flight
+// is ignored, so a failure restores exactly the value from before its own press.
+const _arriveInFlight = new Set();
 async function markArrived(sessionId, arrived) {
   const s = S.sessions.find(x => x.id === sessionId);
-  if (!s) return;
+  if (!s || _arriveInFlight.has(sessionId)) return;
+  _arriveInFlight.add(sessionId);
   const prev = s.speaker_arrived;
   s.speaker_arrived = arrived;
   renderSessions();
-  const { error } = await sb.from('leod_sessions').update({ speaker_arrived: arrived }).eq('id', sessionId);
+  let error;
+  try {
+    ({ error } = await sb.from('leod_sessions').update({ speaker_arrived: arrived }).eq('id', sessionId));
+  } finally {
+    _arriveInFlight.delete(sessionId);
+  }
   if (error) {
     const cur = S.sessions.find(x => x.id === sessionId);
     if (cur) cur.speaker_arrived = prev;
@@ -4636,13 +4652,17 @@ function inspectorHTML(s, nowMs) {
   const speakers = ppl.length ? ppl : (s.speaker ? [{ name: s.speaker, role: '' }] : []);
   const canArrive = (S.role === 'director' || S.role === 'stage') && speakers.length > 0 && !FINISHED.includes(s.status);
   const names = speakers.map(p => p.name + (p.role === 'moderator' ? ` (${t('cc.list.moderator')})` : '')).join(', ');
+  // Slots are positions: when Hold takes the place a forward action had, that slot changed.
+  // An operator's own selection gets its own slots (choosing a session is not a change
+  // under the pointer); the auto-picked inspector shares one set, so an auto-pick swap is.
+  const ns = S.selectedId === s.id ? 'insp:' + s.id : 'insp:auto';
   // Speaker box: names, the arrival state, and the one toggle. Always two text lines, so a
   // toggle never changes its height and nothing below it moves.
   const arrivedState = s.speaker_arrived
     ? `<span class="who-state is-arrived">${icon('check')}${esc(t('cc.insp.arrived'))}</span>`
     : `<span class="who-state is-not">${esc(t('cc.insp.notArrived'))}</span>`;
   const who = speakers.length ? `<div class="who insp-who"><div class="who-txt"><span class="insp-names" dir="auto" title="${esc(names)}">${esc(names)}</span>${arrivedState}</div>`
-    + (canArrive ? `<button type="button" class="btn sm" data-fk="insp-arrive" aria-pressed="${!!s.speaker_arrived}" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${esc(s.speaker_arrived ? t('cc.insp.clearArrived') : t('cc.insp.markArrived'))}</button>` : '')
+    + (canArrive ? `<button type="button" class="btn sm" data-fk="insp-arrive" aria-pressed="${!!s.speaker_arrived}"${slotAttr(ns + ':arrive', s.id + '>' + !!s.speaker_arrived)} onclick="if(pressOk(event,this))markArrived('${s.id}', ${!s.speaker_arrived})">${esc(s.speaker_arrived ? t('cc.insp.clearArrived') : t('cc.insp.markArrived'))}</button>` : '')
     + `</div>` : '';
   const plannedDiffers = s.planned_start !== s.scheduled_start || s.planned_end !== s.scheduled_end;
   const times = `<span class="insp-times">${[sessionSpan(s),
@@ -4656,10 +4676,6 @@ function inspectorHTML(s, nowMs) {
       <span class="insp-unit">${esc(unit)}</span></div>
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}` : '';
   const notes = s.notes && s.notes.trim() ? `<div class="insp-notes" dir="auto"><span>${esc(s.notes)}</span></div>` : '';
-  // Slots are positions: when Hold takes the place a forward action had, that slot changed.
-  // An operator's own selection gets its own slots (choosing a session is not a change
-  // under the pointer); the auto-picked inspector shares one set, so an auto-pick swap is.
-  const ns = S.selectedId === s.id ? 'insp:' + s.id : 'insp:auto';
   const fwdTo = live ? null : primaryTransition(s);
   const fwd = fwdTo ? transitionButtonHTML(s, fwdTo, 'lg', 'insp', ns + ':p1') : '';
   let primary = '';
@@ -4692,8 +4708,9 @@ function inspectorHTML(s, nowMs) {
   const others = (ALLOWED[s.status] || []).filter(to => !shown.has(to) && canDo(s, to));
   const sessionBtns = [
     isDirector ? `<button type="button" class="btn sm" data-fk="insp-edit" onclick="openSessModal('edit','${s.id}')">${esc(t('cc.insp.edit'))}</button>` : '',
-    isDirector ? `<button type="button" class="btn sm" data-fk="insp-up" onclick="reorderSession('${s.id}','up')">${esc(t('cc.list.moveUp'))}</button>` : '',
-    isDirector ? `<button type="button" class="btn sm" data-fk="insp-down" onclick="reorderSession('${s.id}','down')">${esc(t('cc.list.moveDown'))}</button>` : '',
+    // Icon-only, so the row fits one line at 1280 in every language (owner, fix round 1)
+    isDirector ? `<button type="button" class="btn sm icon-only" data-fk="insp-up" aria-label="${esc(t('cc.list.moveUp'))}" title="${esc(t('cc.list.moveUp'))}" onclick="reorderSession('${s.id}','up')">${icon('arrow-up')}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm icon-only" data-fk="insp-down" aria-label="${esc(t('cc.list.moveDown'))}" title="${esc(t('cc.list.moveDown'))}" onclick="reorderSession('${s.id}','down')">${icon('arrow-down')}</button>` : '',
     ...others.map(to => transitionButtonHTML(s, to, 'sm', 'insp-s')),
     canRestartSession(s) ? `<button type="button" class="btn sm" data-restart="${esc(s.id)}" data-fk="insp-restart" onclick="openRestartModal('${esc(s.id)}')">${esc(t('cc.insp.restart'))}</button>` : '',
   ].filter(Boolean).join('');
@@ -4767,6 +4784,7 @@ function readLogMin() { try { return localStorage.getItem('cd.logMin') === '1'; 
 function toggleLogMin() {
   S.logMin = !S.logMin;
   S.logNew = 0;
+  S.logNewErr = false;
   try { localStorage.setItem('cd.logMin', S.logMin ? '1' : '0'); } catch { /* storage blocked: this page only */ }
   applyLogMin();
 }
@@ -4790,8 +4808,9 @@ function renderLogMini() {
   const min = !!S.logMin && !isPhone();
   const e = S.log[0];
   latest.hidden = !min || !e;
-  if (min && e) latest.innerHTML = logRowInner(e);
+  if (min && e) { latest.innerHTML = logRowInner(e); latest.className = 'log-latest lg-' + logKind(e.action); }
   fresh.hidden = !min || !S.logNew;
+  fresh.classList.toggle('is-err', !!S.logNewErr);
   if (min && S.logNew) fresh.textContent = tf('cc.log.new', { n: S.logNew });
 }
 function logRowInner(e) {
@@ -5469,9 +5488,17 @@ function refreshDisplaysPill() {
   if (btn && btn.getAttribute('aria-label') !== label) { btn.setAttribute('aria-label', label); btn.title = label; }
   const mm = document.getElementById('mm-displays-count');
   if (mm && mm.textContent !== String(n)) mm.textContent = String(n);
+  // Pressed while the signage view is showing (5.2b fix round 1)
+  const on = String(S.role === 'signage');
+  for (const el of [btn, document.getElementById('mm-displays')]) {
+    if (el && el.getAttribute('aria-pressed') !== on) { el.setAttribute('aria-pressed', on); el.classList.toggle('is-active', on === 'true'); }
+  }
 }
-// The signage panel, as View as > Signage opens it.
-function openDisplays() { setRole('signage'); closePopovers(); }
+// The signage panel, as View as > Signage opens it; a second press takes a director back.
+function openDisplays() {
+  setRole(S.role === 'signage' && S.userRole === 'director' ? 'director' : 'signage');
+  closePopovers();
+}
 function renderSignagePanel() {
   const list = document.getElementById('sessions-list');
   if (!list) return;
@@ -6483,7 +6510,7 @@ function getNextSession(sessions, liveSession) {
 function pushLog(action, detail, sessionId, ts) {
   S.log.unshift({ action, detail, sessionId, ts: ts ?? correctedNow() });
   if (S.log.length > 60) S.log.pop();
-  if (S.logMin) S.logNew = (S.logNew || 0) + 1;
+  if (S.logMin) { S.logNew = (S.logNew || 0) + 1; if (logKind(action) === 'error') S.logNewErr = true; }
   renderLog();
 
   // Desktop notification for key events when tab is not focused

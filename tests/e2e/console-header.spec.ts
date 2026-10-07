@@ -100,6 +100,28 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720
   });
 }
 
+// 5.2b fix round 1 (2): in the signage view the pill shows it is the current view, and a
+// second press takes a real director back to the director view.
+test('header: Displays is pressed in the signage view, and a second press returns to director', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const btn = page.locator('#displays-btn');
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  await btn.click();
+  expect(await evalPage(page, 'S.role')).toBe('signage');
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await expect(btn).toHaveClass(/is-active/);
+  await btn.click();
+  expect(await evalPage(page, 'S.role')).toBe('director');
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  await expect(btn).not.toHaveClass(/is-active/);
+  await expect(page.locator('#sessions-list .sp-display-card')).toHaveCount(0);
+  // From another view as (stage), Displays still opens signage
+  await evalPage(page, `setRole('stage')`);
+  await btn.click();
+  expect(await evalPage(page, 'S.role')).toBe('signage');
+  await ctx.close();
+});
+
 test('header: the Displays count follows the heartbeat', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await evalPage(page, `S.displays[0].last_seen_at = new Date(Date.now() - 120_000).toISOString(); renderSessions();`);
