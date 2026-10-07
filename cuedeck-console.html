@@ -1707,6 +1707,10 @@
     #sidebar { display: flex; flex-direction: column; overflow-y: auto; background: var(--panel); border-inline-start: 1px solid var(--border-section); }
     .insp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; padding: 14px 16px; border-bottom: 1px solid var(--border-section); overflow-y: auto; max-height: calc(100% - 240px); flex: 0 1 auto; }
     .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .insp-head-l { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    /* Text-sized so it never changes the header's height or anything below it */
+    .insp-urgent { padding: 0; border: 0; background: none; font: 600 var(--fs-11)/1.2 var(--font-sans); color: var(--st-overrun-fg); text-decoration: underline; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .insp-urgent:hover { color: var(--text-primary); }
     .insp-title { font-size: var(--fs-16); font-weight: 700; line-height: 1.3; color: var(--text-primary); }
     .insp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); }
     .insp-flags { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--text-secondary); }
@@ -2741,7 +2745,6 @@ const S = {
   viewMode:        'list', // PR-020: 'list' | 'timeline'
   selectedId:      null,   // session the user selected; the inspector shows it (stage 4)
   inspectedId:     null,   // session the inspector shows this render (selection or most urgent)
-  urgentKey:       '',     // "id:status" of the most urgent session; a change clears the selection
   inspMoreOpen:    false,  // the inspector's More menu stays open across re-renders
   logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
   foldOpen:        { ENDED: false, CANCELLED: false },
@@ -2997,7 +3000,9 @@ function subscribeControl(eventId) {
 }
 
 function onSessionChange(payload) {
-  const row = payload.new || payload.old;
+  // supabase-js sends DELETE with new = {} (truthy) and the row in old, so pick by event type:
+  // `payload.new || payload.old` read {} and a deleted session stayed on every other console.
+  const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
   if (!row) return;
   if (S.event && row.event_id && row.event_id !== S.event.id) return; // another event's row
   if (payload.eventType === 'DELETE') {
@@ -4004,6 +4009,7 @@ function foldRowHTML(kind, list, open) {
 function toggleFold(kind) { S.foldOpen[kind] = !S.foldOpen[kind]; renderSessions(); }
 
 function selectSession(id) {
+  if (S.selectedId !== id) S.inspMoreOpen = false;   // More belongs to the session it was opened on
   S.selectedId = id;
   renderSessions();
 }
@@ -4199,19 +4205,24 @@ function mostUrgentSession() {
   if (ranked.length) return ranked[0];
   return S.sessions.filter(s => s.status === 'READY').sort((a, b) => a.sort_order - b.sort_order)[0] || null;
 }
-// Follows the user's selection; when the most urgent session changes (another
-// session or a new status) it returns there, unless the selected session has an
-// armed End or Cancel, so a second press never lands on a different session.
+// Controller ruling (7 Oct, overrides spec 2.3 "returns to the most urgent"): the
+// inspector never leaves a session the operator selected while it exists in this
+// event (ended, cancelled or filtered out included), so the control under the pointer
+// never changes by itself. The most urgent session is shown only when nothing is
+// selected, the selection was deleted, or the event switched (switchEvent clears it).
+// A more urgent session elsewhere is offered by a header link (urgentLinkHTML).
 function inspectorSession() {
-  const urgent = mostUrgentSession();
-  const key = urgent ? `${urgent.id}:${urgent.status}` : '';
-  if (key !== S.urgentKey) {
-    S.urgentKey = key;
-    const sel = S.selectedId && S.sessions.find(s => s.id === S.selectedId);
-    const armed = !!sel && (isArmed(_endPending, sel) || isArmed(_cancelPending, sel));
-    if (!armed) S.selectedId = null;
-  }
-  return (S.selectedId && S.sessions.find(s => s.id === S.selectedId)) || urgent;
+  const sel = S.selectedId ? S.sessions.find(s => s.id === S.selectedId) : null;
+  if (S.selectedId && !sel) S.selectedId = null;
+  return sel || mostUrgentSession();
+}
+// "Show #3 (overrun)": only while the operator holds a selection and a session ranks
+// above it. Text-sized, in the header row, so it never shifts or replaces a control.
+function urgentLinkHTML(s) {
+  if (S.selectedId !== s.id) return '';
+  const u = mostUrgentSession();
+  if (!u || u.id === s.id || !(u.status in NOW_RANK) || (s.status in NOW_RANK && NOW_RANK[s.status] <= NOW_RANK[u.status])) return '';
+  return `<button type="button" class="insp-urgent" data-fk="insp-urgent" onclick="selectSession('${u.id}')">${esc(tf('cc.insp.showUrgent', { n: u.sort_order, status: t('status.' + u.status).toLocaleLowerCase(CueDeckI18n.getLocale()) }))}</button>`;
 }
 
 function monitorRowHTML(more = '') {
@@ -4277,7 +4288,7 @@ function inspectorHTML(s, nowMs) {
       <summary class="btn sm ghost" data-fk="insp-more">${esc(t('cc.insp.more'))}${icon('chev-down')}</summary>
       <div class="insp-more-list">${moreItems}</div></details>` : '';
   const typeLabel = s.type ? (t('type.' + s.type) !== 'type.' + s.type ? t('type.' + s.type) : s.type) : '';
-  return `<div class="insp-head"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))} · #${s.sort_order}</span>${statusBadge(s.status)}</div>
+  return `<div class="insp-head"><span class="insp-head-l"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))} · #${s.sort_order}</span>${urgentLinkHTML(s)}</span>${statusBadge(s.status)}</div>
     <div class="insp-title" dir="auto" title="${esc(s.title)}">${esc(s.title)}</div>
     <div class="insp-row insp-chips">${s.room ? chipHTML('room', s.room) : ''}${typeLabel ? chipHTML('type', typeLabel) : ''}<span class="insp-flags${S.role === 'av' ? ' is-prominent' : ''}">${flagsHTML(s)}</span></div>
     ${speakerRow}${times}${countdown}${notes}
@@ -4305,15 +4316,20 @@ function renderInspector() {
 function buildCtxPanel() { renderInspector(); }
 
 // ── Event log: filter chips, each row with its own time, in plain words (spec 2.3) ──
+// Kinds match whole words of the action name (split on _ and -), so "DEFAULT" is
+// never read as EF and "FEEDBACK" never as DB.
+const LOG_KINDS = [
+  ['error', ['ESCALATION', 'ERROR', 'FAIL', 'FAILED']],
+  ['broadcast', ['BROADCAST']],
+  ['delay', ['DELAY', 'NUDGE']],
+  ['arrival', ['ARRIVED']],
+  ['state', ['STATUS', 'GO', 'LIVE', 'END', 'SET', 'READY', 'HOLD', 'CALL', 'CANCEL', 'REINSTATE', 'UNDO', 'RESTART', 'AUTO', 'EF']],
+  ['system', ['BOOT', 'SYSTEM', 'CLOCK', 'DB', 'SIGNAGE']],
+];
 function logKind(action) {
-  const a = String(action || '').toUpperCase();
-  if (['ESCALATION', 'ERROR', 'FAIL'].some(k => a.includes(k))) return 'error';
-  if (a.includes('BROADCAST')) return 'broadcast';
-  if (a.includes('DELAY') || a.includes('NUDGE')) return 'delay';
-  if (a.includes('ARRIVED')) return 'arrival';
-  if (['SESSION_STATUS_CHANGE', 'GO_LIVE', 'END_SESSION', 'SET_READY', 'HOLD_STAGE', 'CALL_SPEAKER', 'CANCEL_SESSION', 'REINSTATE', 'STATUS', 'UNDO', 'RESTART', 'AUTO-START', 'EF'].some(k => a.includes(k))) return 'state';
-  if (['BOOT', 'SYSTEM', 'CLOCK', 'DB', 'SIGNAGE'].some(k => a.includes(k))) return 'system';
-  return 'other';
+  const words = String(action || '').toUpperCase().split(/[_\-\s]+/);
+  const hit = LOG_KINDS.find(([, keys]) => keys.some(k => words.includes(k)));
+  return hit ? hit[0] : 'other';
 }
 const LOG_FILTER = { all: () => true, status: k => k === 'state' || k === 'delay' || k === 'arrival', broadcast: k => k === 'broadcast', errors: k => k === 'error' };
 function setLogFilter(f) {
@@ -4780,7 +4796,7 @@ async function batchTransition(toStatus) {
 // Rows: click, Enter or Space select; ArrowUp/ArrowDown move the selection (spec 2.2).
 function handleCardKey(event, sessionId) {
   if (event.target !== event.currentTarget) return;   // keys inside a row's buttons
-  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); S.selectedId = sessionId; renderSessions(); document.getElementById('card-' + sessionId)?.focus(); return; }
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (S.selectedId !== sessionId) S.inspMoreOpen = false; S.selectedId = sessionId; renderSessions(); document.getElementById('card-' + sessionId)?.focus(); return; }
   if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
   event.preventDefault();
   const rows = [...document.querySelectorAll('#sessions-list .sc[tabindex="0"]')];
@@ -4788,6 +4804,7 @@ function handleCardKey(event, sessionId) {
   const next = event.key === 'ArrowDown' ? rows[idx + 1] : rows[idx - 1];
   if (!next) return;
   S.selectedId = next.id.slice(5);
+  S.inspMoreOpen = false;
   renderSessions();
   document.getElementById(next.id)?.focus();
 }
@@ -6319,7 +6336,7 @@ async function switchEvent(eventId) {
   disarmAllBatch();
   F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch
   // The list of the new event opens at its first unfinished row, nothing selected or unfolded.
-  S.listOpened = false; S.selectedId = null; S.foldOpen = { ENDED: false, CANCELLED: false };
+  S.listOpened = false; S.selectedId = null; S.inspMoreOpen = false; S.foldOpen = { ENDED: false, CANCELLED: false };
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});
   await loadLog(eventId).catch(() => {});

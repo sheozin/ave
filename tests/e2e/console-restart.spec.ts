@@ -69,11 +69,15 @@ async function openControls(page: Page, id: string) {
 
 test('the Restart button shows on started sessions and not on a planned one', async ({ page }) => {
   await setup(page);
+  const shown = page.locator('#ctx-wrap .insp-title');   // the inspector shows the intended session
   await openControls(page, STARTED);
+  await expect(shown).toHaveText("Chair's opening remarks");
   await expect(restartBtn(page, STARTED)).toBeVisible();
   await openControls(page, ENDED);
+  await expect(shown).toHaveText('Panel');
   await expect(restartBtn(page, ENDED)).toBeVisible();
   await openControls(page, PLANNED);
+  await expect(shown).toHaveText('Keynote');
   await expect(restartBtn(page, PLANNED)).toHaveCount(0);
 });
 

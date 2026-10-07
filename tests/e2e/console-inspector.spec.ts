@@ -15,12 +15,61 @@ test('inspector: defaults to the most urgent session (LIVE before HOLD)', async 
   await ctx.close();
 });
 
-test('inspector: follows the selection and returns to the most urgent when that changes status', async ({ browser }) => {
+// Controller ruling (fix round 1): the inspector never leaves a session the operator
+// selected while it exists in the event, so the control under the pointer never changes.
+test('inspector: an overrun flip elsewhere never moves the selected session or its controls', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  await page.locator(`#card-${ID(6)} .sc-title`).click();
-  await expect(insp(page).locator('.insp-title')).toHaveText('Digital Pre-Order and Click & Collect at the Gate');
-  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').status = 'OVERRUN'; renderSessions();`);
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  await expect(insp(page).locator('.insp-title')).toHaveText('Duty Free Pricing After the Currency Float');
+  const call = insp(page).locator('.insp-primary .btn', { hasText: 'Call speaker' });
+  const before = await call.boundingBox();
+  await evalPage(page, `onSessionChange({ eventType: 'UPDATE', new: { ...S.sessions.find(x => x.id === '${PANEL_ID}'), status: 'OVERRUN', version: 99 }, old: {} })`);
+  await page.clock.runFor(1100);
+  await expect(page.locator(`#card-${PANEL_ID}`)).toHaveClass(/status-OVERRUN/);
+  await expect(insp(page).locator('.insp-title')).toHaveText('Duty Free Pricing After the Currency Float');
+  expect(await call.boundingBox()).toEqual(before);
+  // Attention without moving controls: a link in the header names the more urgent session.
+  const link = insp(page).locator('.insp-urgent');
+  await expect(link).toHaveText('Show #3 (overrun)');
+  await link.click();
   await expect(insp(page).locator('.insp-title')).toHaveText('Panel: Airport Retail in Cairo, Casablanca and Tunis');
+  await ctx.close();
+});
+
+test('inspector: a finished selection stays; a deleted selection falls back to the most urgent', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  await evalPage(page, `S.sessions.find(x => x.id === '${ID(5)}').status = 'CANCELLED'; renderSessions();`);
+  await expect(insp(page).locator('.insp-title')).toHaveText('Duty Free Pricing After the Currency Float');
+  await evalPage(page, `onSessionChange({ eventType: 'DELETE', new: {}, old: { id: '${ID(5)}' } })`);
+  await page.clock.runFor(1100);   // the paused test clock: let the realtime render and one tick run
+  expect(await evalPage(page, `S.sessions.some(x => x.id === '${ID(5)}')`)).toBe(false);   // a real supabase DELETE (new = {})
+  await expect(insp(page).locator('.insp-title')).toHaveText('Panel: Airport Retail in Cairo, Casablanca and Tunis');
+  await ctx.close();
+});
+
+test('inspector: with nothing selected it follows the most urgent session', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await expect(insp(page).locator('.insp-title')).toHaveText('Panel: Airport Retail in Cairo, Casablanca and Tunis');
+  await evalPage(page, `S.sessions.find(x => x.id === '${ID(2)}').status = 'OVERRUN'; renderSessions();`);
+  await expect(insp(page).locator('.insp-title')).toHaveText('Workshop: Fragrance & Beauty Category Planning');
+  await expect(insp(page).locator('.insp-urgent')).toHaveCount(0);
+  await ctx.close();
+});
+
+test('inspector: More closes when the operator selects another session', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await insp(page).locator('#insp-more summary').click();
+  await expect(insp(page).locator('#insp-more')).toHaveAttribute('open', '');
+  await page.locator(`#card-${ID(6)} .sc-title`).click();
+  await expect(insp(page).locator('#insp-more')).not.toHaveAttribute('open', '');
+  await ctx.close();
+});
+
+test('log: kinds match whole action names, not fragments of other words', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  expect(await evalPage(page, `[logKind('DEFAULT'), logKind('FEEDBACK'), logKind('EF'), logKind('DB'), logKind('SESSION_STATUS_CHANGE'), logKind('BOOT')]`))
+    .toEqual(['other', 'other', 'state', 'system', 'state', 'system']);
   await ctx.close();
 });
 
@@ -73,6 +122,7 @@ test('inspector: More holds restart, arrival, edit, move and a two-press cancel'
     await expect(insp(page).locator(sel)).toBeVisible();
   }
   await page.locator(`#card-${ID(6)} .sc-title`).click();
+  await insp(page).locator('#insp-more summary').click();   // More closes on a new selection (fix round 1)
   const cancel = insp(page).locator('#insp-more .btn.danger');
   await cancel.click();
   await expect(insp(page).locator('#insp-more .btn.danger')).toHaveClass(/confirm-pending/);
