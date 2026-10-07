@@ -47,9 +47,9 @@ BEGIN
   VALUES (v_ev, 2, 'Probe panel', 'Main Stage', '09:30', '10:00', '09:30', '10:00') RETURNING id INTO v_sid2;
   INSERT INTO leod_sessions (event_id, sort_order, title, room, planned_start, planned_end, scheduled_start, scheduled_end)
   VALUES (v_ev2, 1, 'Probe other', 'Hall', '09:00', '09:30', '09:00', '09:30') RETURNING id INTO v_sid3;
-  INSERT INTO leod_signage_displays (event_id, name, content_mode) VALUES (v_ev, 'Probe stage TV', 'stage_timer')
+  INSERT INTO leod_signage_displays (event_id, name, content_mode) VALUES (v_ev, 'Probe stage TV', 'stage-timer')
     RETURNING id, display_secret INTO v_disp, v_secret;
-  INSERT INTO leod_signage_displays (event_id, name, content_mode) VALUES (v_ev2, 'Probe other TV', 'stage_timer')
+  INSERT INTO leod_signage_displays (event_id, name, content_mode) VALUES (v_ev2, 'Probe other TV', 'stage-timer')
     RETURNING id, display_secret INTO v_disp2, v_secret2;
 
   -- 1. a director sends: one active row, returned shape, one log row
