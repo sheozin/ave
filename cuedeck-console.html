@@ -3831,14 +3831,20 @@ function renderTimeline() {
     </svg>
   </div>`;
 
-  // Cut each label to the width of its own bar, measured at the real font size
+  // Cut each label to the width of its own bar, measured at the real font size.
+  // Binary search over code points: this runs every second while a session is
+  // live, so a few measurements per label, and never split a surrogate pair.
   list.querySelectorAll('text.tl-bar-label').forEach(t => {
     const room = +t.dataset.room;
-    let txt = t.textContent;
-    while (txt.length > 1 && t.getComputedTextLength() > room) {
-      txt = txt.slice(0, -1);
-      t.textContent = txt.trimEnd() + '…';
+    if (t.getComputedTextLength() <= room) return;
+    const chars = Array.from(t.textContent);
+    let lo = 1, hi = chars.length - 1; // longest prefix that fits, with the ellipsis
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      t.textContent = chars.slice(0, mid).join('').trimEnd() + '…';
+      if (t.getComputedTextLength() <= room) lo = mid; else hi = mid - 1;
     }
+    t.textContent = chars.slice(0, lo).join('').trimEnd() + '…';
   });
 
   buildCtxPanel();
