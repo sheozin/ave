@@ -42,22 +42,22 @@ CREATE INDEX IF NOT EXISTS leod_stage_messages_event_active
   ON leod_stage_messages (event_id) WHERE cleared_at IS NULL;
 
 ALTER TABLE leod_stage_messages ENABLE ROW LEVEL SECURITY;
+-- Read only for clients. Every write goes through stage_message_send /
+-- stage_message_clear (role check, session-in-event check, log row) or the
+-- stop trigger below, so nobody can forge sent_by/cleared_by, rewrite the
+-- text on the TV, un-clear a message, or plant a row in another event's
+-- session slot without a trace.
 REVOKE ALL ON leod_stage_messages FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON leod_stage_messages TO authenticated;
+GRANT SELECT ON leod_stage_messages TO authenticated;
 
 DROP POLICY IF EXISTS stage_messages_member_read ON leod_stage_messages;
 CREATE POLICY stage_messages_member_read ON leod_stage_messages FOR SELECT TO authenticated
   USING (cuedeck_event_role(event_id) IS NOT NULL);
 
+-- no INSERT, UPDATE or DELETE policy (and no grant): writes are RPC-only;
+-- clearing is an UPDATE of cleared_at inside stage_message_clear
 DROP POLICY IF EXISTS stage_messages_sender_insert ON leod_stage_messages;
-CREATE POLICY stage_messages_sender_insert ON leod_stage_messages FOR INSERT TO authenticated
-  WITH CHECK (cuedeck_event_role(event_id) IN ('director', 'stage') AND sent_by = auth.uid());
-
 DROP POLICY IF EXISTS stage_messages_sender_update ON leod_stage_messages;
-CREATE POLICY stage_messages_sender_update ON leod_stage_messages FOR UPDATE TO authenticated
-  USING (cuedeck_event_role(event_id) IN ('director', 'stage'))
-  WITH CHECK (cuedeck_event_role(event_id) IN ('director', 'stage'));
--- no DELETE policy: clearing is an UPDATE of cleared_at
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'leod_stage_messages') THEN
@@ -67,8 +67,9 @@ END $$;
 
 -- ── Send: replaces the session's active message atomically ──
 -- Errors: 42501 not a director/stage of the event (checked first, so a
--- stranger learns nothing); P0002 session not in this event; 22023 text
--- empty or over 60 characters.
+-- stranger learns nothing); P0002 session not in this event; 55000 session
+-- ENDED or CANCELLED; 22023 text empty or over 60 characters. READY and
+-- CALLING are allowed on purpose: a queued message shows once it goes live.
 CREATE OR REPLACE FUNCTION public.stage_message_send(p_event_id uuid, p_session_id uuid, p_text text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -79,13 +80,25 @@ DECLARE
   v_role text := cuedeck_event_role(p_event_id);
   v_text text := btrim(coalesce(p_text, ''));
   v_row  leod_stage_messages%ROWTYPE;
+  v_status session_status;
 BEGIN
   IF v_role IS NULL OR v_role NOT IN ('director', 'stage') THEN
     RAISE EXCEPTION 'Forbidden' USING ERRCODE = '42501';
   END IF;
-  IF p_session_id IS NULL OR NOT EXISTS (
-       SELECT 1 FROM leod_sessions s WHERE s.id = p_session_id AND s.event_id = p_event_id) THEN
+  -- FOR SHARE: a concurrent status change (End, Cancel, Restart) waits
+  -- until this send commits, so the stop trigger then clears the new
+  -- message. If the change committed first, the status read here is the
+  -- new one and an ended session is refused, so no message can be left
+  -- behind on a stopped session for a later restart to show again.
+  SELECT s.status INTO v_status
+    FROM leod_sessions s
+   WHERE s.id = p_session_id AND s.event_id = p_event_id
+     FOR SHARE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Session not found in this event' USING ERRCODE = 'P0002';
+  END IF;
+  IF v_status IN ('ENDED', 'CANCELLED') THEN
+    RAISE EXCEPTION 'Session has ended' USING ERRCODE = '55000';
   END IF;
   IF char_length(v_text) NOT BETWEEN 1 AND 60 THEN
     RAISE EXCEPTION 'Message must be 1 to 60 characters' USING ERRCODE = '22023';

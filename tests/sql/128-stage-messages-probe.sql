@@ -171,50 +171,56 @@ BEGIN
   IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 4: two active messages for one session'; END IF;
   v_checks := v_checks + 1;
 
-  -- 5. RLS on direct table access: av reads, cannot write; stranger sees nothing;
-  --    nobody deletes
+  -- 5. no direct writes: every write goes through the RPCs (which check the
+  --    role, the session's event, and log) or the stop trigger. av reads,
+  --    a stranger sees nothing. Even a director or stage operator, signed
+  --    in, cannot INSERT, UPDATE (text, sent_by, cleared_by, un-clear) or
+  --    DELETE a row directly: no grant, so 42501 before RLS is consulted.
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_av, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
   SELECT count(*) INTO v_n FROM leod_stage_messages WHERE event_id = v_ev AND cleared_at IS NULL;
   RESET ROLE;
   IF v_n <> 2 THEN RAISE EXCEPTION 'PROBE FAIL 5: av reads % active rows, expected 2', v_n; END IF;
-  v_failed := false;
-  BEGIN
-    SET LOCAL ROLE authenticated;
-    INSERT INTO leod_stage_messages (event_id, session_id, text) VALUES (v_ev, v_sid2, 'av direct');
-  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
-  END;
-  RESET ROLE;
-  IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 5: av inserted directly'; END IF;
-  SET LOCAL ROLE authenticated;
-  UPDATE leod_stage_messages SET text = 'av edit' WHERE event_id = v_ev;
-  RESET ROLE;
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_other, 'role', 'authenticated')::text, true);
   SET LOCAL ROLE authenticated;
   SELECT count(*) INTO v_n FROM leod_stage_messages WHERE event_id = v_ev;
-  UPDATE leod_stage_messages SET text = 'stranger edit' WHERE event_id = v_ev;
   RESET ROLE;
-  IF v_n <> 0 OR EXISTS (SELECT 1 FROM leod_stage_messages WHERE text IN ('av edit', 'stranger edit')) THEN
-    RAISE EXCEPTION 'PROBE FAIL 5: stranger read % rows, or a non-sender edited', v_n;
+  IF v_n <> 0 THEN RAISE EXCEPTION 'PROBE FAIL 5: stranger reads % rows', v_n; END IF;
+  FOR v_r IN SELECT * FROM (VALUES
+      (v_dir,   'INSERT INTO leod_stage_messages (event_id, session_id, text, sent_by) VALUES ($1, $2, ''planted'', $3)'),
+      (v_dir,   'INSERT INTO leod_stage_messages (event_id, session_id, text) VALUES ($1, $2, ''direct'')'),
+      (v_stage, 'UPDATE leod_stage_messages SET text = ''rewritten'' WHERE event_id = $1'),
+      (v_stage, 'UPDATE leod_stage_messages SET sent_by = $3, cleared_by = $3 WHERE event_id = $1'),
+      (v_dir,   'UPDATE leod_stage_messages SET cleared_at = NULL WHERE event_id = $1 AND cleared_at IS NOT NULL'),
+      (v_dir,   'DELETE FROM leod_stage_messages WHERE event_id = $1'),
+      (v_av,    'INSERT INTO leod_stage_messages (event_id, session_id, text) VALUES ($1, $2, ''av direct'')')) AS x(uid, stmt)
+  LOOP
+    v_failed := false;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
+    BEGIN
+      SET LOCAL ROLE authenticated;
+      -- $2: the other event's session, the slot a planted row would take
+      EXECUTE v_r.stmt USING v_ev, v_sid3, v_av;
+    EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+    END;
+    RESET ROLE;
+    IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 5: direct write ran: %', v_r.stmt; END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM leod_stage_messages WHERE text IN ('planted', 'direct', 'rewritten', 'av direct')
+                OR sent_by = v_av OR cleared_by = v_av OR session_id = v_sid3)
+     OR (SELECT count(*) FROM leod_stage_messages WHERE event_id = v_ev) <> 3
+     OR (SELECT count(*) FROM leod_stage_messages WHERE event_id = v_ev AND cleared_at IS NULL) <> 2 THEN
+    RAISE EXCEPTION 'PROBE FAIL 5: a refused direct write changed rows';
   END IF;
-  -- a director inserting directly cannot sign as someone else
+  -- the RPCs still work for the same director afterwards (check 6 onwards
+  -- also drives them as stage)
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_dir, 'role', 'authenticated')::text, true);
-  v_failed := false;
-  BEGIN
-    SET LOCAL ROLE authenticated;
-    INSERT INTO leod_stage_messages (event_id, session_id, text, sent_by) VALUES (v_ev, gen_random_uuid(), 'forged', v_stage);
-  EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
-  END;
+  SET LOCAL ROLE authenticated;
+  v_ok := stage_message_clear(v_ev, v_sid2);
+  v_res := stage_message_send(v_ev, v_sid2, repeat('x', 60));
   RESET ROLE;
-  IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 5: director inserted a row signed by stage'; END IF;
-  BEGIN
-    SET LOCAL ROLE authenticated;
-    DELETE FROM leod_stage_messages WHERE event_id = v_ev;
-  EXCEPTION WHEN insufficient_privilege THEN NULL;   -- no DELETE grant: refused outright
-  END;
-  RESET ROLE;
-  IF (SELECT count(*) FROM leod_stage_messages WHERE event_id = v_ev) < 3 THEN
-    RAISE EXCEPTION 'PROBE FAIL 5: a director deleted rows';
+  IF v_ok IS DISTINCT FROM true OR char_length(v_res->>'text') <> 60 THEN
+    RAISE EXCEPTION 'PROBE FAIL 5: RPCs after refused direct writes: clear % send %', v_ok, v_res;
   END IF;
   v_checks := v_checks + 1;
 
@@ -286,7 +292,7 @@ BEGIN
   v_ok := stage_message_clear(v_ev, v_sid);
   RESET ROLE;
   IF v_ok IS DISTINCT FROM false
-     OR (SELECT count(*) FROM leod_event_log WHERE event_id = v_ev AND action = 'STAGE_MESSAGE_CLEARED') <> 1 THEN
+     OR (SELECT count(*) FROM leod_event_log WHERE event_id = v_ev AND session_id = v_sid AND action = 'STAGE_MESSAGE_CLEARED') <> 1 THEN
     RAISE EXCEPTION 'PROBE FAIL 7: second clear returned % or logged again', v_ok;
   END IF;
   SET LOCAL ROLE anon;
@@ -306,7 +312,12 @@ BEGIN
      OR has_table_privilege('anon', 'public.leod_stage_messages', 'UPDATE')
      OR has_table_privilege('anon', 'public.leod_stage_messages', 'DELETE')
      OR has_table_privilege('anon', 'public.leod_stage_messages', 'TRUNCATE')
+     OR NOT has_table_privilege('authenticated', 'public.leod_stage_messages', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.leod_stage_messages', 'INSERT')
+     OR has_table_privilege('authenticated', 'public.leod_stage_messages', 'UPDATE')
      OR has_table_privilege('authenticated', 'public.leod_stage_messages', 'DELETE')
+     OR has_table_privilege('public', 'public.leod_stage_messages', 'INSERT')
+     OR has_table_privilege('public', 'public.leod_stage_messages', 'UPDATE')
      OR has_table_privilege('authenticated', 'public.leod_stage_messages', 'TRUNCATE')
      OR has_function_privilege('anon', 'public.stage_message_send(uuid,uuid,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.stage_message_clear(uuid,uuid)', 'EXECUTE')
@@ -318,8 +329,9 @@ BEGIN
   END IF;
   IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.leod_stage_messages'::regclass)
      OR NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'leod_stage_messages')
-     OR EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.leod_stage_messages'::regclass AND polcmd IN ('d', '*')) THEN
-    RAISE EXCEPTION 'PROBE FAIL 8: RLS, realtime or a delete policy';
+     OR EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.leod_stage_messages'::regclass AND polcmd <> 'r')
+     OR NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = 'public.leod_stage_messages'::regclass AND polcmd = 'r') THEN
+    RAISE EXCEPTION 'PROBE FAIL 8: RLS, realtime, or a policy other than the one SELECT policy';
   END IF;
   v_checks := v_checks + 1;
 
@@ -338,6 +350,25 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND text = 'Take questions now'
                        AND cleared_at IS NOT NULL AND cleared_by IS NULL) THEN
     RAISE EXCEPTION 'PROBE FAIL 9: LIVE -> ENDED did not clear the message as the system';
+  END IF;
+  -- an ENDED session refuses a send (55000). stage_message_send reads the
+  -- session FOR SHARE, so an End racing a send either waits for the send
+  -- (and the stop trigger then clears it) or commits first (and this refusal
+  -- applies): no message is left on a stopped session for a restart to
+  -- revive. The lock itself needs two sessions to test, so it is not tested here.
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_stage, 'role', 'authenticated')::text, true);
+  v_state := NULL;
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    PERFORM stage_message_send(v_ev, v_sid, 'Too late');
+  EXCEPTION WHEN OTHERS THEN v_state := SQLSTATE;
+  END;
+  RESET ROLE;
+  IF v_state IS DISTINCT FROM '55000' OR EXISTS (SELECT 1 FROM leod_stage_messages WHERE text = 'Too late') THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: send to an ENDED session gave %', coalesce(v_state, 'no error');
+  END IF;
+  IF position('FOR SHARE;' IN pg_get_functiondef('public.stage_message_send(uuid,uuid,text)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: stage_message_send does not lock the session row';
   END IF;
   -- restart: back to LIVE, a fresh message, then LIVE -> READY clears it
   UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid;
