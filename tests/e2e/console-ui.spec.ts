@@ -22,6 +22,12 @@ async function bypassOverlay(page: Page) {
   });
 }
 
+/** The role switch lives in the header "View as" menu (redesign stage 3). */
+async function viewAs(page: Page, role: string) {
+  await page.locator('#viewas-btn').click();
+  await page.locator(`.rbtn[data-role="${role}"]`).click();
+}
+
 test.describe('Console: page load', () => {
 
   test('01 console page loads with correct title', async ({ page }) => {
@@ -69,22 +75,21 @@ test.describe('Console: role switching', () => {
   test('06 clicking signage role activates it', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    const signageBtn = page.locator('.rbtn[data-role="signage"]');
-    await signageBtn.click();
-    await expect(signageBtn).toHaveClass(/active/);
+    await viewAs(page, 'signage');
+    await expect(page.locator('.rbtn[data-role="signage"]')).toHaveClass(/active/);
   });
 
   test('07 signage panel shows global override section', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=GLOBAL DISPLAY OVERRIDE')).toBeVisible();
   });
 
   test('08 signage panel shows override buttons', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     // Use class selector — override buttons appear in both panel and sidebar (strict mode)
     await expect(page.locator('button.sp-override-btn:has-text("Break Screen")')).toBeVisible();
     await expect(page.locator('button.sp-override-btn:has-text("5-Min Recall")')).toBeVisible();
@@ -95,7 +100,7 @@ test.describe('Console: role switching', () => {
   test('09 director role shows session controls', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Session list area should exist
     await expect(page.locator('#sessions-col')).toBeVisible();
   });
@@ -144,7 +149,7 @@ test.describe('Console: display modal', () => {
   test('14 Add Display button opens modal', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     // Wait for signage panel to render
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Display")').click();
@@ -155,7 +160,7 @@ test.describe('Console: display modal', () => {
   test('15 display modal closes on Cancel', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Display")').click();
     await page.locator('#disp-modal button:has-text("Cancel")').click();
@@ -165,7 +170,7 @@ test.describe('Console: display modal', () => {
   test('16 display modal closes on backdrop click', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Display")').click();
     // Click outside the modal card
@@ -176,7 +181,7 @@ test.describe('Console: display modal', () => {
   test('17 display modal shows validation error on empty name', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Display")').click();
     await page.locator('#dm-name').fill('');
@@ -191,7 +196,7 @@ test.describe('Console: sponsor modal', () => {
   test('18 Add Sponsor button opens modal', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Sponsor")').click();
     await expect(page.locator('#spon-modal')).toBeVisible();
@@ -201,7 +206,7 @@ test.describe('Console: sponsor modal', () => {
   test('19 sponsor modal closes on Cancel', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="signage"]').click();
+    await viewAs(page, 'signage');
     await expect(page.locator('text=REGISTERED DISPLAYS')).toBeVisible();
     await page.locator('button:has-text("Add Sponsor")').click();
     await page.locator('#spon-modal button:has-text("Cancel")').click();
@@ -226,7 +231,7 @@ test.describe('Console: no JS errors on load', () => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     for (const role of ['director', 'stage', 'av', 'interp', 'reg', 'signage']) {
-      await page.locator(`.rbtn[data-role="${role}"]`).click();
+      await viewAs(page, role);
       await page.waitForTimeout(200);
     }
     expect(errors).toHaveLength(0);
@@ -267,7 +272,7 @@ test.describe('Console: timeline view (PR-020)', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Call toggleViewMode directly — no sessions loaded so it should handle gracefully
     await page.evaluate(() => {
       try { (window as any).toggleViewMode(); } catch {}

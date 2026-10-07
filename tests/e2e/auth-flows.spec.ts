@@ -23,6 +23,12 @@ async function bypassOverlay(page: Page) {
   });
 }
 
+/** The role switch lives in the header "View as" menu (redesign stage 3). */
+async function viewAs(page: Page, role: string) {
+  await page.locator('#viewas-btn').click();
+  await page.locator(`.rbtn[data-role="${role}"]`).click();
+}
+
 // ── LOGIN FORM (structural — no auth required) ─────────────────────────────
 
 test.describe('Auth: login form structure', () => {
@@ -201,35 +207,35 @@ test.describe('Director: panel structure', () => {
   test('07 sessions column is present', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     await expect(page.locator('#sessions-col')).toBeVisible();
   });
 
   test('08 sessions list is present', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     await expect(page.locator('#sessions-list')).toBeAttached();
   });
 
   test('09 context sidebar is visible', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     await expect(page.locator('#sidebar')).toBeVisible();
   });
 
   test('10 context actions area is present', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     await expect(page.locator('#ctx-actions')).toBeAttached();
   });
 
   test('11 context panel shows no-session state initially', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Without a live DB, context shows the empty/no-session state
     await expect(page.locator('#ctx-wrap')).toBeVisible();
   });
@@ -237,7 +243,7 @@ test.describe('Director: panel structure', () => {
   test('12 delay strip element exists in DOM', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     await expect(page.locator('#delay-strip')).toBeAttached();
   });
 
@@ -252,7 +258,7 @@ test.describe('Stage: panel structure', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await page.waitForTimeout(300);
     expect(errors).toHaveLength(0);
   });
@@ -260,14 +266,14 @@ test.describe('Stage: panel structure', () => {
   test('14 stage monitor button is visible in stage panel', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await expect(page.locator('button:has-text("STAGE MONITOR")')).toBeVisible();
   });
 
   test('15 clicking STAGE MONITOR opens the fullscreen overlay', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await page.locator('button:has-text("STAGE MONITOR")').click();
     await expect(page.locator('#stage-monitor')).toBeVisible();
   });
@@ -275,7 +281,7 @@ test.describe('Stage: panel structure', () => {
   test('16 stage monitor has EXIT MONITOR close button', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await page.locator('button:has-text("STAGE MONITOR")').click();
     await expect(page.locator('#sm-close')).toBeVisible();
   });
@@ -283,7 +289,7 @@ test.describe('Stage: panel structure', () => {
   test('17 EXIT MONITOR button closes the overlay', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await page.locator('button:has-text("STAGE MONITOR")').click();
     await expect(page.locator('#stage-monitor')).toBeVisible();
     await page.locator('#sm-close').click();
@@ -293,7 +299,7 @@ test.describe('Stage: panel structure', () => {
   test('18 stage monitor has status, title, and timer elements', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="stage"]').click();
+    await viewAs(page, 'stage');
     await page.locator('button:has-text("STAGE MONITOR")').click();
     await expect(page.locator('#sm-status')).toBeAttached();
     await expect(page.locator('#sm-title')).toBeAttached();
@@ -312,7 +318,7 @@ test.describe('Other roles: structural sanity', () => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     // Use data-role selector — :has-text("av") matches SAVE buttons too (5 elements)
-    await page.locator('.rbtn[data-role="av"]').click();
+    await viewAs(page, 'av');
     await page.waitForTimeout(300);
     expect(errors).toHaveLength(0);
   });
@@ -322,7 +328,7 @@ test.describe('Other roles: structural sanity', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="interp"]').click();
+    await viewAs(page, 'interp');
     await page.waitForTimeout(300);
     expect(errors).toHaveLength(0);
   });
@@ -332,7 +338,7 @@ test.describe('Other roles: structural sanity', () => {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
-    await page.locator('.rbtn[data-role="reg"]').click();
+    await viewAs(page, 'reg');
     await page.waitForTimeout(300);
     expect(errors).toHaveLength(0);
   });
@@ -390,7 +396,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();
     await page.waitForTimeout(2000);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Wait for session card to render
     const sessionCard = page.locator(`#card-${process.env.TEST_SESSION_ID}`);
     await sessionCard.waitFor({ timeout: 5000 });
@@ -408,7 +414,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();
     await page.waitForTimeout(2000);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Click HOLD (appears in ctx-actions when a LIVE session exists)
     const holdBtn = page.locator('button.hold:has-text("Hold")');
     if (await holdBtn.count() > 0) {
@@ -424,7 +430,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await page.locator('#lf-password').fill(process.env.TEST_PASSWORD!);
     await page.locator('#login-form button[type="submit"]').click();
     await page.waitForTimeout(2000);
-    await page.locator('.rbtn[data-role="director"]').click();
+    await viewAs(page, 'director');
     // Structural pass — delay buttons exist when sessions are loaded
     const delay5 = page.locator('button[onclick*="applyDelay"]:has-text("5")');
     const count = await delay5.count();

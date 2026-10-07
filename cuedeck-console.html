@@ -352,42 +352,10 @@
     .um-activate-btn { border: 1px solid rgba(16,185,129,.3); color: #34d399; background: rgba(16,185,129,.08); }
     .um-remove-btn { border: 1px solid rgba(239,68,68,.3); color: var(--red-lt); background: rgba(239,68,68,.08); }
     .um-empty { font-size: var(--fs-12); color:var(--dim); text-align:center; padding:12px 0; }
-    #users-btn {
-      display:none; align-items:center; gap:5px; position:relative;
-      background:rgba(37,99,235,0.12); border:1px solid rgba(37,99,235,0.3);
-      color:var(--blue-lt); font-weight:600;
-      border-radius:5px; padding:3px 9px; font-size: var(--fs-11);
-      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
-    }
-    #users-btn:hover { filter:brightness(1.15); }
     #users-badge {
       display:none; background:var(--red); color:#fff;
       border-radius:8px; padding:1px 5px; font-size: var(--fs-11); font-weight:700;
     }
-    /* ── LOGOUT BUTTON ── */
-    #logout-btn {
-      background: none; border: none; color: var(--dim);
-      font-size: var(--fs-14); cursor: pointer; padding: 0 4px;
-      line-height: 1; opacity: .6;
-    }
-    #logout-btn:hover { opacity: 1; color: var(--red); }
-    /* BILLING BUTTON */
-    #billing-btn {
-      display:none; align-items:center; gap:5px;
-      background:rgba(37,99,235,0.12); border:1px solid rgba(37,99,235,0.3);
-      color:var(--blue-lt); font-weight:600;
-      border-radius:5px; padding:3px 9px; font-size: var(--fs-11);
-      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
-    }
-    #billing-btn:hover { filter:brightness(1.15); }
-    #checkin-btn {
-      display:flex; align-items:center; gap:5px;
-      background:rgba(37,99,235,0.12); border:1px solid rgba(37,99,235,0.3);
-      color:var(--blue-lt); font-weight:600; text-decoration:none;
-      border-radius:5px; padding:3px 9px; font-size: var(--fs-11);
-      font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap;
-    }
-    #checkin-btn:hover { filter:brightness(1.15); }
     /* USER CHIP */
     .user-chip {
       display:none; align-items:center; gap:7px;
@@ -404,8 +372,6 @@
     }
     .uc-name  { font-size: var(--fs-11); font-weight:600; color:#CBD5E1; }
     .uc-role  { font-size: var(--fs-11); font-weight:700; text-transform:uppercase; letter-spacing:.07em; }
-    .uc-sep   { width:1px; height:14px; background:rgba(148,163,184,0.15); }
-    .uc-caret { color:var(--text-muted); font-size: var(--fs-11); }
     /* PROFILE PANEL */
     .profile-panel {
       position:fixed; top:52px; right:0;
@@ -492,65 +458,14 @@
     }
     .logo { display: flex; align-items: center; }
     .logo svg { height: 30px; width: auto; }
-    #event-name { flex: 1; font-size: var(--fs-11); color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #hdr-clock  { font-size: var(--fs-clock); font-weight: 700; letter-spacing: var(--ls-big); color: var(--text-primary); min-width: 100px; text-align: right; font-variant-numeric: tabular-nums; }
     #hdr-offset { font-size: var(--fs-11); color: var(--text-muted); min-width: 72px; text-align: center; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    #conn-pill {
-      display: flex; align-items: center; gap: 5px;
-      font-size: var(--fs-11); padding: 4px 10px;
-      border-radius: 100px; background: rgba(255,255,255,0.03);
-      border: 1px solid var(--border);
-    }
-    #conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
-    #conn-dot.live         { background: var(--green); box-shadow: 0 0 6px var(--green); }
-    #conn-dot.reconnecting { background: var(--amber); animation: blink .8s infinite; }
 
-    /* ── DIAG BAR ── */
-    #diag-bar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border-section);
-      padding: 4px 20px;
-      display: flex; gap: 16px; align-items: center;
-      font-size: var(--fs-11); color: var(--text-muted);
-      flex-shrink: 0;
-    }
-    .di { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.03); border-radius: 4px; padding: 3px 8px; }
     .dd { width: 8px; height: 8px; border-radius: 50%; background: #374151; }
     .dd.ok       { background: var(--green); box-shadow: 0 0 4px rgba(34,197,94,0.5); }
     .dd.error    { background: var(--red); }
     .dd.checking { background: var(--amber); animation: blink .8s infinite; }
 
-    /* ── ROLE BAR ── */
-    #role-bar {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border-section);
-      padding: 5px 20px;
-      display: flex; align-items: center; gap: 4px;
-      flex-shrink: 0;
-    }
-    #role-bar label { font-size: var(--fs-11); color: var(--text-muted); letter-spacing: .08em; text-transform: uppercase; margin-right: 4px; font-weight: 600; }
-    .rbtn {
-      padding: 0 14px; height: 30px; border-radius: 6px;
-      border: 1px solid rgba(148,163,184,0.15); background: transparent;
-      color: var(--text-muted); font-size: var(--fs-11); cursor: pointer;
-      font-family: inherit; font-weight: 600; letter-spacing: .06em;
-      text-transform: uppercase; transition: all .12s;
-    }
-    .rbtn:hover { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.25); }
-    .rbtn.active { background: var(--card-hi); color: var(--text-primary); border-color: rgba(148,163,184,0.3); box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
-    #ev-select-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--dim); }
-    .ev-pill { display:flex;align-items:center;background:var(--overlay);border-radius:8px;border:1px solid var(--border-strong);overflow:visible;cursor:pointer;transition:border-color .12s; }
-    .ev-pill:hover { border-color:rgba(148,163,184,0.35); }
-    .ev-pill-label { padding:6px 10px;font-size: var(--fs-11);color:#94a3b8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:var(--border-section);border-radius:8px 0 0 8px; }
-    .ev-pill-name { padding:6px 14px;font-size: var(--fs-11);color:var(--text-primary);font-weight:700;letter-spacing:.04em;text-transform:uppercase; }
-    .ev-pill-chev { padding:6px 8px;font-size: var(--fs-11);color:var(--text-muted); }
-    .ev-pill-dd { position:absolute;top:100%;right:0;margin-top:4px;background:var(--overlay);border:1px solid var(--border-strong);border-radius:8px;padding:4px;min-width:180px;z-index:200;display:none; }
-    .ev-pill-dd.open { display:block; }
-    .ev-pill-dd button { display:block;width:100%;text-align:left;padding:6px 12px;border:none;background:none;color:#94a3b8;font-size: var(--fs-11);font-family:inherit;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:background .1s; }
-    .ev-pill-dd button:hover { background:var(--border);color:var(--text-primary); }
-    .ev-pill-dd button.active { color:var(--blue-lt);background:rgba(37,99,235,0.1); }
-    .ev-add-btn { width:28px;height:28px;border-radius:8px;border:1px solid rgba(37,99,235,0.4);background:rgba(37,99,235,0.15);color:var(--blue-lt);font-size: var(--fs-14);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;flex-shrink:0; }
-    .ev-add-btn:hover { background:rgba(37,99,235,0.25);border-color:rgba(37,99,235,0.6); }
 
     /* ── MAIN LAYOUT ── */
     #main { flex: 1; display: flex; overflow: hidden; background: var(--bg); }
@@ -725,8 +640,6 @@
     }
 
     /* Clock */
-    #sb-time    { font-size: 36px; font-weight: 200; letter-spacing: .04em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-    .ck-details { font-size: var(--fs-11); color: var(--text-muted); margin-top: 6px; display: flex; flex-direction: column; gap: 3px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
     .ck-val     { color: var(--text-primary); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: var(--fs-11); }
     .ck-val.drifted { color: var(--amber); }
 
@@ -767,7 +680,6 @@
       display: flex; align-items: center; gap: 8px;
       flex-shrink: 0;
     }
-    #bc-bar label { font-size: var(--fs-11); color: var(--text-muted); letter-spacing: .1em; text-transform: uppercase; font-weight: 600; white-space: nowrap; }
     #bc-input {
       flex: 1; background: rgba(255,255,255,0.04);
       border: 1px solid rgba(148,163,184,0.15); border-radius: 6px;
@@ -782,7 +694,6 @@
       font-size: var(--fs-11); font-family: inherit;
     }
     /* ── BROADCAST IMPROVEMENTS ── */
-    .bc-presets { display:flex; gap:4px; flex-shrink:0; }
     .bc-preset-btn {
       background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
       color: var(--dim); font-size: var(--fs-11); font-family: inherit; padding: 3px 8px;
@@ -829,15 +740,6 @@
     }
     .import-btn:hover { background: rgba(99,102,241,.16); }
 
-    /* ── AUTO-START TOGGLE ── */
-    #auto-start-btn {
-      display: none; background: none; border: 1px solid var(--border);
-      color: var(--dim); border-radius: 5px; padding: 3px 9px;
-      font-size: var(--fs-11); font-family: inherit; cursor: pointer;
-      transition: all .15s; white-space: nowrap;
-    }
-    #auto-start-btn.enabled { border-color: rgba(34,197,94,.4); color: var(--green); background: rgba(34,197,94,.08); }
-    #auto-start-btn:hover   { border-color: var(--green); color: var(--green); }
 
     /* ── LOG EXPORT ── */
     .log-export-btn {
@@ -1368,10 +1270,6 @@
     }
 
     /* ── Operator presence indicator (PR-009) ──────────────────────────────── */
-    #presence-bar { display: flex; align-items: center; gap: 10px; }
-    .pr-role { display: flex; align-items: center; gap: 4px; font-size: var(--fs-11); color: var(--dim); letter-spacing: .05em; cursor: default; }
-    .pr-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); transition: background .3s; flex-shrink: 0; }
-    .pr-dot.online { background: var(--green); }
 
     /* ── Timeline view (PR-020) ────────────────────────────────────────────── */
     #timeline-wrap { padding: 12px 8px; overflow-x: auto; }
@@ -1497,11 +1395,6 @@
       #sidebar.sidebar-open { transform: translateX(0); }
       #sidebar-toggle { display: block; }
 
-      /* ROLE BAR */
-      #role-bar { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-      #role-bar::-webkit-scrollbar { display: none; }
-      #role-bar label { display: none; }
-      .rbtn { padding: 0 10px; flex-shrink: 0; }
 
       /* BROADCAST BAR */
       #bc-bar > label { display: none; }
@@ -1511,10 +1404,6 @@
       #filter-bar { flex-wrap: wrap; }
       #fb-search { max-width: none; }
 
-      /* DIAG BAR */
-      .di span { font-size: 0; }
-      .di { padding: 3px 5px; }
-      #diag-bar { padding: 4px 12px; gap: 10px; }
 
       /* MODALS — constrain height on tablet */
       .ev-modal-card { max-height: 90vh; overflow-y: auto; }
@@ -1526,18 +1415,10 @@
       #header { padding: 0 10px; gap: 8px; }
       #hdr-offset { display: none; }
       #hdr-clock { font-size: var(--fs-16); min-width: 68px; }
-      #event-name { display: none; }
       #plan-badge { display: none !important; }
-      #presence-bar { display: none; }
       /* Logo: show icon + text, scaled for mobile */
       .logo { flex-shrink: 0; }
       .logo svg { height: 24px; width: auto; }
-      /* Hide header buttons — moved to hamburger menu */
-      #billing-btn { display: none !important; }
-      #users-btn { display: none !important; }
-      #checkin-btn { display: none !important; }
-      #logout-btn { display: none !important; }
-      #auto-start-btn { display: none !important; }
       .user-chip { display: none !important; }
       #help-btn  { display: none !important; }
       /* Show hamburger — push to far right */
@@ -1558,12 +1439,6 @@
       #sidebar.sidebar-open { transform: translateX(0); }
       #sidebar-toggle { display: block; }
 
-      /* ROLE BAR — wrap: roles on row 1, event selector on row 2 */
-      #role-bar { padding: 5px 10px; flex-wrap: wrap; gap: 4px 4px; }
-      #role-bar label { display: none; }
-      .rbtn { padding: 0 8px; height: 28px; font-size: var(--fs-11); flex-shrink: 0; }
-      #ev-select-wrap { flex-basis: 100%; gap: 4px; margin-left: 0; }
-      #ev-select-wrap button, #ev-select-wrap select { font-size: var(--fs-11); }
 
       /* FILTER BAR — search full width, filters behind toggle, timeline always visible */
       #filter-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
@@ -1594,8 +1469,6 @@
       .bc-char { display: none; }
       #bc-pri { height: 34px; }
 
-      /* DIAG BAR — hide on mobile */
-      #diag-bar { display: none; }
 
       /* MODALS — full-width friendly */
       .ev-modal-card { min-width: 0; max-width: calc(100vw - 24px); max-height: 90vh; overflow-y: auto; }
@@ -1620,8 +1493,6 @@
     /* Sidebar slides from left in RTL */
     [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
     [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
-    /* Role bar: RTL direction with translated labels */
-    [dir="rtl"] #role-bar { direction: rtl; }
     /* Session cards: full RTL layout */
     [dir="rtl"] .sc { direction: rtl; text-align: right; }
     [dir="rtl"] .sc-top { direction: rtl; flex-direction: row-reverse; }
@@ -1636,8 +1507,6 @@
     [dir="rtl"] #filter-bar { direction: rtl; }
     [dir="rtl"] #bc-bar { direction: rtl; flex-direction: row-reverse; }
     [dir="rtl"] #bc-input { text-align: right; }
-    /* Diagnostic bar */
-    [dir="rtl"] #diag-bar { direction: rtl; }
     /* Modals */
     [dir="rtl"] .ev-modal-card { direction: rtl; text-align: right; }
     [dir="rtl"] .ev-modal-card label { text-align: right; }
@@ -1662,8 +1531,6 @@
     [dir="rtl"] .help-dropdown button { text-align: right; }
     /* Log feed */
     [dir="rtl"] .log-entry { direction: rtl; text-align: right; }
-    /* Presence bar */
-    [dir="rtl"] #presence-bar { direction: rtl; }
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
@@ -1771,6 +1638,85 @@
     .pill.is-warn { border-color: var(--st-hold-line); color: var(--st-hold-fg); }   .pill.is-warn .dot { background: var(--st-hold); }
     .pill.is-err  { border-color: var(--st-live-line); color: var(--st-live-fg); }   .pill.is-err  .dot { background: var(--st-live); animation: conn-lost 1s ease-in-out infinite; }
     @keyframes conn-lost { 50% { opacity: .35; } }
+    /* ═══ Command center header and chrome (stage 3) ═══ */
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    #bc-banner { display: none; align-items: center; gap: 10px; height: 28px; padding: 0 16px; font-size: var(--fs-13); font-weight: 600; text-align: start; flex-shrink: 0; animation: none; }
+    #bc-banner .bc-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #bc-banner .bc-when { color: var(--text-tertiary); font-weight: 500; font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+    #bc-banner .bc-dismiss { position: static; transform: none; height: 24px; opacity: 1; }
+    .bc-chip.info { color: var(--accent-fg); }
+    .bc-chip.warn { color: var(--st-hold-fg); border-color: var(--st-hold-line); }
+    .bc-chip.critical { color: var(--st-live-fg); border-color: var(--st-live-line); }
+    #header { height: 52px; padding: 0 16px; gap: 12px; background: var(--panel); border-bottom: 1px solid var(--border-section); backdrop-filter: none; }
+    .hdr-spacer { flex: 1 1 0; min-width: 8px; }
+    .hdr-pop-wrap { position: relative; display: flex; align-items: center; }
+    #ev-select-wrap { min-width: 0; flex: 0 1 auto; margin: 0; }
+    .ev-switch { display: grid; gap: 2px; min-width: 0; max-width: 340px; padding: 4px 8px; border-radius: var(--r-ctl); background: transparent; border: 1px solid transparent; color: var(--text-primary); text-align: start; cursor: pointer; font-family: var(--font-sans); }
+    .ev-switch:hover { background: var(--raised); }
+    .ev-switch-name { display: flex; align-items: center; gap: 4px; font-size: var(--fs-14); font-weight: 700; min-width: 0; }
+    #event-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ev-switch-sub { font-size: var(--fs-12); color: var(--text-tertiary); white-space: nowrap; }
+    .hdr-menu, .ev-pill-dd, .hdr-pop { position: absolute; top: calc(100% + 6px); z-index: 300; min-width: 220px; padding: 6px; background: var(--overlay); border: 1px solid var(--border-section); border-radius: var(--r-ctl); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+    .ev-pill-dd { inset-inline-start: 0; display: none; }
+    .ev-pill-dd.open { display: block; }
+    .hdr-pop, .hdr-menu { inset-inline-end: 0; }
+    .hdr-menu[hidden], .hdr-pop[hidden], #brain-wrap[hidden], #bc-chip[hidden], #role-lock[hidden], #viewas-btn[hidden] { display: none; }
+    .hdr-menu button, .ev-pill-dd button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font: 500 var(--fs-13) var(--font-sans); text-align: start; text-transform: none; letter-spacing: 0; cursor: pointer; }
+    .hdr-menu button:hover, .ev-pill-dd button:hover, .hdr-menu button.active, .ev-pill-dd button.active { background: var(--raised); color: var(--text-primary); }
+    .ev-pill-dd .hd-sep { height: 1px; background: var(--border-divider); margin: 4px 6px; }
+    .hdr-pop { display: grid; gap: 8px; padding: 12px; min-width: 260px; }
+    .hdr-pop-wide { min-width: 320px; }
+    .hdr-pop .di { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--text-secondary); }
+    .dd { width: 8px; height: 8px; border-radius: 50%; background: var(--st-planned); }
+    .dd.ok { background: var(--st-ready); box-shadow: none; }
+    .dd.error { background: var(--st-live); }
+    .dd.checking { background: var(--st-hold); animation: none; }
+    .sys-clock { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: var(--fs-12); color: var(--text-tertiary); }
+    .sys-clock dd { margin: 0; color: var(--text-primary); font-family: var(--font-mono); }
+    .sys-foot { font-size: var(--fs-12); color: var(--text-tertiary); }
+    #hdr-clock { min-width: 120px; text-align: center; }
+    #conn-dot.reconnecting, #conn-dot.offline { background: var(--st-live); }
+    #conn-dot.reconnecting { animation: blink .8s infinite; }   /* kept from stage 1: the reconnecting dot blinks (show-safety motion test) */
+    .crew-dots { display: inline-flex; gap: 3px; }
+    .crew-dots i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--text-disabled); }
+    .crew-dots i.on { background: var(--st-ready); border-color: var(--st-ready); }
+    .crew-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .crew-list li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-13); color: var(--text-primary); }
+    .crew-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-ready); }
+    .crew-role { margin-inline-start: auto; color: var(--text-tertiary); font-size: var(--fs-12); }
+    .crew-none { color: var(--text-tertiary); }
+    .pill-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); font-size: var(--fs-11); font-weight: 700; display: inline-grid; place-items: center; }
+    .role-lock { cursor: default; }
+    .rbtn { text-transform: none; }
+    #help-btn { height: var(--btn-sm); position: relative; }
+    .help-dropdown { top: 50px; background: var(--overlay); border: 1px solid var(--border-section); border-radius: var(--r-ctl); }
+    .help-dropdown button { display: flex; align-items: center; gap: 8px; }
+    .user-chip { align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 4px; border-radius: var(--r-pill); background: transparent; border: 1px solid transparent; color: var(--text-secondary); font-family: var(--font-sans); cursor: pointer; }
+    .user-chip:hover { background: var(--raised); filter: none; }
+    .uc-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--raised); border: 1px solid var(--border-control); color: var(--text-primary); display: grid; place-items: center; font: 700 var(--fs-11) var(--font-sans); }
+    .uc-name { font-size: var(--fs-13); font-weight: 600; color: var(--text-primary); }
+    .profile-panel { background: var(--overlay); border: 1px solid var(--border-section); border-radius: var(--r-modal); }
+    .pp-action { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; text-decoration: none; }
+    .pp-label { flex: 1; text-align: start; }
+    #auto-start-btn[aria-checked="true"] { color: var(--st-ready-fg); }
+    .pp-group { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--border-divider); margin-top: 6px; }
+    .pp-group-lbl { padding: 4px 10px; }
+    #bc-bar { height: 52px; padding: 0 16px; gap: 8px; }
+    .bc-presets-menu { position: relative; }
+    .bc-presets-menu > summary { list-style: none; }
+    .bc-presets-menu > summary::-webkit-details-marker { display: none; }
+    .bc-presets-list { bottom: calc(100% + 6px); top: auto; inset-inline-start: 0; inset-inline-end: auto; }
+    .bc-presets-menu:not([open]) .bc-presets-list { display: none; }
+    /* Phone: logo, event name, clock, status dot and the menu button fit in 390 px;
+       crew, View as and AVE Brain stay on desktop and tablet (the role shows in the menu). */
+    @media screen and (max-width: 767px) {
+      #header { gap: 8px; padding: 0 10px; }
+      .ev-switch { padding: 4px; }
+      .ev-switch-sub, #crew-pill, #viewas-wrap, #brain-wrap, #bc-chip { display: none; }
+      #hdr-clock { min-width: 0; flex: none; }
+      .hdr-spacer { min-width: 0; }
+      #bc-bar { height: auto; }   /* the composer wraps to two rows on a phone */
+    }
 </style>
 </head>
 <body>
@@ -1835,6 +1781,7 @@
 
 <!-- TOAST NOTIFICATIONS -->
 <div id="toast-container"></div>
+<div id="sr-announcer" class="sr-only" role="status" aria-live="assertive"></div>
 
 <!-- UNDO BAR -->
 <div id="undo-bar" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
@@ -1991,58 +1938,93 @@
 </div>
 
 <!-- BROADCAST BANNER -->
-<div id="bc-banner"></div>
+<div id="bc-banner" role="status" aria-live="polite"></div>
 
-<!-- HEADER -->
-<div id="header">
+<!-- HEADER (52 px) -->
+<div id="header" role="banner">
   <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="hl-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#hl-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text></svg></div>
-  <div id="event-name">—</div>
-  <div id="plan-badge"></div>
-  <div id="presence-bar"></div>
+  <div id="ev-select-wrap" class="hdr-pop-wrap">
+    <button type="button" id="ev-switch" class="ev-switch" aria-haspopup="menu" aria-expanded="false" aria-controls="ev-pill-dd" onclick="toggleEvDropdown()">
+      <span class="ev-switch-name"><span id="event-name">–</span><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg></span>
+      <span id="event-sub" class="ev-switch-sub"></span>
+    </button>
+    <div id="ev-pill-dd" class="ev-pill-dd" role="menu"></div>
+  </div>
+  <span class="hdr-spacer"></span>
   <div id="hdr-clock">--:--:--</div>
-  <div id="hdr-offset">offset: —</div>
-  <div id="conn-pill">
-    <div id="conn-dot"></div>
-    <span id="conn-lbl">offline</span>
-  </div>
-  <button id="auto-start-btn" onclick="toggleAutoStart()" title="Auto-start sessions at planned time">⏱ AUTO</button>
-  <button id="billing-btn" onclick="openBillingModal()" title="Manage billing" style="display:none">&#x1F4B3; Billing</button>
-  <a id="checkin-btn" href="/checkin" target="_blank" rel="noopener" title="Open the check-in desk">Check-in</a>
-  <button id="users-btn" onclick="openUsersModal()" title="Manage operator accounts">
-    &#x1F465; Operators <span id="users-badge"></span>
-  </button>
-  <select id="lang-switcher" onchange="CueDeckI18n.setLocale(this.value);location.reload()"
-    title="Language"
-    style="background:var(--input-bg);border:1px solid var(--border);color:var(--text-primary);
-           padding:3px 6px;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;outline:none">
-    <option value="en">EN</option>
-    <option value="ar">AR</option>
-    <option value="pl">PL</option>
-    <option value="de">DE</option>
-  </select>
-  <button id="logout-btn" onclick="doLogout()" title="Sign out" style="display:none">⏻</button>
-  <button id="help-btn" onclick="toggleHelpMenu()" title="Help &middot; Press ? anytime">Help<span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
-  <div id="help-dropdown" class="help-dropdown">
-    <button onclick="openShortcutsModal();closeHelpMenu()">⌨️ Keyboard Shortcuts</button>
-    <button onclick="openQuickRefModal();closeHelpMenu()">📋 Quick Reference</button>
-    <button onclick="openChangelogModal();closeHelpMenu()">🆕 What's New</button>
-    <div class="hd-sep"></div>
-    <button onclick="window.open('https://www.cuedeck.io/docs','_blank');closeHelpMenu()">📖 Documentation</button>
-    <button onclick="openFeedbackModal();closeHelpMenu()">💬 Send Feedback</button>
-    <button onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()">📧 Contact Support</button>
-    <div class="hd-sep"></div>
-    <button onclick="openAboutModal();closeHelpMenu()">ℹ️ About CueDeck</button>
-  </div>
-  <!-- USER CHIP + PROFILE PANEL -->
-  <div id="user-chip" class="user-chip" onclick="toggleProfilePanel(event)">
-    <div id="user-chip-avatar" class="uc-avatar"></div>
-    <div>
-      <div id="user-chip-name" class="uc-name"></div>
-      <div id="user-chip-role" class="uc-role"></div>
+  <span class="hdr-spacer"></span>
+  <button type="button" id="bc-chip" class="pill bc-chip" hidden onclick="reopenBanner()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg><span data-i18n="cc.bc.show">Show broadcast</span></button>
+  <div class="hdr-pop-wrap">
+    <button type="button" id="conn-pill" class="pill" aria-haspopup="dialog" aria-expanded="false" aria-controls="sys-pop" onclick="window.togglePopover('sys-pop', this)">
+      <span id="conn-dot" class="dot"></span><span id="conn-lbl">offline</span>
+    </button>
+    <div id="sys-pop" class="hdr-pop" role="dialog" aria-labelledby="sys-pop-title" hidden>
+      <div class="lbl" id="sys-pop-title" data-i18n="cc.sys.title">System status</div>
+      <div class="di"><span class="dd checking" id="dd-db"></span><span id="dl-db">database</span></div>
+      <div class="di"><span class="dd checking" id="dd-rt"></span><span id="dl-rt">realtime</span></div>
+      <div class="di"><span class="dd checking" id="dd-ck"></span><span id="dl-ck">clock</span></div>
+      <div class="di"><span class="dd" id="dd-ef"></span><span id="dl-ef">edge functions</span></div>
+      <div class="lbl" data-i18n="cc.sys.clock">Clock</div>
+      <dl class="sys-clock">
+        <dt data-i18n="cc.sys.offset">Offset</dt><dd class="ck-val" id="ck-off">–</dd>
+        <dt data-i18n="cc.sys.rtt">Round trip</dt><dd class="ck-val" id="ck-rtt">–</dd>
+        <dt data-i18n="cc.sys.synced">Last sync</dt><dd class="ck-val" id="ck-sync">–</dd>
+        <dt>Tick</dt><dd class="ck-val" id="ck-tick">–</dd>
+      </dl>
+      <div class="sys-foot"><span id="hdr-offset">offset: –</span> · <span data-i18n="cc.sys.sessions">Sessions</span> <span id="di-cnt">–</span></div>
     </div>
-    <div class="uc-sep"></div>
-    <span class="uc-caret">&#9662;</span>
   </div>
+  <div class="hdr-pop-wrap">
+    <button type="button" id="crew-pill" class="pill" aria-haspopup="dialog" aria-expanded="false" aria-controls="crew-pop" onclick="window.togglePopover('crew-pop', this)">
+      <span id="presence-bar" class="crew-dots"></span><span id="crew-count">Crew 0/5</span>
+    </button>
+    <div id="crew-pop" class="hdr-pop" role="dialog" aria-labelledby="crew-pop-title" hidden>
+      <div class="lbl" id="crew-pop-title" data-i18n="cc.hdr.crewTitle">Crew online</div>
+      <ul id="crew-list" class="crew-list"></ul>
+    </div>
+  </div>
+  <div class="hdr-pop-wrap" id="brain-wrap" hidden>
+    <button type="button" id="brain-badge" class="pill" aria-haspopup="dialog" aria-expanded="false" aria-controls="brain-pop" onclick="window.togglePopover('brain-pop', this)">
+      <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg><span data-i18n="cc.hdr.brain">AVE Brain</span><span id="brain-count" class="pill-count"></span>
+    </button>
+    <div id="brain-pop" class="hdr-pop hdr-pop-wide" role="dialog" aria-labelledby="brain-pop-title" hidden>
+      <div id="ave-brain-wrap">
+        <div class="lbl" id="brain-pop-title" data-i18n="cc.hdr.brain">AVE Brain</div>
+        <div id="ave-brain-cards"><p class="brain-empty">Loading…</p></div>
+        <a href="https://ave-brain.vercel.app/insights" target="_blank" rel="noopener" class="brain-link">View all</a>
+      </div>
+    </div>
+  </div>
+  <div id="plan-badge"></div>
+  <div class="hdr-pop-wrap" id="viewas-wrap">
+    <button type="button" id="viewas-btn" class="pill" aria-haspopup="menu" aria-expanded="false" aria-controls="viewas-menu" onclick="window.togglePopover('viewas-menu', this)">
+      <span id="viewas-lbl">View as Director</span><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg>
+    </button>
+    <div id="viewas-menu" class="hdr-menu" role="menu" hidden>
+      <button type="button" class="rbtn active" role="menuitemradio" aria-checked="true"  data-role="director" onclick="setRole('director');closePopovers()">director</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="stage"    onclick="setRole('stage');closePopovers()">stage</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="av"       onclick="setRole('av');closePopovers()">av</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="interp"   onclick="setRole('interp');closePopovers()">interp</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="reg"      onclick="setRole('reg');closePopovers()">reg</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="signage"  onclick="setRole('signage');closePopovers()">signage</button>
+    </div>
+    <span id="role-lock" class="pill role-lock" hidden></span>
+  </div>
+  <button type="button" id="help-btn" class="btn sm ghost" onclick="toggleHelpMenu()" aria-haspopup="menu" title="Help · Press ? anytime"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-help"/></svg><span>Help</span><span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
+  <div id="help-dropdown" class="help-dropdown" role="menu">
+    <button role="menuitem" onclick="openShortcutsModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg><span class="hd-label">Keyboard Shortcuts</span></button>
+    <button role="menuitem" onclick="openQuickRefModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg><span class="hd-label">Quick Reference</span></button>
+    <button role="menuitem" onclick="openChangelogModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg><span class="hd-label">What's New</span></button>
+    <div class="hd-sep"></div>
+    <button role="menuitem" onclick="window.open('https://www.cuedeck.io/docs','_blank');closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-book"/></svg><span class="hd-label">Documentation</span></button>
+    <button role="menuitem" onclick="openFeedbackModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-message"/></svg><span class="hd-label">Send Feedback</span></button>
+    <button role="menuitem" onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg><span class="hd-label">Contact Support</span></button>
+    <div class="hd-sep"></div>
+    <button role="menuitem" onclick="openAboutModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span class="hd-label">About CueDeck</span></button>
+  </div>
+  <button type="button" id="user-chip" class="user-chip" aria-haspopup="menu" aria-expanded="false" aria-label="Account" onclick="toggleProfilePanel(event)">
+    <span id="user-chip-avatar" class="uc-avatar"></span><span id="user-chip-name" class="uc-name"></span><span id="user-chip-role" class="uc-role" hidden></span><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg>
+  </button>
   <div id="profile-panel" class="profile-panel" style="display:none" onclick="event.stopPropagation()">
       <div class="pp-identity" style="position:relative">
         <div id="pp-avatar" class="pp-avatar"></div>
@@ -2094,33 +2076,38 @@
         <p id="pp-trial-note" class="pp-trial-note" style="display:none"></p>
         <div id="pp-usage"></div>
       </div>
-      <div class="pp-actions">
-        <button id="pp-billing-btn" class="pp-action" style="display:none"
-                onclick="openBillingModal();closeProfilePanel()">
-          <span class="pp-action-icon">&#x1F4B3;</span>Manage Billing
-        </button>
-        <button id="pp-invoices-btn" class="pp-action" style="display:none"
-                onclick="openInvoiceModal();closeProfilePanel()">
-          <span class="pp-action-icon">&#x1F4CB;</span>Invoices
-        </button>
+      <div class="pp-actions" role="menu">
+        <a id="checkin-btn" class="pp-action" role="menuitem" href="/checkin" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-checkin"/></svg><span class="pp-label" data-i18n="cc.menu.checkin">Check-in</span></a>
+        <button id="users-btn" class="pp-action" role="menuitem" style="display:none" onclick="closeProfilePanel();openUsersModal()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-team"/></svg><span class="pp-label" data-i18n="cc.menu.team">Team</span><span id="users-badge"></span></button>
+        <button id="pp-billing-btn" class="pp-action" role="menuitem" style="display:none" onclick="openBillingModal();closeProfilePanel()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-card"/></svg><span class="pp-label" data-i18n="cc.menu.billing">Billing</span></button>
+        <button id="pp-invoices-btn" class="pp-action" role="menuitem" style="display:none" onclick="openInvoiceModal();closeProfilePanel()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-report"/></svg><span class="pp-label" data-i18n="cc.menu.invoices">Invoices</span></button>
         <div id="pp-upgrade-wrap" style="display:none">
-          <button class="pp-action pp-upgrade" onclick="openBillingModal();closeProfilePanel()">
-            <span class="pp-action-icon">&#x2B06;&#xFE0F;</span>Upgrade Plan
-          </button>
+          <button class="pp-action pp-upgrade" role="menuitem" onclick="openBillingModal();closeProfilePanel()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-arrow-up"/></svg><span class="pp-label" data-i18n="cc.menu.upgrade">Upgrade plan</span></button>
+        </div>
+        <label class="pp-action pp-lang"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg><span class="pp-label" data-i18n="cc.menu.language">Language</span>
+          <select id="lang-switcher" aria-label="Language" onchange="CueDeckI18n.setLocale(this.value);location.reload()">
+            <option value="en">EN</option><option value="ar">AR</option><option value="pl">PL</option><option value="de">DE</option>
+          </select>
+        </label>
+        <button class="pp-action" role="menuitem" onclick="closeProfilePanel();openShortcutsModal()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg><span class="pp-label" data-i18n="cc.menu.shortcuts">Shortcuts</span></button>
+        <button id="auto-start-btn" class="pp-action" role="menuitemcheckbox" aria-checked="false" onclick="toggleAutoStart()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-timer"/></svg><span class="pp-label" data-i18n="cc.menu.autoStart">Auto-start</span></button>
+        <div id="ai-agents-wrap" class="pp-group" style="display:none">
+          <div class="lbl pp-group-lbl" data-i18n="cc.menu.tools">Tools</div>
+          <button class="pp-action" role="menuitem" title="Manually trigger an incident advisory modal" onclick="closeProfilePanel();ensureAgentsInited();CueDeckIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test: check signal path and connections',timestamp:new Date().toLocaleTimeString()})"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg><span class="pp-label" data-i18n="cc.menu.testIncident">Test incident alert</span></button>
+          <button class="pp-action" role="menuitem" title="Fire a demo pre-cue modal (as if 8 min before next session)" onclick="closeProfilePanel();ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(eventWallClockNow()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(eventWallClockNow()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(eventWallClockNow()+8*60000));})()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-timer"/></svg><span class="pp-label" data-i18n="cc.menu.testCue">Test cue alert</span></button>
+          <button class="pp-action" role="menuitem" id="ai-report-btn" title="Generate AI post-event report (auto-loads all session + incident data)" onclick="closeProfilePanel();ensureAgentsInited();CueDeckReportAgent.triggerFromCueDeck()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-report"/></svg><span class="pp-label" data-i18n="cc.menu.report">Generate report</span></button>
         </div>
         <div class="pp-divider"></div>
-        <button class="pp-action pp-danger" onclick="doLogout()">
-          <span class="pp-action-icon">&#x23FB;</span>Sign Out
-        </button>
+        <button class="pp-action pp-danger" role="menuitem" onclick="doLogout()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-logout"/></svg><span class="pp-label" data-i18n="cc.menu.signOut">Sign out</span></button>
       </div>
     </div>
   <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
   <div id="mobile-menu">
-    <button onclick="openShortcutsModal();toggleHamburger()">⌨️ Shortcuts</button>
-    <button onclick="openQuickRefModal();toggleHamburger()">📋 Quick Ref</button>
-    <button onclick="openChangelogModal();toggleHamburger()">🆕 What's New</button>
-    <button onclick="openAboutModal();toggleHamburger()">ℹ️ About</button>
-    <button onclick="openFeedbackModal();toggleHamburger()">💬 Feedback</button>
+    <button onclick="openShortcutsModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg>Shortcuts</button>
+    <button onclick="openQuickRefModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg>Quick Ref</button>
+    <button onclick="openChangelogModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg>What's New</button>
+    <button onclick="openAboutModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>About</button>
+    <button onclick="openFeedbackModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-message"/></svg>Feedback</button>
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     <button onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button onclick="openInvoiceModal();toggleHamburger()">Invoices</button>
@@ -2133,27 +2120,6 @@
   </div>
 </div>
 <input type="file" id="csv-import-input" accept=".csv,text/csv">
-
-<!-- DIAGNOSTICS -->
-<div id="diag-bar">
-  <div class="di"><div class="dd checking" id="dd-db"></div><span id="dl-db">database</span></div>
-  <div class="di"><div class="dd checking" id="dd-rt"></div><span id="dl-rt">realtime</span></div>
-  <div class="di"><div class="dd checking" id="dd-ck"></div><span id="dl-ck">clock</span></div>
-  <div class="di"><div class="dd"          id="dd-ef"></div><span id="dl-ef">edge functions</span></div>
-  <div style="margin-left:auto;color:var(--dim)">sessions: <span id="di-cnt">—</span></div>
-</div>
-
-<!-- ROLE BAR -->
-<div id="role-bar">
-  <label>ROLE</label>
-  <button class="rbtn active" data-role="director" onclick="setRole('director')">director</button>
-  <button class="rbtn"        data-role="stage"    onclick="setRole('stage')">stage</button>
-  <button class="rbtn"        data-role="av"       onclick="setRole('av')">av</button>
-  <button class="rbtn"        data-role="interp"   onclick="setRole('interp')">interp</button>
-  <button class="rbtn"        data-role="reg"      onclick="setRole('reg')">reg</button>
-  <button class="rbtn"        data-role="signage"  onclick="setRole('signage')">signage</button>
-  <div id="ev-select-wrap"></div>
-</div>
 
 <!-- FILTER BAR -->
 <div id="filter-bar"><!-- populated by buildFilterBar() --></div>
@@ -2195,50 +2161,6 @@
         <label class="ck-item" id="ck-launch"><input type="checkbox" disabled><span>Launch a display</span></label>
       </div>
       <div class="ck-progress"><div class="ck-bar" id="ck-bar"></div></div>
-    </div>
-
-    <!-- AI Agents panel (hidden until boot, director only) -->
-    <div class="sb-section" id="ai-agents-wrap" style="display:none">
-      <div class="sb-title">AI AGENTS</div>
-
-      <!-- Action buttons -->
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <button class="sb-action-btn btn-red"
-          title="Manually trigger an incident advisory modal"
-          onclick="ensureAgentsInited();CueDeckIncidentAdvisor.trigger({system:'AV System',location:'Main Stage',severity:'Warning',description:'Manual test — check signal path and connections',timestamp:new Date().toLocaleTimeString()})">
-          <span class="sb-btn-icon">⚠</span> Test Incident Alert
-        </button>
-        <button class="sb-action-btn btn-blue"
-          title="Fire a demo pre-cue modal (as if 8 min before next session)"
-          onclick="ensureAgentsInited();(()=>{const s=S.sessions.find(x=>!['ENDED','CANCELLED'].includes(x.status))||{title:'Demo Session',scheduled_start:new Date(eventWallClockNow()+8*60000).toISOString(),room:'Main Stage'};CueDeckCueEngine.triggerCue(CueDeckCueEngine.adaptSessions([s])[0]||{title:s.title||'Demo',startTime:new Date(eventWallClockNow()+8*60000).toTimeString().slice(0,5),location:s.room||'Main Stage',systems:[],interpreters:[]},new Date(eventWallClockNow()+8*60000));})()">
-          <span class="sb-btn-icon">⏱</span> Test Cue Alert
-        </button>
-        <button class="sb-action-btn btn-green"
-          id="ai-report-btn"
-          title="Generate AI post-event report (auto-loads all session + incident data)"
-          onclick="ensureAgentsInited();CueDeckReportAgent.triggerFromCueDeck()">
-          <span class="sb-btn-icon">📋</span> Generate Report
-        </button>
-      </div>
-    </div>
-
-    <!-- AVE Brain panel (director only) -->
-    <div class="sb-section" id="ave-brain-wrap" style="display:none">
-      <div class="sb-title">AVE BRAIN</div>
-      <div id="ave-brain-cards"><p class="brain-empty">Loading&hellip;</p></div>
-      <a href="https://ave-brain.vercel.app/insights" target="_blank" rel="noopener" class="brain-link">View all &rarr;</a>
-    </div>
-
-    <!-- Clock -->
-    <div class="sb-section">
-      <div class="sb-title">SERVER CLOCK</div>
-      <div id="sb-time">--:--:--</div>
-      <div class="ck-details">
-        <div>offset: <span class="ck-val" id="ck-off">—</span></div>
-        <div>rtt: <span class="ck-val" id="ck-rtt">—</span></div>
-        <div>synced: <span class="ck-val" id="ck-sync">—</span></div>
-        <div>tick: <span class="ck-val" id="ck-tick">—</span></div>
-      </div>
     </div>
 
     <!-- Log -->
@@ -2544,18 +2466,18 @@
 
 <!-- BROADCAST BAR -->
 <div id="bc-bar">
-  <label>BROADCAST</label>
+  <span class="lbl" data-i18n="cc.bc.label">Broadcast</span>
   <div class="bc-presets" id="bc-presets"></div>
-  <input id="bc-input" type="text" placeholder="Message to all operators…" maxlength="200"
+  <input id="bc-input" type="text" placeholder="Message to all operators" maxlength="200" aria-label="Broadcast message"
          oninput="onBCInput()" onkeydown="if(event.key==='Enter')sendBroadcast()">
   <span id="bc-char" class="bc-char"></span>
-  <select id="bc-pri">
+  <select id="bc-pri" aria-label="Priority">
     <option value="info">info</option>
     <option value="warn">warn</option>
     <option value="critical">critical</option>
   </select>
-  <button class="abtn btn-blue" style="background:#3B82F6;border-color:#3B82F6;color:#fff;font-weight:700;height:38px;padding:0 16px;border-radius:6px;" onclick="sendBroadcast()">SEND</button>
-  <button class="abtn btn-grey"  onclick="clearBroadcast()">CLEAR</button>
+  <button type="button" id="bc-send" class="btn md primary" onclick="sendBroadcast()" data-i18n="cc.bc.send">Send</button>
+  <button type="button" id="bc-clear" class="btn md" onclick="clearBroadcast()" data-i18n="cc.bc.clear">Clear</button>
 </div>
 
 <div id="rc-overlay">⟳ RECONNECTING — DATA MAY BE STALE</div>
@@ -2982,6 +2904,7 @@ function subscribeControl(eventId) {
           if (r) counts[r] = (counts[r] || 0) + 1;
         }
       }
+      S.presenceList = Object.values(state).flat().map(e => ({ role: e.role, name: e.name || '' }));
       S.presence = counts;
       refreshPresence();
     })
@@ -2994,7 +2917,7 @@ function subscribeControl(eventId) {
         pushLog('SYSTEM', 'realtime channel connected', null);
         document.getElementById('rc-overlay').style.display = 'none';
         // PR-009: track own presence
-        if (S.user) await S.ctrlChan.track({ role: S.role, userId: S.user.id }).catch(() => {});
+        if (S.user) await S.ctrlChan.track({ role: S.role, userId: S.user.id, name: S.userName || S.user.email }).catch(() => {});
       } else if (st === 'CHANNEL_ERROR') {
         onDisconnect();
       }
@@ -3095,14 +3018,14 @@ function dropStaleArms(sessionId, status) {
     }
   }
 }
-function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms) {
+function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms, act) {
   const status = armState(pending, S.sessions.find(x => x.id === sessionId)?.status);
   const prev = pending.get(sessionId);
   if (prev) { clearTimeout(prev.timer); pending.delete(sessionId); }
   if (prev && prev.status === status) {
     // Second click on the same status — proceed
     renderSessions();
-    transition(sessionId, toStatus);
+    if (act) act(); else transition(sessionId, toStatus);
     return;
   }
   // First click (or the status moved on) — show confirm state
@@ -3112,6 +3035,7 @@ function armOrConfirm(pending, sessionId, btn, toStatus, labelKey, ms) {
   }, ms);
   pending.set(sessionId, arm);
   if (btn) { btn.textContent = t(labelKey); btn.classList.add('confirm-pending'); }
+  announce(t(labelKey));
   renderSessions();
 }
 function confirmCancel(sessionId, btn) {
@@ -3500,7 +3424,29 @@ async function markArrived(sessionId, arrived) {
 // ═══════════════════════════════════════════════════
 // BROADCAST
 // ═══════════════════════════════════════════════════
-async function sendBroadcast() {
+// Critical needs a second press within 3 s (spec 2.9); info and warn send at once.
+// The arm is the shared one (armOrConfirm): solid red, announced, re-render safe.
+const _bcPending = new Map();
+function sendBroadcast() {
+  const msg = document.getElementById('bc-input').value.trim();
+  const pri = document.getElementById('bc-pri').value;
+  if (!msg || !S.event) return;
+  if (pri === 'critical') {
+    armOrConfirm(_bcPending, 'critical', document.getElementById('bc-send'), null, 'cc.bc.pressAgain', 3000, doSendBroadcast);
+    return;
+  }
+  doSendBroadcast();
+}
+// The Send button renders from _bcPending (like End and Cancel render from
+// theirs), so its label follows the arm, its re-renders and its timeout.
+function renderBCSend() {
+  const btn = document.getElementById('bc-send');
+  if (!btn) return;
+  const armed = _bcPending.has('critical');
+  btn.classList.toggle('confirm-pending', armed);
+  btn.textContent = t(armed ? 'cc.bc.pressAgain' : 'cc.bc.send');
+}
+async function doSendBroadcast() {
   const msg = document.getElementById('bc-input').value.trim();
   const pri = document.getElementById('bc-pri').value;
   if (!msg || !S.event) return;
@@ -3523,16 +3469,16 @@ async function clearBroadcast() {
   const btn = document.querySelector('[onclick*="clearBroadcast"]');
   if (!_clearBCArmed.armed) {
     _clearBCArmed.armed = true;
-    if (btn) btn.textContent = 'CONFIRM CLEAR';
+    if (btn) btn.textContent = t('confirm.confirmClear');
     _clearBCArmed.timer = setTimeout(() => {
       _clearBCArmed.armed = false;
-      if (btn) btn.textContent = 'CLEAR';
+      if (btn) btn.textContent = t('cc.bc.clear');
     }, 3000);
     return;
   }
   _clearBCArmed.armed = false;
   clearTimeout(_clearBCArmed.timer);
-  if (btn) btn.textContent = 'CLEAR';
+  if (btn) btn.textContent = t('cc.bc.clear');
   const { error } = await sb.from('leod_broadcast')
     .update({ message: '', sent_at: new Date().toISOString() })
     .eq('id', S.event.id).eq('event_id', S.event.id);
@@ -3599,7 +3545,7 @@ document.addEventListener('keydown', e => {
   }
 
   if (e.key === 'Escape') {
-    closeProfilePanel();
+    closeProfilePanel(); closePopovers(); closeEvDropdown();
     // Close command palette first
     if (document.getElementById('cmd-palette').style.display === 'flex') { closeCmdPalette(); return; }
     // Close help dropdown
@@ -3707,9 +3653,80 @@ function tsHM(ts) {
 }
 
 // ═══════════════════════════════════════════════════
+// COMMAND CENTER: header (stage 3)
+// ═══════════════════════════════════════════════════
+// Static labels carry data-i18n; this fills them in the current language.
+function applyI18nAttrs(root = document) {
+  root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+}
+applyI18nAttrs();
+
+// Inline handlers call window.togglePopover: a bare name inside onclick resolves
+// to the element's own native HTMLElement.togglePopover() first and does nothing.
+function togglePopover(id, btn) {
+  const pop = document.getElementById(id);
+  if (!pop) return;
+  const opening = pop.hidden;
+  closePopovers();
+  if (opening) { pop.hidden = false; if (btn) btn.setAttribute('aria-expanded', 'true'); }
+}
+function closePopovers() {
+  document.querySelectorAll('#header .hdr-pop, #header .hdr-menu').forEach(p => { p.hidden = true; });
+  document.querySelectorAll('#header [aria-haspopup][aria-controls]').forEach(b => { if (b.id !== 'ev-switch') b.setAttribute('aria-expanded', 'false'); });
+}
+document.addEventListener('click', e => { if (!e.target.closest('.hdr-pop-wrap')) closePopovers(); });
+
+// Live region for armed confirms (spec 2.3): armOrConfirm calls it for every
+// two-press action. Synchronous on purpose (a frame callback never fires under
+// the paused test clock); a trailing no-break space makes a repeat a change.
+function announce(msg) {
+  const el = document.getElementById('sr-announcer');
+  if (!el) return;
+  el.textContent = el.textContent === msg ? msg + ' ' : msg;
+}
+// "Tue 6 Oct · Cairo UTC+3"
+function eventSubline(ev) {
+  const locale = { ar: 'ar', pl: 'pl-PL', de: 'de-DE' }[CueDeckI18n.getLocale()] || 'en-GB';
+  let day = ev.date || '';
+  try { day = new Date(ev.date + 'T12:00:00Z').toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); } catch { /* keep ISO date */ }
+  const tz = ev.timezone || '';
+  const city = tz ? tz.split('/').pop().replace(/_/g, ' ') : '';
+  return [day, tz ? `${city} ${getUtcOffset(tz)}` : ''].filter(Boolean).join(' · ');
+}
+
+// The "All systems" pill turns amber or red and names the failing check.
+const SYS_CHECKS = [['db', 'dbStatus'], ['rt', 'rtStatus'], ['ck', 'ckStatus'], ['ef', 'efStatus']];
+function refreshSysPill() {
+  const pill = document.getElementById('conn-pill');
+  const lbl = document.getElementById('conn-lbl');
+  if (!pill || !lbl) return;
+  const failing = SYS_CHECKS.filter(([, k]) => S[k] === 'error' || S[k] === 'not-deployed').map(([n]) => n);
+  let state = 'ok';
+  let text = t('cc.hdr.allSystems');
+  if (S.connStatus === 'reconnecting' || S.connStatus === 'offline' || failing.includes('rt')) {
+    state = 'err'; text = tf('cc.hdr.problem', { name: t('cc.sys.rt') });
+  } else if (failing.length) {
+    state = failing.includes('db') ? 'err' : 'warn'; text = tf('cc.hdr.problem', { name: t('cc.sys.' + failing[0]) });
+  } else if (SYS_CHECKS.some(([, k]) => S[k] === 'checking')) {
+    state = 'warn'; text = t('cc.hdr.connecting');
+  }
+  pill.className = `pill is-${state}`;
+  lbl.textContent = text;
+}
+
+function setBannerRead(read) {
+  const el = document.getElementById('bc-banner');
+  const chip = document.getElementById('bc-chip');
+  if (el) el.style.display = read ? 'none' : 'flex';
+  if (chip) chip.hidden = !read;
+}
+function reopenBanner() { S.bcReadKey = null; setBannerRead(false); }
+
+// ═══════════════════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════════════════
 function renderSessions() {
+  renderBCSend();
   // Signage role gets its own dedicated management panel
   if (S.role === 'signage') {
     document.getElementById('delay-strip').style.display = 'none';
@@ -5254,8 +5271,8 @@ function updateStageMonitor() {
 function setConn(st) {
   S.connStatus = st;
   const dot = document.getElementById('conn-dot');
-  dot.className = st;
-  document.getElementById('conn-lbl').textContent = st;
+  if (dot) dot.className = 'dot ' + st;
+  refreshSysPill();
 }
 
 function refreshClockUI() {
@@ -5265,7 +5282,6 @@ function refreshClockUI() {
   const offStr = `${off >= 0 ? '+' : ''}${off}ms`;
 
   document.getElementById('hdr-clock').textContent = ts;
-  document.getElementById('sb-time').textContent   = ts;
   document.getElementById('hdr-offset').textContent = `offset: ${offStr}`;
 
   const ckOff = document.getElementById('ck-off');
@@ -5281,37 +5297,37 @@ function refreshClockUI() {
 }
 
 function refreshDiag() {
-  const map = {
-    db: { el: ['dd-db','dl-db'], st: S.dbStatus, ok:'database ✓', error:'database ✗', checking:'database…', '':'database' },
-    rt: { el: ['dd-rt','dl-rt'], st: S.rtStatus, ok:'realtime ✓', error:'realtime ✗', '':'realtime' },
-    ck: { el: ['dd-ck','dl-ck'], st: S.ckStatus, ok:'clock sync ✓', error:'clock sync ✗', checking:'clock…', '':'clock sync' },
-    ef: { el: ['dd-ef','dl-ef'], st: S.efStatus, ok:'edge functions ✓', 'not-deployed':'edge functions (not deployed)', unknown:'edge functions', '':'edge functions' },
-  };
-  for (const [, cfg] of Object.entries(map)) {
-    const dot = document.getElementById(cfg.el[0]);
-    const lbl = document.getElementById(cfg.el[1]);
-    dot.className = `dd ${cfg.st === 'ok' ? 'ok' : cfg.st === 'error' || cfg.st === 'not-deployed' ? 'error' : cfg.st === 'checking' ? 'checking' : ''}`;
-    lbl.textContent = cfg[cfg.st] || cfg[''];
+  for (const [k, field] of SYS_CHECKS) {
+    const st = S[field];
+    const dot = document.getElementById('dd-' + k);
+    const lbl = document.getElementById('dl-' + k);
+    if (!dot || !lbl) continue;
+    dot.className = `dd ${st === 'ok' ? 'ok' : (st === 'error' || st === 'not-deployed') ? 'error' : st === 'checking' ? 'checking' : ''}`;
+    const word = { ok: 'cc.sys.ok', error: 'cc.sys.down', 'not-deployed': 'cc.sys.notDeployed', checking: 'cc.sys.checking' }[st];
+    lbl.textContent = word ? `${t('cc.sys.' + k)}: ${t(word)}` : t('cc.sys.' + k);
   }
-  // PR-016: show last sync timestamp as tooltip on DB pill
   const dbLbl = document.getElementById('dl-db');
-  if (dbLbl) {
-    dbLbl.title = S.lastSyncAt
-      ? `Last sync: ${fmtTS(S.lastSyncAt)}`
-      : 'Not yet synced';
-  }
+  if (dbLbl) dbLbl.title = S.lastSyncAt ? `Last sync: ${fmtTS(S.lastSyncAt)}` : 'Not yet synced';
+  refreshSysPill();
 }
 
 // PR-009: Refresh operator presence dots in header (director role sees all roles)
 const PRESENCE_ROLES = ['director', 'stage', 'av', 'interp', 'reg'];
 function refreshPresence() {
   const bar = document.getElementById('presence-bar');
-  if (!bar || S.role === 'signage') { if (bar) bar.innerHTML = ''; return; }
-  bar.innerHTML = PRESENCE_ROLES.map(r => {
-    const online = (S.presence[r] || 0) > 0;
-    return `<div class="pr-role" title="${r}${online ? ` (${S.presence[r]})` : ' (offline)'}">
-      <div class="pr-dot${online ? ' online' : ''}"></div>${r}</div>`;
-  }).join('');
+  if (!bar) return;
+  const online = PRESENCE_ROLES.filter(r => (S.presence[r] || 0) > 0);
+  bar.innerHTML = PRESENCE_ROLES.map(r => `<i class="${(S.presence[r] || 0) > 0 ? 'on' : ''}"></i>`).join('');
+  const cnt = document.getElementById('crew-count');
+  if (cnt) cnt.textContent = tf('cc.hdr.crew', { on: online.length, all: PRESENCE_ROLES.length });
+  const list = document.getElementById('crew-list');
+  if (list) {
+    // List exactly the roles the count counts, so "Crew 3/5" shows three names.
+    const people = (S.presenceList || []).filter(p => PRESENCE_ROLES.includes(p.role));
+    list.innerHTML = people.length
+      ? people.map(p => `<li><span class="crew-dot"></span><span>${esc(p.name || '–')}</span><span class="crew-role">${esc(t('role.' + p.role))}</span></li>`).join('')
+      : `<li class="crew-none">${esc(t('cc.hdr.crewNone'))}</li>`;
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -5403,6 +5419,7 @@ function toggleAutoStart() {
   if (!S.autoStart) S._autoStarted = new Set();
   const btn = document.getElementById('auto-start-btn');
   if (btn) btn.classList.toggle('enabled', S.autoStart);
+  if (btn) btn.setAttribute('aria-checked', String(S.autoStart));
   pushToast(S.autoStart ? '⏱ ' + t('toast.autoStartEnabled') : t('toast.autoStartDisabled'), 'info');
 }
 
@@ -5676,23 +5693,28 @@ function renderLog() {
 function showBCBanner(b) {
   const el = document.getElementById('bc-banner');
   if (!b?.message) { hideBCBanner(); return; }
+  S.bcKey = `${b.sent_at || ''}|${b.message}`;
   el.className = b.priority;
-  el.style.display = 'block';
-  el.innerHTML = `📢 ${esc(b.message)}<button class="bc-dismiss" onclick="dismissBanner()" title="Dismiss locally">✕</button>`;
-  // Flash 3 times to draw attention
-  el.classList.remove('bc-flash');
-  void el.offsetWidth; // force reflow to restart animation
-  el.classList.add('bc-flash');
+  el.innerHTML = `${icon(b.priority === 'info' ? 'info' : 'alert')}<span class="bc-msg">${esc(b.message)}</span>`
+    + `<span class="bc-when">${esc(tsHM(b.sent_at))}</span>`
+    + `<button type="button" class="btn sm ghost bc-dismiss" onclick="dismissBanner()">${esc(t('cc.bc.dismiss'))}</button>`;
+  const chip = document.getElementById('bc-chip');
+  if (chip) chip.className = `pill bc-chip ${b.priority}`;
+  setBannerRead(S.bcReadKey === S.bcKey);
 }
-function hideBCBanner()  { document.getElementById('bc-banner').style.display = 'none'; }
-function dismissBanner() { document.getElementById('bc-banner').style.display = 'none'; }
+function hideBCBanner() {
+  document.getElementById('bc-banner').style.display = 'none';
+  const chip = document.getElementById('bc-chip');
+  if (chip) chip.hidden = true;
+}
+function dismissBanner() { S.bcReadKey = S.bcKey; setBannerRead(true); }
 
 const BC_PRESETS = [
-  { label: '☕ Break',   text: '☕ Coffee break starting now' },
-  { label: '🎤 Seats',  text: '🎤 Please take your seats — next session starting soon' },
-  { label: '⏱ Delay',  text: '⏱ Running a few minutes behind schedule' },
-  { label: '🔇 Phones', text: '🔇 Please silence your phones' },
-  { label: '🚨 Hold',   text: '🚨 HOLD — please stand by' },
+  { label: 'Break',  text: 'Coffee break starting now' },
+  { label: 'Seats',  text: 'Please take your seats, the next session is starting soon' },
+  { label: 'Delay',  text: 'Running a few minutes behind schedule' },
+  { label: 'Phones', text: 'Please silence your phones' },
+  { label: 'Hold',   text: 'Hold, please stand by' },
 ];
 
 function buildBCPresets() {
@@ -5700,9 +5722,11 @@ function buildBCPresets() {
   if (!wrap) return;
   const isDirector = S.role === 'director' || S.userRole === 'director';
   if (!isDirector) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = BC_PRESETS.map(p =>
-    `<button class="bc-preset-btn" onclick="fillPreset('${p.text.replace(/'/g, "\\'")}')">${p.label}</button>`
-  ).join('');
+  wrap.innerHTML = `<details class="bc-presets-menu" id="bc-presets-menu">
+    <summary class="btn sm">${esc(t('cc.bc.presets'))}${icon('chev-down')}</summary>
+    <div class="hdr-menu bc-presets-list" role="menu">${BC_PRESETS.map((p, i) =>
+      `<button type="button" role="menuitem" class="bc-preset-btn" onclick="fillPreset(BC_PRESETS[${i}].text);document.getElementById('bc-presets-menu').open=false">${esc(p.label)}</button>`).join('')}</div>
+  </details>`;
 }
 
 function fillPreset(text) {
@@ -5736,7 +5760,15 @@ function setRole(role) {
   if (ROLE_FILTER_DEFAULT[role] !== undefined) {
     F.status = ROLE_FILTER_DEFAULT[role];
   }
-  document.querySelectorAll('.rbtn[data-role]').forEach(b => b.classList.toggle('active', b.dataset.role === role));
+  document.querySelectorAll('.rbtn[data-role]').forEach(b => {
+    const on = b.dataset.role === role;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  const va = document.getElementById('viewas-lbl');
+  if (va) va.textContent = tf('cc.hdr.viewAs', { role: t('role.' + role) });
+  const bw = document.getElementById('brain-wrap');
+  if (bw) bw.hidden = role !== 'director' || !(S.brainCount > 0);
   // Show auto-start button for director/stage only
   const autoBtn = document.getElementById('auto-start-btn');
   if (autoBtn) autoBtn.style.display = (role === 'director' || role === 'stage') ? '' : 'none';
@@ -5752,36 +5784,36 @@ function setRole(role) {
 }
 
 function buildEvSelect(events) {
-  const wrap = document.getElementById('ev-select-wrap');
   const cur = S.event;
-  const editBtn = cur
-    ? `<button class="ev-edit-btn" onclick="event.stopPropagation();openEvModal('edit','${cur.id}')" title="Edit event">✎</button>`
-    : '';
-  const ddItems = events.map(e =>
-    `<button class="${e.id === cur?.id ? 'active' : ''}" onclick="event.stopPropagation();switchEvent('${e.id}');closeEvDropdown()">${esc(e.name)}</button>`
-  ).join('');
-  const plusClass = (S.role === 'director' && !events.length) ? 'ev-add-btn rbtn-pulse' : 'ev-add-btn';
-  wrap.innerHTML =
-    `<div style="position:relative;display:flex;align-items:center;gap:6px">` +
-      `<div class="ev-pill" onclick="toggleEvDropdown()" title="Switch event">` +
-        `<span class="ev-pill-label">EVENT</span>` +
-        `<span class="ev-pill-name">${cur ? esc(cur.name) : 'None'}</span>` +
-        `<span class="ev-pill-chev">▾</span>` +
-      `</div>` +
-      editBtn +
-      `<div id="ev-pill-dd" class="ev-pill-dd">${ddItems}</div>` +
-    `</div>` +
-    `<button class="${plusClass}" onclick="openEvModal('create')" title="New event">＋</button>`;
+  const nameEl = document.getElementById('event-name');
+  if (cur && nameEl) nameEl.textContent = cur.name;
+  const subEl = document.getElementById('event-sub');
+  if (subEl) subEl.textContent = cur ? eventSubline(cur) : '';
+  const dd = document.getElementById('ev-pill-dd');
+  if (!dd) return;
+  const isDirector = S.userRole === 'director' || S.role === 'director';
+  dd.innerHTML = events.map(e =>
+    `<button type="button" role="menuitemradio" aria-checked="${e.id === cur?.id}" class="${e.id === cur?.id ? 'active' : ''}" onclick="event.stopPropagation();switchEvent('${e.id}');closeEvDropdown()">${esc(e.name)}</button>`
+  ).join('') + (isDirector
+    ? `<div class="hd-sep"></div>`
+      + (cur ? `<button type="button" role="menuitem" onclick="event.stopPropagation();closeEvDropdown();openEvModal('edit','${cur.id}')">${icon('edit')}${esc(t('cc.hdr.editEvent'))}</button>` : '')
+      + `<button type="button" role="menuitem" class="ev-add-btn${events.length ? '' : ' rbtn-pulse'}" onclick="event.stopPropagation();closeEvDropdown();openEvModal('create')">${icon('plus')}${esc(t('cc.hdr.newEvent'))}</button>`
+    : '');
+  // Onboarding: with no event yet, the switcher itself pulses so "New event" is found.
+  document.getElementById('ev-switch')?.classList.toggle('rbtn-pulse', isDirector && !events.length);
 }
 
 function toggleEvDropdown() {
   closeHelpMenu();
+  closePopovers();
   const dd = document.getElementById('ev-pill-dd');
-  if (dd) dd.classList.toggle('open');
+  if (!dd) return;
+  const open = dd.classList.toggle('open');
+  document.getElementById('ev-switch')?.setAttribute('aria-expanded', String(open));
 }
 function closeEvDropdown() {
-  const dd = document.getElementById('ev-pill-dd');
-  if (dd) dd.classList.remove('open');
+  document.getElementById('ev-pill-dd')?.classList.remove('open');
+  document.getElementById('ev-switch')?.setAttribute('aria-expanded', 'false');
 }
 document.addEventListener('click', e => {
   const dd = document.getElementById('ev-pill-dd');
@@ -7158,43 +7190,15 @@ async function loadPendingBadge() {
 function renderUserChip() {
   const chip = document.getElementById('user-chip');
   if (!chip || !S.userRole) return;
-
-  const name     = S.userName || S.user?.email || '';
-  const words    = name.trim().split(/\s+/);
-  const initials = words.length >= 2
-    ? (words[0][0] + words[words.length - 1][0]).toUpperCase()
-    : (name.substring(0, 2) || '??').toUpperCase();
-  const firstName = words[0] || name;
-  const role      = S.userRole;
-
-  const roleColors = {
-    director: { bg:'rgba(59,130,246,0.2)', border:'rgba(59,130,246,0.4)', text:'#60A5FA', chipBg:'rgba(59,130,246,0.12)', chipBorder:'rgba(59,130,246,0.35)' },
-    stage:    { bg:'rgba(34,197,94,0.2)',  border:'rgba(34,197,94,0.4)',  text:'#4ade80', chipBg:'rgba(34,197,94,0.10)',   chipBorder:'rgba(34,197,94,0.3)'   },
-    av:       { bg:'rgba(249,115,22,0.2)', border:'rgba(249,115,22,0.4)', text:'#fb923c', chipBg:'rgba(249,115,22,0.10)',  chipBorder:'rgba(249,115,22,0.3)'  },
-    interp:   { bg:'rgba(139,92,246,0.2)', border:'rgba(139,92,246,0.4)', text:'#a78bfa', chipBg:'rgba(139,92,246,0.10)',  chipBorder:'rgba(139,92,246,0.3)'  },
-  };
-  const c = roleColors[role] || {
-    bg:'rgba(100,116,139,0.2)', border:'rgba(100,116,139,0.4)', text:'#94A3B8',
-    chipBg:'rgba(100,116,139,0.10)', chipBorder:'rgba(100,116,139,0.3)',
-  };
-
-  const avatar = document.getElementById('user-chip-avatar');
-  avatar.textContent      = initials;
-  avatar.style.background = c.bg;
-  avatar.style.borderColor= c.border;
-  avatar.style.color      = c.text;
-
-  document.getElementById('user-chip-name').textContent = firstName;
-  const roleEl = document.getElementById('user-chip-role');
-  roleEl.textContent  = role;
-  roleEl.style.color  = c.text;
-
-  chip.style.background   = c.chipBg;
-  chip.style.borderColor  = c.chipBorder;
-  chip.style.display      = 'flex';
-
+  const name  = S.userName || S.user?.email || '';
+  const words = name.trim().split(/\s+/);
+  const initials = words.length >= 2 ? (words[0][0] + words[words.length - 1][0]).toUpperCase() : (name.substring(0, 2) || '??').toUpperCase();
+  document.getElementById('user-chip-avatar').textContent = initials;
+  document.getElementById('user-chip-name').textContent = words[0] || name;
+  document.getElementById('user-chip-role').textContent = S.userRole;
+  chip.style.display = 'inline-flex';
   const mob = document.getElementById('mobile-signed-in');
-  if (mob) mob.textContent = 'Signed in as ' + (S.userName || S.user?.email || '') + ' (' + role + ')';
+  if (mob) mob.textContent = 'Signed in as ' + name + ' (' + S.userRole + ')';
 }
 
 function toggleProfilePanel(e) {
@@ -7208,6 +7212,7 @@ function toggleProfilePanel(e) {
   } else {
     renderProfilePanel();
     panel.style.display = '';
+    document.getElementById('user-chip')?.setAttribute('aria-expanded', 'true');
     setTimeout(function() { document.addEventListener('click', _closePanelOutside); }, 10);
   }
 }
@@ -7215,6 +7220,7 @@ function toggleProfilePanel(e) {
 function closeProfilePanel() {
   const panel = document.getElementById('profile-panel');
   if (panel) panel.style.display = 'none';
+  document.getElementById('user-chip')?.setAttribute('aria-expanded', 'false');
   // Reset edit mode so panel opens in view mode next time
   const editSec = document.getElementById('pp-edit-section');
   if (editSec) editSec.style.display = 'none';
@@ -7431,11 +7437,6 @@ async function loadSubscription() {
 
   S.planLimits = PLAN_LIMITS[sub.plan] || PLAN_LIMITS.trial;
   updatePlanBadge();
-
-  // Show billing button for directors
-  if (S.userRole === 'director') {
-    document.getElementById('billing-btn').style.display = '';
-  }
 }
 
 async function createTrialSubscription() {
@@ -7933,12 +7934,12 @@ async function loadUserRole() {
     localStorage.setItem(rlsKey, data.role);
   }
 
-  // Lock role switcher for non-directors
-  const roleBar = document.getElementById('role-bar');
+  // Operators locked to one role see their role name, not the View as menu
   if (data.role !== 'director') {
-    roleBar.querySelectorAll('.rbtn[data-role]').forEach(b => b.style.display = 'none');
-    const lbl = roleBar.querySelector('label');
-    lbl.textContent = `${data.name || S.user.email} · ${data.role}`;
+    const va = document.getElementById('viewas-btn');
+    if (va) va.hidden = true;
+    const lock = document.getElementById('role-lock');
+    if (lock) { lock.textContent = t('role.' + data.role); lock.hidden = false; }
   }
 
   // Show Users button and pending badge for directors
@@ -8054,7 +8055,7 @@ const ROLE_TIPS = {
   director: [
     { target: '#ev-select-wrap',   text: 'This is your event selector. Create events and switch between them from here.' },
     { target: '#sessions-list',    text: 'Session cards appear here. Click + Add Session to build your run of show.' },
-    { target: '#users-btn',        text: 'Invite operators and assign roles (stage, AV, signage) from the Operators panel.' },
+    { target: '#user-chip',        text: 'Invite operators and assign roles (stage, AV, signage) from the Operators panel.' },
     { target: '#bc-bar',           text: 'Send broadcast messages to all connected operators instantly — pick a priority and hit Send.' },
     { target: '#filter-bar',       text: 'Filter sessions by title, status, or room. Toggle the Timeline view for a time-based grid.' },
   ],
@@ -8618,6 +8619,11 @@ initAuth();
       if (!res.ok) throw new Error('fetch failed');
       const json = await res.json();
       const insights = Array.isArray(json.insights) ? json.insights : [];
+      S.brainCount = insights.length;
+      const badge = document.getElementById('brain-wrap');
+      if (badge) badge.hidden = insights.length === 0 || S.role !== 'director';
+      const count = document.getElementById('brain-count');
+      if (count) count.textContent = insights.length ? String(insights.length) : '';
       while (container.firstChild) container.removeChild(container.firstChild);
       if (insights.length === 0) {
         const p = document.createElement('p');
@@ -8648,6 +8654,7 @@ initAuth();
         container.appendChild(card);
       });
     } catch (_) {
+      S.brainCount = 0; const bw = document.getElementById('brain-wrap'); if (bw) bw.hidden = true;
       while (container.firstChild) container.removeChild(container.firstChild);
       const p = document.createElement('p');
       p.className = 'brain-error';

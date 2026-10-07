@@ -218,7 +218,7 @@ test.describe('Live: create and delete session', () => {
     // Wait for loading overlay to disappear
     await expect(page.locator('#loading-overlay')).toBeHidden({ timeout: 10000 });
     // Director role bar should be visible
-    await expect(page.locator('.rbtn[data-role="director"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#viewas-btn')).toBeVisible({ timeout: 5000 });
   });
 
   test('L02 director can open Add Session modal from sessions view', async ({ page }) => {

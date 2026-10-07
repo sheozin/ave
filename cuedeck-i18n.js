@@ -93,13 +93,13 @@ const CueDeckI18n = (() => {
       'sign.pushAll':         '→ PUSH ALL',
 
       // Roles
-      'role.director':  'DIRECTOR',
-      'role.stage':     'STAGE',
+      'role.director':  'Director',
+      'role.stage':     'Stage',
       'role.av':        'AV',
-      'role.interp':    'INTERP',
-      'role.reg':       'REG',
-      'role.signage':   'SIGNAGE',
-      'role.label':     'ROLE',
+      'role.interp':    'Interp',
+      'role.reg':       'Reg',
+      'role.signage':   'Signage',
+      'role.label':     'Role',
 
       // Filter bar
       'filter.timeline':    'Timeline',
@@ -330,6 +330,50 @@ const CueDeckI18n = (() => {
       'misc.version':         'Version',
       'misc.copy':            'Copy',
       'misc.copied':          'Copied!',
+      'cc.hdr.allSystems': 'All systems',
+      'cc.hdr.problem': '{name} not working',
+      'cc.hdr.connecting': 'Connecting',
+      'cc.hdr.crew': 'Crew {on}/{all}',
+      'cc.hdr.crewTitle': 'Crew online',
+      'cc.hdr.crewNone': 'No one else is online',
+      'cc.hdr.viewAs': 'View as {role}',
+      'cc.hdr.newEvent': 'New event',
+      'cc.hdr.editEvent': 'Edit event',
+      'cc.hdr.brain': 'AVE Brain',
+      'cc.sys.title': 'System status',
+      'cc.sys.db': 'Database',
+      'cc.sys.rt': 'Realtime',
+      'cc.sys.ck': 'Clock sync',
+      'cc.sys.ef': 'Edge Functions',
+      'cc.sys.ok': 'OK',
+      'cc.sys.down': 'not working',
+      'cc.sys.checking': 'checking',
+      'cc.sys.notDeployed': 'not deployed',
+      'cc.sys.clock': 'Clock',
+      'cc.sys.offset': 'Offset',
+      'cc.sys.rtt': 'Round trip',
+      'cc.sys.synced': 'Last sync',
+      'cc.sys.sessions': 'Sessions',
+      'cc.menu.checkin': 'Check-in',
+      'cc.menu.team': 'Team',
+      'cc.menu.billing': 'Billing',
+      'cc.menu.invoices': 'Invoices',
+      'cc.menu.upgrade': 'Upgrade plan',
+      'cc.menu.language': 'Language',
+      'cc.menu.shortcuts': 'Shortcuts',
+      'cc.menu.autoStart': 'Auto-start',
+      'cc.menu.tools': 'Tools',
+      'cc.menu.testIncident': 'Test incident alert',
+      'cc.menu.testCue': 'Test cue alert',
+      'cc.menu.report': 'Generate report',
+      'cc.menu.signOut': 'Sign out',
+      'cc.bc.label': 'Broadcast',
+      'cc.bc.send': 'Send',
+      'cc.bc.clear': 'Clear',
+      'cc.bc.presets': 'Presets',
+      'cc.bc.pressAgain': 'Press again to send',
+      'cc.bc.show': 'Show broadcast',
+      'cc.bc.dismiss': 'Dismiss',
     },
 
     ar: {
@@ -621,6 +665,50 @@ const CueDeckI18n = (() => {
       'misc.version':     'الإصدار',
       'misc.copy':        'نسخ',
       'misc.copied':      'تم النسخ!',
+      'cc.hdr.allSystems': 'كل الأنظمة تعمل',
+      'cc.hdr.problem': '{name} لا يعمل',
+      'cc.hdr.connecting': 'جارٍ الاتصال',
+      'cc.hdr.crew': 'الطاقم {on}/{all}',
+      'cc.hdr.crewTitle': 'الطاقم المتصل',
+      'cc.hdr.crewNone': 'لا أحد متصل',
+      'cc.hdr.viewAs': 'العرض كـ {role}',
+      'cc.hdr.newEvent': 'حدث جديد',
+      'cc.hdr.editEvent': 'تعديل الحدث',
+      'cc.hdr.brain': 'AVE Brain',
+      'cc.sys.title': 'حالة النظام',
+      'cc.sys.db': 'قاعدة البيانات',
+      'cc.sys.rt': 'الاتصال الفوري',
+      'cc.sys.ck': 'مزامنة الساعة',
+      'cc.sys.ef': 'وظائف الخادم',
+      'cc.sys.ok': 'يعمل',
+      'cc.sys.down': 'لا يعمل',
+      'cc.sys.checking': 'جارٍ الفحص',
+      'cc.sys.notDeployed': 'غير منشورة',
+      'cc.sys.clock': 'الساعة',
+      'cc.sys.offset': 'الفرق',
+      'cc.sys.rtt': 'زمن الاستجابة',
+      'cc.sys.synced': 'آخر مزامنة',
+      'cc.sys.sessions': 'الجلسات',
+      'cc.menu.checkin': 'تسجيل الحضور',
+      'cc.menu.team': 'الفريق',
+      'cc.menu.billing': 'الفوترة',
+      'cc.menu.invoices': 'الفواتير',
+      'cc.menu.upgrade': 'ترقية الخطة',
+      'cc.menu.language': 'اللغة',
+      'cc.menu.shortcuts': 'الاختصارات',
+      'cc.menu.autoStart': 'البدء التلقائي',
+      'cc.menu.tools': 'أدوات',
+      'cc.menu.testIncident': 'اختبار تنبيه حادث',
+      'cc.menu.testCue': 'اختبار تنبيه الإشارة',
+      'cc.menu.report': 'إنشاء تقرير',
+      'cc.menu.signOut': 'تسجيل الخروج',
+      'cc.bc.label': 'رسالة عامة',
+      'cc.bc.send': 'إرسال',
+      'cc.bc.clear': 'مسح',
+      'cc.bc.presets': 'رسائل جاهزة',
+      'cc.bc.pressAgain': 'اضغط مرة أخرى للإرسال',
+      'cc.bc.show': 'عرض الرسالة',
+      'cc.bc.dismiss': 'إخفاء',
     },
 
     pl: {
@@ -705,13 +793,13 @@ const CueDeckI18n = (() => {
       'bc.break':           'Przerwa',
       'bc.broadcast':       'KOMUNIKAT',
 
-      'role.director':      'REŻYSER',
-      'role.stage':         'SCENA',
+      'role.director':      'Reżyser',
+      'role.stage':         'Scena',
       'role.av':            'AV',
-      'role.interp':        'TŁUMACZ',
-      'role.reg':           'REJESTR.',
-      'role.signage':       'EKRANY',
-      'role.label':         'ROLA',
+      'role.interp':        'Tłumacz',
+      'role.reg':           'Rejestr.',
+      'role.signage':       'Ekrany',
+      'role.label':         'Rola',
 
       'filter.timeline':    'Oś czasu',
       'filter.list':        'Lista',
@@ -751,6 +839,50 @@ const CueDeckI18n = (() => {
       'misc.allStatuses':     'Wszystkie statusy',
       'misc.activeStatuses':  'Aktywne',
       'misc.allRooms':        'Wszystkie sale',
+      'cc.hdr.allSystems': 'Wszystkie systemy działają',
+      'cc.hdr.problem': '{name} nie działa',
+      'cc.hdr.connecting': 'Łączenie',
+      'cc.hdr.crew': 'Ekipa {on}/{all}',
+      'cc.hdr.crewTitle': 'Ekipa online',
+      'cc.hdr.crewNone': 'Nikt inny nie jest online',
+      'cc.hdr.viewAs': 'Widok: {role}',
+      'cc.hdr.newEvent': 'Nowe wydarzenie',
+      'cc.hdr.editEvent': 'Edytuj wydarzenie',
+      'cc.hdr.brain': 'AVE Brain',
+      'cc.sys.title': 'Stan systemu',
+      'cc.sys.db': 'Baza danych',
+      'cc.sys.rt': 'Czas rzeczywisty',
+      'cc.sys.ck': 'Synchronizacja zegara',
+      'cc.sys.ef': 'Funkcje serwera',
+      'cc.sys.ok': 'OK',
+      'cc.sys.down': 'nie działa',
+      'cc.sys.checking': 'sprawdzanie',
+      'cc.sys.notDeployed': 'nie wdrożone',
+      'cc.sys.clock': 'Zegar',
+      'cc.sys.offset': 'Przesunięcie',
+      'cc.sys.rtt': 'Opóźnienie',
+      'cc.sys.synced': 'Ostatnia synchronizacja',
+      'cc.sys.sessions': 'Sesje',
+      'cc.menu.checkin': 'Rejestracja',
+      'cc.menu.team': 'Zespół',
+      'cc.menu.billing': 'Płatności',
+      'cc.menu.invoices': 'Faktury',
+      'cc.menu.upgrade': 'Zmień plan',
+      'cc.menu.language': 'Język',
+      'cc.menu.shortcuts': 'Skróty',
+      'cc.menu.autoStart': 'Autostart',
+      'cc.menu.tools': 'Narzędzia',
+      'cc.menu.testIncident': 'Testowy alert incydentu',
+      'cc.menu.testCue': 'Testowy alert sygnału',
+      'cc.menu.report': 'Utwórz raport',
+      'cc.menu.signOut': 'Wyloguj',
+      'cc.bc.label': 'Komunikat',
+      'cc.bc.send': 'Wyślij',
+      'cc.bc.clear': 'Wyczyść',
+      'cc.bc.presets': 'Szablony',
+      'cc.bc.pressAgain': 'Naciśnij ponownie, aby wysłać',
+      'cc.bc.show': 'Pokaż komunikat',
+      'cc.bc.dismiss': 'Ukryj',
     },
 
     de: {
@@ -835,13 +967,13 @@ const CueDeckI18n = (() => {
       'bc.break':           'Pause',
       'bc.broadcast':       'DURCHSAGE',
 
-      'role.director':      'REGIE',
-      'role.stage':         'BÜHNE',
+      'role.director':      'Regie',
+      'role.stage':         'Bühne',
       'role.av':            'AV',
-      'role.interp':        'DOLM.',
-      'role.reg':           'EMPFANG',
-      'role.signage':       'ANZEIGEN',
-      'role.label':         'ROLLE',
+      'role.interp':        'Dolm.',
+      'role.reg':           'Empfang',
+      'role.signage':       'Anzeigen',
+      'role.label':         'Rolle',
 
       'filter.timeline':    'Zeitachse',
       'filter.list':        'Liste',
@@ -881,6 +1013,50 @@ const CueDeckI18n = (() => {
       'misc.allStatuses':     'Alle Status',
       'misc.activeStatuses':  'Aktiv',
       'misc.allRooms':        'Alle Räume',
+      'cc.hdr.allSystems': 'Alle Systeme laufen',
+      'cc.hdr.problem': '{name} gestört',
+      'cc.hdr.connecting': 'Verbinde',
+      'cc.hdr.crew': 'Crew {on}/{all}',
+      'cc.hdr.crewTitle': 'Crew online',
+      'cc.hdr.crewNone': 'Sonst ist niemand online',
+      'cc.hdr.viewAs': 'Ansicht: {role}',
+      'cc.hdr.newEvent': 'Neue Veranstaltung',
+      'cc.hdr.editEvent': 'Veranstaltung bearbeiten',
+      'cc.hdr.brain': 'AVE Brain',
+      'cc.sys.title': 'Systemstatus',
+      'cc.sys.db': 'Datenbank',
+      'cc.sys.rt': 'Echtzeit',
+      'cc.sys.ck': 'Uhrzeit-Sync',
+      'cc.sys.ef': 'Serverfunktionen',
+      'cc.sys.ok': 'OK',
+      'cc.sys.down': 'gestört',
+      'cc.sys.checking': 'wird geprüft',
+      'cc.sys.notDeployed': 'nicht bereitgestellt',
+      'cc.sys.clock': 'Uhr',
+      'cc.sys.offset': 'Abweichung',
+      'cc.sys.rtt': 'Laufzeit',
+      'cc.sys.synced': 'Letzter Abgleich',
+      'cc.sys.sessions': 'Sitzungen',
+      'cc.menu.checkin': 'Check-in',
+      'cc.menu.team': 'Team',
+      'cc.menu.billing': 'Abrechnung',
+      'cc.menu.invoices': 'Rechnungen',
+      'cc.menu.upgrade': 'Tarif upgraden',
+      'cc.menu.language': 'Sprache',
+      'cc.menu.shortcuts': 'Tastenkürzel',
+      'cc.menu.autoStart': 'Autostart',
+      'cc.menu.tools': 'Werkzeuge',
+      'cc.menu.testIncident': 'Störungsalarm testen',
+      'cc.menu.testCue': 'Cue-Alarm testen',
+      'cc.menu.report': 'Bericht erstellen',
+      'cc.menu.signOut': 'Abmelden',
+      'cc.bc.label': 'Durchsage',
+      'cc.bc.send': 'Senden',
+      'cc.bc.clear': 'Löschen',
+      'cc.bc.presets': 'Vorlagen',
+      'cc.bc.pressAgain': 'Zum Senden erneut drücken',
+      'cc.bc.show': 'Durchsage anzeigen',
+      'cc.bc.dismiss': 'Ausblenden',
     },
   };
 
@@ -903,13 +1079,10 @@ const CueDeckI18n = (() => {
   function translateStaticDOM() {
     if (_locale === 'en') return; // English is the source, skip
     const map = {
-      // Role bar
-      '#role-bar > label':          'role.label',
       // Header buttons
-      '#users-btn':                 'hdr.operators',
-      '#help-btn':                  'hdr.help',
+      '#users-btn .pp-label':       'cc.menu.team',
+      '#help-btn > span:not(.changelog-badge)': 'hdr.help',
       // Broadcast bar
-      '#bc-bar > label':            'bc.label',
       '#bc-input':                  null, // placeholder handled below
     };
     // Role buttons by data-role attribute
@@ -974,19 +1147,9 @@ const CueDeckI18n = (() => {
       'Contact Support':    'help.contact',
       'About CueDeck':      'help.about',
     };
-    document.querySelectorAll('#help-dropdown button').forEach(btn => {
-      const orig = btn.textContent.replace(/^[^\w]*/, '').trim(); // strip emoji
-      if (helpItems[orig]) {
-        const emoji = btn.textContent.match(/^([^\w]*)/)?.[1] || '';
-        btn.textContent = emoji + t(helpItems[orig]);
-      }
-    });
-
-    // Diagnostic bar pills
-    const diagMap = { 'database': 'diag.database', 'realtime': 'diag.realtime', 'clock sync': 'diag.clockSync', 'edge functions': 'diag.edgeFunctions' };
-    document.querySelectorAll('#diag-bar .di-lbl').forEach(lbl => {
-      const key = diagMap[lbl.textContent.trim().toLowerCase()];
-      if (key) lbl.textContent = t(key);
+    document.querySelectorAll('#help-dropdown .hd-label').forEach(label => {
+      const key = helpItems[label.textContent.trim()];
+      if (key) label.textContent = t(key);
     });
 
     // Auth forms
@@ -1034,13 +1197,6 @@ const CueDeckI18n = (() => {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.title = t('profile.signOut');
 
-    // Broadcast bottom bar buttons
-    document.querySelectorAll('#bc-bar button').forEach(btn => {
-      const txt = btn.textContent.trim();
-      if (txt === 'SEND') btn.textContent = t('bc.send');
-      if (txt === 'CLEAR') btn.textContent = t('bc.clear');
-    });
-
     // Broadcast preset buttons at far right
     document.querySelectorAll('[onclick*="insertPreset"]').forEach(btn => {
       const presets = { 'Hold': 'bc.hold', 'Phones': 'bc.phones', 'Delay': 'bc.delay', 'Seats': 'bc.seats', 'Break': 'bc.break' };
@@ -1051,28 +1207,11 @@ const CueDeckI18n = (() => {
       }
     });
 
-    // "BROADCAST" label
-    document.querySelectorAll('#bc-bar span').forEach(el => {
-      if (el.textContent.trim() === 'BROADCAST') el.textContent = t('bc.broadcast');
-    });
-
     // Presence indicators in header
     document.querySelectorAll('.pr-role').forEach(el => {
       const presMap = { 'director': 'presence.director', 'stage': 'presence.stage', 'av': 'presence.av', 'interp': 'presence.interp', 'reg': 'presence.reg' };
       const key = presMap[el.textContent.trim().toLowerCase()];
       if (key) el.textContent = t(key);
-    });
-
-    // Diagnostic "sessions: N" and "live" label
-    document.querySelectorAll('#diag-bar span').forEach(el => {
-      if (el.textContent.trim().startsWith('sessions')) el.textContent = el.textContent.replace('sessions', t('diag.sessions'));
-    });
-    const connLbl = document.getElementById('conn-lbl');
-    if (connLbl && connLbl.textContent.trim() === 'live') connLbl.textContent = t('diag.live');
-
-    // EVENT label
-    document.querySelectorAll('#ev-select-wrap label, #ev-select-wrap span').forEach(el => {
-      if (el.textContent.trim() === 'EVENT') el.textContent = t('hdr.event');
     });
   }
 

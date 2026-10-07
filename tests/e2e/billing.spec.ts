@@ -40,9 +40,9 @@ test.describe('Billing: HTML structure', () => {
     await expect(page.locator('#plan-badge')).toBeAttached();
   });
 
-  test('04 billing button exists in header', async ({ page }) => {
+  test('04 billing button exists in the account menu', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
-    await expect(page.locator('#billing-btn')).toBeAttached();
+    await expect(page.locator('#pp-billing-btn')).toBeAttached();
   });
 
   test('05 billing modal exists in DOM', async ({ page }) => {
