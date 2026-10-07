@@ -1677,7 +1677,9 @@ Deno.test('webhooks: private, loopback, link-local and metadata addresses are re
   for (const ip of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.20.1.1', '192.168.1.5', '100.64.0.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:10.0.0.1',
                     // (127) the spellings that hid a private address
                     '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:7f00:1', '::127.0.0.1', '64:ff9b::a00:1', '64:ff9b::10.0.0.1', '2002:a00:1::1', '2001:0:4136::1',
-                    'ff02::1', 'fec0::1', '2001:db8::1', '198.18.0.1', '203.0.113.5', '192.0.2.1', '::', 'not-an-ip', '1:2:3'])
+                    'ff02::1', 'fec0::1', '2001:db8::1', '198.18.0.1', '203.0.113.5', '192.0.2.1', '::', 'not-an-ip', '1:2:3',
+                    // the ranges a deny-list missed: now refused because they are not global unicast
+                    '64:ff9b:1::a00:1', '::ffff:0:a00:1', '100::1', '192.88.99.1', '2001:2::1', '2001:10::1', '3fff::1', '3fff:fff::1', '4000::1'])
     assert(isPrivateIp(ip), ip + ' should be private')
   for (const ip of ['93.184.216.34', '1.1.1.1', '2606:4700::1111', '2a00:1450:4001:82a::200e', '64:ff9b::808:808', '::ffff:8.8.8.8']) assert(!isPrivateIp(ip), ip + ' should be public')
 })

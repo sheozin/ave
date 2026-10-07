@@ -6,18 +6,20 @@
 // grade NAT (100.64/10), loopback (127/8), link-local and cloud metadata
 // (169.254/16), IETF and documentation ranges (192.0.0/24, 192.0.2/24,
 // 198.51.100/24, 203.0.113/24), benchmarking (198.18/15), multicast and
-// reserved (224/3).
-// IPv6 is expanded to its eight groups first, so no spelling hides a range:
-// unspecified and loopback, IPv4-mapped (::ffff:a.b.c.d, in either form),
-// IPv4-compatible (::a.b.c.d), NAT64 (64:ff9b::/96), 6to4 (2002::/16) and
-// Teredo (2001::/32) are judged by the IPv4 address they carry or refused,
-// plus unique local (fc00::/7), link-local (fe80::/10), site-local
-// (fec0::/10), multicast (ff00::/8) and documentation (2001:db8::/32).
+// reserved (224/3), 6to4 relay anycast (192.88.99/24).
+// IPv6 is expanded to its eight groups first, so no spelling hides a range.
+// IPv4-mapped (::ffff:a.b.c.d, in either form) and well-known NAT64
+// (64:ff9b::/96) are judged by the IPv4 address they carry. Everything else
+// must be global unicast (2000::/3): an allow-list, so a special range nobody
+// listed is refused rather than called. Inside 2000::/3, 6to4 (2002::/16) is
+// judged by its IPv4 address, and the IETF protocol block (2001::/23, which
+// holds Teredo, benchmarking and ORCHID), documentation (2001:db8::/32,
+// 3fff::/20) are refused.
 
 function v4Private(p: number[]): boolean {
   const [a, b, c] = p
   return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254)
-    || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && (c === 0 || c === 2))
+    || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 192 && b === 88 && c === 99)
     || (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113)
     || a >= 224
 }
@@ -55,16 +57,12 @@ export function isPrivateIp(ip: string): boolean {
   const g = expandV6(ip)
   if (!g) return true                                     // unparseable: never call it
   const fromLast32 = () => v4Private([g[6] >> 8, g[6] & 255, g[7] >> 8, g[7] & 255])
-  if (g.every(x => x === 0)) return true                  // ::
-  if (g.slice(0, 7).every(x => x === 0) && g[7] === 1) return true            // ::1
   if (g.slice(0, 5).every(x => x === 0) && g[5] === 0xffff) return fromLast32()  // ::ffff:a.b.c.d
-  if (g.slice(0, 6).every(x => x === 0)) return true      // ::a.b.c.d (deprecated)
   if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every(x => x === 0)) return fromLast32()  // NAT64
+  if ((g[0] & 0xe000) !== 0x2000) return true             // not global unicast
   if (g[0] === 0x2002) return v4Private([g[1] >> 8, g[1] & 255, g[2] >> 8, g[2] & 255])          // 6to4
-  if (g[0] === 0x2001 && g[1] === 0) return true          // Teredo
+  if (g[0] === 0x2001 && g[1] < 0x200) return true        // IETF protocol block, Teredo
   if (g[0] === 0x2001 && g[1] === 0x0db8) return true     // documentation
-  if ((g[0] & 0xfe00) === 0xfc00) return true             // unique local
-  if ((g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xffc0) === 0xfec0) return true  // link-local, site-local
-  if ((g[0] & 0xff00) === 0xff00) return true             // multicast
+  if (g[0] === 0x3fff && (g[1] & 0xf000) === 0) return true  // documentation 3fff::/20
   return false
 }
