@@ -1516,17 +1516,15 @@ Deno.test(`${RG} confirm: each plus-one's ticket is emailed to the guest who bro
   assert(mails.length === 2 && mails.every(m => m.to === 'maya@stub.test'), JSON.stringify(mails.map(m => [m.to, m.subject])))
   assert(mails[1].subject === 'Ticket for Ola: Stub event' && mails[1].html.includes('coming with you'), mails[1].subject)
 })
-Deno.test('checkin-held fill: a party joins only if all of it fits', async () => {
+Deno.test('checkin-held fill: runs the locked database fill and emails whoever it released', async () => {
   setup('organizer', { ent: { checkin_core: true, status: 'live', registration_capacity: 10 } })
-  world.rpcResult.checkin_web_places_taken = 8   // 2 places free
-  world.tables.leod_checkin_held = [
-    { id: 'h1', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [{ first_name: 'A', last_name: 'B' }, { first_name: 'C', last_name: 'D' }], created_at: '1' },
-    { id: 'h2', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [], created_at: '2' }]
-  world.rpcResult.checkin_web_release_held = { status: 'released', is_test: false, attendee: null, plus_ones: [] }
+  world.rpcResult.checkin_web_waitlist_fill = [{ status: 'released', is_test: false,
+    attendee: { id: ATT, first_name: 'Wes', email: 'wes@stub.test', qr_token: 'tok00000000000000000000000000009', qr_email_sent_at: null },
+    plus_ones: [{ id: 'p3000000-0000-4000-8000-000000000001', first_name: 'Ola', qr_token: 'tok00000000000000000000000000008' }] }]
   const r = await call('checkin-held', { event_id: EVENT, action: 'fill' })
-  const asked = world.rpcCalls.filter(c => c.name === 'checkin_web_release_held').map(c => c.args.p_held_id)
-  // The first party needs 3 places: the queue stops there rather than jumping it.
-  assert(r.status === 200 && asked.length === 0, JSON.stringify(r) + ' ' + JSON.stringify(asked))
+  assert(r.status === 200 && r.body.released === 1 && r.body.emailed === 1, JSON.stringify(r))
+  assert(world.rpcCalls.some(c => c.name === 'checkin_web_waitlist_fill' && c.args.p_event_id === EVENT), 'fill rpc not called')
+  assert((world.emails ?? []).length === 2, 'guest and plus-one tickets: ' + world.emails?.length)
 })
 
 // ── Invitations (116) ───────────────────────────────────────────────
@@ -1653,4 +1651,21 @@ Deno.test(`${RG} register: the language of a form is not stored for an address n
     const m = (world.emails ?? [])[0] as { subject: string } | undefined
     assert(m && m.subject === 'أكّد تسجيلك', 'the confirmation itself still in the form language: ' + m?.subject)
   } finally { globalThis.fetch = real; Deno.env.delete('TURNSTILE_SECRET_KEY') }
+})
+
+Deno.test('checkin-held auto: refuses without the cron secret', async () => {
+  setup('none'); world.rpcResult.checkin_waitlist_cron_ok = false
+  const r = await call('checkin-held', { action: 'auto' })
+  assert(r.status === 401 && !(world.tables.leod_checkin_job_runs?.length), JSON.stringify(r))
+})
+Deno.test('checkin-held auto: moves each due event and records the run', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'live', registration_capacity: 10 } })
+  world.rpcResult.checkin_waitlist_cron_ok = true
+  world.rpcResult.checkin_web_waitlist_due = [{ event_id: EVENT }]
+  world.rpcResult.checkin_web_waitlist_fill = [{ status: 'released', is_test: false,
+    attendee: { id: ATT, first_name: 'Wes', email: 'wes@stub.test', qr_token: 'tok00000000000000000000000000009', qr_email_sent_at: null }, plus_ones: [] }]
+  const r = await call('checkin-held', { action: 'auto' })
+  assert(r.status === 200 && r.body.detail === 'released 1', JSON.stringify(r))
+  assert(String(world.emails?.[0]?.to) === 'wes@stub.test', 'ticket not emailed')
+  assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not ok')
 })

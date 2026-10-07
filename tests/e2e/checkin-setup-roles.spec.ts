@@ -640,3 +640,17 @@ test('guests tab: invitations go out in batches and answers show on each guest',
   expect(calls.filter(c => c.action === 'send')).toHaveLength(2);
   await expect(page.locator('#gi-sum')).toContainText('3 invited');
 });
+
+test('registration tab: the automatic waitlist switch shows with the waitlist and saves', async ({ page }) => {
+  const set: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_enabled: true, registration_code: 'ABCDEFGH23',
+      registration_questions: [], registration_capacity: 100, registration_waitlist: true, waitlist_auto: false }]);
+    await rpc(page, 'checkin_held_list', []);
+    await rpc(page, 'checkin_set_waitlist_auto', (a) => { set.push(a); return a.p_on; });
+  });
+  await expect(page.locator('#rg-wlauto-row')).toBeVisible();
+  await page.locator('#rg-wlauto').evaluate((e: HTMLInputElement) => e.click());
+  await expect(page.locator('#held-ok')).toContainText('moves up by itself');
+  expect(set[0]).toMatchObject({ p_event_id: EVENT_ID, p_on: true });
+});
