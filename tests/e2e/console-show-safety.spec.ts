@@ -43,70 +43,83 @@ async function setup(page: Page, sessions: Sess[], opts: { role?: string; event?
 }
 const calls = (page: Page) => page.evaluate(() => (window as any).__calls);
 const live = (o: Sess = {}) => sess('live1', 1, { status: 'LIVE', actual_start: iso(-5), title: 'Opening', ...o });
+// Where a session's controls sit. Stage 3: the selected row's drawer
+// (buildButtons). Task 4.2 points this at the inspector; the assertions that
+// use it do not change.
+async function controls(page: Page, id: string) {
+  await page.evaluate((sid) => { (0, eval)('S').selectedId = sid; (window as any).renderSessions(); }, id);
+  return page.locator(`#card-${id} .sc-drawer .sc-actions`);
+}
+// Labels as those controls render them (updated by Tasks 4.2 and 5.2).
+const L = { end: 'END SESSION', armedEnd: 'CONFIRM END', cancel: 'CANCEL', armedCancel: 'CONFIRM CANCEL', hold: 'HOLD', endAll: 'END ALL' };
 
 // ── 1. END / CANCEL confirm survives the 1 s re-render ────────────────────
 test.describe('END and CANCEL confirm', () => {
   test('armed END on a live card keeps its confirm label through several ticks, then ends on the second click', async ({ page }) => {
     await setup(page, [live()]);
-    const end = page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' });
-    await end.click();
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
     await page.clock.runFor(1500);
-    const armed = page.locator('#card-live1 .sc-actions button.confirm-pending');
-    await expect(armed).toHaveText('CONFIRM END');
+    const armed = ctl.locator('button.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
     await armed.click();
     expect(await calls(page)).toEqual([['live1', 'ENDED']]);
   });
 
   test('an END armed on LIVE is dropped when the session moves to HOLD; one press then does not end it', async ({ page }) => {
     await setup(page, [live({ version: 3 })]);
-    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
-    await expect(page.locator('#card-live1 .confirm-pending')).toHaveCount(1);
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
+    await expect(ctl.locator('.confirm-pending')).toHaveCount(1);
     await page.evaluate(() => {
       const St = (0, eval)('S');
       const row = { ...St.sessions[0], status: 'HOLD', version: 4 };
       (window as any).onSessionChange({ eventType: 'UPDATE', new: row, old: {} });
     });
-    // Checked at once: the 3 s arm timeout must not be what clears it.
-    expect(await page.locator('#card-live1 .confirm-pending').count()).toBe(0);
-    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    // Checked at once: the 3 s arm timeout must not be what clears it. Nothing on the page stays armed.
+    expect(await page.locator('.confirm-pending').count()).toBe(0);
+    await ctl.locator('button', { hasText: L.end }).click();
     expect(await calls(page)).toEqual([]);
-    await expect(page.locator('#card-live1 .sc-actions button.confirm-pending')).toHaveText('CONFIRM END');
+    await expect(ctl.locator('button.confirm-pending')).toHaveText(L.armedEnd);
   });
 
   test('an END armed just before the end time still confirms after LIVE flips to OVERRUN', async ({ page }) => {
     await setup(page, [live({ version: 3 })]);
-    const endBtn = page.locator('#card-live1 .sc-actions button', { hasText: /END SESSION|CONFIRM END/ });
+    const ctl = await controls(page, 'live1');
+    const endBtn = ctl.locator('button', { hasText: new RegExp(`${L.end}|${L.armedEnd}`) });
     await endBtn.click();
     await page.evaluate(() => {
       const St = (0, eval)('S');
       (window as any).onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'OVERRUN', version: 4 }, old: {} });
     });
-    await expect(endBtn).toHaveText('CONFIRM END');
+    await expect(endBtn).toHaveText(L.armedEnd);
     await endBtn.click();
     expect(await calls(page)).toEqual([['live1', 'ENDED']]);
   });
 
   test('an END arm does not come back after LIVE to HOLD to LIVE; one press only arms', async ({ page }) => {
     await setup(page, [live({ version: 3 })]);
-    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
     await page.evaluate(() => {
       const St = (0, eval)('S');
       const w = window as any;
       w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'HOLD', version: 4 }, old: {} });
       w.onSessionChange({ eventType: 'UPDATE', new: { ...St.sessions[0], status: 'LIVE', version: 5 }, old: {} });
     });
-    expect(await page.locator('#card-live1 .confirm-pending').count()).toBe(0);
-    await expect(page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' })).toHaveCount(1);
-    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    expect(await page.locator('.confirm-pending').count()).toBe(0);
+    await expect(ctl.locator('button', { hasText: L.end })).toHaveCount(1);
+    await ctl.locator('button', { hasText: L.end }).click();
     expect(await calls(page)).toEqual([]);
-    await expect(page.locator('#card-live1 .sc-actions button.confirm-pending')).toHaveText('CONFIRM END');
+    await expect(ctl.locator('button.confirm-pending')).toHaveText(L.armedEnd);
   });
 
   test('an armed CANCEL holds for 3 s like END', async ({ page }) => {
     await setup(page, [sess('ready1', 1, { status: 'READY' })]);
-    await page.locator('#card-ready1 .sc-actions button', { hasText: 'CANCEL' }).click();
+    const ctl = await controls(page, 'ready1');
+    await ctl.locator('button', { hasText: L.cancel }).click();
     await page.clock.runFor(2500);
-    const armed = page.locator('#card-ready1 .sc-actions button.confirm-pending');
+    const armed = ctl.locator('button.confirm-pending');
     expect(await armed.count()).toBe(1);
     await armed.click();
     expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
@@ -114,19 +127,21 @@ test.describe('END and CANCEL confirm', () => {
 
   test('armed END returns to its normal label after the timeout', async ({ page }) => {
     await setup(page, [live()]);
-    await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+    const ctl = await controls(page, 'live1');
+    await ctl.locator('button', { hasText: L.end }).click();
     await page.clock.runFor(3500);
-    await expect(page.locator('#card-live1 .confirm-pending')).toHaveCount(0);
-    await expect(page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' })).toHaveCount(1);
+    await expect(page.locator('.confirm-pending')).toHaveCount(0);
+    await expect(ctl.locator('button', { hasText: L.end })).toHaveCount(1);
     expect(await calls(page)).toEqual([]);
   });
 
   test('armed CANCEL on a ready card survives the re-render caused by a live session', async ({ page }) => {
     await setup(page, [live(), sess('ready1', 2, { status: 'READY' })]);
-    await page.locator('#card-ready1 .sc-actions button', { hasText: 'CANCEL' }).click();
+    const ctl = await controls(page, 'ready1');
+    await ctl.locator('button', { hasText: L.cancel }).click();
     await page.clock.runFor(1500);
-    const armed = page.locator('#card-ready1 .sc-actions button.confirm-pending');
-    await expect(armed).toHaveText('CONFIRM CANCEL');
+    const armed = ctl.locator('button.confirm-pending');
+    await expect(armed).toHaveText(L.armedCancel);
     await armed.click();
     expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
   });
@@ -141,16 +156,27 @@ test.describe('END and CANCEL confirm', () => {
     expect(await calls(page)).toEqual([['live1', 'ENDED']]);
   });
 
+  test('the End in a live row stays armed through several ticks', async ({ page }) => {
+    await setup(page, [live()]);
+    await page.locator('#card-live1 .sc-act .btn.danger').click();
+    await page.clock.runFor(1500);
+    const armed = page.locator('#card-live1 .sc-act .btn.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
+    await armed.click();
+    expect(await calls(page)).toEqual([['live1', 'ENDED']]);
+  });
+
   test('the batch END ALL button shows a visible armed state', async ({ page }) => {
     await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1').hover();          // editing tools show on hover (spec 2.2)
     await page.locator('#card-live1 .batch-chk').check();
     const btn = page.locator('#batch-bar [data-batch="ENDED"]');
     await btn.click();
     await expect(btn).toHaveClass(/confirm-pending/);
-    await expect(btn).toHaveText('CONFIRM END');
+    await expect(btn).toHaveText(L.armedEnd);
     await page.clock.runFor(3500);
     await expect(btn).not.toHaveClass(/confirm-pending/);
-    await expect(btn).toHaveText('END ALL');
+    await expect(btn).toHaveText(L.endAll);
   });
 });
 
@@ -158,6 +184,7 @@ test.describe('END and CANCEL confirm', () => {
 test.describe('batch actions', () => {
   test('a batch only counts sessions that exist in the current event', async ({ page }) => {
     await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    await page.locator('#card-live1').hover();
     await page.locator('#card-live1 .batch-chk').check();
     await page.evaluate(() => (window as any).toggleBatchSelect('ghost-from-another-event', true));
     const btn = page.locator('#batch-bar [data-batch="ENDED"]');
@@ -170,6 +197,7 @@ test.describe('batch actions', () => {
   test('switching event clears the batch selection and its armed button', async ({ page }) => {
     await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
     await page.evaluate(() => { (0, eval)('S').events = [{ id: 'ev-1', name: 'One' }, { id: 'ev-2', name: 'Two', timezone: 'UTC' }]; });
+    await page.locator('#card-live1').hover();
     await page.locator('#card-live1 .batch-chk').check();
     const btn = page.locator('#batch-bar [data-batch="ENDED"]');
     await btn.click();
@@ -177,13 +205,14 @@ test.describe('batch actions', () => {
     await page.evaluate(() => (window as any).switchEvent('ev-2'));
     await expect(page.locator('#batch-bar')).toBeHidden();
     await expect(btn).not.toHaveClass(/confirm-pending/);
-    await expect(btn).toHaveText('END ALL');
+    await expect(btn).toHaveText(L.endAll);
     // Selecting in the new event and pressing once only arms again.
     await page.evaluate(() => {
       const St = (0, eval)('S');
       St.sessions = [{ ...St.sessions[0], id: 'n1', event_id: 'ev-2', status: 'LIVE' }];
       (window as any).renderSessions();
     });
+    await page.locator('#card-n1').hover();
     await page.locator('#card-n1 .batch-chk').check();
     await btn.click();
     expect(await calls(page)).toEqual([]);
@@ -192,10 +221,10 @@ test.describe('batch actions', () => {
 
 // ── 2. HOLD before END in LIVE and OVERRUN ────────────────────────────────
 for (const status of ['LIVE', 'OVERRUN']) {
-  test(`${status}: HOLD comes before END on the card and in the sidebar quick actions`, async ({ page }) => {
+  test(`${status}: HOLD comes before END in the session's controls and in the sidebar quick actions`, async ({ page }) => {
     await setup(page, [live({ status })]);
-    const card = await page.locator('#card-live1 .sc-actions > button').allTextContents();
-    expect(card.slice(0, 2)).toEqual(['HOLD', 'END SESSION']);
+    const card = await (await controls(page, 'live1')).locator(':scope > button').allTextContents();
+    expect(card.slice(0, 2)).toEqual([L.hold, L.end]);
     const ctx = await page.locator('#ctx-actions .ctx-btn').allTextContents();
     expect(ctx.slice(0, 2).map(s => s.trim())).toEqual(['HOLD', 'END SESSION']);
   });
@@ -374,21 +403,23 @@ test.describe('event time zone', () => {
 
   test('STARTED shows the actual start in Cairo time', async ({ page }) => {
     await setup(page, [live({ actual_start: '2026-10-06T11:31:00Z' })], { event: cairo });
-    await expect(page.locator('#card-live1 .sc-times')).toContainText('14:31:00');
+    await controls(page, 'live1');
+    await expect(page.locator('#card-live1 .sc-drawer-times')).toHaveText(/14:31$/);
   });
 });
 
 // ── 8. A delayed card keeps its status colour on the left edge ────────────
-test('a delayed READY card keeps the READY left edge and shows the delay as a top line', async ({ page }) => {
+test('a delayed READY row keeps the READY left edge and shows the delay in its own column', async ({ page }) => {
   await setup(page, [sess('d', 1, { status: 'READY', cumulative_delay: 5, scheduled_start: '11:05:00', scheduled_end: '11:35:00' })]);
   const css = await page.locator('#card-d').evaluate(e => {
     const cs = getComputedStyle(e);
-    return { left: cs.borderLeftColor, top: cs.borderTopColor, topW: cs.borderTopWidth };
+    return { left: cs.borderLeftColor, leftW: cs.borderLeftWidth, top: cs.borderTopColor };
   });
-  expect(css.left).toBe('rgb(52, 211, 153)');  // --st-ready
-  expect(css.top).toBe('rgb(251, 146, 60)');   // .sc.delayed uses --amber = --st-hold
-  expect(css.topW).toBe('2px');
-  await expect(page.locator('#card-d .delay-tag')).toHaveText('+5min');
+  expect(css.left).toBe('rgb(52, 211, 153)');   // --st-ready
+  expect(css.leftW).toBe('4px');
+  expect(css.top).not.toBe('rgb(251, 146, 60)'); // the delay no longer paints an edge
+  await expect(page.locator('#card-d .sc-delay')).toHaveText('+5');
+  await expect(page.locator('#card-d .sc-time small')).toHaveText('was 11:00');
 });
 
 // ── 9. HOLD badge, reduced motion, speaker arrival errors ────────────────
@@ -404,7 +435,7 @@ test('the HOLD badge is solid, not blinking', async ({ page }) => {
 // no-preference run is the control: it proves the states really animate.
 async function motionState(page: Page) {
   await setup(page, [live()]);
-  await page.locator('#card-live1 .sc-actions button', { hasText: 'END SESSION' }).click();
+  await (await controls(page, 'live1')).locator('button', { hasText: L.end }).click();
   return page.evaluate(() => {
     (0, eval)('onDisconnect(); buildEvSelect([]);');
     const name = (sel: string) => { const el = document.querySelector(sel); return el ? getComputedStyle(el).animationName : 'missing'; };

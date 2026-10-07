@@ -2,7 +2,7 @@
 // Component spec (section 3): sizes, variants, badge recipe, chip, label,
 // pill, and that every icon reference resolves to a sprite symbol.
 import { test, expect, type Page } from '@playwright/test';
-import { openConsole, evalPage, PANEL_ID, textContrast } from './console-boot-mock';
+import { openConsole, evalPage, ID, PANEL_ID, textContrast } from './console-boot-mock';
 
 async function mount(page: Page, html: string) {
   await page.evaluate((h) => { const d = document.createElement('div'); d.id = 'cmp-probe'; d.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;display:flex;gap:8px;padding:8px;background:var(--bg)'; d.innerHTML = h; document.body.append(d); }, html);
@@ -105,10 +105,13 @@ async function armedHoverCheck(page: Page, sel: string) {
 
 test('components: an armed END or CANCEL stays solid red under hover', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
+  // Stage 3: a session's full controls sit in its row drawer, opened by selecting it.
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
   await page.locator(`#card-${PANEL_ID} .sc-actions button[onclick^="confirmEnd"]`).click();
   const end = await armedHoverCheck(page, `#card-${PANEL_ID} .sc-actions button.confirm-pending`);
   expect(end.bg).toBe('rgb(239, 68, 68)');
   expect(end.contrast).toBeGreaterThanOrEqual(4.5);
+  await evalPage(page, `S.selectedId = '${ID(5)}'; renderSessions();`);
   const cancelBtn = page.locator('.sc-actions button[onclick^="confirmCancel"]').first();
   await expect(cancelBtn).toHaveCount(1);
   const cardId = await cancelBtn.evaluate(b => b.closest('.sc')!.id);
@@ -129,6 +132,7 @@ test('components: an armed END or CANCEL stays solid red under hover', async ({ 
 
 test('components: armed batch buttons stay solid red under hover', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
+  await page.locator(`#card-${PANEL_ID}`).hover();          // editing tools show on hover (spec 2.2)
   await page.locator(`#card-${PANEL_ID} .batch-chk`).check();
   for (const st of ['ENDED', 'CANCELLED', 'READY']) {
     const sel = `#batch-bar [data-batch="${st}"]`;
@@ -143,6 +147,7 @@ test('components: armed batch buttons stay solid red under hover', async ({ brow
 
 test('components: every visible button is at least 44 px on touch', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { touch: true, viewport: { width: 1280, height: 800 } });
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);   // the row drawer holds the full controls
   const small = await page.evaluate(() => [...document.querySelectorAll('.btn, .abtn')]
     .map(b => ({ b, r: b.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && r.height > 0)

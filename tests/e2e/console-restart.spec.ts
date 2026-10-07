@@ -62,21 +62,30 @@ async function setup(page: Page, role = 'director') {
 }
 
 const restartBtn = (page: Page, id: string) => page.locator(`#card-${id} [data-restart]`);
+// Restart sits with the selected session's controls (stage 3: the row drawer).
+async function openControls(page: Page, id: string) {
+  await page.evaluate((sid) => (0, eval)(`S.foldOpen = { ENDED: true, CANCELLED: true }; S.selectedId = '${sid}'; renderSessions();`), id);
+}
 
 test('the Restart button shows on started sessions and not on a planned one', async ({ page }) => {
   await setup(page);
+  await openControls(page, STARTED);
   await expect(restartBtn(page, STARTED)).toBeVisible();
+  await openControls(page, ENDED);
   await expect(restartBtn(page, ENDED)).toBeVisible();
+  await openControls(page, PLANNED);
   await expect(restartBtn(page, PLANNED)).toHaveCount(0);
 });
 
 test('a role that cannot set READY gets no Restart button', async ({ page }) => {
   await setup(page, 'av');
+  await openControls(page, STARTED);
   await expect(page.locator('[data-restart]')).toHaveCount(0);
 });
 
 test('confirm calls restart-session with the session id and version', async ({ page }) => {
   const calls = await setup(page);
+  await openControls(page, STARTED);
   await restartBtn(page, STARTED).click();
   const modal = page.locator('#restart-modal');
   await expect(modal).toBeVisible();
@@ -96,6 +105,7 @@ test('confirm calls restart-session with the session id and version', async ({ p
 
 test('cancel closes the modal and calls nothing', async ({ page }) => {
   const calls = await setup(page);
+  await openControls(page, ENDED);
   await restartBtn(page, ENDED).click();
   await expect(page.locator('#restart-modal')).toBeVisible();
   await page.locator('#restart-modal-no').click();
@@ -106,6 +116,7 @@ test('cancel closes the modal and calls nothing', async ({ page }) => {
 
 test('Escape closes the modal and calls nothing', async ({ page }) => {
   const calls = await setup(page);
+  await openControls(page, ENDED);
   await restartBtn(page, ENDED).click();
   await expect(page.locator('#restart-modal')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -132,6 +143,7 @@ test('I1: a restarted session is not auto-started again in its start minute', as
     checkAutoStart();
   `);
   await expect.poll(() => calls.filter(c => c.fn === 'go-live').length).toBe(1);
+  await openControls(page, PLANNED);
   await expect(restartBtn(page, PLANNED)).toBeVisible();
   await restartBtn(page, PLANNED).click();
   await page.locator('#restart-modal-yes').click();
@@ -149,6 +161,7 @@ test('I2: END, then RESTART, and the undo bar is gone', async ({ page }) => {
     transition('${STARTED}', 'ENDED');
   `);
   await expect(page.locator('#undo-bar')).toBeVisible();
+  await openControls(page, STARTED);
   await restartBtn(page, STARTED).click();
   await page.locator('#restart-modal-yes').click();
   await expect.poll(() => calls.filter(c => c.fn === 'restart-session').length).toBe(1);
@@ -195,6 +208,7 @@ test('I2: undo is version-guarded and a lost race reloads instead of claiming su
 
 test('I3: the session changes while the modal is open, so confirm restarts nothing', async ({ page }) => {
   const calls = await setup(page);
+  await openControls(page, ENDED);
   await restartBtn(page, ENDED).click();
   await expect(page.locator('#restart-modal')).toBeVisible();
   await evalPage(page, `
@@ -210,6 +224,7 @@ test('I3: the session changes while the modal is open, so confirm restarts nothi
 
 test('I3: confirm sends the version seen when the modal opened', async ({ page }) => {
   const calls = await setup(page);
+  await openControls(page, ENDED);
   await restartBtn(page, ENDED).click();
   await evalPage(page, `S.sessions.find(x => x.id === '${ENDED}').version = 10;`);
   await page.locator('#restart-modal-yes').click();
@@ -222,6 +237,7 @@ for (const [code, text] of [['NOT_RESTARTABLE', 'has not started'], ['Version co
     await setup(page);
     // Registered after setup's catch-all, so it runs first.
     await page.route('**/functions/v1/restart-session', r => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: code }) }));
+    await openControls(page, ENDED);
     await restartBtn(page, ENDED).click();
     await page.locator('#restart-modal-yes').click();
     await expect(toasts(page)).toContainText(text);
