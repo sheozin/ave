@@ -3,7 +3,7 @@
 // baselines change only on purpose: run with --update-snapshots in the task
 // that changes the look, review every PNG, commit them with that task.
 import { test } from '@playwright/test';
-import { openConsole, snap, evalPage, overrunSessions, noLiveSessions, PANEL_ID, type Scenario } from './console-boot-mock';
+import { openConsole, snap, evalPage, overrunSessions, noLiveSessions, fourRoomSessions, PANEL_ID, type Scenario } from './console-boot-mock';
 
 interface Case { name: string; sc?: Scenario; prep?: string }
 const CASES: Case[] = [
@@ -19,6 +19,8 @@ const CASES: Case[] = [
   { name: 'armed-end-1440', prep: `document.querySelector('[onclick*="confirmEnd(\\'${PANEL_ID}\\'"]').click()` },
   { name: 'signage-1440', prep: `setRole('signage')` },
   { name: 'browser-cairo-1440', sc: { timezoneId: 'Africa/Cairo' } },
+  { name: 'band-overrun-1280', sc: { sessions: overrunSessions(), viewport: { width: 1280, height: 720 } } },
+  { name: 'band-four-rooms-1440', sc: { sessions: fourRoomSessions() } },
 ];
 
 for (const c of CASES) {

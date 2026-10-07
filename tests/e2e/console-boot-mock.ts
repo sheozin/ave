@@ -110,6 +110,21 @@ export function longTitleSessions(): Sess[] {
     : x);
 }
 
+// The demo plus six afternoon sessions, so the list is longer than the screen
+// and "at least 8 rows visible" is a real limit, not the whole list.
+export function manySessions(): Sess[] {
+  const extra: [string, string, string, string][] = [
+    ['Retail Media Networks at the Airport', 'Main Stage', '14:30:00', '15:00:00'],
+    ['Panel: Arrivals Duty Free After Two Years', 'Hall B', '15:00:00', '15:45:00'],
+    ['Loyalty Programmes for Transit Passengers', 'Main Stage', '15:15:00', '15:45:00'],
+    ['Workshop: Planogram Basics for Gate Stores', 'Hall B', '16:00:00', '16:45:00'],
+    ['Closing Remarks', 'Main Stage', '16:00:00', '16:15:00'],
+    ['Networking Coffee', 'Hall B', '16:45:00', '17:00:00'],
+  ];
+  return [...demoSessions(), ...extra.map(([title, room, a, b], i) => sess(11 + i, { title, type: 'Talk', room, status: 'PLANNED', version: 1,
+    planned_start: a, planned_end: b, scheduled_start: a, scheduled_end: b }))];
+}
+
 const EVENT = {
   id: EVENT_ID, name: 'GTR North Africa 2026', date: '2026-10-06', venue: 'Cairo', timezone: 'Africa/Cairo',
   active: true, created_via: 'console', event_start: '09:00:00', event_end: '17:00:00', created_at: '2026-09-01T08:00:00Z',

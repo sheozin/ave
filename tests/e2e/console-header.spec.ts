@@ -11,9 +11,9 @@ test('header: one 52 px bar, no diagnostics strip or role bar, top chrome at mos
   await expect(page.locator('#role-bar')).toHaveCount(0);
   expect(Math.round((await page.locator('#header').boundingBox())!.height)).toBe(52);
   const banner = (await page.locator('#bc-banner').boundingBox())?.height ?? 0;
-  const fb = (await page.locator('#filter-bar').boundingBox())!;
-  // Top chrome in stage 3 = header + filter row, banner excluded (spec: at most 100 px).
-  expect(fb.y + fb.height - banner).toBeLessThanOrEqual(100);
+  // Top chrome in stage 4 = everything above the band, banner excluded (spec: at most 100 px).
+  const bandTop = (await page.locator('#band').boundingBox())!.y;
+  expect(bandTop - banner).toBeLessThanOrEqual(100);   // top chrome = everything above the band
   expect(await page.locator('#header').evaluate(el => /\p{Extended_Pictographic}/u.test(el.textContent || ''))).toBe(false);
   await ctx.close();
 });

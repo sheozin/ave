@@ -468,10 +468,10 @@
 
 
     /* ── MAIN LAYOUT ── */
-    #main { flex: 1; display: flex; overflow: hidden; background: var(--bg); }
-    #sessions-col { flex: 1; overflow-y: auto; padding: 14px 16px; background: var(--bg); }
+    #main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; overflow: hidden; background: var(--bg); }
+    #sessions-col { overflow-y: auto; min-height: 0; padding: 8px 16px 16px; background: var(--bg); }
     #sidebar {
-      width: 280px; border-left: 1px solid var(--border-section);
+      width: auto; min-width: 0; border-left: 1px solid var(--border-section);
       display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
       background: var(--surface);
     }
@@ -1233,6 +1233,7 @@
 
     /* ── TABLET: 768px – 1279px ─────────────────────────────────── */
     @media screen and (max-width: 1279px) {
+      #main { grid-template-columns: minmax(0, 1fr); }
       /* HEADER */
       #header { padding: 0 12px; gap: 10px; }
       #hdr-offset { display: none; }
@@ -1332,9 +1333,11 @@
     /* Header: logo stays LTR, rest flows RTL */
     [dir="rtl"] .logo { direction: ltr; }
     [dir="rtl"] #header { direction: rtl; }
-    /* Sidebar slides from left in RTL */
-    [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
-    [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
+    /* Sidebar slides from left in RTL, where it is a drawer (below 1280 px); on desktop it is the rail */
+    @media screen and (max-width: 1279px) {
+      [dir="rtl"] #sidebar { right: auto; left: 0; transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.5); }
+      [dir="rtl"] #sidebar.sidebar-open { transform: translateX(0); }
+    }
     /* Filter bar + broadcast */
     [dir="rtl"] #filter-bar { direction: rtl; }
     [dir="rtl"] #bc-bar { direction: rtl; flex-direction: row-reverse; }
@@ -1646,6 +1649,86 @@
       .sc-time { grid-area: time; } .sc-delay { grid-area: delay; } .sc-act { grid-area: act; }
       .sc-room:empty { display: none; }
       .sc-room .chip { max-width: 100%; }
+    }
+    /* ═══ Command center layout and band (stage 4) ═══ */
+    #main-col { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+    /* 1280 to 1439: a 320 px rail (below 1280 the rail is a drawer and #main is one column) */
+    @media (min-width: 1280px) and (max-width: 1439px) { #main { grid-template-columns: minmax(0, 1fr) 320px; } }
+    .band { display: grid; background: var(--panel); border-bottom: 1px solid var(--border-section); }
+    .band[hidden] { display: none; }
+    /* The filter row now shares the main column with the band: from 768 to 1599 px "Edit run of
+       show" is its icon (name in aria-label and title), and the row wraps rather than clip */
+    #filter-bar { flex-wrap: wrap; height: auto; min-height: 48px; padding-block: 6px; row-gap: 6px; }
+    @media (min-width: 768px) and (max-width: 1599px) { #edit-mode-btn .fb-lbl { display: none; } #fb-search { flex: 1 1 160px; } }
+    .lane { display: grid; grid-template-columns: 110px minmax(0, 1fr); border-bottom: 1px solid var(--border-divider); }
+    .lane:last-child { border-bottom: 0; }
+    .lane-room { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-inline-end: 1px solid var(--border-divider); font: 700 var(--fs-13)/1.25 var(--font-sans); text-transform: uppercase; color: var(--text-primary); min-width: 0; }
+    /* A long room name wraps to a second line ("MAIN STAGE" fits one), then truncates */
+    .lane-room span { overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .lane-body { display: grid; min-width: 0; }
+    .lane-now, .lane-next { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto auto; align-items: center; column-gap: 14px; padding: 7px 14px; min-width: 0; }
+    .lane-now { min-height: 58px; }
+    .lane-next { min-height: 40px; padding-block: 4px; border-top: 1px dashed var(--border-divider); color: var(--text-secondary); font-size: var(--fs-13); }
+    .lane-what { display: grid; gap: 2px; min-width: 0; }
+    .lane-title { font-size: var(--fs-16); font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lane-who { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-12); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
+    .lane-spk { overflow: hidden; text-overflow: ellipsis; }
+    .lane-flags { display: inline-flex; gap: 10px; color: var(--text-primary); font-weight: 600; }
+    .lane-count { display: grid; justify-items: end; gap: 2px; }
+    .lane-big { font: 700 var(--fs-28)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
+    .lane-unit { font: 700 var(--fs-11)/1.2 var(--font-sans); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary); }
+    .lane-ctrl { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+    .lane-lead { display: inline-flex; width: 112px; justify-content: flex-end; }
+    .lane-lead .btn { width: 100%; }
+    .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { width: 148px; overflow: hidden; text-overflow: ellipsis; }
+    .end-slot { display: inline-block; width: 148px; height: 1px; }
+    .lane-next-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lane-next-title { color: var(--text-primary); font-weight: 600; }
+    .lane-next-state { display: inline-flex; align-items: center; }
+    .lane-risk { color: var(--st-live-fg); }
+    .warnchip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--r-badge); background: var(--st-live-bg); color: var(--danger-fg); font: 700 var(--fs-11) var(--font-sans); letter-spacing: var(--ls-badge); text-transform: uppercase; }
+    .lane-idle { grid-template-columns: minmax(0, 1fr) auto; }
+    .lane-idle-text { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lane.is-live    .lane-now { background: var(--st-live-wash); }
+    .lane.is-over    .lane-now { background: var(--st-overrun-wash); box-shadow: inset 4px 0 0 var(--st-overrun); animation: lane-over 1.6s ease-in-out infinite; }
+    .lane.is-hold    .lane-now { background: var(--st-hold-wash); }
+    .lane.is-calling .lane-now { background: var(--st-calling-wash); }
+    .lane.is-over .lane-big { color: var(--st-overrun-fg); }
+    .lane.is-hold .lane-big { color: var(--st-hold-fg); }
+    .lane-count.warn-amber .lane-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the list */
+    .lane-count.warn-red   .lane-big { color: var(--st-live-fg); }
+    @keyframes lane-over { 50% { box-shadow: inset 4px 0 0 transparent; } }
+    .lane-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 14px; border-top: 1px solid var(--border-divider); }
+    .lane-chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; max-width: 360px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-section); background: var(--card); color: var(--text-secondary); font: 500 var(--fs-12) var(--font-sans); cursor: pointer; }
+    .lane-chip b { color: var(--text-primary); }
+    .lane-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 1280×720: now and next side by side on one 44 px line (spec 2.6) */
+    @media (max-width: 1439px) {
+      .lane-body { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }   /* now gets two thirds: its title is the one the operator acts on */
+      .lane-now { min-height: 44px; padding: 4px 10px; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: 10px; }
+      .lane-next { min-height: 44px; border-top: 0; border-inline-start: 1px dashed var(--border-divider); padding: 4px 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
+      .lane-next-state, .lane-who, .lane-unit { display: none; }
+      .lane-big { font-size: var(--fs-20); }
+      .lane-lead { width: 96px; }
+      /* End keeps its 148 px slot: the armed label "Press again to end" (Task 4.2)
+         measures 142 px at md and would be clipped in a 112 px slot. */
+    }
+    /* Phone (until the stage 5 phone layout): the room above, now and next stacked, controls on their own line */
+    @media (max-width: 767px) {
+      /* The band, filters and list scroll as one column, so the list is never squeezed under the band */
+      #main-col { display: block; overflow-y: auto; }
+      #sessions-col { overflow: visible; }
+      #delay-strip { flex-wrap: wrap; }
+      .lane { grid-template-columns: minmax(0, 1fr); }
+      .lane-room { padding: 6px 10px; border-inline-end: 0; border-bottom: 1px solid var(--border-divider); }
+      .lane-body { grid-template-columns: minmax(0, 1fr); }
+      .lane-now { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "badge what count" "ctrl ctrl ctrl"; row-gap: 8px; padding: 8px 10px; }
+      .lane-now > .badge { grid-area: badge; } .lane-now .lane-what { grid-area: what; } .lane-now .lane-count { grid-area: count; } .lane-now > .lane-ctrl { grid-area: ctrl; }
+      .lane-now.lane-idle { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: none; }
+      .lane-next { grid-template-columns: auto minmax(0, 1fr) auto; border-inline-start: 0; border-top: 1px dashed var(--border-divider); padding: 6px 10px; }
+      .lane-next-state { display: none; }
+      .lane-lead, .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { width: auto; flex: 1; }
+      .lane-big { font-size: var(--fs-28); }
     }
 </style>
 </head>
@@ -2067,20 +2150,21 @@
 </div>
 <input type="file" id="csv-import-input" accept=".csv,text/csv">
 
-<!-- FILTER BAR -->
-<div id="filter-bar"><div id="fb-controls"></div><span class="fb-spacer"></span><div id="delay-strip" hidden></div></div>
-
 <!-- SIDEBAR TOGGLE + BACKDROP -->
 <button id="sidebar-toggle" onclick="toggleSidebar()">&#9664;</button>
 <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
 <!-- MAIN -->
 <div id="main">
-  <div id="sessions-col">
-    <div id="sessions-list">
-      <div id="empty">
-        <div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg></div>
-        <h2>Loading sessions…</h2>
+  <div id="main-col">
+    <section id="band" class="band" aria-label="Now and next" hidden></section>
+    <div id="filter-bar"><div id="fb-controls"></div><span class="fb-spacer"></span><div id="delay-strip" hidden></div></div>
+    <div id="sessions-col">
+      <div id="sessions-list">
+        <div id="empty">
+          <div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg></div>
+          <h2>Loading sessions…</h2>
+        </div>
       </div>
     </div>
   </div>
@@ -2606,6 +2690,7 @@ const S = {
   viewMode:        'list', // PR-020: 'list' | 'timeline'
   selectedId:      null,   // session shown in the row drawer (stage 3) / inspector (stage 4)
   foldOpen:        { ENDED: false, CANCELLED: false },
+  laneOpen:        {},
   editMode:        false,  // "Edit run of show": editing tools on every row
   listOpened:      false,  // first render scrolls to the first unfinished row
   booted:          false,  // boot() runs once per sign-in
@@ -3912,9 +3997,142 @@ function toggleEditMode() {
 }
 
 // ═══════════════════════════════════════════════════
+// COMMAND CENTER: now and next band (stage 4)
+// ═══════════════════════════════════════════════════
+const BAND_ROLES = ['director', 'stage', 'av'];
+const NOW_RANK = { OVERRUN: 0, LIVE: 1, HOLD: 2, CALLING: 3 };
+const ROOM_NONE = '';
+function roomOf(s) { return s.room || ROOM_NONE; }
+// The operator's own room (stage, av, phone): a per-viewer convenience.
+function myRoom() {
+  try { return localStorage.getItem('cuedeck_room_' + (S.event?.id || '')) || null; } catch { return null; }
+}
+function setMyRoom(room) {
+  try {
+    const k = 'cuedeck_room_' + (S.event?.id || '');
+    if (room) localStorage.setItem(k, room); else localStorage.removeItem(k);
+  } catch { /* storage blocked: order stays alphabetical */ }
+  renderSessions();
+}
+// Event room order when the event has one, else alphabetical; the operator's room first.
+function roomsInOrder() {
+  const rooms = [...new Set(S.sessions.map(roomOf))];
+  const pref = Array.isArray(S.event?.rooms) ? S.event.rooms : null;
+  rooms.sort((a, b) => {
+    if (pref) { const ia = pref.indexOf(a), ib = pref.indexOf(b); if (ia !== ib) return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib); }
+    if (a === ROOM_NONE) return 1;
+    if (b === ROOM_NONE) return -1;
+    return a.localeCompare(b);
+  });
+  const mine = myRoom();
+  if (mine && rooms.includes(mine)) { rooms.splice(rooms.indexOf(mine), 1); rooms.unshift(mine); }
+  return rooms;
+}
+function laneFor(room) {
+  const inRoom = S.sessions.filter(s => roomOf(s) === room).sort((a, b) => a.sort_order - b.sort_order);
+  const now = inRoom.filter(s => s.status in NOW_RANK)
+    .sort((a, b) => NOW_RANK[a.status] - NOW_RANK[b.status] || a.sort_order - b.sort_order)[0] || null;
+  const next = now ? getNextSession(S.sessions, now) : (inRoom.find(s => !FINISHED.includes(s.status)) || null);
+  return { room, now, next };
+}
+function bandLanes() { return roomsInOrder().map(laneFor).filter(l => l.now || l.next); }
+function minsUntil(s) { return Math.ceil(toMins(s.scheduled_start) - eventNowMinutes()); }
+function untilText(s) { const m = minsUntil(s); return m <= 0 ? t('cc.band.now') : tf('cc.band.inMin', { n: m }); }
+
+function renderBand() {
+  const band = document.getElementById('band');
+  if (!band) return;
+  const lanes = BAND_ROLES.includes(S.role) ? bandLanes() : [];
+  if (!lanes.length) { band.hidden = true; band.innerHTML = ''; return; }
+  const nowMs = correctedNow();
+  const many = lanes.length > 3;
+  const full = [], chips = [];
+  // More than three rooms: lanes that need attention stay full, idle ones collapse.
+  for (const l of lanes) (many && !l.now && !S.laneOpen[l.room] ? chips : full).push(l);
+  band.hidden = false;
+  band.setAttribute('aria-label', t('cc.band.label'));
+  band.innerHTML = full.map(l => laneHTML(l, nowMs, many)).join('')
+    + (chips.length ? `<div class="lane-chips">${chips.map(laneChipHTML).join('')}</div>` : '');
+}
+
+function laneHTML(l, nowMs, many) {
+  const roomName = l.room === ROOM_NONE ? t('cc.band.noRoom') : l.room;
+  const collapse = many && !l.now ? `<button type="button" class="btn ghost sm icon-only" data-fk="lanecollapse-${esc(l.room)}" aria-label="${esc(t('cc.band.collapse'))}" onclick="toggleLane(${esc(JSON.stringify(l.room))})">${icon('chev-down')}</button>` : '';
+  const room = `<div class="lane-room"><span>${esc(roomName)}</span>${collapse}</div>`;
+  const s = l.now;
+  if (!s) {
+    const n = l.next;
+    return `<div class="lane is-idle" data-room="${esc(l.room)}">${room}
+      <div class="lane-body"><div class="lane-now lane-idle">
+        <span class="lane-idle-text">${esc(tf('cc.band.idle', { room: roomName }))} · ${esc(t('cc.band.next'))} #${n.sort_order} ${esc(n.title)} · ${esc(untilText(n))}</span>
+        <span class="lane-ctrl">${primaryButtonHTML(n, 'md', 'band-idle')}</span>
+      </div></div></div>`;
+  }
+  const tm = (s.status === 'LIVE' || s.status === 'OVERRUN') ? liveTiming(s, nowMs) : null;
+  const over = s.status === 'OVERRUN' || !!(tm && tm.overrun);
+  const cls = over ? 'is-over' : s.status === 'LIVE' ? 'is-live' : s.status === 'HOLD' ? 'is-hold' : 'is-calling';
+  const cd = countdownLabel(s, nowMs) || { big: hm(s.scheduled_start), unit: untilText(s) };
+  // A panel shows its lead and a count; one speaker shows name and company (approved demo).
+  const spk = people(s).length > 1 ? speakerShort(s) : speakerLine(s);
+  const who = S.role === 'av'
+    ? `<span class="lane-flags">${flagsHTML(s)}</span>`
+    : `<span class="lane-spk">${esc(spk)}</span>${s.speaker_arrived && spk ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : ''}`;
+  // Fixed slots: [lead: Hold for LIVE/OVERRUN, else the forward action] | gap | [End or an empty slot]
+  const lead = (s.status === 'LIVE' || s.status === 'OVERRUN')
+    ? (canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'md', 'band') : '')
+    : primaryButtonHTML(s, 'md', 'band');
+  const end = endButtonHTML(s, 'md', 'band') || '<span class="end-slot" aria-hidden="true"></span>';
+  return `<div class="lane ${cls}" data-room="${esc(l.room)}">${room}
+    <div class="lane-body">
+      <div class="lane-now">
+        ${statusBadge(s.status)}
+        <span class="lane-what"><span class="lane-title" title="${esc(s.title)}">#${s.sort_order} ${esc(s.title)}</span><span class="lane-who">${who}</span></span>
+        <span class="lane-count${warnCls(cd)}" data-timer><span class="lane-big"${(s.status === 'LIVE' || s.status === 'OVERRUN') ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span><span class="lane-unit">${esc(cd.unit)}</span></span>
+        <span class="lane-ctrl"><span class="lane-lead">${lead}</span><span class="act-gap" aria-hidden="true"></span>${end}</span>
+      </div>
+      ${l.next ? nextRowHTML(l, over, tm) : ''}
+    </div>
+  </div>`;
+}
+
+function nextRowHTML(l, over, tm) {
+  const n = l.next;
+  const delay = (n.cumulative_delay || 0) > 0 ? ` (+${n.cumulative_delay})` : '';
+  let when = esc(`${hm(n.scheduled_start)}${delay} · ${untilText(n)}`);
+  let push = '';
+  if (over && tm) {
+    // Knock-on: the current session's overrun, in 5-minute steps (spec 2.1).
+    const overMin = Math.max(1, Math.ceil(-tm.remain / 60_000));
+    const shift = Math.max(5, Math.round(overMin / 5) * 5);
+    when = `<b class="lane-risk">${esc(tf('cc.band.atRisk', { was: hm(n.scheduled_start), now: addMinutes(hm(n.scheduled_start), shift) }))}</b>`;
+    if (ROLE_DELAY[S.role]) push = `<button type="button" class="btn sm" data-fk="band-push-${n.id}" onclick="applyDelay('${n.id}', ${shift})">${esc(tf('cc.band.push', { n: shift }))}</button>`;
+  }
+  const hasSpeaker = !!(n.speaker || people(n).length);
+  const notArrived = hasSpeaker && !n.speaker_arrived && minsUntil(n) <= 10;
+  return `<div class="lane-next">
+    <span class="lbl">${esc(t('cc.band.next'))}</span>
+    <span class="lane-next-what"><span class="lane-next-title">#${n.sort_order} ${esc(n.title)}</span> · ${when}</span>
+    <span class="lane-next-state">${notArrived ? `<span class="warnchip">${icon('user')}${esc(t('cc.band.notArrived'))}</span>` : statusBadge(n.status)}</span>
+    <span class="lane-ctrl">${push}${primaryButtonHTML(n, 'sm', 'band-next')}</span>
+  </div>`;
+}
+
+function laneChipHTML(l) {
+  const roomName = l.room === ROOM_NONE ? t('cc.band.noRoom') : l.room;
+  const n = l.next;
+  return `<button type="button" class="lane-chip" data-fk="lanechip-${esc(l.room)}" aria-label="${esc(tf('cc.band.expand', { room: roomName }))}" onclick="toggleLane(${esc(JSON.stringify(l.room))})">
+    <b>${esc(roomName)}</b><span>${esc(t('cc.band.next'))} #${n.sort_order} ${esc(n.title)} · ${hm(n.scheduled_start)}</span></button>`;
+}
+function toggleLane(room) { S.laneOpen[room] = !S.laneOpen[room]; renderSessions(); }
+
+// ═══════════════════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════════════════
 function renderSessions() {
+  // The band shows in list and timeline views alike (spec 2.5).
+  const fkTop = focusKey();
+  renderBand();
+  restoreFocus(fkTop);
   renderBCSend();
   // Signage role gets its own dedicated management panel
   if (S.role === 'signage') {
@@ -5972,13 +6190,14 @@ function buildFilterBar() {
     '<button type="button" class="fvp-btn' + (S.viewMode === 'list' ? ' active' : '') + '" data-view="list" aria-pressed="' + (S.viewMode === 'list') + '" onclick="setViewMode(\'list\')">' + icon('list') + esc(t('filter.list')) + '</button>' +
     '<button type="button" class="fvp-btn' + (S.viewMode === 'timeline' ? ' active' : '') + '" data-view="timeline" aria-pressed="' + (S.viewMode === 'timeline') + '" onclick="setViewMode(\'timeline\')">' + icon('clock') + esc(t('filter.timeline')) + '</button>' +
     '</div>' +
-    (isDirector && S.role !== 'signage' ? '<button type="button" id="edit-mode-btn" class="btn sm ghost" aria-pressed="' + !!S.editMode + '" onclick="toggleEditMode()">' + icon('edit') + esc(t('cc.list.editMode')) + '</button>' : '');
+    (isDirector && S.role !== 'signage' ? '<button type="button" id="edit-mode-btn" class="btn sm ghost" aria-pressed="' + !!S.editMode + '" aria-label="' + esc(t('cc.list.editMode')) + '" title="' + esc(t('cc.list.editMode')) + '" onclick="toggleEditMode()">' + icon('edit') + '<span class="fb-lbl">' + esc(t('cc.list.editMode')) + '</span></button>' : '');
 }
 
 function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
 function onFilterChange() {
   F.status = document.getElementById('fb-status').value;
   F.room   = document.getElementById('fb-room').value;
+  if ((S.role === 'stage' || S.role === 'av') && F.room) { setMyRoom(F.room); return; }
   renderSessions();
 }
 function clearFilters() {
@@ -6710,8 +6929,12 @@ setInterval(() => {
     });
   }
   refreshClockUI();
-  // Re-render while a timer is on screen: live countdowns and the held timer ("held m:ss").
-  if (S.sessions.some(s => ['LIVE', 'OVERRUN', 'HOLD'].includes(s.status))) renderSessions();
+  // Re-render while any timer is on screen: live and held countdowns, and, for the
+  // roles that see the band, its "in N min", which every unfinished session can show.
+  // Other roles (signage, interp, reg) keep the old rule, so their panels are not
+  // redrawn every second before the show starts.
+  const timers = S.sessions.some(s => ['LIVE', 'OVERRUN', 'HOLD'].includes(s.status));
+  if (timers || (BAND_ROLES.includes(S.role) && S.sessions.some(s => !FINISHED.includes(s.status)))) renderSessions();
   // OVERRUN auto-detection (director/stage/av only)
   checkOverrunSessions();
 }, 1000);
