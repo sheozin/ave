@@ -46,10 +46,11 @@ test('band: OVERRUN lane turns magenta, counts up, and the next row shows the kn
   await expect(ms).toHaveClass(/is-over/);
   await expect(ms.locator('.lane-big')).toHaveText('+10:45');
   await expect(ms.locator('.lane-unit')).toHaveText('over');
-  await expect(ms.locator('.lane-risk')).toHaveText('12:05 now 12:15, at risk');
+  // 10:45 over rounds UP to the next 5 minutes (round 3): +15, never an under-push.
+  await expect(ms.locator('.lane-risk')).toHaveText('12:05 now 12:20, at risk');
   const sent = page.waitForRequest(r => r.url().includes('/functions/v1/apply-delay'));
-  await ms.locator('.lane-next button', { hasText: 'Push following +10' }).click();
-  expect(JSON.parse((await sent).postData() || '{}')).toMatchObject({ session_id: ID(5), minutes: 10 });
+  await ms.locator('.lane-next button', { hasText: 'Push following +15' }).click();
+  expect(JSON.parse((await sent).postData() || '{}')).toMatchObject({ session_id: ID(5), minutes: 15 });
   await ctx.close();
 });
 
@@ -317,7 +318,7 @@ test('layout: at 1280x720 the now title has at least 200 px, and in overrun the 
   expect(((await title.textContent()) || '').trim()).toMatch(/^#5 /);
   expect((await title.boundingBox())!.width).toBeGreaterThanOrEqual(40);
   const risk = next.locator('.lane-risk');
-  await expect(risk).toHaveText('12:05 now 12:15, at risk');
+  await expect(risk).toHaveText('12:05 now 12:20, at risk');
   expect(await risk.evaluate(el => el.scrollWidth <= el.clientWidth + 0.5)).toBe(true);
   const rb = (await risk.boundingBox())!, nb = (await next.boundingBox())!;
   expect(rb.x).toBeGreaterThanOrEqual(nb.x);
@@ -375,3 +376,119 @@ test('layout: at 1440x900 with the GTR data the list still shows at least 6 rows
   expect(rows).toBeGreaterThanOrEqual(6);
   await ctx.close();
 });
+
+
+// ── Round 3 ──────────────────────────────────────────────────────────────────
+const holdReq = (page: Page) => page.waitForRequest(r => r.url().includes('/functions/v1/hold-stage'), { timeout: 5000 });
+const centre = async (page: Page, sel: string) => { const b = (await page.locator(sel).boundingBox())!; return [b.x + b.width / 2, b.y + b.height / 2] as const; };
+
+test('band: a press that spans the 1 s tick still lands on Hold, and the countdown keeps counting meanwhile', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const lane = '#band .lane[data-room="Main Stage"]';
+  const big = page.locator(`${lane} .lane-big`);
+  const before = await big.textContent();
+  const node = await big.elementHandle();
+  const [x, y] = await centre(page, `${lane} .lane-now .lane-lead .btn`);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.clock.runFor(1200);   // one 1 s tick while the button is held
+  expect(await node!.evaluate(el => el.isConnected)).toBe(true);   // the band was not rebuilt under the pointer
+  expect(await big.textContent()).not.toBe(before);                // but the countdown advanced in place
+  const sent = holdReq(page);
+  await page.mouse.up();
+  expect(JSON.parse((await sent).postData() || '{}')).toMatchObject({ session_id: PANEL_ID });
+  await ctx.close();
+});
+
+test('band: a press on End that spans the tick still arms it', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const end = '#band .lane[data-room="Main Stage"] .lane-now .btn.danger';
+  const [x, y] = await centre(page, end);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.clock.runFor(1200);
+  await page.mouse.up();
+  await expect(page.locator(end)).toHaveClass(/confirm-pending/);
+  await ctx.close();
+});
+
+test('band: the deferred render runs after release, a stuck press releases after 1.5 s, and a press elsewhere defers nothing', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const big = '#band .lane[data-room="Main Stage"] .lane-big';
+  // Elsewhere (the header clock): the tick re-renders as usual.
+  let node = await page.locator(big).elementHandle();
+  const [hx, hy] = await centre(page, '#hdr-clock');
+  await page.mouse.move(hx, hy); await page.mouse.down();
+  await page.clock.runFor(1100);
+  expect(await node!.evaluate(el => el.isConnected)).toBe(false);
+  await page.mouse.up();
+  // In the band, never released: the safety timeout lets the render through.
+  node = await page.locator(big).elementHandle();
+  const [x, y] = await centre(page, '#band .lane[data-room="Main Stage"] .lane-title');
+  await page.mouse.move(x, y); await page.mouse.down();
+  await page.clock.runFor(1100);
+  expect(await node!.evaluate(el => el.isConnected)).toBe(true);
+  await page.clock.runFor(1000);   // past 1.5 s held
+  expect(await node!.evaluate(el => el.isConnected)).toBe(false);
+  await page.mouse.up();
+  await ctx.close();
+});
+
+test('band: Push following rounds the overrun up to the next 5 minutes (5 over: +5, 7 over: +10)', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { sessions: overrunSessions() });
+  const push = page.locator('#band .lane[data-room="Main Stage"] .lane-next button', { hasText: 'Push following' });
+  // The overrun panel is scheduled 11:00 to 11:30 (30 min).
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').actual_start = new Date(correctedNow() - 35 * 60_000).toISOString(); renderSessions();`);
+  await expect(push).toHaveText('Push following +5');
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').actual_start = new Date(correctedNow() - 37 * 60_000).toISOString(); renderSessions();`);
+  await expect(push).toHaveText('Push following +10');
+  await expect(page.locator('#band .lane[data-room="Main Stage"] .lane-risk')).toHaveText('12:05 now 12:15, at risk');
+  await ctx.close();
+});
+
+test('band: the No room lane takes its next session only from sessions without a room', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  // #2 (on hold) loses its room; every later session has a room.
+  await evalPage(page, `S.sessions.find(x => x.id === '${ID(2)}').room = null; renderSessions();`);
+  const none = page.locator('#band .lane[data-room=""]');
+  await expect(none.locator('.lane-title')).toHaveText(/^#2 /);
+  await expect(none.locator('.lane-next')).toHaveCount(0);
+  // A later session without a room becomes its next.
+  await evalPage(page, `S.sessions.find(x => x.id === '${ID(7)}').room = null; renderSessions();`);
+  await expect(none.locator('.lane-next')).toContainText('#7 ');
+  await ctx.close();
+});
+
+test('band: for a stage operator, choosing All rooms clears the saved room', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage' });
+  await page.locator('#fb-room').selectOption('Hall B');
+  expect(await evalPage(page, 'myRoom()')).toBe('Hall B');
+  await expect(page.locator('#band .lane').first()).toHaveAttribute('data-room', 'Hall B');
+  await page.locator('#fb-room').selectOption('');
+  expect(await evalPage(page, 'myRoom()')).toBeNull();
+  await expect(page.locator('#band .lane').first()).toHaveAttribute('data-room', 'Main Stage');
+  await ctx.close();
+});
+
+for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
+  test(`band (${locale}): with a wider fallback font (Verdana) arming End still moves neither Hold nor End`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { locale });
+    // As if Inter never loaded: the whole page in a wide fallback, slots measured for it.
+    await page.addStyleTag({ content: '*, *::before, *::after { font-family: Verdana, sans-serif !important; }' });
+    await evalPage(page, 'measureSlots(true); renderSessions();');
+    const ms = '#band .lane[data-room="Main Stage"] .lane-now';
+    const hold0 = await box(page, `${ms} .lane-lead .btn`), end0 = await box(page, `${ms} .btn.danger`);
+    await page.locator(`${ms} .btn.danger`).click();
+    await page.clock.runFor(1100);
+    const end = page.locator(`${ms} .btn.danger`);
+    await expect(end).toHaveClass(/confirm-pending/);
+    const hold1 = await box(page, `${ms} .lane-lead .btn`), end1 = await box(page, `${ms} .btn.danger`);
+    expect(near(hold1.x, hold0.x)).toBe(true);
+    expect(near(end1.x, end0.x) && near(end1.width, end0.width)).toBe(true);
+    expect(await end.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    // and the slots line up across lanes in the fallback font too
+    const hb = '#band .lane[data-room="Hall B"] .lane-now';
+    expect(near((await box(page, `${hb} .lane-lead`)).x, (await box(page, `${ms} .lane-lead`)).x)).toBe(true);
+    await ctx.close();
+  });
+}

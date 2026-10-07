@@ -1685,15 +1685,15 @@
     /* HOLD and END never move (spec 2.3): every End button reserves the width of its armed
        label in the page language ("CONFIRM END", measured at md; whichever End label is longest), so arming changes neither
        End's edges nor anything beside it. */
-    html { --end-armed-w: 119px; }
-    html:lang(ar) { --end-armed-w: 94px; }   /* the drawer's "End session" (93 px) is longer than the armed label here */
-    html:lang(pl) { --end-armed-w: 202px; }
-    html:lang(de) { --end-armed-w: 173px; }
+    /* Defaults (measured in Inter, plus 8 px for a fallback font); measureSlots() replaces both
+       with the widths of the labels in the font the page actually renders. */
+    html { --end-armed-w: 127px; --lane-lead-w: 86px; }
+    html:lang(ar) { --end-armed-w: 102px; --lane-lead-w: 94px; }   /* the drawer's "End session" (93 px) is longer than the armed label here */
+    html:lang(pl) { --end-armed-w: 210px; --lane-lead-w: 119px; }
+    html:lang(de) { --end-armed-w: 181px; --lane-lead-w: 119px; }
     @media (min-width: 768px) { .sc { grid-template-columns: 100px 28px minmax(0, 1fr) 110px 120px 44px max(150px, var(--end-armed-w)); } }
     .sc-act .btn.danger, .sc-drawer [data-fk^="drw-ENDED-"] { min-width: var(--end-armed-w); }
-    .lane-now { --lane-lead-w: 84px; --lane-end-w: var(--end-armed-w); }
-    :lang(ar) .lane-now { --lane-lead-w: 92px; }
-    :lang(pl) .lane-now, :lang(de) .lane-now { --lane-lead-w: 117px; }
+    .lane-now { --lane-end-w: var(--end-armed-w); }
     .lane-lead { display: inline-flex; flex: none; min-width: var(--lane-lead-w); justify-content: flex-end; }
     .lane-lead .btn { width: 100%; }
     .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { flex: none; min-width: var(--lane-end-w); white-space: nowrap; }
@@ -4059,12 +4059,36 @@ function laneFor(room) {
   const inRoom = S.sessions.filter(s => roomOf(s) === room).sort((a, b) => a.sort_order - b.sort_order);
   const now = inRoom.filter(s => s.status in NOW_RANK)
     .sort((a, b) => NOW_RANK[a.status] - NOW_RANK[b.status] || a.sort_order - b.sort_order)[0] || null;
-  const next = now ? getNextSession(S.sessions, now) : (inRoom.find(s => !FINISHED.includes(s.status)) || null);
+  // getNextSession treats a session without a room as "any room"; the No room lane only looks at its own sessions.
+  const next = now
+    ? (room === ROOM_NONE ? inRoom.find(s => s.sort_order > now.sort_order && !FINISHED.includes(s.status)) || null : getNextSession(S.sessions, now))
+    : (inRoom.find(s => !FINISHED.includes(s.status)) || null);
   return { room, now, next };
 }
 function bandLanes() { return roomsInOrder().map(laneFor).filter(l => l.now || l.next); }
 function minsUntil(s) { return Math.ceil(toMins(s.scheduled_start) - eventNowMinutes()); }
 function untilText(s) { const m = minsUntil(s); return m <= 0 ? t('cc.band.now') : tf('cc.band.inMin', { n: m }); }
+
+// HOLD and END never move: every End reserves the width of its longest label (armed, at
+// rest, the drawer's) and the lead slot the longest of Hold, Resume and On stage, measured
+// in the font the page renders, plus 8 px. Re-measured when a web font finishes loading.
+let _slotKey = null, _fontEpoch = 0;
+function measureSlots(force) {
+  const key = (document.documentElement.lang || '') + '|' + _fontEpoch;
+  if (!force && key === _slotKey) return;
+  _slotKey = key;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;display:flex;';
+  document.body.appendChild(probe);
+  const w = (cls, html) => { const b = document.createElement('button'); b.className = 'btn md ' + cls; b.innerHTML = html; probe.appendChild(b); return b.getBoundingClientRect().width; };
+  const ended = getBtnOverride()['LIVE→ENDED'] || getBtnCfg().ENDED?.label || '';
+  const endW = Math.max(w('danger', esc(t('cc.act.end'))), w('danger confirm-pending', esc(t('confirm.confirmEnd'))), w('danger', esc(ended)));
+  const leadW = Math.max(w('hold', icon('pause') + esc(t('cc.act.hold'))), w('fwd fwd-go', esc(t('cc.act.resume'))), w('fwd fwd-go', esc(t('cc.act.onStage'))));
+  probe.remove();
+  if (endW > 0) document.documentElement.style.setProperty('--end-armed-w', Math.ceil(endW) + 8 + 'px');
+  if (leadW > 0) document.documentElement.style.setProperty('--lane-lead-w', Math.ceil(leadW) + 2 + 'px');
+}
+document.fonts?.addEventListener?.('loadingdone', () => { _fontEpoch++; renderSessions(); });
 
 function renderBand() {
   const band = document.getElementById('band');
@@ -4129,8 +4153,8 @@ function nextRowHTML(l, over, tm) {
   let push = '';
   if (over && tm) {
     // Knock-on: the current session's overrun, in 5-minute steps (spec 2.1).
-    const overMin = Math.max(1, Math.ceil(-tm.remain / 60_000));
-    const shift = Math.max(5, Math.round(overMin / 5) * 5);
+    // Rounded UP to the next 5 minutes, never an under-push: 5:00 over is +5, 7:00 over is +10.
+    const shift = Math.max(5, Math.ceil(-tm.remain / 300_000) * 5);
     when = `<b class="lane-risk">${esc(tf('cc.band.atRisk', { was: hm(n.scheduled_start), now: addMinutes(hm(n.scheduled_start), shift) }))}</b>`;
     if (ROLE_DELAY[S.role]) push = `<button type="button" class="btn sm" data-fk="band-push-${n.id}" onclick="applyDelay('${n.id}', ${shift})">${esc(tf('cc.band.push', { n: shift }))}</button>`;
   }
@@ -4156,6 +4180,8 @@ function toggleLane(room) { S.laneOpen[room] = !S.laneOpen[room]; renderSessions
 // RENDERING
 // ═══════════════════════════════════════════════════
 function renderSessions() {
+  if (_ptrHeld) { _renderDeferred = true; return; }
+  measureSlots();
   // The band shows in list and timeline views alike (spec 2.5).
   const fkTop = focusKey();
   renderBand();
@@ -5734,7 +5760,7 @@ setInterval(() => {
     const s = S.sessions.find(x => x.id === el.dataset.cdSid);
     if (!s || (s.status !== 'LIVE' && s.status !== 'OVERRUN')) return;
     const tm = liveTiming(s, nowMs);
-    if (!tm || Math.abs(tm.remain) >= 60_000) return;
+    if (!tm || (Math.abs(tm.remain) >= 60_000 && !_ptrHeld)) return;   // all of them while a re-render is deferred
     el.textContent = countdownText(s.status === 'OVERRUN' ? Math.min(tm.remain, -1) : tm.remain, el.dataset.cdFmt);
   });
 }, 200);
@@ -6224,7 +6250,7 @@ function onFilterInput(e) { F.text = e.target.value; renderSessions(); }
 function onFilterChange() {
   F.status = document.getElementById('fb-status').value;
   F.room   = document.getElementById('fb-room').value;
-  if ((S.role === 'stage' || S.role === 'av') && F.room) { setMyRoom(F.room); return; }
+  if (S.role === 'stage' || S.role === 'av') { setMyRoom(F.room || null); return; }   // "All rooms" clears the saved room
   renderSessions();
 }
 function clearFilters() {
@@ -6939,6 +6965,29 @@ function checkOverrunSessions() {
   }
 }
 
+// A press whose mousedown and mouseup straddle a re-render loses its click (the button
+// under the pointer is replaced). While a pointer is down on the band, the list, the
+// drawer or the rail, renderSessions() waits (the 1 s tick, and also a snapshot reload or
+// realtime update landing mid-press); it runs right after release (after the click), or
+// after 1.5 s if no release ever comes. Running countdowns keep counting in place
+// meanwhile (the 200 ms updater). A press anywhere else defers nothing.
+// var, not let: renderSessions() reads these and must never hit the temporal dead zone.
+var _ptrHeld = false, _ptrTimer = null, _renderDeferred = false;
+function releasePointer() {
+  if (!_ptrHeld) return;
+  _ptrHeld = false;
+  clearTimeout(_ptrTimer);
+  if (_renderDeferred) { _renderDeferred = false; setTimeout(renderSessions, 0); }   // after the click event
+}
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest?.('#band, #sessions-list, .sc-drawer, #sidebar')) return;
+  _ptrHeld = true;
+  clearTimeout(_ptrTimer);
+  _ptrTimer = setTimeout(releasePointer, 1500);
+}, true);
+document.addEventListener('pointerup', releasePointer, true);
+document.addEventListener('pointercancel', releasePointer, true);
+
 // LOCAL TICK — 1s interval
 // ═══════════════════════════════════════════════════
 let _lastTick = performance.now();
@@ -6961,7 +7010,9 @@ setInterval(() => {
   // Other roles (signage, interp, reg) keep the old rule, so their panels are not
   // redrawn every second before the show starts.
   const timers = S.sessions.some(s => ['LIVE', 'OVERRUN', 'HOLD'].includes(s.status));
-  if (timers || (BAND_ROLES.includes(S.role) && S.sessions.some(s => !FINISHED.includes(s.status)))) renderSessions();
+  if (timers || (BAND_ROLES.includes(S.role) && S.sessions.some(s => !FINISHED.includes(s.status)))) {
+    renderSessions();   // waits while a pointer is down on the controls (see releasePointer)
+  }
   // OVERRUN auto-detection (director/stage/av only)
   checkOverrunSessions();
 }, 1000);
