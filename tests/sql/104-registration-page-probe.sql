@@ -7,6 +7,7 @@ DECLARE
   v_res  jsonb;
   v_ok   boolean;
   v_bad  jsonb;
+  v_ok_name text;
 BEGIN
   SELECT created_by INTO v_own FROM leod_events WHERE id = E;
 
@@ -47,7 +48,9 @@ BEGIN
   -- Storage: the owner may insert under their event with a good name;
   -- a stranger may not; a bad name or another event's folder is refused.
   SET LOCAL ROLE authenticated;
-  INSERT INTO storage.objects (bucket_id, name) VALUES ('checkin-public', E::text || '/cover-probe1234.jpg');
+  -- RETURNING, as Supabase Storage does: SELECT policies apply to the returned row (107).
+  INSERT INTO storage.objects (bucket_id, name) VALUES ('checkin-public', E::text || '/cover-probe1234.jpg') RETURNING name INTO v_ok_name;
+  IF v_ok_name IS NULL THEN RAISE EXCEPTION 'upload not returned'; END IF;
   BEGIN
     INSERT INTO storage.objects (bucket_id, name) VALUES ('checkin-public', E::text || '/cover-x.svg');
     RAISE EXCEPTION 'bad name accepted';
@@ -61,8 +64,8 @@ BEGIN
     INSERT INTO storage.objects (bucket_id, name) VALUES ('checkin-public', E::text || '/cover-probe5678.jpg');
     RAISE EXCEPTION 'stranger uploaded';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
-  -- Nobody can list the bucket.
-  IF EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'checkin-public') THEN RAISE EXCEPTION 'bucket listable'; END IF;
+  -- A stranger sees nothing in the bucket, not even this event's upload.
+  IF EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'checkin-public') THEN RAISE EXCEPTION 'bucket listable by a stranger'; END IF;
   RESET ROLE;
 
   SELECT bool_and(ok) INTO v_ok FROM checkin_guard_results();
