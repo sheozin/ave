@@ -3871,28 +3871,49 @@ const FWD_CLASS = {
   'PLANNED>READY': 'fwd fwd-ready', 'READY>CALLING': 'fwd fwd-calling',
   'READY>LIVE': 'fwd fwd-go', 'CALLING>LIVE': 'fwd fwd-go', 'HOLD>LIVE': 'fwd fwd-go',
 };
-function transitionButtonHTML(s, to, size, fk) {
-  if (to === 'ENDED') return endButtonHTML(s, size, fk);
-  if (to === 'CANCELLED') return cancelButtonHTML(s, size, fk);
-  const cls = to === 'HOLD' ? 'hold' : (FWD_CLASS[s.status + '>' + to] || '');
-  return `<button type="button" class="btn ${size} ${cls}" data-fk="${fk}-${to}-${s.id}" onclick="event.stopPropagation();transition('${s.id}','${to}')">${to === 'HOLD' ? icon('pause') : ''}${esc(actionLabel(s.status, to))}</button>`;
+// Press guard (stage 4 review): a slot whose action changes in place (Resume
+// becoming Hold after the optimistic re-render, or On stage becoming Hold by
+// realtime) must not take a press meant for the old action. A slot is a place
+// on screen (a band lane's lead, next and End by room, the inspector's buttons by
+// position, a list row's action by session); slotAttr() stamps
+// the time its action (session + target status) last changed. pressOk() drops
+// the second click of a double-click and any press within SLOT_GUARD_MS of a change.
+const SLOT_GUARD_MS = 600;
+const _slots = new Map();   // slot → { act, at }
+function slotAttr(slot, act) {
+  const prev = _slots.get(slot);
+  if (!prev) _slots.set(slot, { act, at: -Infinity });
+  else if (prev.act !== act) _slots.set(slot, { act, at: performance.now() });
+  return ` data-slot="${esc(slot)}"`;
 }
-function primaryButtonHTML(s, size, fk) {
+function pressOk(ev, el) {
+  if (ev && ev.detail > 1) return false;
+  const r = _slots.get(el?.dataset?.slot);
+  return !r || performance.now() - r.at >= SLOT_GUARD_MS;
+}
+function transitionButtonHTML(s, to, size, fk, slot) {
+  if (to === 'ENDED') return endButtonHTML(s, size, fk, slot);
+  if (to === 'CANCELLED') return cancelButtonHTML(s, size, fk, slot);
+  const cls = to === 'HOLD' ? 'hold' : (FWD_CLASS[s.status + '>' + to] || '');
+  return `<button type="button" class="btn ${size} ${cls}" data-fk="${fk}-${to}-${s.id}"${slotAttr(slot || `${fk}-${to}-${s.id}`, s.id + '>' + to)} onclick="event.stopPropagation();if(pressOk(event,this))transition('${s.id}','${to}')">${to === 'HOLD' ? icon('pause') : ''}${esc(actionLabel(s.status, to))}</button>`;
+}
+function primaryButtonHTML(s, size, fk, slot) {
   const to = primaryTransition(s);
-  return to ? transitionButtonHTML(s, to, size, fk) : '';
+  return to ? transitionButtonHTML(s, to, size, fk, slot) : '';
 }
 // Two-press End and Cancel through the show-safety helpers: isArmed() reads the
 // arm for this session's (normalised) status, so an END armed on LIVE still
 // shows armed after the flip to OVERRUN, and a stale arm never shows.
-function endButtonHTML(s, size, fk) {
+// Arming changes End's label, not its action, so the guard never blocks the confirming press.
+function endButtonHTML(s, size, fk, slot) {
   if (!canDo(s, 'ENDED')) return '';
   const armed = isArmed(_endPending, s);
-  return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-end-${s.id}" onclick="event.stopPropagation();confirmEnd('${s.id}',this)">${esc(armed ? t('confirm.confirmEnd') : t('cc.act.end'))}</button>`;
+  return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-end-${s.id}"${slotAttr(slot || `${fk}-end-${s.id}`, s.id + '>ENDED')} onclick="event.stopPropagation();if(pressOk(event,this))confirmEnd('${s.id}',this)">${esc(armed ? t('confirm.confirmEnd') : t('cc.act.end'))}</button>`;
 }
-function cancelButtonHTML(s, size, fk) {
+function cancelButtonHTML(s, size, fk, slot) {
   if (!canDo(s, 'CANCELLED')) return '';
   const armed = isArmed(_cancelPending, s);
-  return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-cancel-${s.id}" onclick="event.stopPropagation();confirmCancel('${s.id}',this)">${esc(armed ? t('confirm.confirmCancel') : t('cc.act.cancel'))}</button>`;
+  return `<button type="button" class="btn ${size} danger${armed ? ' confirm-pending' : ''}" data-fk="${fk}-cancel-${s.id}"${slotAttr(slot || `${fk}-cancel-${s.id}`, s.id + '>CANCELLED')} onclick="event.stopPropagation();if(pressOk(event,this))confirmCancel('${s.id}',this)">${esc(armed ? t('confirm.confirmCancel') : t('cc.act.cancel'))}</button>`;
 }
 
 function liveTiming(s, nowMs) {
@@ -4008,7 +4029,7 @@ function rowHTML(s, nowMs, ctx) {
     <span class="sc-room">${s.room ? chipHTML('room', s.room) : ''}</span>
     ${timeCell}
     <span class="sc-delay">${delayed ? '+' + s.cumulative_delay : ''}</span>
-    <span class="sc-act">${primaryButtonHTML(s, 'md', 'rowact')}</span>
+    <span class="sc-act">${primaryButtonHTML(s, 'md', 'rowact', 'rowact:' + s.id)}</span>
   </div>`;
 }
 
@@ -4153,7 +4174,7 @@ function laneHTML(l, nowMs, many) {
     return `<div class="lane is-idle" data-room="${esc(l.room)}">${room}
       <div class="lane-body"><div class="lane-now lane-idle">
         <span class="lane-idle-text">${esc(tf('cc.band.idle', { room: roomName }))} · ${esc(t('cc.band.next'))} #${n.sort_order} ${esc(n.title)} · ${esc(untilText(n))}</span>
-        <span class="lane-ctrl">${primaryButtonHTML(n, 'md', 'band-idle')}</span>
+        <span class="lane-ctrl">${primaryButtonHTML(n, 'md', 'band-idle', 'band-lead:' + l.room)}</span>
       </div></div></div>`;
   }
   const tm = (s.status === 'LIVE' || s.status === 'OVERRUN') ? liveTiming(s, nowMs) : null;
@@ -4167,9 +4188,9 @@ function laneHTML(l, nowMs, many) {
     : `<span class="lane-spk">${esc(spk)}</span>${s.speaker_arrived && spk ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : ''}`;
   // Fixed slots: [lead: Hold for LIVE/OVERRUN, else the forward action] | gap | [End or an empty slot]
   const lead = (s.status === 'LIVE' || s.status === 'OVERRUN')
-    ? (canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'md', 'band') : '')
-    : primaryButtonHTML(s, 'md', 'band');
-  const end = endButtonHTML(s, 'md', 'band') || '<span class="end-slot" aria-hidden="true"></span>';
+    ? (canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'md', 'band', 'band-lead:' + l.room) : '')
+    : primaryButtonHTML(s, 'md', 'band', 'band-lead:' + l.room);
+  const end = endButtonHTML(s, 'md', 'band', 'band-end:' + l.room) || '<span class="end-slot" aria-hidden="true"></span>';
   return `<div class="lane ${cls}" data-room="${esc(l.room)}">${room}
     <div class="lane-body">
       <div class="lane-now">
@@ -4193,7 +4214,7 @@ function nextRowHTML(l, over, tm) {
     // Rounded UP to the next 5 minutes, never an under-push: 5:00 over is +5, 7:00 over is +10.
     const shift = Math.max(5, Math.ceil(-tm.remain / 300_000) * 5);
     when = `<b class="lane-risk">${esc(tf('cc.band.atRisk', { was: hm(n.scheduled_start), now: addMinutes(hm(n.scheduled_start), shift) }))}</b>`;
-    if (ROLE_DELAY[S.role]) push = `<button type="button" class="btn sm" data-fk="band-push-${n.id}" onclick="applyDelay('${n.id}', ${shift})">${esc(tf('cc.band.push', { n: shift }))}</button>`;
+    if (ROLE_DELAY[S.role]) push = `<button type="button" class="btn sm" data-fk="band-push-${n.id}"${slotAttr('band-push:' + l.room, n.id + '>+' + shift)} onclick="if(pressOk(event,this))applyDelay('${n.id}', ${shift})">${esc(tf('cc.band.push', { n: shift }))}</button>`;
   }
   const hasSpeaker = !!(n.speaker || people(n).length);
   const notArrived = hasSpeaker && !n.speaker_arrived && minsUntil(n) <= 10;
@@ -4201,7 +4222,7 @@ function nextRowHTML(l, over, tm) {
     <span class="lbl">${esc(t('cc.band.next'))}</span>
     <span class="lane-next-what"><span class="lane-next-title">#${n.sort_order} ${esc(n.title)}</span><span class="lane-next-when"> · ${when}</span></span>
     <span class="lane-next-state">${notArrived ? `<span class="warnchip">${icon('user')}${esc(t('cc.band.notArrived'))}</span>` : statusBadge(n.status)}</span>
-    <span class="lane-ctrl">${push}${primaryButtonHTML(n, 'sm', 'band-next')}</span>
+    <span class="lane-ctrl">${push}${primaryButtonHTML(n, 'sm', 'band-next', 'band-next:' + l.room)}</span>
   </div>`;
 }
 
@@ -4280,9 +4301,15 @@ function inspectorHTML(s, nowMs) {
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}` : '';
   const notes = s.notes && s.notes.trim() ? `<div class="insp-notes">${icon('note')}<span>${esc(s.notes)}</span></div>` : '';
   // Primary row with fixed slots: [forward] [Hold] | gap | [End or empty slot]
-  const fwd = live ? '' : primaryButtonHTML(s, 'lg', 'insp');
-  const hold = s.status !== 'HOLD' && canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp') : '';
-  const end = endButtonHTML(s, 'lg', 'insp') || '<span class="end-slot" aria-hidden="true"></span>';
+  // Slots are positions: when Hold takes the place a forward action had, that slot changed.
+  // An operator's own selection gets its own slots (choosing a session is not a change
+  // under the pointer); the auto-picked inspector shares one set, so an auto-pick swap is.
+  const ns = S.selectedId === s.id ? 'insp:' + s.id : 'insp:auto';
+  const fwdTo = live ? null : primaryTransition(s);
+  const holdOk = s.status !== 'HOLD' && canDo(s, 'HOLD');
+  const fwd = fwdTo ? transitionButtonHTML(s, fwdTo, 'lg', 'insp', ns + ':p1') : '';
+  const hold = holdOk ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp', ns + (fwdTo ? ':p2' : ':p1')) : '';
+  const end = endButtonHTML(s, 'lg', 'insp', ns + ':end') || '<span class="end-slot" aria-hidden="true"></span>';
   const primaryRow = `<div class="insp-row insp-primary">${fwd}${hold}<span class="act-gap" aria-hidden="true"></span>${end}</div>`;
   // Time row: this session only, visibly apart from pushing every later session
   const canNudge = live && (S.role === 'director' || S.role === 'stage');
@@ -4574,6 +4601,7 @@ function renderTimeline() {
   const spanMins = Math.max(30, maxMins - minMins);
   const ROW_H = 40, BAR_H = 28, LABEL_W = 110, PAD_TOP = 24;
   const SVG_W = Math.max(600, (document.getElementById('sessions-col')?.clientWidth || 900) - 32);
+  const loc = CueDeckI18n.getLocale();
   const CHART_W = SVG_W - LABEL_W;
   const x = m => LABEL_W + ((m - minMins) / spanMins) * CHART_W;
   const rooms = roomsInOrder().filter(r => visible.some(s => roomOf(s) === r));
@@ -4608,7 +4636,12 @@ function renderTimeline() {
         const ox = x(Math.max(se, minMins));
         g += `<rect class="tl-over" x="${ox}" y="${by}" width="${Math.max(2, x(Math.min(endMin, maxMins)) - ox)}" height="${BAR_H}" fill="url(#tl-hatch)"/>`;
       }
-      if (bw > 40) g += `<svg x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" overflow="hidden"><text class="tl-bar-label" x="6" y="${BAR_H / 2 + 4}" data-room="${bw - 12}">${esc(label)}</text></svg>`;
+      if (bw > 40) {
+        const room = Math.floor(bw - 12);
+        const key = `${label}|${room}|${loc}|${_fontEpoch}`;
+        const fit = _tlFit.get(key);
+        g += `<svg x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" overflow="hidden"><text class="tl-bar-label" x="6" y="${BAR_H / 2 + 4}"${fit == null ? ` data-room="${room}" data-fit="${esc(key)}"` : ''}>${esc(fit ?? label)}</text></svg>`;
+      }
       rows += g + '</g>';
     }
   });
@@ -4623,25 +4656,32 @@ function renderTimeline() {
     </svg></div>`;
 
   // Cut each label to the width of its own bar, measured at the real font size.
-  // Binary search over code points: this runs every second while a session is
-  // live, so a few measurements per label, and never split a surrogate pair.
-  list.querySelectorAll('text.tl-bar-label').forEach(el => {
+  // Binary search over code points, never splitting a surrogate pair. The result
+  // is cached by label + whole-pixel room + language + font epoch (bumped when a font loads), so
+  // the 1 s re-render measures only a bar whose width or text really changed.
+  list.querySelectorAll('text.tl-bar-label[data-fit]').forEach(el => {
     const room = +el.dataset.room;
-    if (el.getComputedTextLength() <= room) return;
-    const chars = Array.from(el.textContent);
-    let lo = 1, hi = chars.length - 1; // longest prefix that fits, with the ellipsis
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      el.textContent = chars.slice(0, mid).join('').trimEnd() + '…';
-      if (el.getComputedTextLength() <= room) lo = mid; else hi = mid - 1;
+    if (el.getComputedTextLength() > room) {
+      const chars = Array.from(el.textContent);
+      let lo = 1, hi = chars.length - 1; // longest prefix that fits, with the ellipsis
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        el.textContent = chars.slice(0, mid).join('').trimEnd() + '…';
+        if (el.getComputedTextLength() <= room) lo = mid; else hi = mid - 1;
+      }
+      el.textContent = chars.slice(0, lo).join('').trimEnd() + '…';
     }
-    el.textContent = chars.slice(0, lo).join('').trimEnd() + '…';
+    if (_tlFit.size > 500) _tlFit.clear();
+    _tlFit.set(el.dataset.fit, el.textContent);
   });
 
   restoreFocus(fk);
   buildCtxPanel();
 }
 function toggleTlFit() { S.tlFit = !S.tlFit; renderTimeline(); }
+// Fitted timeline labels (see renderTimeline). var, not const: renderTimeline
+// reads it and must never hit the temporal dead zone.
+var _tlFit = new Map();
 
 // Delay summary as a chip in the filter row (spec 2.2): "Running +5 min · 2 affected · stops at #7".
 function updateDelayStrip() {
