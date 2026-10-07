@@ -19,6 +19,7 @@ BEGIN
   IF checkin_web_invite_issue(E, v_g, repeat('1', 64))->>'status' <> 'issued' THEN RAISE EXCEPTION 'first'; END IF;
   IF checkin_web_invite_issue(E, v_g, repeat('2', 64))->>'status' <> 'too_soon' THEN RAISE EXCEPTION 'no 10 minute gap'; END IF;
   UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes', sent_count = 5 WHERE attendee_id = v_g;
+  UPDATE leod_checkin_web_mail SET sent_at = sent_at - interval '11 minutes' WHERE event_id = E AND kind = 'invite';  -- (121) the address limit too
   IF checkin_web_invite_issue(E, v_g, repeat('3', 64))->>'status' <> 'limit' THEN RAISE EXCEPTION 'no total limit'; END IF;
   -- The event cap.
   UPDATE leod_checkin_web_invites SET sent_count = 1 WHERE attendee_id = v_g;

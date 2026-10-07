@@ -42,12 +42,15 @@ BEGIN
   -- Sending again: the previous link keeps working beside the new one (118);
   -- a second resend retires the oldest.
   UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
+  UPDATE leod_checkin_web_mail SET sent_at = sent_at - interval '11 minutes' WHERE event_id = E AND kind = 'invite';  -- (121) the address limit too
   PERFORM checkin_web_invite_issue(E, v_g, H2);
   IF checkin_web_invite_view(v_code, H1)->>'status' <> 'ok' THEN RAISE EXCEPTION 'previous link dropped on resend'; END IF;
   UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
+  UPDATE leod_checkin_web_mail SET sent_at = sent_at - interval '11 minutes' WHERE event_id = E AND kind = 'invite';  -- (121) the address limit too
   PERFORM checkin_web_invite_issue(E, v_g, repeat('3', 64));
   IF checkin_web_invite_view(v_code, H1)->>'status' <> 'invalid' THEN RAISE EXCEPTION 'oldest link still works'; END IF;
   UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
+  UPDATE leod_checkin_web_mail SET sent_at = sent_at - interval '11 minutes' WHERE event_id = E AND kind = 'invite';  -- (121) the address limit too
   PERFORM checkin_web_invite_issue(E, v_g, H2);
   v_res := checkin_web_invite_view(v_code, H2);
   IF v_res->>'first_name' <> 'Gina' OR (v_res->>'plus_max')::int <> 2 OR v_res->>'rsvp' IS NOT NULL THEN RAISE EXCEPTION 'view: %', v_res; END IF;

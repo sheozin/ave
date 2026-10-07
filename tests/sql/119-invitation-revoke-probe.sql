@@ -19,6 +19,7 @@ BEGIN
   PERFORM checkin_web_invite_issue(E, v_g, H1);
   PERFORM checkin_web_rsvp(v_code, H1, true, '[]');
   UPDATE leod_checkin_web_invites SET sent_at = now() - interval '11 minutes' WHERE attendee_id = v_g;  -- (120) past the 10 minute gap
+  UPDATE leod_checkin_web_mail SET sent_at = sent_at - interval '11 minutes' WHERE event_id = E AND kind = 'invite';  -- (121) the address limit too
   PERFORM checkin_web_invite_issue(E, v_g, H2);
   IF checkin_web_invite_view(v_code, H1)->>'status' <> 'ok' THEN RAISE EXCEPTION 'previous link within 48 h'; END IF;
   -- After 48 hours only the latest link works.
