@@ -69,6 +69,7 @@
       --fs-11: 11px; --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-16: 16px; --fs-20: 20px; --fs-28: 28px; --fs-40: 40px;
       --fs-clock: 26px;            /* header clock (spec 2.4) */
       --fs-insp-countdown: 32px;   /* desktop inspector countdown (spec 2.3) */
+      --fs-ph-title: 17px;         /* phone Now card title (approved demo) */
       --ls-label: .06em; --ls-badge: .04em; --ls-big: -.01em;
 
       /* ── Space, rows, radius, controls ── */
@@ -1217,18 +1218,6 @@
       #conn-lbl { display: none; }
       #conn-pill { padding: 4px 6px; }
 
-      /* SIDEBAR — full-width minus 60px */
-      #sidebar {
-        position: fixed; right: 0; top: 0; bottom: 0;
-        z-index: 200; width: calc(100vw - 60px); max-width: 320px;
-        transform: translateX(100%);
-        transition: transform 0.25s ease;
-        will-change: transform;
-        box-shadow: -4px 0 24px rgba(0,0,0,.5);
-      }
-      #sidebar.sidebar-open { transform: translateX(0); }
-      #sidebar-toggle { display: block; }
-
 
       /* FILTER BAR — search full width, filters behind toggle, timeline always visible */
       #filter-bar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
@@ -1240,14 +1229,6 @@
       #filter-bar.filters-open #fb-room,
       #filter-bar.filters-open #fb-clear { display: block; }
       #fb-status, #fb-room { flex: 1 1 calc(50% - 4px); }
-
-      /* BROADCAST BAR — wrap into 2 rows */
-      #bc-bar { flex-wrap: wrap; padding: 8px 10px; gap: 6px; }
-      #bc-bar > label { display: none; }
-      .bc-presets { display: none; }
-      #bc-input { flex: 1 1 100%; order: -1; height: 34px; }
-      .bc-char { display: none; }
-      #bc-pri { height: 34px; }
 
 
       /* MODALS — full-width friendly */
@@ -1481,7 +1462,6 @@
       .ev-switch-sub, #crew-pill, #viewas-wrap, #brain-wrap, #bc-chip { display: none; }
       #hdr-clock { min-width: 0; flex: none; }
       .hdr-spacer { min-width: 0; }
-      #bc-bar { height: auto; }   /* the composer wraps to two rows on a phone */
     }
     /* ═══ Command center compact list (stage 3) ═══ */
     #filter-bar { height: 48px; padding: 0 16px; gap: 8px; display: flex; align-items: center; background: var(--bg); border-bottom: 1px solid var(--border-section); flex-shrink: 0; }
@@ -1781,6 +1761,91 @@
       .insp-primary .btn { padding: 0 12px; font-size: var(--fs-13); }
     }
     @media (max-width: 1439px) and (pointer: fine) { .insp-primary .btn { height: var(--btn-md); } }
+    /* ═══ Command center phone (stage 5) ═══ */
+    .ph-only { display: none; }
+    @media screen and (max-width: 767px) {
+      /* Header 48 px: logo, clock, status dot, room picker, menu */
+      #header { height: 48px; gap: 6px; padding: 0 8px; }
+      #ev-select-wrap, #crew-pill, #viewas-wrap, #help-btn, #user-chip, #plan-badge, #brain-wrap, #bc-chip, .hdr-spacer { display: none !important; }
+      .logo { width: 19px; overflow: hidden; direction: ltr; flex: none; }   /* the mark only; ltr so RTL clips the word, not the mark */
+      .logo svg { height: 22px; width: auto; max-width: none; flex: none; }
+      #hdr-clock { font-size: var(--fs-20); min-width: 0; flex: none; text-align: start; }
+      #conn-pill { justify-content: center; width: 44px; height: 44px; padding: 0; border-color: transparent; background: transparent; }
+      #room-pick { display: block; flex: 0 1 170px; min-width: 0; height: 44px; margin-inline-start: auto; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--input-bg); color: var(--text-primary); font: 500 var(--fs-13) var(--font-sans); text-overflow: ellipsis; }
+      #hamburger-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0; padding: 0; flex: none; }
+      #mobile-menu { top: 48px; inset-inline-end: 8px; inset-inline-start: auto; max-height: calc(100vh - 112px); overflow-y: auto; }
+      #mobile-menu button, .mm-lang, #mm-lang { min-height: 44px; }
+      #mm-lang { min-width: 64px; }
+      #sidebar-toggle, #sidebar-backdrop { display: none !important; }
+
+      /* Broadcast banner: one line; a tap shows all of it with sender, time and Dismiss */
+      #bc-banner { height: auto; min-height: 44px; padding: 0 12px; flex-wrap: wrap; cursor: pointer; }
+      #bc-banner .bc-when, #bc-banner .bc-dismiss { display: none; }
+      #bc-banner.expanded { padding: 8px 12px; row-gap: 4px; }
+      #bc-banner.expanded .bc-msg { white-space: normal; flex-basis: calc(100% - 30px); }
+      #bc-banner.expanded .bc-when { display: inline; margin-inline-start: 26px; }
+      #bc-banner.expanded .bc-dismiss { display: inline-flex; height: 44px; margin-inline-start: auto; }
+
+      /* Tabs: body[data-ph-tab] shows one part of the page */
+      #phone-now { display: none; flex: 1; min-height: 0; overflow-y: auto; align-content: start; gap: 10px; padding: 12px 12px 72px; }
+      body[data-ph-tab="now"] #phone-now, body[data-ph-tab="send"] #phone-now { display: grid; }
+      body[data-ph-tab="now"] #main, body[data-ph-tab="send"] #main { display: none; }
+      #main { padding-bottom: 56px; }
+      #bc-bar { display: none; }
+      body[data-ph-tab="schedule"] #sidebar, body[data-ph-tab="schedule"] #band { display: none; }
+      body[data-ph-tab="log"] #main-col, body[data-ph-tab="log"] #checklist-wrap { display: none !important; }
+      body[data-ph-tab="log"][data-ph-insp="1"] #ctx-wrap { display: none; }   /* the inspector's controls are on the Now tab */
+      body[data-ph-tab="log"] #sidebar { position: static; transform: none; width: auto; max-width: none; box-shadow: none; border: 0; }
+      body[data-ph-tab="send"] #bc-bar { display: flex; flex-wrap: wrap; height: auto; gap: 8px; padding: 12px; position: fixed; inset-inline: 0; bottom: 56px; z-index: 150; background: var(--overlay); border-top: 1px solid var(--border-section); border-radius: var(--r-modal) var(--r-modal) 0 0; }
+      #bc-bar > .lbl, #bc-bar .bc-presets, #bc-bar .bc-char { display: none; }
+      #bc-input { flex: 1 1 100%; height: 44px; }
+      #bc-pri { height: 44px; flex: 1 1 auto; }
+      #phone-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; inset-inline: 0; bottom: 0; height: 56px; z-index: 160; background: var(--panel); border-top: 1px solid var(--border-section); }
+      #phone-tabs button { display: grid; place-items: center; align-content: center; gap: 2px; min-height: 56px; border: 0; background: transparent; color: var(--text-tertiary); font: 600 var(--fs-12) var(--font-sans); cursor: pointer; }
+      #phone-tabs button[aria-current="page"] { color: var(--text-primary); }
+      .log-chip { height: 44px; min-width: 44px; }
+      #fb-search, .fvp-btn, .sc-fold, #fb-status, #fb-room { min-height: 44px; }   /* Schedule tab */
+
+      /* Now and Next cards (approved demo) */
+      .ph-lane { display: grid; gap: 10px; }
+      .ph-card { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-modal); background: var(--card); border: 1px solid var(--border-section); min-width: 0; }
+      .ph-now-card.is-live    { background: var(--st-live-wash);    border-color: var(--st-live-line); }
+      .ph-now-card.is-over    { background: var(--st-overrun-wash); border-color: var(--st-overrun-line); }
+      .ph-now-card.is-hold    { background: var(--st-hold-wash);    border-color: var(--st-hold-line); }
+      .ph-now-card.is-calling { background: var(--st-calling-wash); border-color: var(--st-calling-line); }
+      .ph-next-card { border-inline-start: 4px solid var(--st-planned); }
+      .ph-next-card.status-READY { border-inline-start-color: var(--st-ready); }
+      .ph-next-card.status-CALLING { border-inline-start-color: var(--st-calling); }
+      .ph-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+      .ph-card-head .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ph-title { font-size: var(--fs-ph-title); font-weight: 700; line-height: 1.25; color: var(--text-primary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .ph-next-title { font-size: var(--fs-14); font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ph-count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      .ph-big { font: 700 var(--fs-40)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
+      .ph-now-card.is-over .ph-big { color: var(--st-overrun-fg); }
+      .ph-now-card.is-hold .ph-big { color: var(--st-hold-count); }
+      .ph-count.warn-amber .ph-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the band */
+      .ph-count.warn-red   .ph-big { color: var(--st-live-fg); }
+      .ph-unit { font-size: var(--fs-13); color: var(--text-tertiary); }
+      .ph-meta { display: flex; gap: 6px; align-items: center; min-width: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+      .ph-meta > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      /* Hold and End: two equal columns, so neither moves when End arms; a long armed label wraps inside */
+      .ph-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .ph-actions .btn, .ph-next-card .btn { width: 100%; height: 48px; min-width: 0; }
+      .ph-actions .btn { white-space: normal; line-height: 1.15; text-align: center; padding: 0 8px; }
+      .ph-next-card .btn { height: 44px; }
+      .ph-time, .ph-monitor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .ph-monitor > .btn:only-child { grid-column: 1 / -1; }
+      .ph-later-lbl { padding: 4px 2px 0; }
+      .ph-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; border-radius: var(--r-ctl); background: var(--card); border: 1px solid var(--border-section); border-inline-start: 4px solid var(--st-planned); font-size: var(--fs-13); }
+      .ph-row.status-READY { border-inline-start-color: var(--st-ready); }
+      .ph-row.status-CALLING { border-inline-start-color: var(--st-calling); }
+      .ph-row.status-HOLD { border-inline-start-color: var(--st-hold); }
+      .ph-row-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+      .ph-row-title { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ph-fold { width: 100%; min-height: 44px; }
+      .ph-idle { color: var(--text-tertiary); }
+    }
 </style>
 </head>
 <body>
@@ -2038,6 +2103,7 @@
       <div class="sys-foot"><span id="hdr-offset">offset: –</span> · <span data-i18n="cc.sys.sessions">Sessions</span> <span id="di-cnt">–</span></div>
     </div>
   </div>
+  <select id="room-pick" class="ph-only" aria-label="Room" data-i18n-aria="cc.ph.room" onchange="setMyRoom(this.value)"></select>
   <div class="hdr-pop-wrap">
     <button type="button" id="crew-pill" class="pill" aria-haspopup="dialog" aria-expanded="false" aria-controls="crew-pop" onclick="window.togglePopover('crew-pop', this)">
       <span id="presence-bar" class="crew-dots"></span><span id="crew-count">Crew 0/5</span>
@@ -2204,6 +2270,9 @@
 <!-- SIDEBAR TOGGLE + BACKDROP -->
 <button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Inspector" data-i18n-aria="cc.a11y.inspector"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg></button>
 <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+
+<!-- PHONE: Now tab (stage 5) -->
+<main id="phone-now" class="ph-only" aria-label="Now" data-i18n-aria="cc.ph.now"></main>
 
 <!-- MAIN -->
 <div id="main">
@@ -2557,6 +2626,14 @@
   <button type="button" id="bc-send" class="btn md primary" onclick="sendBroadcast()" data-i18n="cc.bc.send">Send</button>
   <button type="button" id="bc-clear" class="btn md" onclick="clearBroadcast()" data-i18n="cc.bc.clear">Clear</button>
 </div>
+
+<!-- PHONE: bottom tabs (stage 5) -->
+<nav id="phone-tabs" class="ph-only" aria-label="Sections" data-i18n-aria="cc.ph.sections">
+  <button type="button" data-tab="now" aria-current="page" onclick="setPhoneTab('now')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-play"/></svg><span data-i18n="cc.ph.now">Now</span></button>
+  <button type="button" data-tab="schedule" onclick="setPhoneTab('schedule')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg><span data-i18n="cc.ph.schedule">Schedule</span></button>
+  <button type="button" data-tab="log" onclick="setPhoneTab('log')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-report"/></svg><span data-i18n="cc.ph.log">Log</span></button>
+  <button type="button" data-tab="send" onclick="setPhoneTab('send')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg><span data-i18n="cc.ph.send">Send</span></button>
+</nav>
 
 <div id="rc-overlay"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg> Reconnecting: data may be stale</div>
 
@@ -4265,6 +4342,126 @@ function laneChipHTML(l) {
 function toggleLane(room) { S.laneOpen[room] = !S.laneOpen[room]; renderSessions(); }
 
 // ═══════════════════════════════════════════════════
+// COMMAND CENTER: phone (stage 5)
+// ═══════════════════════════════════════════════════
+// At 767 px and below: the Now tab (Now and Next cards per room, a short Later
+// list), the room picker in the header, and bottom tabs. The tab lives on
+// body[data-ph-tab]; CSS shows the matching part of the page.
+const PHONE_MQ = window.matchMedia('(max-width: 767px)');
+function isPhone() { return PHONE_MQ.matches; }
+document.body.dataset.phTab = 'now';
+PHONE_MQ.addEventListener('change', () => renderSessions());
+const PH_LATER_MAX = 5;
+
+function setPhoneTab(tab) {
+  document.body.dataset.phTab = tab;
+  document.querySelectorAll('#phone-tabs [data-tab]').forEach(b => {
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  if (tab === 'send') document.getElementById('bc-input')?.focus();
+}
+
+// renderPhoneNow runs on every 1 s render. Rewriting the options each time
+// would close a picker the operator has open, so the options are rebuilt only
+// when the room list changes, and the value is set only when it differs and
+// the picker does not have focus. `shown` is the room on screen for an
+// operator who has not picked one, so the picker never names another room.
+function renderRoomPick(shown) {
+  const sel = document.getElementById('room-pick');
+  if (!sel) return;
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  // "No room" cannot be chosen (setMyRoom clears on an empty value), so it is not offered;
+  // an event without rooms has nothing to pick and the picker keeps its place, empty.
+  const rooms = roomsInOrder().filter(r => r !== ROOM_NONE);
+  sel.style.visibility = rooms.length ? '' : 'hidden';
+  const key = (isDirector ? '*|' : '|') + CueDeckI18n.getLocale() + '|' + rooms.join('|');
+  let rebuilt = false;
+  if (sel.dataset.key !== key) {
+    sel.dataset.key = key;
+    sel.innerHTML = (isDirector ? `<option value="">${esc(t('misc.allRooms'))}</option>` : '')
+      + rooms.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+    rebuilt = true;
+  }
+  const want = myRoom() || (isDirector ? '' : (shown ?? sel.value));
+  if ((rebuilt || document.activeElement !== sel) && sel.value !== want) sel.value = want;
+}
+
+function phoneLaneHTML(l, nowMs) {
+  const roomName = l.room === ROOM_NONE ? t('cc.band.noRoom') : l.room;
+  const s = l.now;
+  let nowCard = '';
+  if (s) {
+    const live = s.status === 'LIVE' || s.status === 'OVERRUN';
+    const tm = live ? liveTiming(s, nowMs) : null;
+    const over = s.status === 'OVERRUN' || !!(tm && tm.overrun);
+    const cd = countdownLabel(s, nowMs) || { big: hm(s.scheduled_start), unit: untilText(s) };
+    // Fixed slots, as in the band: [Hold for LIVE/OVERRUN, else the forward action] [End or an empty slot].
+    // Two equal grid columns, so arming End (a longer label) moves neither button.
+    const lead = live
+      ? (canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'lg', 'ph', 'ph-lead:' + l.room) : '')
+      : primaryButtonHTML(s, 'lg', 'ph', 'ph-lead:' + l.room);
+    const end = endButtonHTML(s, 'lg', 'ph', 'ph-end:' + l.room);
+    const slot = '<span class="end-slot" aria-hidden="true"></span>';
+    const pair = (lead || end) ? `<div class="ph-actions">${lead || slot}${end || slot}</div>` : '';
+    const adjust = live && ROLE_DELAY[S.role]
+      ? `<div class="ph-time">
+          <button type="button" class="btn md" data-fk="ph-nudge-m-${s.id}" onclick="nudgeSession('${s.id}',-1)">${esc(t('cc.insp.minus1'))}</button>
+          <button type="button" class="btn md" data-fk="ph-nudge-p-${s.id}" onclick="nudgeSession('${s.id}',1)">${esc(t('cc.insp.plus1'))}</button></div>` : '';
+    const spk = speakerShort(s);
+    nowCard = `<article class="ph-card ph-now-card ${over ? 'is-over' : 'is-' + s.status.toLowerCase()}">
+      <div class="ph-card-head"><span class="lbl">${esc(tf('cc.ph.nowIn', { room: roomName }))}</span>${statusBadge(s.status)}</div>
+      <div class="ph-title" dir="auto">${esc(s.title)}</div>
+      <div class="ph-count${warnCls(cd)}" data-timer><span class="ph-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span><span class="ph-unit">${esc(cd.unit)}</span></div>
+      ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}
+      ${spk ? `<div class="ph-meta">${esc(spk)}${s.speaker_arrived ? ` · ${esc(t('cc.list.arrived'))}` : ''}</div>` : ''}
+      ${s.notes && s.notes.trim() ? `<div class="ph-meta">${icon('note')}<span dir="auto">${esc(s.notes.trim().split('\n')[0])}</span></div>` : ''}
+      ${pair}
+      ${adjust}
+    </article>`;
+  }
+  const n = l.next;
+  const nextCard = n ? `<article class="ph-card ph-next-card status-${n.status}">
+      <div class="ph-card-head"><span class="lbl">${esc(t('cc.band.next'))}${s ? '' : ' · ' + esc(roomName)} · ${hm(n.scheduled_start)}${(n.cumulative_delay || 0) > 0 ? ` (+${n.cumulative_delay})` : ''} · ${esc(untilText(n))}</span>${statusBadge(n.status)}</div>
+      <div class="ph-next-title" dir="auto">${esc(n.title)}</div>
+      ${primaryButtonHTML(n, 'lg', 'phn', 'ph-next:' + l.room)}
+    </article>` : '';
+  return `<section class="ph-lane" data-room="${esc(l.room)}">${nowCard}${nextCard}</section>`;
+}
+
+function renderPhoneNow() {
+  const el = document.getElementById('phone-now');
+  if (!el) return;
+  if (!isPhone()) { if (el.firstChild) el.innerHTML = ''; return; }
+  const nowMs = correctedNow();
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  const lanes = bandLanes();
+  const mine = myRoom();
+  // Operators: their room, or the first room with something on (their room comes first
+  // in roomsInOrder). Directors: every room, unless they picked one.
+  const room = mine ?? lanes[0]?.room;
+  const shown = (isDirector && !mine) ? lanes : lanes.filter(l => l.room === room);
+  renderRoomPick(isDirector ? undefined : room);
+  document.body.dataset.phInsp = INSPECTOR_ROLES.includes(S.role) ? '1' : '0';
+  const inCards = new Set(shown.flatMap(l => [l.now?.id, l.next?.id]).filter(Boolean));
+  const rooms = new Set(shown.map(l => l.room));
+  const later = S.sessions.filter(s => !FINISHED.includes(s.status) && !inCards.has(s.id) && rooms.has(roomOf(s)))
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const done = S.sessions.filter(s => s.status === 'ENDED').length;
+  const cancelled = S.sessions.filter(s => s.status === 'CANCELLED').length;
+  const fold = [done ? tf('cc.list.completed', { n: done }) : '', cancelled ? tf('cc.list.cancelled', { n: cancelled }) : ''].filter(Boolean).join(' · ');
+  const idle = !shown.length && room !== undefined
+    ? `<div class="ph-card ph-idle">${esc(tf('cc.band.idle', { room: room === ROOM_NONE ? t('cc.band.noRoom') : room }))}</div>` : '';
+  const monitor = INSPECTOR_ROLES.includes(S.role)
+    ? `<div class="ph-monitor"><button type="button" class="btn md" data-fk="ph-monitor" onclick="openStageMonitor()">${icon('monitor')}${esc(t('cc.insp.stageMonitor'))}</button>`
+      + (S.role !== 'av' ? `<button type="button" class="btn md" data-fk="ph-timer" onclick="openStageTimerDisplay()">${icon('timer')}${esc(t('cc.insp.stageTimer'))}</button>` : '') + `</div>` : '';
+  el.innerHTML = idle + shown.map(l => phoneLaneHTML(l, nowMs)).join('')
+    + (later.length ? `<div class="lbl ph-later-lbl">${esc(t('cc.ph.later'))}</div>`
+        + later.slice(0, PH_LATER_MAX).map(s => `<div class="ph-row status-${s.status}"><span class="ph-row-time">${hm(s.scheduled_start)}</span><span class="ph-row-title" dir="auto">${esc(s.title)}</span>${s.status === 'PLANNED' ? '' : statusBadge(s.status)}</div>`).join('') : '')
+    + (fold ? `<button type="button" class="sc-fold ph-fold" data-fk="ph-fold" onclick="setPhoneTab('schedule')">${icon('chev-right')}<span class="sc-fold-txt">${esc(fold)}</span></button>` : '')
+    + monitor;
+}
+
+// ═══════════════════════════════════════════════════
 // COMMAND CENTER: inspector and log (stage 4)
 // ═══════════════════════════════════════════════════
 const INSPECTOR_ROLES = ['director', 'stage', 'av'];
@@ -4454,6 +4651,7 @@ function renderSessions() {
   // The band shows in list and timeline views alike (spec 2.5).
   const fkTop = focusKey();
   renderBand();
+  renderPhoneNow();
   S.inspectedId = INSPECTOR_ROLES.includes(S.role) ? (inspectorSession()?.id || null) : null;
   restoreFocus(fkTop);
   renderBCSend();
@@ -6198,6 +6396,8 @@ function showBCBanner(b) {
   el.innerHTML = `${icon(b.priority === 'info' ? 'info' : 'alert')}<span class="bc-msg">${esc(b.message)}</span>`
     + `<span class="bc-when">${esc([bcSenderName(b.sent_by), tsHM(b.sent_at)].filter(Boolean).join(' · '))}</span>`
     + `<button type="button" class="btn sm ghost bc-dismiss" onclick="dismissBanner()">${esc(t('cc.bc.dismiss'))}</button>`;
+  // Phone: one line, tap to expand (spec 2.7)
+  el.onclick = (e) => { if (isPhone() && !e.target.closest('button')) el.classList.toggle('expanded'); };
   const chip = document.getElementById('bc-chip');
   if (chip) chip.className = `pill bc-chip ${b.priority}`;
   setBannerRead(S.bcReadKey === S.bcKey);
@@ -7103,7 +7303,7 @@ function releasePointer() {
   if (_renderDeferred) { _renderDeferred = false; setTimeout(renderSessions, 0); }   // after the click event
 }
 document.addEventListener('pointerdown', e => {
-  if (!e.target.closest?.('#band, #sessions-list, #sidebar')) return;
+  if (!e.target.closest?.('#band, #sessions-list, #sidebar, #phone-now')) return;
   _ptrHeld = true;
   clearTimeout(_ptrTimer);
   _ptrTimer = setTimeout(releasePointer, 1500);
