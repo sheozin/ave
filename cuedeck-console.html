@@ -1844,6 +1844,10 @@
       .ph-row-time { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
       .ph-row-title { font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .ph-fold { width: 100%; min-height: 44px; }
+      .ph-who { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; min-width: 0; font-size: var(--fs-12); color: var(--text-secondary); }
+      .ph-who-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ph-who .ph-arrive { flex: none; width: auto; }
+      .ph-push { width: 100%; white-space: normal; line-height: 1.15; }
       .ph-idle { color: var(--text-tertiary); }
     }
 </style>
@@ -4386,14 +4390,23 @@ function renderRoomPick(shown) {
   if ((rebuilt || document.activeElement !== sel) && sel.value !== want) sel.value = want;
 }
 
+// Arrival toggle (inspector rule: director and stage, a session with a speaker, not finished).
+// markArrived reverts and toasts on a failed write. Keyed by place, so a double tap counts once.
+function phoneArriveHTML(x, slot) {
+  const hasSpeaker = !!(x.speaker || people(x).length);
+  if (!(S.role === 'director' || S.role === 'stage') || !hasSpeaker || FINISHED.includes(x.status)) return '';
+  const on = !!x.speaker_arrived;
+  return `<button type="button" class="btn md ph-arrive${on ? ' ghost insp-arrived' : ' primary'}" data-fk="ph-arrive-${x.id}" aria-pressed="${on}"${slotAttr(slot, x.id + '>' + on)} onclick="if(pressOk(event,this))markArrived('${x.id}', ${!on})">${on ? icon('check') + esc(t('cc.ph.arrived')) : esc(t('cc.insp.markArrived'))}</button>`;
+}
+
 function phoneLaneHTML(l, nowMs) {
   const roomName = l.room === ROOM_NONE ? t('cc.band.noRoom') : l.room;
   const s = l.now;
+  const live = !!s && (s.status === 'LIVE' || s.status === 'OVERRUN');
+  const tm = live ? liveTiming(s, nowMs) : null;
+  const over = !!s && (s.status === 'OVERRUN' || !!(tm && tm.overrun));
   let nowCard = '';
   if (s) {
-    const live = s.status === 'LIVE' || s.status === 'OVERRUN';
-    const tm = live ? liveTiming(s, nowMs) : null;
-    const over = s.status === 'OVERRUN' || !!(tm && tm.overrun);
     const cd = countdownLabel(s, nowMs) || { big: hm(s.scheduled_start), unit: untilText(s) };
     // Fixed slots, as in the band: [Hold for LIVE/OVERRUN, else the forward action] [End or an empty slot].
     // Two equal grid columns, so arming End (a longer label) moves neither button.
@@ -4408,23 +4421,45 @@ function phoneLaneHTML(l, nowMs) {
           <button type="button" class="btn md" data-fk="ph-nudge-m-${s.id}" onclick="nudgeSession('${s.id}',-1)">${esc(t('cc.insp.minus1'))}</button>
           <button type="button" class="btn md" data-fk="ph-nudge-p-${s.id}" onclick="nudgeSession('${s.id}',1)">${esc(t('cc.insp.plus1'))}</button></div>` : '';
     const spk = speakerShort(s);
+    const arrive = phoneArriveHTML(s, 'ph-arrive-now:' + l.room);
+    // The toggle row is always 44 px when it is there, so a label change never moves Hold and End.
+    const who = arrive
+      ? `<div class="ph-who"><span class="ph-who-txt" dir="auto">${esc(spk)}</span>${arrive}</div>`
+      : (spk ? `<div class="ph-meta">${esc(spk)}${s.speaker_arrived ? ` · ${esc(t('cc.list.arrived'))}` : ''}</div>` : '');
     nowCard = `<article class="ph-card ph-now-card ${over ? 'is-over' : 'is-' + s.status.toLowerCase()}">
       <div class="ph-card-head"><span class="lbl">${esc(tf('cc.ph.nowIn', { room: roomName }))}</span>${statusBadge(s.status)}</div>
       <div class="ph-title" dir="auto">${esc(s.title)}</div>
       <div class="ph-count${warnCls(cd)}" data-timer><span class="ph-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span><span class="ph-unit">${esc(cd.unit)}</span></div>
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}
-      ${spk ? `<div class="ph-meta">${esc(spk)}${s.speaker_arrived ? ` · ${esc(t('cc.list.arrived'))}` : ''}</div>` : ''}
+      ${who}
       ${s.notes && s.notes.trim() ? `<div class="ph-meta">${icon('note')}<span dir="auto">${esc(s.notes.trim().split('\n')[0])}</span></div>` : ''}
       ${pair}
       ${adjust}
     </article>`;
   }
   const n = l.next;
-  const nextCard = n ? `<article class="ph-card ph-next-card status-${n.status}">
-      <div class="ph-card-head"><span class="lbl">${esc(t('cc.band.next'))}${s ? '' : ' · ' + esc(roomName)} · ${hm(n.scheduled_start)}${(n.cumulative_delay || 0) > 0 ? ` (+${n.cumulative_delay})` : ''} · ${esc(untilText(n))}</span>${statusBadge(n.status)}</div>
+  let nextCard = '';
+  if (n) {
+    let when = esc(`${hm(n.scheduled_start)}${(n.cumulative_delay || 0) > 0 ? ` (+${n.cumulative_delay})` : ''} · ${untilText(n)}`);
+    let push = '';
+    if (over && tm) {
+      // Knock-on, exactly as the band (nextRowHTML): the overrun rounded UP to the next 5 minutes.
+      const shift = Math.max(5, Math.ceil(-tm.remain / 300_000) * 5);
+      when = `<b class="lane-risk">${esc(tf('cc.band.atRisk', { was: hm(n.scheduled_start), now: addMinutes(hm(n.scheduled_start), shift) }))}</b>`;
+      if (ROLE_DELAY[S.role]) push = `<button type="button" class="btn md ph-push" data-fk="ph-push-${n.id}"${slotAttr('ph-push:' + l.room, n.id + '>+' + shift)} onclick="if(pressOk(event,this))applyDelay('${n.id}', ${shift})">${esc(tf('cc.band.push', { n: shift }))}</button>`;
+    }
+    const hasSpeaker = !!(n.speaker || people(n).length);
+    const notArrived = hasSpeaker && !n.speaker_arrived && minsUntil(n) <= 10;
+    const nspk = speakerShort(n);
+    const arrive = phoneArriveHTML(n, 'ph-arrive-next:' + l.room);
+    nextCard = `<article class="ph-card ph-next-card status-${n.status}">
+      <div class="ph-card-head"><span class="lbl">${esc(t('cc.band.next'))}${s ? '' : ' · ' + esc(roomName)} · ${when}</span>${notArrived ? `<span class="warnchip">${icon('user')}${esc(t('cc.band.notArrived'))}</span>` : statusBadge(n.status)}</div>
       <div class="ph-next-title" dir="auto">${esc(n.title)}</div>
+      ${arrive ? `<div class="ph-who"><span class="ph-who-txt" dir="auto">${esc(nspk)}</span>${arrive}</div>` : ''}
       ${primaryButtonHTML(n, 'lg', 'phn', 'ph-next:' + l.room)}
-    </article>` : '';
+      ${push}
+    </article>`;
+  }
   return `<section class="ph-lane" data-room="${esc(l.room)}">${nowCard}${nextCard}</section>`;
 }
 
@@ -4446,8 +4481,10 @@ function renderPhoneNow() {
   const rooms = new Set(shown.map(l => l.room));
   const later = S.sessions.filter(s => !FINISHED.includes(s.status) && !inCards.has(s.id) && rooms.has(roomOf(s)))
     .sort((a, b) => a.sort_order - b.sort_order);
-  const done = S.sessions.filter(s => s.status === 'ENDED').length;
-  const cancelled = S.sessions.filter(s => s.status === 'CANCELLED').length;
+  // Finished sessions of the chosen room, or of the whole event for All rooms.
+  const inScope = (isDirector && !mine) ? () => true : x => roomOf(x) === room;
+  const done = S.sessions.filter(s => s.status === 'ENDED' && inScope(s)).length;
+  const cancelled = S.sessions.filter(s => s.status === 'CANCELLED' && inScope(s)).length;
   const fold = [done ? tf('cc.list.completed', { n: done }) : '', cancelled ? tf('cc.list.cancelled', { n: cancelled }) : ''].filter(Boolean).join(' · ');
   const idle = !shown.length && room !== undefined
     ? `<div class="ph-card ph-idle">${esc(tf('cc.band.idle', { room: room === ROOM_NONE ? t('cc.band.noRoom') : room }))}</div>` : '';
