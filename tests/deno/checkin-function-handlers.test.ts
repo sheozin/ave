@@ -1630,3 +1630,27 @@ Deno.test(`${RM}: a failed language lookup still sends, in English`, async () =>
   const m = world.emails![0] as { subject: string }
   assert(r.status === 200 && m.subject === 'Thank you for coming to Stub event', m.subject)
 })
+
+Deno.test(`${RG} register: the language of a form is not stored for an address nobody has confirmed`, async () => {
+  regSetup()
+  Deno.env.set('TURNSTILE_SECRET_KEY', 'ts-secret')
+  world.tables.leod_checkin_entitlements[0].registration_questions = []
+  world.rpcResult.checkin_web_rate_check = true
+  world.rpcResult.checkin_web_request = { status: 'pending', send: true, event_id: EVENT }
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('challenges.cloudflare.com')) return new Response(JSON.stringify({ success: true, hostname: 'app.cuedeck.io', action: 'register' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const res = await handlers[RG](new Request('http://stub.local/functions/v1/' + RG, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://app.cuedeck.io', 'cf-connecting-ip': '203.0.113.9' },
+      body: JSON.stringify({ action: 'register', code: 'VTQBZ3ENFV', lang: 'ar', first_name: 'Vic', last_name: 'Tim', email: 'victim@stub.test',
+        company: '', answers: {}, consent: true, turnstile_token: 'tok', website: '' }) }))
+    const body = await res.json()
+    assert(res.status === 200 && body.status === 'check_email', JSON.stringify(body))
+    assert(!world.rpcCalls.some(c => c.name === 'checkin_web_set_lang'), 'stored a language for an unconfirmed address')
+    const m = (world.emails ?? [])[0] as { subject: string } | undefined
+    assert(m && m.subject === 'أكّد تسجيلك', 'the confirmation itself still in the form language: ' + m?.subject)
+  } finally { globalThis.fetch = real; Deno.env.delete('TURNSTILE_SECRET_KEY') }
+})

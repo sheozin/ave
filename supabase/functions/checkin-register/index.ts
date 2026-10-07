@@ -236,6 +236,8 @@ Deno.serve(async (req) => {
   }
 
   // (123) The language the guest is using the page in; their emails follow it.
+  // Recorded only on actions that prove the address is theirs (confirm, an
+  // invitation answer: both need the emailed token), never on a submission.
   const lang: Lang | null = isLang(body.lang) ? body.lang : null
   const rememberLang = async (email: string | null | undefined) => {
     if (!lang || !email) return
@@ -513,7 +515,9 @@ Deno.serve(async (req) => {
     const link = 'https://app.cuedeck.io/r/' + code + '#t=' + token
     const tokenHash = await sha256Hex(token)
     // A refused send gives the guest's budget back (103, F7).
-    await rememberLang(form.email.trim())
+    // The confirmation goes in the language of the form, but nothing is
+    // stored for the address yet: the submitter has not shown they own it.
+    // Their language is recorded when they confirm (security review of 123).
     const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link, lang ?? (isLang(ent.registration_language) ? ent.registration_language : 'en'))
       .then(async (sent) => {
         if (sent) return
