@@ -156,7 +156,7 @@ Same structure; band lanes compress to one line (now and next side by side, 44 p
 
 ## 3. Components (one spec each)
 
-- **Button**: sizes sm 28 / md 32 / lg 40 (coarse pointer 40/44/48); variants primary (accent solid), forward (status solid), secondary (raised fill + control border), ghost, danger (red outline); states hover (fill step, no `filter: brightness`), active, focus-visible ring, disabled (opacity .4), armed (`confirm-pending`, solid red). Sentence case labels; uppercase only via CSS for badges and labels.
+- **Button**: sizes sm 28 / md 32 / lg 40 (coarse pointer 44/44/48: nothing under 44 px on touch); variants primary (accent solid), forward (status solid), secondary (raised fill + control border), ghost, danger (red outline); states hover (fill step, no `filter: brightness`), active, focus-visible ring, disabled (opacity .4), armed (`confirm-pending`, solid red). Sentence case labels; uppercase only via CSS for badges and labels.
 - **Badge**: 22 px, radius 6, 11/700, .06em uppercase via CSS; per-state recipe above; only CALLING and OVERRUN may animate.
 - **Chip/tag**: 22 px, radius 4, 12 px, divider border; room and type chips distinguishable by icon.
 - **Section label**: one class, 11/700, .06em uppercase, `--text-tertiary`, consistent inset; text passes through `t()`.
@@ -196,3 +196,14 @@ Each stage: Playwright screenshot diffs reviewed, the full console e2e suite gre
 1. Release: all five stages before GTR, with the 10 Oct evening code freeze above.
 2. Destructive confirm: two presses (the fixed, re-render-safe version from the safety branch). Press and hold is not built.
 3. AI test tools: moved into the account menu under "Tools", away from show controls.
+
+## 9. Release gate: approval against the demo (Sherif, 7 Oct)
+
+Stage 1 shipped and Sherif compared it with the approved demo (https://claude.ai/artifact/WqQ6EYTKocovRAVFqo7eLp, tab "B · Now and next"): "the after doesnt have clear big size the same as we agreed". Stages 3 and 4 therefore do not go live until Sherif approves side-by-side screenshots of the real console (1440x900, same GTR data) next to the matching demo view.
+
+Measured before that request, in the real console at 1440x900, and a release blocker if smaller than the demo:
+- Band countdown 28 px bold; inspector countdown 32 px bold.
+- Band "now" title 15 px bold; list row title 14 px semibold.
+- List row min height 58 px; about 10 rows visible with the band in place.
+- Header clock 26 px bold, one header row of 52 px.
+- Times as HH:MM; seconds only on running timers.
