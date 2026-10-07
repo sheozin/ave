@@ -39,9 +39,13 @@ BEGIN
   VALUES (E, 'Self', 'Reg', 'self@example.invalid', 'tok-inv-2', 'web', false) RETURNING id INTO v_web;
   IF checkin_web_invite_issue(E, v_web, H1)->>'status' <> 'not_invitable' THEN RAISE EXCEPTION 'self-registration invited'; END IF;
   IF checkin_web_invite_issue(E, v_g, H1)->>'status' <> 'issued' THEN RAISE EXCEPTION 'issue'; END IF;
-  -- Sending again replaces the link: the old one stops working.
+  -- Sending again: the previous link keeps working beside the new one (118);
+  -- a second resend retires the oldest.
   PERFORM checkin_web_invite_issue(E, v_g, H2);
-  IF checkin_web_invite_view(v_code, H1)->>'status' <> 'invalid' THEN RAISE EXCEPTION 'old link still works'; END IF;
+  IF checkin_web_invite_view(v_code, H1)->>'status' <> 'ok' THEN RAISE EXCEPTION 'previous link dropped on resend'; END IF;
+  PERFORM checkin_web_invite_issue(E, v_g, repeat('3', 64));
+  IF checkin_web_invite_view(v_code, H1)->>'status' <> 'invalid' THEN RAISE EXCEPTION 'oldest link still works'; END IF;
+  PERFORM checkin_web_invite_issue(E, v_g, H2);
   v_res := checkin_web_invite_view(v_code, H2);
   IF v_res->>'first_name' <> 'Gina' OR (v_res->>'plus_max')::int <> 2 OR v_res->>'rsvp' IS NOT NULL THEN RAISE EXCEPTION 'view: %', v_res; END IF;
 
