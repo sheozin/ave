@@ -1667,16 +1667,13 @@
 
     /* ── TOUCH TARGETS ─────────────────────────────────────────── */
     @media (pointer: coarse) {
-      .abtn { min-height: 48px; font-size: var(--fs-13); padding: 8px 16px; }
       .rbtn { min-height: 40px; }
       button, select, input { min-height: 40px; }
       button { touch-action: manipulation; }
       .sc-mgmt-btn { padding: 6px 10px; font-size: var(--fs-16); }
       .sc-actions { gap: 6px; }
-      .sc-actions .abtn { flex: 1; min-height: 48px; font-size: var(--fs-13); font-weight: 700; }
       .toast-close { min-width: 44px; min-height: 44px; font-size: var(--fs-20); }
       .batch-chk { width: 20px !important; height: 20px !important; }
-      #batch-bar .abtn { min-height: 40px; }
       #undo-btn { min-height: 44px; font-size: var(--fs-13); padding: 8px 20px; }
     }
       /* ═══ Command center tokens: lines, controls, focus, motion (stage 1) ═══ */
@@ -1739,15 +1736,20 @@
     .btn.btn-amber, .abtn.btn-amber { background: var(--st-hold-bg); border-color: var(--st-hold-line); color: var(--st-hold-fg); }
     .btn.btn-grey, .abtn.btn-grey { background: var(--raised); border-color: var(--border-control); color: var(--text-primary); }
     .btn.btn-purple, .abtn.btn-purple { background: var(--raised); border-color: var(--border-control); color: var(--purple-lt); }
-    .btn.confirm-pending, .abtn.confirm-pending, .ctx-btn.confirm-pending {
+    /* Armed wins over every variant's hover, focus and active state (0,3,0, declared after them) */
+    .btn.confirm-pending, .abtn.confirm-pending, .ctx-btn.confirm-pending,
+    .btn.confirm-pending:hover, .btn.confirm-pending:focus-visible, .btn.confirm-pending:active,
+    .abtn.confirm-pending:hover, .abtn.confirm-pending:focus-visible, .abtn.confirm-pending:active {
       background: var(--st-live); border-color: var(--st-live); color: var(--on-solid);
       animation: pulse-confirm .5s ease-in-out infinite alternate;   /* armed is an exception that animates */
     }
+    .btn.confirm-pending:hover, .abtn.confirm-pending:hover { box-shadow: none; }   /* no veil over the armed red */
     @keyframes pulse-confirm { from { opacity: .85; } to { opacity: 1; } }
     .act-gap { display: inline-block; width: 20px; height: 24px; border-left: 1px solid var(--border-divider); margin-left: 12px; flex: none; }
     @media (pointer: coarse) {
-      .btn.sm, .abtn.abtn-sm { height: 40px; } .btn, .btn.md, .abtn { height: 44px; } .btn.lg { height: 48px; }
-      .btn.icon-only { width: 44px; } .btn.sm.icon-only { width: 40px; }
+      .btn.sm, .abtn.abtn-sm { height: 44px; } .btn, .btn.md, .abtn { height: 44px; } .btn.lg { height: 48px; }
+      .btn.icon-only, .btn.sm.icon-only { width: 44px; }
+      .btn, .abtn { min-height: 44px; }   /* also beats inline heights on legacy markup (Send) */
     }
     .chip {
       display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; max-width: 100%;
@@ -4350,7 +4352,7 @@ function buildCtxPanel() {
   } else if (role === 'av') {
     if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
       html += sectionLbl('AV CONTROL');
-      html += cbtn('HOLD SESSION', 'btn-amber', `transition('${esc(tgt.id)}','HOLD')`, 'pause');
+      html += cbtn('HOLD SESSION', 'hold', `transition('${esc(tgt.id)}','HOLD')`, 'pause');
     }
     html += sectionLbl('MONITOR');
     html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', 'monitor');

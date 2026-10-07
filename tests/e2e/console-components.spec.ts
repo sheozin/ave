@@ -2,7 +2,7 @@
 // Component spec (section 3): sizes, variants, badge recipe, chip, label,
 // pill, and that every icon reference resolves to a sprite symbol.
 import { test, expect, type Page } from '@playwright/test';
-import { openConsole, evalPage, PANEL_ID } from './console-boot-mock';
+import { openConsole, evalPage, PANEL_ID, textContrast } from './console-boot-mock';
 
 async function mount(page: Page, html: string) {
   await page.evaluate((h) => { const d = document.createElement('div'); d.id = 'cmp-probe'; d.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;display:flex;gap:8px;padding:8px;background:var(--bg)'; d.innerHTML = h; document.body.append(d); }, html);
@@ -37,7 +37,7 @@ test('components: button sizes and variants', async ({ browser }) => {
 test('components: buttons grow on a coarse pointer', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { touch: true, viewport: { width: 1280, height: 800 } });
   await mount(page, `<button class="btn sm" id="b-sm">Sm</button><button class="btn md" id="b-md">Md</button><button class="btn lg" id="b-lg">Lg</button>`);
-  expect((await box(page, '#b-sm')).h).toBe(40);
+  expect((await box(page, '#b-sm')).h).toBe(44);   // fix round 1: every touch target at least 44 px
   expect((await box(page, '#b-md')).h).toBe(44);
   expect((await box(page, '#b-lg')).h).toBe(48);
   await ctx.close();
@@ -90,5 +90,74 @@ test('components: HOLD sits left of END, END is outlined and separated', async (
   const order = await page.evaluate((h) => { const d = document.createElement('div'); d.innerHTML = h as string;
     return [...d.querySelectorAll('button, .act-gap')].map(b => b.classList.contains('act-gap') ? 'gap' : (b.classList.contains('hold') ? 'hold' : b.classList.contains('danger') ? 'end' : 'other')); }, html);
   expect(order.slice(0, 3)).toEqual(['hold', 'gap', 'end']);
+  await ctx.close();
+});
+
+// Fix round 1: the armed state must win over every variant's hover. An armed
+// END hovered at the moment of decision lost its solid red to .btn.danger:hover.
+async function armedHoverCheck(page: Page, sel: string) {
+  await page.locator(sel).first().hover();
+  await page.waitForTimeout(300);   // let the .12s background transition settle
+  const s = await box(page, sel);
+  const contrast = await textContrast(page, sel);
+  return { bg: s.bg, contrast };
+}
+
+test('components: an armed END or CANCEL stays solid red under hover', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator(`#card-${PANEL_ID} .sc-actions button[onclick^="confirmEnd"]`).click();
+  const end = await armedHoverCheck(page, `#card-${PANEL_ID} .sc-actions button.confirm-pending`);
+  expect(end.bg).toBe('rgb(239, 68, 68)');
+  expect(end.contrast).toBeGreaterThanOrEqual(4.5);
+  const cancelBtn = page.locator('.sc-actions button[onclick^="confirmCancel"]').first();
+  await expect(cancelBtn).toHaveCount(1);
+  const cardId = await cancelBtn.evaluate(b => b.closest('.sc')!.id);
+  await cancelBtn.click();
+  const cancel = await armedHoverCheck(page, `#${cardId} .sc-actions button.confirm-pending[onclick^="confirmCancel"]`);
+  expect(cancel.bg).toBe('rgb(239, 68, 68)');
+  expect(cancel.contrast).toBeGreaterThanOrEqual(4.5);
+  await ctx.close();
+  // Inspector END (ctx-btn) too, in a fresh page: a second press on the same
+  // session would confirm the END armed on the card above.
+  const fresh = await openConsole(browser);
+  await fresh.page.locator('#ctx-actions .ctx-btn[onclick^="confirmEnd"]').click();
+  const ctxEnd = await armedHoverCheck(fresh.page, '#ctx-actions .ctx-btn.confirm-pending');
+  expect(ctxEnd.bg).toBe('rgb(239, 68, 68)');
+  expect(ctxEnd.contrast).toBeGreaterThanOrEqual(4.5);
+  await fresh.ctx.close();
+});
+
+test('components: armed batch buttons stay solid red under hover', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator(`#card-${PANEL_ID} .batch-chk`).check();
+  for (const st of ['ENDED', 'CANCELLED', 'READY']) {
+    const sel = `#batch-bar [data-batch="${st}"]`;
+    await page.locator(sel).click();
+    await expect(page.locator(sel)).toHaveClass(/confirm-pending/);
+    const r = await armedHoverCheck(page, sel);
+    expect(r.bg, st).toBe('rgb(239, 68, 68)');
+    expect(r.contrast, st).toBeGreaterThanOrEqual(4.5);
+  }
+  await ctx.close();
+});
+
+test('components: every visible button is at least 44 px on touch', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { touch: true, viewport: { width: 1280, height: 800 } });
+  const small = await page.evaluate(() => [...document.querySelectorAll('.btn, .abtn')]
+    .map(b => ({ b, r: b.getBoundingClientRect() }))
+    .filter(({ r }) => r.width > 0 && r.height > 0)
+    .filter(({ r }) => r.height < 44)
+    .map(({ b, r }) => `${b.className}:${(b.textContent || '').trim().slice(0, 20)}:${Math.round(r.height)}`));
+  const total = await page.locator('.sc-actions .btn').count();
+  expect(total).toBeGreaterThan(0);
+  expect(small).toEqual([]);
+  await ctx.close();
+});
+
+test('components: Hold looks the same for the AV role as for the director', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'av' });
+  const hold = page.locator('#ctx-actions .ctx-btn', { hasText: 'HOLD SESSION' });
+  await expect(hold).toHaveClass(/\bhold\b/);
+  expect((await box(page, '#ctx-actions .ctx-btn.hold')).bg).toBe('rgb(251, 146, 60)');
   await ctx.close();
 });
