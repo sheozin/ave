@@ -24,6 +24,9 @@ async function checkTarget(raw: string): Promise<string | null> {
   let u: URL
   try { u = new URL(raw) } catch { return 'not a valid address' }
   if (u.protocol !== 'https:') return 'not https'
+  // (127) The standard port only, and no credentials in the address.
+  if (u.port && u.port !== '443') return 'not the standard https port'
+  if (u.username || u.password) return 'credentials in the address'
   const host = u.hostname.replace(/^\[|\]$/g, '')
   if (/^[\d.]+$/.test(host) || host.includes(':')) return 'an IP address, not a name'
   const ips: string[] = []
