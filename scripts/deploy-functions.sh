@@ -5,7 +5,7 @@
 set -euo pipefail
 
 PROJ=$(cd "$(dirname "$0")/.." && pwd)
-ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun restart-session invite-operator manage-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair checkin-invite-staff checkin-price checkin-create-checkout checkin-add-walk-in checkin-post-event-report checkin-scanner)
+ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun restart-session invite-operator manage-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair checkin-invite-staff checkin-price checkin-create-checkout checkin-add-walk-in checkin-post-event-report checkin-scanner checkin-tickets checkin-orders-sweep)
 FAIL=0
 
 green() { echo "  OK  $1"; }
@@ -27,7 +27,7 @@ echo "-- Deploy --"
 for func in "${DEPLOY_LIST[@]}"; do
   echo "  -> deploying $func..."
   extra=()
-  case "$func" in stripe-webhook|checkin-price|create-checkout-session|customer-portal|send-invoice-email|ai-proxy|checkin-post-event-report|checkin-scanner|checkin-register) extra=(--no-verify-jwt) ;; esac
+  case "$func" in stripe-webhook|checkin-price|create-checkout-session|customer-portal|send-invoice-email|ai-proxy|checkin-post-event-report|checkin-scanner|checkin-register|checkin-orders-sweep) extra=(--no-verify-jwt) ;; esac
   if supabase functions deploy "$func" --project-ref "sawekpguemzvuvvulfbc" --workdir "$PROJ" ${extra[@]+"${extra[@]}"} 2>&1; then
     green "$func deployed"
   else

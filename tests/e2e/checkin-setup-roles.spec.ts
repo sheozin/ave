@@ -462,3 +462,69 @@ test('registration tab: waitlist and approval switches, and held guests are offe
   await expect(page.locator('#held-box')).toBeHidden();
   expect(removed).toBe(1);
 });
+
+test('tickets tab: the owner connects Stripe, adds a ticket, and refunds an order', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  const calls: Record<string, unknown>[] = [];
+  let types: Record<string, unknown>[] = [];
+  let orders = [{ id: 'o1', first_name: 'Pia', last_name: 'Payer', email: 'pia@example.invalid', ticket_name: 'Standard', amount_cents: 4900, currency: 'eur', fee_cents: 0, status: 'paid', created_at: FIXED_NOW.toISOString() }];
+  let charges = false;
+  await open(page, { role: 'organizer', is_owner: true }, 'tickets', STAFF, async () => {
+    await rpc(page, 'checkin_tickets_overview', () => ({ is_owner: true, fee_bps: 0, payout: { connected: charges, charges_enabled: charges, details_submitted: charges },
+      types, revenue: orders.some(o => o.status === 'paid') ? { eur: 4900 } : {} }));
+    await rpc(page, 'checkin_orders_list', () => orders);
+    await rpc(page, 'checkin_ticket_type_save', (a) => { saved.push(a); types = [{ id: 't1', name: a.p_name, description: a.p_description, price_cents: a.p_price_cents, currency: a.p_currency, quantity: a.p_quantity, sort: 1, active: true, sold: 1, pending: 0 }]; return types[0]; });
+    await fn(page, 'checkin-tickets', (b) => {
+      calls.push(b);
+      if (b.action === 'payout_connect') return { body: { url: 'https://connect.stripe.com/setup/s/probe' } };
+      if (b.action === 'refund') { orders = orders.map(o => ({ ...o, status: 'refunded' })); return { body: { ok: true, status: 'refunded', removed: true } }; }
+      return { body: { connected: charges, charges_enabled: charges } };
+    });
+    await page.route('https://connect.stripe.com/**', r => r.fulfill({ contentType: 'text/html', body: '<title>Stripe onboarding</title>' }));
+  });
+  await expect(page.locator('#p-tickets')).toBeVisible();
+  await expect(page.locator('#tk-pay-s')).toHaveText('Connect your Stripe account to sell paid tickets. Free tickets work without it.');
+  await expect(page.locator('#tk-fee')).toContainText('CueDeck takes no fee on tickets.');
+  // Not connected: the form says so before a paid price is tried.
+  await page.click('#tk-add');
+  await expect(page.locator('#tk-price-note')).toBeVisible();
+  await page.click('#tk-cancel');
+  await page.click('#tk-connect');
+  await page.waitForURL('https://connect.stripe.com/setup/s/probe');
+  expect(calls.at(-1)).toMatchObject({ event_id: EVENT_ID, action: 'payout_connect' });
+
+  // Back from Stripe, connected.
+  charges = true;
+  await page.goto('/cuedeck-checkin-setup.html?event=' + EVENT_ID + '&step=tickets&connect=done');
+  await expect(page.locator('#tk-pay-s')).toHaveText('Connected. Ticket payments go straight to your Stripe account.');
+  await expect(page.locator('#tk-connect')).toBeHidden();
+  await page.click('#tk-add');
+  await page.fill('#tk-name', 'Standard');
+  await page.fill('#tk-price', '49,50');
+  await page.fill('#tk-qty', '200');
+  await page.click('#tk-save');
+  await expect(page.locator('#tk-ok')).toHaveText('Saved. The registration page shows it now.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_id: null, p_name: 'Standard', p_price_cents: 4950, p_currency: 'eur', p_quantity: 200, p_active: true });
+  await expect(page.locator('#tk-body tr')).toHaveCount(1);
+  await expect(page.locator('#tk-body tr').first()).toContainText('1 of 200');
+
+  // Refund takes two clicks.
+  const rf = page.locator('#tk-obody tr', { hasText: 'Pia' }).getByRole('button', { name: 'Refund' });
+  await rf.click();
+  expect(calls.some(c => c.action === 'refund')).toBe(false);
+  await page.locator('#tk-obody tr', { hasText: 'Pia' }).getByRole('button', { name: /Click again to refund/ }).click();
+  await expect(page.locator('#tk-ok')).toContainText('taken off the guest list');
+  expect(calls.find(c => c.action === 'refund')).toMatchObject({ event_id: EVENT_ID, order_id: 'o1' });
+  await expect(page.locator('#tk-obody tr').first()).toContainText('Refunded');
+});
+
+test('tickets tab: an organizer sees payouts but cannot connect or refund', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'tickets', STAFF, async () => {
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 250, payout: { connected: true, charges_enabled: true, details_submitted: true }, types: [], revenue: { eur: 4900 } });
+    await rpc(page, 'checkin_orders_list', [{ id: 'o1', first_name: 'Pia', last_name: 'Payer', email: 'pia@example.invalid', ticket_name: 'Standard', amount_cents: 4900, currency: 'eur', fee_cents: 122, status: 'paid', created_at: FIXED_NOW.toISOString() }]);
+  });
+  await expect(page.locator('#tk-connect')).toBeHidden();
+  await expect(page.locator('#tk-fee')).toContainText('CueDeck fee: 2.5% of each paid ticket.');
+  await expect(page.locator('#tk-obody tr')).toHaveCount(1);
+  await expect(page.locator('#tk-obody button')).toHaveCount(0);
+});

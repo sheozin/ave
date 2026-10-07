@@ -71,6 +71,9 @@ const ALLOWED: Record<GatedFunction, Who[]> = {
   'checkin-kiosk-pair': ['owner', 'organizer', 'lead'],
   'checkin-record-scans': ['owner', 'organizer', 'lead', 'crew'],
   'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
+  'checkin-held': ['owner', 'organizer'],
+  'checkin-tickets': ['owner', 'organizer'],
+  'checkin-tickets-owner': ['owner'],
 };
 
 describe('functionGate', () => {
@@ -273,7 +276,7 @@ describe('archiveVerdict', () => {
 
 describe('handlers route through the shared gates', () => {
   const src = (fn: string) => readFileSync(`supabase/functions/${fn}/index.ts`, 'utf8');
-  it.each(Object.keys(ALLOWED))('%s', (fn) => {
+  it.each(Object.keys(ALLOWED).filter(f => !f.startsWith('checkin-tickets')))('%s', (fn) => {
     // checkin-record-scans also takes a paired scanner's device key (scanner
     // Build A); there is no user then, so its operator path gates on
     // operatorId (= user.id, set only after a valid JWT).
@@ -285,6 +288,12 @@ describe('handlers route through the shared gates', () => {
     expect(s).toContain('if (authErr || !user) return fail(401, \'Unauthorized\')\n    operatorId = user.id');
     expect(s).toContain('if (operatorId) {\n    const gate = functionGate(');
     expect(s).toContain("const auth = await authDevice(sb, event_id, deviceKey, 'scanner')");
+  });
+  it('checkin-tickets: status for organizers, money moves for the owner only', () => {
+    const s = src('checkin-tickets');
+    expect(s).toContain('const caller = await loadCallerRole(sb, event_id, user.id)');
+    expect(s).toContain("functionGate(action === 'payout_status' ? 'checkin-tickets' : 'checkin-tickets-owner', caller)");
+    expect(s).toContain("if (!['payout_status', 'payout_connect', 'refund'].includes(action)) return json({ error: 'Bad request' }, 400)");
   });
   it('checkin-enable-event', () => {
     const s = src('checkin-enable-event');

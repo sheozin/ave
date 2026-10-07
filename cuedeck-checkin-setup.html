@@ -135,6 +135,7 @@
     <button class="st" data-step="overview"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg></span>Overview</button>
     <button class="st" data-step="attendees"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8"/></svg></span>Guests<small id="n-att"></small></button>
     <button class="st" data-step="register"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/></svg></span>Registration<small id="n-web"></small></button>
+    <button class="st" data-step="tickets"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2zM13 5v2M13 17v2M13 11v2"/></svg></span>Tickets<small id="n-tix"></small></button>
     <button class="st" data-step="branding"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.6 1.5-1.4 0-.9-.7-1.3-.7-2.1 0-.9.7-1.5 1.6-1.5H17a4 4 0 0 0 4-4c0-5-4-9-9-9M7.5 11.5h.01M10.5 7.5h.01M15.5 7.5h.01"/></svg></span>Branding</button>
     <button class="st" data-step="qr"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3zM3 7l9 6 9-6"/></svg></span>Emails</button>
     <button class="st" data-step="staff"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 12 0v1"/></svg></span>Team<small id="n-staff"></small></button>
@@ -291,6 +292,34 @@
     <p style="margin:10px 0 0"><button class="btn btn-g" id="rg-addq" type="button">Add a question</button></p>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px"><button class="btn btn-p" id="rg-save" type="button">Save</button><span class="small" id="rg-count"></span></div>
     <div class="err" id="rg-err"></div><div class="ok" id="rg-ok"></div>
+  </section>
+
+  <section class="panel" id="p-tickets" hidden>
+    <div class="ph"><div><h2>Tickets</h2><p>Free and paid tickets for your registration page. Payments go straight to your own Stripe account, and guests get their QR ticket once they have paid.</p></div></div>
+    <div class="toggle"><div><b>Payouts</b><p id="tk-pay-s">Checking…</p></div><button class="btn btn-s" id="tk-connect" type="button" hidden>Connect Stripe</button></div>
+    <p class="small" id="tk-fee"></p>
+    <h3 class="sc-h">Ticket types</h3>
+    <p class="sc-p">Guests choose one when they register. With no ticket types, registration is free and nobody chooses.</p>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Ticket</th><th>Price</th><th>Sold</th><th></th></tr></thead><tbody id="tk-body"></tbody></table></div>
+    <div id="tk-form" hidden style="border:1px solid var(--bd);border-radius:14px;padding:16px;margin-top:12px;display:grid;gap:12px">
+      <div class="row2" style="gap:12px">
+        <div class="field"><label for="tk-name">Name</label><input id="tk-name" maxlength="60" placeholder="Standard"></div>
+        <div class="field"><label for="tk-desc">Description <span class="small">(optional)</span></label><input id="tk-desc" maxlength="200" placeholder="Full access, lunch included"></div>
+      </div>
+      <div class="row2" style="gap:12px">
+        <div class="field"><label for="tk-price">Price</label><div style="display:flex;gap:8px"><input id="tk-price" inputmode="decimal" placeholder="0.00 for free" style="flex:1;min-width:0"><select id="tk-cur" aria-label="Currency"></select></div></div>
+        <div class="field"><label for="tk-qty">How many</label><input id="tk-qty" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
+      </div>
+      <p class="small" id="tk-price-note" hidden>Connect Stripe above to sell paid tickets. Free tickets work now.</p>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn btn-p" id="tk-save" type="button">Save ticket</button><button class="link" id="tk-cancel" type="button">Cancel</button></div>
+    </div>
+    <p style="margin:10px 0 0"><button class="btn btn-g" id="tk-add" type="button">Add a ticket type</button></p>
+    <div class="err" id="tk-err"></div><div class="ok" id="tk-ok"></div>
+    <div id="tk-orders" hidden>
+      <h3 class="sc-h">Orders</h3>
+      <p class="sc-p" id="tk-rev"></p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Guest</th><th>Ticket</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody id="tk-obody"></tbody></table></div>
+    </div>
   </section>
 
   <section class="panel" id="p-staff" hidden>
@@ -481,6 +510,7 @@ function renderChrome() {
     details: true,
     attendees: ATT.length > 0,
     register: !!ENT.registration_enabled,
+    tickets: !!(TIX && TIX.types.length),
     branding: !!(ENT.registration_brand_color || ENT.registration_logo_path || ENT.registration_cover_path || ENT.registration_host_name),
     staff: STAFF.some(s => !s.is_owner),
     kiosk: ENT.self_registration || ENT.kiosk_self_print || ENT.auto_send_qr_email,
@@ -492,9 +522,9 @@ function renderChrome() {
 
 function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
-  for (const s of ['overview', 'details', 'attendees', 'register', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
+  for (const s of ['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, branding: () => { renderDesign(); renderPreview(); },
+  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
@@ -913,6 +943,134 @@ async function saveFlow() {
   $('held-ok').textContent = 'Saved.';
 }
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+
+// ── tickets and payouts (migration 109) ──
+// Types and orders are RPCs; anything that talks to Stripe (payout status,
+// connecting, refunds) is the checkin-tickets Edge Function.
+let TIX = null, ORDERS = [], TK_EDIT = null;
+const TK_CURRENCIES = ['eur', 'usd', 'gbp', 'pln', 'chf', 'sek', 'nok', 'dkk', 'czk', 'aed', 'cad', 'aud'];
+const fmtMoney = (cents, cur) => { try { return new Intl.NumberFormat(navigator.language || 'en-GB', { style: 'currency', currency: String(cur).toUpperCase() }).format(cents / 100); } catch { return (cents / 100).toFixed(2) + ' ' + String(cur).toUpperCase(); } };
+async function loadTickets() {
+  const [ov, od] = await Promise.all([
+    sb.rpc('checkin_tickets_overview', { p_event_id: EVENT_ID }),
+    sb.rpc('checkin_orders_list', { p_event_id: EVENT_ID }),
+  ]);
+  if (ov.error) throw new Error(ov.error.message);
+  if (od.error) throw new Error(od.error.message);
+  TIX = ov.data; ORDERS = od.data || [];
+}
+async function openTickets() {
+  $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+  try { await loadTickets(); } catch (e) { $('tk-err').textContent = 'Could not load tickets: ' + e.message; return; }
+  renderTickets();
+  // Stripe is asked while onboarding is unfinished (also on the way back from it).
+  if (TIX.payout.connected && !TIX.payout.charges_enabled) {
+    const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'payout_status' } });
+    if (!error && data) { TIX.payout = { ...TIX.payout, ...data }; renderTickets(); }
+  }
+}
+function renderTickets() {
+  if (!TIX) return;
+  const p = TIX.payout, paidTypes = TIX.types.filter(t => t.price_cents > 0 && t.active);
+  $('tk-pay-s').textContent = p.charges_enabled ? 'Connected. Ticket payments go straight to your Stripe account.'
+    : p.connected ? (p.details_submitted ? 'Stripe is reviewing your account. Paid tickets go on sale as soon as it is approved.' : 'Stripe setup is not finished yet. Continue where you left off.')
+    : TIX.is_owner ? 'Connect your Stripe account to sell paid tickets. Free tickets work without it.' : 'The event owner connects their Stripe account to sell paid tickets.';
+  $('tk-connect').hidden = !TIX.is_owner || p.charges_enabled;
+  $('tk-connect').textContent = p.connected ? 'Continue Stripe setup' : 'Connect Stripe';
+  $('tk-fee').textContent = (TIX.fee_bps ? 'CueDeck fee: ' + (TIX.fee_bps / 100) + '% of each paid ticket. ' : 'CueDeck takes no fee on tickets. ')
+    + 'Stripe card fees are charged on your Stripe account, and refunds and disputes are handled there too.';
+  $('tk-body').replaceChildren(...(TIX.types.length ? TIX.types.map(t => {
+    const tr = el('tr');
+    const nm = el('td'); nm.append(el('div', 'nm', t.name), el('div', 'em', [t.description, t.active ? '' : 'Hidden from the page'].filter(Boolean).join(' · ')));
+    const sold = Number(t.sold) + (t.pending ? ' (+' + t.pending + ' paying)' : '');
+    const acts = el('td'); acts.style.whiteSpace = 'nowrap';
+    const ed = el('button', 'btn btn-s', 'Edit'); ed.type = 'button'; ed.onclick = () => editTicket(t);
+    const rm = el('button', 'link', t.sold > 0 || t.pending > 0 ? (t.active ? 'Hide' : 'Show') : 'Delete'); rm.type = 'button'; rm.style.marginLeft = '10px';
+    rm.onclick = () => (t.sold > 0 || t.pending > 0) ? saveTicket({ ...t, active: !t.active }) : deleteTicket(t, rm);
+    acts.append(ed, rm);
+    tr.append(nm, el('td', null, t.price_cents ? fmtMoney(t.price_cents, t.currency) : 'Free'), el('td', null, sold + (t.quantity ? ' of ' + t.quantity : '')), acts);
+    return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No ticket types yet: registration is free.'); td.colSpan = 4; tr.append(td); return tr; })()]));
+  $('n-tix').textContent = TIX.types.length ? String(TIX.types.reduce((n, t) => n + Number(t.sold), 0)) : '';
+  // Orders: paid, open (paying now) and refunded; expired ones are left out.
+  $('tk-orders').hidden = !ORDERS.length && !paidTypes.length;
+  const rev = Object.entries(TIX.revenue || {}).map(([cur, c]) => fmtMoney(c, cur)).join(' + ');
+  $('tk-rev').textContent = ORDERS.length ? ORDERS.filter(o => o.status === 'paid').length + ' paid' + (rev ? ', ' + rev + ' in ticket sales' : '') + '. Payouts arrive on your Stripe schedule.' : 'No orders yet.';
+  $('tk-obody').replaceChildren(...ORDERS.map(o => {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('div', 'nm', o.first_name + ' ' + o.last_name), el('div', 'em', o.email));
+    const st = { paid: ['Paid', 't-sent'], open: ['Paying now', 't-wait'], refunded: ['Refunded', 't-test'] }[o.status] || [o.status, 't-wait'];
+    const acts = el('td');
+    if (o.status === 'paid' && TIX.is_owner) {
+      const rf = el('button', 'link', 'Refund'); rf.type = 'button';
+      let armed = null;
+      rf.onclick = async () => {
+        if (!armed) { rf.textContent = 'Click again to refund ' + fmtMoney(o.amount_cents, o.currency); armed = setTimeout(() => { armed = null; rf.textContent = 'Refund'; }, 4000); return; }
+        clearTimeout(armed); rf.disabled = true; rf.textContent = 'Refunding…';
+        $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+        const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'refund', order_id: o.id } });
+        if (error) { $('tk-err').textContent = await fnError(error); rf.disabled = false; rf.textContent = 'Refund'; return; }
+        $('tk-ok').textContent = 'Refunded ' + fmtMoney(o.amount_cents, o.currency) + '. ' + (data.removed ? 'The guest was taken off the guest list and their QR code no longer works.' : 'They had already checked in, so they stay on the guest list.');
+        await Promise.all([loadTickets(), loadAttendees()]); renderTickets(); renderChrome();
+      };
+      acts.append(rf);
+    }
+    const tag = el('td'); tag.append(el('span', 'tag ' + st[1], st[0]));
+    tr.append(who, el('td', null, o.ticket_name), el('td', null, fmtMoney(o.amount_cents, o.currency)), tag, acts);
+    return tr;
+  }));
+}
+function editTicket(t) {
+  TK_EDIT = t || null;
+  $('tk-form').hidden = false; $('tk-add').hidden = true;
+  $('tk-name').value = t ? t.name : ''; $('tk-desc').value = t ? (t.description || '') : '';
+  $('tk-price').value = t && t.price_cents ? (t.price_cents / 100).toFixed(2) : '';
+  $('tk-qty').value = t && t.quantity ? t.quantity : '';
+  const cur = t ? t.currency : (TIX.types[0]?.currency || 'eur');
+  $('tk-cur').replaceChildren(...TK_CURRENCIES.map(c => { const o = el('option', null, c.toUpperCase()); o.value = c; o.selected = c === cur; return o; }));
+  // One currency per event: fixed once any other ticket exists.
+  $('tk-cur').disabled = TIX.types.some(x => !t || x.id !== t.id);
+  $('tk-price-note').hidden = TIX.payout.charges_enabled;
+  $('tk-name').focus();
+}
+$('tk-add').onclick = () => editTicket(null);
+$('tk-cancel').onclick = () => { $('tk-form').hidden = true; $('tk-add').hidden = false; $('tk-err').textContent = ''; };
+async function saveTicket(t) {
+  $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+  const { error } = await sb.rpc('checkin_ticket_type_save', {
+    p_event_id: EVENT_ID, p_id: t.id ?? null, p_name: t.name, p_description: t.description ?? null,
+    p_price_cents: t.price_cents, p_currency: t.currency, p_quantity: t.quantity ?? null, p_active: t.active ?? true, p_sort: t.sort ?? null,
+  });
+  if (error) { $('tk-err').textContent = error.message; return false; }
+  await loadTickets(); renderTickets(); renderChrome();
+  return true;
+}
+$('tk-save').onclick = async () => {
+  const raw = $('tk-price').value.trim().replace(',', '.');
+  if (raw && !/^\d+(\.\d{1,2})?$/.test(raw)) { $('tk-err').textContent = 'Write the price as a number, like 49 or 49.50.'; return; }
+  const qty = $('tk-qty').value.trim();
+  const ok = await saveTicket({
+    id: TK_EDIT?.id, name: $('tk-name').value.trim(), description: $('tk-desc').value.trim(),
+    price_cents: raw ? Math.round(parseFloat(raw) * 100) : 0, currency: $('tk-cur').value,
+    quantity: qty ? parseInt(qty, 10) : null, active: TK_EDIT ? TK_EDIT.active : true, sort: TK_EDIT?.sort,
+  });
+  if (ok) { $('tk-form').hidden = true; $('tk-add').hidden = false; $('tk-ok').textContent = 'Saved. The registration page shows it now.'; }
+};
+async function deleteTicket(t, btn) {
+  if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Click again'; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; }, 3500); return; }
+  const { error } = await sb.rpc('checkin_ticket_type_delete', { p_event_id: EVENT_ID, p_id: t.id });
+  if (error) { $('tk-err').textContent = error.message; return; }
+  await loadTickets(); renderTickets(); renderChrome();
+}
+$('tk-connect').onclick = async () => {
+  const b = $('tk-connect'); b.disabled = true; b.textContent = 'Opening Stripe…'; $('tk-err').textContent = '';
+  const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'payout_connect' } });
+  if (error || !/^https:\/\/connect\.stripe\.com\//.test(data?.url || '')) {
+    $('tk-err').textContent = error ? await fnError(error) : 'Stripe did not return a setup link. Please try again.';
+    b.disabled = false; renderTickets(); return;
+  }
+  location.href = data.url;
+};
 
 function renderRegister() {
   const on = !!ENT.registration_enabled;
@@ -1346,7 +1504,7 @@ async function waitForLive() {
   $('layout').hidden = false; renderChrome();
   if (params.get('paid') === '1' && !isLive() && !isComp()) { await waitForLive(); return; }
   const step = params.get('step');
-  go(['overview', 'details', 'attendees', 'register', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive'].includes(step) ? step : 'overview');
+  go(['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive'].includes(step) ? step : 'overview');
 })();
 </script>
 </body>

@@ -10,12 +10,22 @@ import {
 const FN = 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/checkin-register';
 const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 const $ = (id) => document.getElementById(id);
+const money = (cents, cur) => {
+  try { return new Intl.NumberFormat(navigator.language || 'en-GB', { style: 'currency', currency: String(cur).toUpperCase() }).format(cents / 100); }
+  catch { return (cents / 100).toFixed(2) + ' ' + String(cur).toUpperCase(); }
+};
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 // /r/<code>, or ?code= when served from a dev server without the rewrite.
 const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
 // The emailed link carries its token in the fragment (#t=), which browsers never send to a server.
-const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+let token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+// Back from Stripe Checkout (paid tickets): the link's token was kept in
+// this tab while the guest paid, so the page can finish the order.
+const back = new URLSearchParams(location.search);
+const PAY_KEY = 'cuedeck-pay:' + code;
+const fromStripe = back.has('paid') ? 'paid' : back.has('unpaid') ? 'unpaid' : null;
+if (!token && fromStripe) { try { token = sessionStorage.getItem(PAY_KEY) || ''; } catch { /* storage blocked */ } }
 let config = null;
 
 async function call(body) {
@@ -227,6 +237,44 @@ function loadTurnstile(siteKey) {
   });
 }
 
+// ── tickets (paid tickets, migration 109) ──
+function renderTickets(list) {
+  const box = $('tix-list');
+  box.replaceChildren();
+  $('tix').hidden = !list.length;
+  if (!list.length) return;
+  const hidden = el('input', { type: 'hidden', name: 'ticket_type_id', value: '' });
+  box.append(hidden);
+  const pick = (t, b) => {
+    hidden.value = t.id;
+    for (const x of box.querySelectorAll('.tix-o')) x.setAttribute('aria-checked', String(x === b));
+    $('tix-pay').hidden = !(t.price && !config.test);
+    $('tix').classList.remove('bad'); $('tix').querySelector('.err').textContent = '';
+  };
+  const buyable = list.filter(t => !t.sold_out && t.on_sale);
+  for (const t of list) {
+    const off = t.sold_out || !t.on_sale;
+    const b = el('button', { type: 'button', class: 'tix-o', role: 'radio', 'aria-checked': 'false' });
+    if (off) b.disabled = true;
+    const nm = el('span', { class: 'nm' });
+    nm.append(el('b', null, t.name));
+    const sub = t.sold_out ? 'Sold out' : !t.on_sale ? 'Not on sale yet' : [t.description, t.left ? t.left + ' left' : ''].filter(Boolean).join(' · ');
+    if (sub) nm.append(el('small', null, sub));
+    b.append(el('span', { class: 'dot', 'aria-hidden': 'true' }), nm, el('span', { class: 'pr' }, t.price || 'Free'));
+    b.addEventListener('click', () => pick(t, b));
+    box.append(b);
+  }
+  // One choice on sale: picked for the guest.
+  if (buyable.length === 1) pick(buyable[0], box.querySelectorAll('.tix-o')[list.indexOf(buyable[0])]);
+}
+function ticketMissing() {
+  const tx = config.tickets || [];
+  if (!tx.length || $('form').elements.ticket_type_id.value) return false;
+  $('tix').classList.add('bad'); $('tix').querySelector('.err').textContent = 'Choose a ticket.';
+  $('tix').querySelector('.tix-o:not([disabled])')?.focus();
+  return true;
+}
+
 // ── form ──
 function clearErrors() {
   for (const l of document.querySelectorAll('[data-f]')) {
@@ -255,6 +303,7 @@ function formValues() {
     first_name: f.elements.first_name.value, last_name: f.elements.last_name.value,
     email: f.elements.email.value, company: f.elements.company.value,
     answers, consent: f.elements.consent.checked,
+    ticket_type_id: f.elements.ticket_type_id ? f.elements.ticket_type_id.value : '',
   };
 }
 function message(text) { $('msg').textContent = text; $('msg').hidden = false; }
@@ -264,7 +313,9 @@ $('form').addEventListener('submit', async (ev) => {
   clearErrors();
   const v = formValues();
   const { errors } = validateRegistration(v, config.questions);
-  if (errors.length) { markErrors(errors); return; }
+  const noTicket = ticketMissing();
+  if (errors.length) markErrors(errors);
+  if (noTicket || errors.length) return;
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
@@ -287,6 +338,8 @@ $('form').addEventListener('submit', async (ev) => {
     if (b.status === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
     if (b.status === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
     if (b.status === 'test_cap') return message('This test page has used its 25 test registrations.');
+    if (b.status === 'sold_out') return message('That ticket has just sold out. Please choose another.');
+    if (b.status === 'bad_ticket') return message('That ticket is no longer available. Reload the page and choose another.');
     if (r.status === 404) return closed(...NOT_ACTIVE);
     if (r.status === 400 && Array.isArray(b.fields)) { markErrors(b.fields); return; }
     message(b.error || 'Registration failed. Please try again.');
@@ -302,7 +355,12 @@ $('form').addEventListener('submit', async (ev) => {
 // ── the emailed link ──
 // Confirming takes a button press, so a mail scanner that opens the link
 // registers nobody.
-const dropToken = () => history.replaceState(null, '', location.pathname + location.search);
+const dropToken = () => {
+  const q = new URLSearchParams(location.search); q.delete('paid'); q.delete('unpaid');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+  try { sessionStorage.removeItem(PAY_KEY); } catch { /* storage blocked */ }
+};
+const NOT_YET = 'Your link keeps working: open it again later to finish.';
 
 function showTicket(first, t) {
   const e = config.event || {}, pg = config.page || {};
@@ -318,6 +376,7 @@ function showTicket(first, t) {
   card('ticket');
 }
 
+let cfLabel = 'Confirm my registration';
 $('cf-btn').addEventListener('click', async () => {
   const btn = $('cf-btn');
   btn.disabled = true; btn.textContent = 'Confirming…';
@@ -325,7 +384,28 @@ $('cf-btn').addEventListener('click', async () => {
   try {
     const r = await call({ action: 'confirm', token });
     const b = r.body;
+    if (r.status === 200 && b.status === 'payment' && /^https:\/\/checkout\.stripe\.com\//.test(b.checkout_url || '')) {
+      // Off to Stripe. The token stays in this tab so the return can finish.
+      try { sessionStorage.setItem(PAY_KEY, token); } catch { /* the emailed link still works */ }
+      btn.textContent = 'Opening secure checkout…';
+      location.href = b.checkout_url;
+      return new Promise(() => {});   // keep the button busy while the page leaves
+    }
+    if (r.status === 200 && b.status === 'payments_unavailable') {
+      $('cf-msg').textContent = 'The organizer cannot take payments right now. ' + NOT_YET; $('cf-msg').hidden = false;
+      return;
+    }
     dropToken();
+    if (b.status === 'sold_out') return closed('This ticket has sold out', 'It sold out before you confirmed. Register again from this page to choose another ticket.');
+    if (b.status === 'bad_ticket') return closed('This ticket is no longer available', 'Register again from this page to choose another ticket.');
+    if (b.status === 'refunded') return closed('This ticket was refunded', 'Contact the organizer if you think this is a mistake.');
+    if (b.status === 'hold_limit') return closed('This payment link has expired', 'Register again from this page to get a new one.');
+    if (r.status === 200 && b.status === 'processing') {
+      $('done-h').textContent = 'Your payment is being processed';
+      $('done-p').textContent = 'Your QR ticket arrives by email as soon as the payment clears. Nothing more to do.';
+      card('done');
+      return;
+    }
     if (r.status === 200 && (b.status === 'waitlisted' || b.status === 'awaiting_approval')) {
       const who = b.first_name ? ', ' + b.first_name : '';
       $('done-h').textContent = b.status === 'waitlisted' ? 'You are on the waitlist' + who : 'Thanks' + who;
@@ -350,7 +430,7 @@ $('cf-btn').addEventListener('click', async () => {
   } catch {
     $('cf-msg').textContent = 'Could not reach the server. Check your connection and try again.'; $('cf-msg').hidden = false;
   } finally {
-    btn.disabled = false; btn.textContent = 'Confirm my registration';
+    btn.disabled = false; btn.textContent = cfLabel;
   }
 });
 
@@ -384,19 +464,46 @@ $('cf-no').addEventListener('click', async () => {
     $('cf-name').textContent = config.event?.name || 'Event';
     $('cf-meta').textContent = [formatEventDate(config.event?.date), config.event?.venue].filter(Boolean).join(' · ');
     const pv = await call({ action: 'preview', token }).catch(() => null);
-    if (pv && pv.status === 200 && pv.body.status === 'ok') {
-      $('cf-who').textContent = [pv.body.first_name, pv.body.last_name].filter(Boolean).join(' ') + (pv.body.company ? ', ' + pv.body.company : '');
+    if (pv && pv.status === 200 && (pv.body.status === 'ok' || pv.body.status === 'order')) {
+      const p = pv.body;
+      $('cf-who').textContent = [p.first_name, p.last_name].filter(Boolean).join(' ') + (p.company ? ', ' + p.company : '');
       $('cf-who-row').hidden = false;
+      const tk = p.ticket, price = tk && tk.price_cents > 0 && !config.test ? money(tk.price_cents, tk.currency) : '';
+      if (tk) { $('cf-tix').textContent = tk.name + (price ? ', ' + price : ''); $('cf-tix').hidden = false; }
+      if (p.status === 'order') {
+        // The request is already an order: this link is the way back to it.
+        $('cf-no').hidden = true; $('cf-who-s').hidden = true;
+        if (p.order_status === 'refunded') { dropToken(); return closed('This ticket was refunded', 'Contact the organizer if you think this is a mistake.'); }
+        if (p.order_status === 'paid') {
+          cfLabel = 'Show my ticket'; $('cf-h').textContent = 'Your ticket is ready';
+        } else {
+          cfLabel = 'Continue to payment';
+          $('cf-h').textContent = fromStripe === 'unpaid' ? 'Payment not completed' : 'Complete your payment';
+          $('cf-meta').textContent = 'Nothing was charged. Your place is held for a short while.';
+        }
+      } else if (price) {
+        cfLabel = 'Confirm and pay ' + price;
+      }
+      $('cf-btn').textContent = cfLabel;
+      // Back from Stripe after paying: finish without another press.
+      if (fromStripe === 'paid' && p.status === 'order') { card('confirm'); $('cf-btn').click(); return; }
     } else if (pv && pv.body && pv.body.status === 'invalid') {
       dropToken();
       return closed('This link has expired or was already used', 'Links work once, for 48 hours. Register again from the page you started on.');
     }
     return card('confirm');
   }
+  if (fromStripe === 'paid') {
+    // Paid in another tab or browser: the order settles on its own.
+    $('done-h').textContent = 'Finishing your registration';
+    $('done-p').textContent = 'If your payment went through, your QR ticket arrives by email within a few minutes. The link in your confirmation email also shows it.';
+    return card('done');
+  }
   if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
   // 'waitlist' falls through to the form: the guest joins the waitlist.
   if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
   renderQuestions(config.questions);
+  renderTickets(config.tickets || []);
   card('open');
   await loadTurnstile(config.turnstile_site_key);
 })();

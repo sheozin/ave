@@ -276,3 +276,78 @@ test('test mode: a waitlisted test registration says so', async ({ page }) => {
   await page.click('#submit');
   await expect(page.locator('#done-h')).toHaveText('Added to the waitlist (test)');
 });
+
+// ── Paid tickets (109) ──
+const TICKETS = [
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Community', description: null, price_cents: 0, currency: 'eur', price: null, left: null, sold_out: false, on_sale: true },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Standard', description: 'Full access', price_cents: 4900, currency: 'eur', price: '€49.00', left: 3, sold_out: false, on_sale: true },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000003', name: 'VIP', description: null, price_cents: 19900, currency: 'eur', price: '€199.00', left: null, sold_out: true, on_sale: true },
+];
+
+test('tickets: the guest must pick one; a paid pick says how payment works', async ({ page }) => {
+  const sent = await setup(page, { config: CONFIG({ tickets: TICKETS }) });
+  await page.goto(URL_);
+  await expect(page.locator('.tix-o')).toHaveCount(3);
+  await expect(page.locator('.tix-o').nth(2)).toBeDisabled();
+  await expect(page.locator('.tix-o').nth(2)).toContainText('Sold out');
+  await expect(page.locator('.tix-o').nth(1)).toContainText('Full access · 3 left');
+  await fill(page);
+  await page.click('#submit');
+  await expect(page.locator('#tix .err')).toHaveText('Choose a ticket.');
+  expect(sent).toHaveLength(0);
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await expect(page.locator('#tix-pay')).toBeVisible();
+  await page.locator('.tix-o', { hasText: 'Community' }).click();
+  await expect(page.locator('#tix-pay')).toBeHidden();
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await page.click('#submit');
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent[0]).toMatchObject({ action: 'register', ticket_type_id: 'aaaaaaaa-0000-4000-8000-000000000002' });
+});
+
+test('tickets: a paid confirm goes to Stripe, and the return shows the ticket', async ({ page }) => {
+  let paid = false;
+  const sent = await setup(page, {
+    config: CONFIG({ tickets: TICKETS }),
+    preview: () => paid
+      ? { body: { status: 'order', order_status: 'open', first_name: 'Maya', last_name: 'Lindqvist', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } }
+      : { body: { status: 'ok', first_name: 'Maya', last_name: 'Lindqvist', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } },
+    confirm: () => paid
+      ? { body: { status: 'registered', first_name: 'Maya', ticket: { first_name: 'Maya', last_name: 'Lindqvist', ticket_type: 'Standard', code: 'B4K2C7', qr_svg: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>') } } }
+      : { body: { status: 'payment', checkout_url: 'https://checkout.stripe.com/c/pay/cs_probe', first_name: 'Maya', ticket_name: 'Standard', amount: '€49.00' } },
+  });
+  await page.route('https://checkout.stripe.com/**', r => r.fulfill({ contentType: 'text/html', body: '<title>Stripe Checkout</title>' }));
+  const TOK = 'T'.repeat(43);
+  await page.goto(URL_ + '#t=' + TOK);
+  await expect(page.locator('#cf-tix')).toHaveText('Standard, €49.00');
+  await expect(page.locator('#cf-btn')).toHaveText('Confirm and pay €49.00');
+  await page.click('#cf-btn');
+  await page.waitForURL('https://checkout.stripe.com/c/pay/cs_probe');
+  // Stripe sends the guest back to /r/<code>?paid=1 with no fragment.
+  paid = true;
+  await page.goto(URL_ + '&paid=1');
+  await expect(page.locator('#ticket')).toBeVisible();
+  await expect(page.locator('#tk-type')).toHaveText('Standard');
+  expect(sent.filter(b => b.action === 'confirm').map(b => b.token)).toEqual([TOK, TOK]);
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  expect(page.url()).not.toContain('paid=1');
+});
+
+test('tickets: a cancelled payment can be retried from the same tab', async ({ page }) => {
+  await setup(page, {
+    config: CONFIG({ tickets: TICKETS }),
+    preview: () => ({ body: { status: 'order', order_status: 'open', first_name: 'Maya', last_name: 'L', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } }),
+  });
+  await page.goto(URL_);
+  await page.evaluate((c) => sessionStorage.setItem('cuedeck-pay:' + c, 'U'.repeat(43)), CODE);
+  await page.goto(URL_ + '&unpaid=1');
+  await expect(page.locator('#cf-h')).toHaveText('Payment not completed');
+  await expect(page.locator('#cf-btn')).toHaveText('Continue to payment');
+  await expect(page.locator('#cf-no')).toBeHidden();
+});
+
+test('tickets: paid in another browser, the return says the ticket is on its way', async ({ page }) => {
+  await setup(page, { config: CONFIG({ tickets: TICKETS }) });
+  await page.goto(URL_ + '&paid=1');
+  await expect(page.locator('#done-h')).toHaveText('Finishing your registration');
+});

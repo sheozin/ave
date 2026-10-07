@@ -18,6 +18,10 @@ export const FUNCTION_GATES = {
   'checkin-send-qr-emails': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   // Waitlist and approval: releasing a held guest is a guest-list change.
   'checkin-held': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
+  // Paid tickets (109): organizers see payout status; connecting the
+  // payout account and refunding move the owner's money, so owner only.
+  'checkin-tickets': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
+  'checkin-tickets-owner': { perm: 'go_live', forbidden: { error: 'Only the event owner can connect payouts or refund a ticket', code: 'not_owner' } },
   // The desk maps a 403 whose message contains 'organizer' to its
   // "who can set up a kiosk" note, so keep that word in the message.
   'checkin-kiosk-pair': { perm: 'kiosk', forbidden: { error: 'Forbidden, organizers and desk leads only' } },

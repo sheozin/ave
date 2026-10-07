@@ -98,6 +98,18 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .choice{min-height:48px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:15px;font-weight:600;cursor:pointer;padding:8px 10px;overflow-wrap:anywhere}
 .choice[aria-pressed=true]{border:2px solid var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.tix{border:0;margin:0;padding:0;display:grid;gap:8px}
+.tix legend{font-size:14px;font-weight:600;padding:0;margin-bottom:8px}
+.tix-o{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;border:1px solid var(--line2);border-radius:14px;padding:12px 14px;background:#fff;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.tix-o[aria-checked=true]{border:2px solid var(--accent);background:var(--accent-soft);padding:11px 13px}
+.tix-o:disabled{opacity:.55;cursor:default}
+.tix-o .dot{width:18px;height:18px;flex:none;border-radius:999px;border:2px solid var(--line2);background:#fff}
+.tix-o[aria-checked=true] .dot{border:5px solid var(--accent)}
+.tix-o .nm{flex:1;min-width:0}
+.tix-o .nm b{display:block;font-weight:600;overflow-wrap:anywhere}
+.tix-o .nm small{display:block;font-size:13px;color:var(--t3);overflow-wrap:anywhere}
+.tix-o .pr{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tix.bad .tix-o{border-color:#B3261E}
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--t2);line-height:1.45}
 .consent input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
 .consent.bad{color:#B3261E}
@@ -187,6 +199,12 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
           <p class="hint" id="flow-note" hidden style="margin:-6px 0 14px;color:var(--t2)"></p>
           <p class="hint" id="test-note" hidden style="margin:-6px 0 16px">Test mode: registrations are for trying the page. No email is sent, and they are cleared when the event goes live.</p>
           <form id="form" novalidate>
+            <fieldset class="tix" id="tix" data-f="ticket" role="radiogroup" aria-labelledby="tix-l" hidden>
+              <legend id="tix-l">Ticket</legend>
+              <div id="tix-list" style="display:grid;gap:8px"></div>
+              <span class="hint" id="tix-pay" hidden>You pay by card after confirming your email, on a secure Stripe page.</span>
+              <span class="err"></span>
+            </fieldset>
             <div class="row">
               <label class="f" data-f="first_name">First name<input type="text" name="first_name" autocomplete="given-name" maxlength="80" required><span class="err"></span></label>
               <label class="f" data-f="last_name">Last name<input type="text" name="last_name" autocomplete="family-name" maxlength="80" required><span class="err"></span></label>
@@ -206,9 +224,9 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
         <section id="confirm" hidden>
           <div class="state">
             <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></div>
-            <h2>Confirm your registration</h2>
+            <h2 id="cf-h">Confirm your registration</h2>
             <p id="cf-meta"></p>
-            <div class="who" id="cf-who-row" hidden><span>Registering</span><b id="cf-who"></b><small>Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
+            <div class="who" id="cf-who-row" hidden><span>Registering</span><b id="cf-who"></b><span id="cf-tix" hidden style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--t2)"></span><small id="cf-who-s">Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
             <button class="btn" type="button" id="cf-btn">Confirm my registration</button>
             <button class="link" type="button" id="cf-no">This is not me. Delete this request.</button>
             <p class="msg" id="cf-msg" hidden></p>

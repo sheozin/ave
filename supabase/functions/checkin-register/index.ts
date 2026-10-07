@@ -12,6 +12,14 @@
 //          answers, consent, turnstile_token, website }
 //   POST { action: 'confirm', code, token }   the link from the email
 //
+// PAID TICKETS (migration 109). Confirming a paid ticket makes an order
+// instead of a guest, and answers { status: 'payment', checkout_url }: the
+// page sends the guest to Stripe Checkout on the owner's account. Stripe
+// returns them to /r/<code>?paid=1 and the page confirms again with the
+// same token, which now names the order: Stripe is asked, and a paid order
+// answers 'registered' with the ticket. The emailed link does the same, so
+// it is also the way back to an unfinished payment.
+//
 // DOUBLE OPT-IN (migration 101, after the security review of 100). A live
 // registration answers { status: 'check_email' } for every address, new,
 // pending or already listed, and the only email it can cause is the
@@ -31,6 +39,8 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed, zonedTimeUtc } from '../_shared/checkin-policy.ts'
+import { stripe } from '../_shared/stripe.ts'
+import { loadOrder, money, openCheckout, sessionExpiry, settleOrder } from '../_shared/checkin-tickets.ts'
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import {
   isRegistrationCode, validateRegistration, mayResend, cleanText, clientKey, type Question,
@@ -68,6 +78,7 @@ async function sha256Hex(s: string): Promise<string> {
   return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 const TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 async function turnstileOk(secret: string, token: string, ip: string): Promise<boolean> {
   if (!token || token.length > 4096) return false
@@ -142,10 +153,11 @@ Deno.serve(async (req) => {
     if (event.date && event.timezone && isWindowClosed(event.date, event.timezone)) state = 'closed'
     let placesLeft: number | null = null
     if (ent.registration_capacity) {
-      const { count, error } = await sb.from('leod_checkin_attendees')
-        .select('id', { count: 'exact', head: true }).eq('event_id', ent.event_id).eq('is_test', test)
-      if (!error) {
-        placesLeft = Math.max(0, ent.registration_capacity - (count ?? 0))
+      // (109) Orders awaiting payment hold their places.
+      const { data: taken, error } = await sb.rpc('checkin_web_places_taken', { p_event_id: ent.event_id, p_test: test })
+      if (error) console.error('checkin-register: places read failed', error.code)
+      else {
+        placesLeft = Math.max(0, ent.registration_capacity - Number(taken ?? 0))
         // (108) Full with a waitlist: the page offers the waitlist instead.
         if (state === 'open' && placesLeft === 0) state = ent.registration_waitlist ? 'waitlist' : 'full'
       }
@@ -167,8 +179,38 @@ Deno.serve(async (req) => {
       if (error) console.error('checkin-register: programme read failed', error.code)
       programme = (rows ?? []).map(r => ({ time: hhmm(r.scheduled_start ?? r.planned_start), title: r.title, room: r.room ?? null, speaker: r.speaker ?? null }))
     }
+    // (109) Ticket types. A paid type is on sale once the owner's Stripe
+    // account can take charges; test mode never charges, so it always is.
+    const { data: types, error: tErr } = await sb.from('leod_checkin_ticket_types')
+      .select('id, name, description, price_cents, currency, quantity, sort, created_at')
+      .eq('event_id', ent.event_id).eq('active', true).order('sort').order('created_at')
+    if (tErr) {
+      console.error('checkin-register: ticket types read failed', tErr.code)
+      return json({ error: 'Registration is not available right now' }, 503)
+    }
+    let payable = test
+    if (!test && (types ?? []).some(t => t.price_cents > 0)) {
+      const { data: ev2 } = await sb.from('leod_events').select('created_by').eq('id', ent.event_id).single()
+      const { data: acct } = await sb.from('leod_checkin_payout_accounts').select('charges_enabled').eq('user_id', ev2?.created_by ?? '').maybeSingle()
+      payable = acct?.charges_enabled === true
+    }
+    const tickets = []
+    for (const t of types ?? []) {
+      let left: number | null = null
+      if (t.quantity) {
+        const { data, error } = await sb.rpc('checkin_web_ticket_left', { p_type_id: t.id, p_test: test })
+        if (error) console.error('checkin-register: ticket count failed', error.code)
+        left = error ? null : Number(data ?? 0)
+      }
+      tickets.push({
+        id: t.id, name: t.name, description: t.description ?? null, price_cents: t.price_cents, currency: t.currency,
+        price: t.price_cents > 0 ? money(t.price_cents, t.currency) : null,
+        left: left !== null && left <= 10 ? left : null, sold_out: left === 0,
+        on_sale: t.price_cents === 0 || payable,
+      })
+    }
     return json({
-      state, test, places_left: placesLeft, approval: !!ent.registration_approval,
+      state, test, places_left: placesLeft, approval: !!ent.registration_approval, tickets,
       event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
@@ -209,6 +251,57 @@ Deno.serve(async (req) => {
   }
   const tooMany = () => json({ error: 'Too many attempts from this connection just now. Please try again in a few minutes.' }, 429)
 
+  // The ticket, shown to the token holder (the address owner) only.
+  const ticketFor = async (attendeeId: string) => {
+    const { data: a } = await sb.from('leod_checkin_attendees')
+      .select('first_name, last_name, ticket_type, qr_token').eq('id', attendeeId).single()
+    if (!a) return null
+    const qr = qrcode(0, 'M'); qr.addData(a.qr_token); qr.make()
+    return {
+      first_name: a.first_name, last_name: a.last_name, ticket_type: a.ticket_type,
+      code: a.qr_token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase(),
+      qr_svg: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true })),
+    }
+  }
+
+  // (109) One order, settled with Stripe: paid -> the ticket; still open ->
+  // the Checkout URL; expired -> a new hold and a new session when a place
+  // is free.
+  const orderReply = async (orderId: string): Promise<Response> => {
+    let order = await loadOrder(sb, orderId)
+    if (!order || order.event_id !== ent.event_id) return json({ status: 'invalid' })
+    const st = stripe()
+    let s = await settleOrder(st, sb, order)
+    if (s.kind === 'pending') return json({ status: 'processing', first_name: order.first_name })
+    // No session yet and too little hold left for one (a first attempt
+    // failed): start a fresh hold, so the session can end before it.
+    if (s.kind === 'open' && !s.url && sessionExpiry(order.expires_at, Date.now()) === null) s = { kind: 'expired' }
+    if (s.kind === 'expired') {
+      // The session is over even if the hold is not: end the hold so the
+      // reopen below starts a new one, with a new session.
+      const { error: exErr } = await sb.rpc('checkin_web_order_expire', { p_order_id: order.id })
+      if (exErr) throw new Error('expire: ' + exErr.message)
+      const { data: r, error } = await sb.rpc('checkin_web_order_reopen', { p_order_id: order.id })
+      if (error) throw new Error('reopen: ' + error.message)
+      order = await loadOrder(sb, order.id)
+      if (!order) return json({ status: 'invalid' })
+      // 'paid': the sweep settled it a moment ago.
+      if (r === 'paid') s = await settleOrder(st, sb, order)
+      else if (r !== 'open') return json({ status: String(r) })
+      else s = { kind: 'open', url: null }
+    }
+    if (s.kind === 'refunded') return json({ status: 'refunded' })
+    if (s.kind === 'paid') {
+      console.log('checkin-register: order paid, event', ent.event_id)
+      return json({ status: 'registered', first_name: order.first_name, ticket: s.attendee ? await ticketFor(s.attendee.id) : null })
+    }
+    const url = (s.kind === 'open' && s.url) || await openCheckout(st, sb, order, { code: String(code), eventName: event.name })
+    return json({
+      status: 'payment', checkout_url: url, first_name: order.first_name,
+      ticket_name: order.ticket_name, amount: money(order.amount_cents, order.currency),
+    })
+  }
+
   // ── preview ─────────────────────────────────────────────────────
   // The token holder (the address owner) sees what they are confirming, so
   // a request someone else overwrote is visible before it counts.
@@ -245,6 +338,19 @@ Deno.serve(async (req) => {
     }
     const status = String(out.status)
     if (status === 'not_found') return json({ error: 'not_found' }, 404)
+    // (109) A paid ticket: an order, new or found by this link.
+    if (status === 'payment_required' || status === 'order') {
+      try {
+        return await orderReply(String(out.order_id))
+      } catch (e) {
+        console.error('checkin-register: payment step failed, event', ent.event_id, (e as Error).message)
+        return json({ error: 'The payment could not be started. Please try your link again in a moment.' }, 502)
+      }
+    }
+    if (status === 'payments_unavailable') {
+      console.error('checkin-register: owner payouts not enabled, event', ent.event_id)
+      return json({ status })
+    }
     // (108) Held on the waitlist or for approval: no ticket yet.
     if (status === 'waitlisted' || status === 'awaiting_approval') {
       console.log('checkin-register: confirmed into ' + status + ', event', ent.event_id)
@@ -259,21 +365,7 @@ Deno.serve(async (req) => {
       if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
     }
     console.log('checkin-register: confirmed (' + status + '), event', ent.event_id)
-    // The ticket, shown to the token holder (the address owner) only.
-    let ticket = null
-    if (attendee) {
-      const { data: a } = await sb.from('leod_checkin_attendees')
-        .select('first_name, last_name, ticket_type, qr_token').eq('id', attendee.id).single()
-      if (a) {
-        const qr = qrcode(0, 'M'); qr.addData(a.qr_token); qr.make()
-        ticket = {
-          first_name: a.first_name, last_name: a.last_name, ticket_type: a.ticket_type,
-          code: a.qr_token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase(),
-          qr_svg: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true })),
-        }
-      }
-    }
-    return json({ status: 'registered', first_name: String(out.first_name ?? ''), ticket })
+    return json({ status: 'registered', first_name: String(out.first_name ?? ''), ticket: attendee ? await ticketFor(attendee.id) : null })
   }
 
   if (body.action !== 'register') return json({ error: 'Bad request' }, 400)
@@ -296,6 +388,9 @@ Deno.serve(async (req) => {
   }
   const { errors, answers } = validateRegistration(form, questions)
   if (errors.length) return json({ error: 'Invalid submission', fields: errors }, 400)
+  // (109) The ticket picked, if the event sells any. The database decides
+  // whether one is required and whether it is still on sale.
+  const ticketTypeId = typeof body.ticket_type_id === 'string' && UUID.test(body.ticket_type_id) ? body.ticket_type_id : null
 
   // Honeypot: a field people never see. Bots that fill it get the normal
   // answer and nothing is written or sent.
@@ -322,6 +417,7 @@ Deno.serve(async (req) => {
   const { data: out, error: regErr } = await sb.rpc('checkin_web_request', {
     p_code: code, p_first_name: cleanText(form.first_name), p_last_name: cleanText(form.last_name),
     p_email: form.email.trim(), p_company: cleanText(form.company), p_answers: answers, p_token_hash: await sha256Hex(token),
+    p_ticket_type_id: ticketTypeId,
   })
   if (regErr || !out) {
     // Code only: the message of a constraint error can carry the address.
@@ -330,7 +426,7 @@ Deno.serve(async (req) => {
   }
 
   const status = String(out.status)
-  if (status === 'full' || status === 'closed' || status === 'test_cap') return json({ status })
+  if (status === 'full' || status === 'closed' || status === 'test_cap' || status === 'sold_out' || status === 'bad_ticket') return json({ status })
   if (status === 'not_found') return json({ error: 'not_found' }, 404)
 
   if (test) {
