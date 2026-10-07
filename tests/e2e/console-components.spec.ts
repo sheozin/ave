@@ -130,11 +130,11 @@ test('components: an armed END or CANCEL stays solid red under hover', async ({ 
   await fresh.ctx.close();
 });
 
-test('components: armed batch buttons stay solid red under hover', async ({ browser }) => {
+test('components: armed batch END and CANCEL stay solid red under hover; SET READY stays green', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await page.locator(`#card-${PANEL_ID}`).hover();          // editing tools show on hover (spec 2.2)
   await page.locator(`#card-${PANEL_ID} .batch-chk`).check();
-  for (const st of ['ENDED', 'CANCELLED', 'READY']) {
+  for (const st of ['ENDED', 'CANCELLED']) {
     const sel = `#batch-bar [data-batch="${st}"]`;
     await page.locator(sel).click();
     await expect(page.locator(sel)).toHaveClass(/confirm-pending/);
@@ -142,6 +142,13 @@ test('components: armed batch buttons stay solid red under hover', async ({ brow
     expect(r.bg, st).toBe('rgb(239, 68, 68)');
     expect(r.contrast, st).toBeGreaterThanOrEqual(4.5);
   }
+  // Stage review: an armed forward action (SET READY) keeps its green under hover, with the armed ring.
+  const ready = '#batch-bar [data-batch="READY"]';
+  await page.locator(ready).click();
+  await expect(page.locator(ready)).toHaveClass(/armed-fwd/);
+  const r = await armedHoverCheck(page, ready);
+  expect(r.bg, 'READY').toBe('rgb(52, 211, 153)');
+  expect(r.contrast, 'READY').toBeGreaterThanOrEqual(4.5);
   await ctx.close();
 });
 

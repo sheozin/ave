@@ -1440,7 +1440,7 @@
     }
     .btn.confirm-pending:hover, .abtn.confirm-pending:hover { box-shadow: none; }   /* no veil over the armed red */
     @keyframes pulse-confirm { from { opacity: .85; } to { opacity: 1; } }
-    .act-gap { display: inline-block; width: 20px; height: 24px; border-left: 1px solid var(--border-divider); margin-left: 12px; flex: none; }
+    .act-gap { display: inline-block; width: 20px; height: 24px; border-inline-start: 1px solid var(--border-divider); margin-inline-start: 12px; flex: none; }
     @media (pointer: coarse) {
       .btn.sm, .abtn.abtn-sm { height: 44px; } .btn, .btn.md, .abtn { height: 44px; } .btn.lg { height: 48px; }
       .btn.icon-only, .btn.sm.icon-only { width: 44px; }
@@ -1570,14 +1570,16 @@
       background: var(--card); border: 1px solid var(--border-section); border-inline-start: 4px solid var(--st-planned);
       border-radius: var(--r-ctl); box-shadow: none; opacity: 1; animation: none; overflow: visible; cursor: pointer; color: var(--text-primary);
     }
+    .sc { --wash-dir: to right; }
+    [dir="rtl"] .sc { --wash-dir: to left; }   /* the live wash starts at the inline start */
     .sc:hover { background: var(--raised); }
     .sc:focus-visible { outline: none; }
     .sc.is-selected { background: var(--raised); box-shadow: inset 0 0 0 1px var(--accent); }
     .sc.status-PLANNED   { border-inline-start: 4px double var(--st-planned); }
     .sc.status-READY     { border-inline-start-color: var(--st-ready); }
     .sc.status-CALLING   { border-inline-start-color: var(--st-calling); }
-    .sc.status-LIVE      { border-color: var(--st-live-line); border-inline-start: 4px solid var(--st-live); background: linear-gradient(90deg, var(--st-live-wash), var(--card) 40%); }
-    .sc.status-OVERRUN   { border-color: var(--st-overrun-line); border-inline-start: 4px solid var(--st-overrun); background: linear-gradient(90deg, var(--st-overrun-wash), var(--card) 40%); }
+    .sc.status-LIVE      { border-color: var(--st-live-line); border-inline-start: 4px solid var(--st-live); background: linear-gradient(var(--wash-dir), var(--st-live-wash), var(--card) 40%); }
+    .sc.status-OVERRUN   { border-color: var(--st-overrun-line); border-inline-start: 4px solid var(--st-overrun); background: linear-gradient(var(--wash-dir), var(--st-overrun-wash), var(--card) 40%); }
     .sc.status-HOLD      { border-inline-start: 4px dashed var(--st-hold); }
     .sc.status-ENDED     { border-inline-start-color: var(--st-ended); color: var(--text-secondary); }
     .sc.status-CANCELLED { border-inline-start-color: var(--st-cancelled); color: var(--text-tertiary); background: transparent; }
@@ -1624,6 +1626,10 @@
     .sc-anchor::after { content: ""; flex: 1; border-top: 1px dashed var(--border-section); }
     .sc-addrow { display: flex; gap: 8px; justify-content: center; padding: 12px 0; }
     #empty .ei .ico { width: 32px; height: 32px; color: var(--text-tertiary); }
+    /* An armed forward batch action keeps its colour; the ring and the "?" label say it is armed */
+    .btn.armed-fwd { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+    .mm-lang { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--text-secondary); font-size: var(--fs-13); }
+    .mm-lang select { margin-inline-start: auto; }
     /* Filter row controls at the demo's 32 px */
     #fb-search { flex: 0 1 260px; min-width: 120px; height: 32px; max-width: 260px; padding: 0 10px; font-size: var(--fs-13); border-radius: var(--r-ctl); }
     #fb-status, #fb-room { height: 32px; padding: 0 8px; font-size: var(--fs-13); border-radius: var(--r-ctl); }
@@ -2038,6 +2044,11 @@
       <button type="button" class="mm-role" data-role="signage" aria-pressed="false" onclick="setRole('signage');toggleHamburger()" data-i18n="role.signage">Signage</button>
       <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     </div>
+    <label class="mm-lang"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-globe"/></svg><span data-i18n="cc.menu.language">Language</span>
+      <select id="mm-lang" aria-label="Language" onchange="CueDeckI18n.setLocale(this.value);location.reload()">
+        <option value="en">EN</option><option value="ar">AR</option><option value="pl">PL</option><option value="de">DE</option>
+      </select>
+    </label>
     <button onclick="openShortcutsModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg>Shortcuts</button>
     <button onclick="openQuickRefModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg>Quick Ref</button>
     <button onclick="openChangelogModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg>What's New</button>
@@ -2658,6 +2669,14 @@ function getBtnCfg() {
     PLANNED:   { label: t('btn.deArm'),       cls: '' },
     CANCELLED: { label: t('btn.cancel'),      cls: 'danger' },
   };
+}
+// Drawer and sidebar colour by the MOVE, as the list rows do (FWD_CLASS): forward
+// moves keep their forward colour, HOLD is amber, END and CANCEL red outline, and
+// backward or sideways moves (Pull back, HOLD to READY, Back to planned) are secondary.
+function moveCls(from, to) {
+  if (to === 'HOLD') return 'hold';
+  if (to === 'ENDED' || to === 'CANCELLED') return 'danger';
+  return FWD_CLASS[from + '>' + to] || '';
 }
 function getBtnOverride() {
   return {
@@ -3500,9 +3519,16 @@ document.addEventListener('keydown', e => {
     const opener = document.querySelector('#header [aria-haspopup][aria-expanded="true"]');
     const presets = document.getElementById('bc-presets-menu');
     const presetsOpen = !!presets?.open;
+    // Anything open? Escape closes it and stops there: it must not also wipe the filters.
+    const pp = document.getElementById('profile-panel');
+    const somethingOpen = presetsOpen
+      || (pp && pp.style.display && pp.style.display !== 'none')
+      || !!document.querySelector('#header .hdr-pop:not([hidden]), #header .hdr-menu:not([hidden])')
+      || !!document.getElementById('ev-pill-dd')?.classList.contains('open');
     closeProfilePanel(); closePopovers(); closeEvDropdown();
     if (presets) presets.open = false;
     if (opener) opener.focus(); else if (presetsOpen) presets.querySelector('summary')?.focus();
+    if (somethingOpen) return;
     // Close command palette first
     if (document.getElementById('cmd-palette').style.display === 'flex') { closeCmdPalette(); return; }
     // Close help dropdown
@@ -3900,6 +3926,7 @@ function renderSessions() {
 
   // PR-020: Timeline view mode
   if (S.viewMode === 'timeline') {
+    updateDelayStrip();   // the chip sits in the filter row, above both views
     renderTimeline();
     return;
   }
@@ -4259,7 +4286,7 @@ function disarmBatch(toStatus) {
   if (!bar) return;
   delete bar.dataset[`batch-${toStatus}`];
   const btn = bar.querySelector(`[data-batch="${toStatus}"]`);
-  if (btn) { btn.classList.remove('confirm-pending'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+  if (btn) { btn.classList.remove('confirm-pending', 'armed-fwd'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
 }
 function disarmAllBatch() {
   for (const st of ['READY', 'ENDED', 'CANCELLED']) disarmBatch(st);
@@ -4282,7 +4309,8 @@ async function batchTransition(toStatus) {
       btn.textContent = toStatus === 'ENDED' ? t('confirm.confirmEnd')
                       : toStatus === 'CANCELLED' ? t('confirm.confirmCancel')
                       : `${btn.dataset.label}?`;
-      btn.classList.add('confirm-pending');
+      // Armed END/CANCEL turn solid red; an armed forward action keeps its colour and gets a ring.
+      btn.classList.add(toStatus === 'ENDED' || toStatus === 'CANCELLED' ? 'confirm-pending' : 'armed-fwd');
     }
     pushToast(`Click again to ${toStatus} ${count} session${count>1?'s':''}`, 'warn');
     clearTimeout(_batchArmTimers[toStatus]);
@@ -4333,6 +4361,7 @@ function buildButtons(s) {
   const btnHtml = possible.map(to => {
     const cfg   = _btnCfg[to] || { label: to, cls: '' };
     const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
+    cfg.cls = moveCls(s.status, to);
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
       const armed = isArmed(_cancelPending, s);
@@ -4420,7 +4449,7 @@ function buildCtxPanel() {
       const _btnOvr2 = getBtnOverride();
       const possible = (ALLOWED[tgt.status] || []).filter(st => (ROLE_WRITE[role] || []).includes(st));
       possible.forEach(to => {
-        const cfg   = _btnCfg2[to] || { label: to, cls: '' };
+        const cfg   = { ...(_btnCfg2[to] || { label: to }), cls: moveCls(tgt.status, to) };
         const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
         if (to === 'CANCELLED') {
           const armed = isArmed(_cancelPending, tgt);
@@ -8498,6 +8527,8 @@ async function boot() {
   // Set language switcher to current locale
   const langSel = document.getElementById('lang-switcher');
   if (langSel) langSel.value = CueDeckI18n.getLocale();
+  const mmLang = document.getElementById('mm-lang');
+  if (mmLang) mmLang.value = CueDeckI18n.getLocale();
   // Translate static DOM elements based on current locale
   CueDeckI18n.translateStaticDOM();
 
