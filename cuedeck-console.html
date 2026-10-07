@@ -1554,6 +1554,10 @@
     .sc-anchor::after { content: ""; flex: 1; border-top: 1px dashed var(--border-section); }
     .sc-addrow { display: flex; gap: 8px; justify-content: center; padding: 12px 0; }
     #empty .ei .ico { width: 32px; height: 32px; color: var(--text-tertiary); }
+    .fb-star .ico { width: 22px; height: 22px; } .fb-star.active .ico, .fb-star:hover .ico { fill: currentColor; }
+    .ce-icon .ico, .ps-icon .ico, .te-icon .ico { width: 32px; height: 32px; }
+    .ico.ico-xl { width: 48px; height: 48px; }
+    .cmd-item-icon { display: inline-flex; align-items: center; justify-content: center; }
     /* An armed forward batch action keeps its colour; the ring and the "?" label say it is armed */
     .btn.armed-fwd { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .mm-lang { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--text-secondary); font-size: var(--fs-13); }
@@ -1883,7 +1887,7 @@
     <button type="submit">Send Reset Link</button>
     <div id="rst-error"></div>
     <div id="rst-success" style="display:none">Check your inbox for a password reset link.</div>
-    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
+    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg> Back to sign in</a>
   </form>
   <form id="register-form" onsubmit="handleRegisterSubmit(event)">
     <div class="lf-title">CREATE ACCOUNT</div>
@@ -1897,12 +1901,12 @@
     <input id="rf-website" type="text" class="rf-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
     <button type="submit">Create Account</button>
     <div id="rf-error"></div>
-    <div id="rf-success" style="display:none">✅ Check your email to confirm your account. Once confirmed, sign in to start your free trial.</div>
-    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false">← Back to sign in</a>
+    <div id="rf-success" style="display:none"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-check"/></svg> Check your email to confirm your account. Once confirmed, sign in to start your free trial.</div>
+    <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg> Back to sign in</a>
   </form>
   <div id="cd-captcha" style="display:flex;justify-content:center;margin-top:10px"></div>
   <div id="confirm-email-screen">
-    <div class="ce-icon">📬</div>
+    <div class="ce-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg></div>
     <div class="ce-title">Check your inbox</div>
     <div class="ce-msg">
       We sent a confirmation link to<br>
@@ -1912,10 +1916,10 @@
     <button class="ce-resend-btn" id="ce-resend-btn" onclick="handleResendEmail()">Resend confirmation email</button>
     <div class="ce-resend-ok" id="ce-resend-ok">Sent! Check your inbox (and spam folder).</div>
     <div class="ce-polling"><div class="ce-polling-dot"></div> Waiting for confirmation…</div>
-    <a href="#" class="lf-toggle-link" onclick="stopConfirmPolling();showLoginForm();return false">← Back to sign in</a>
+    <a href="#" class="lf-toggle-link" onclick="stopConfirmPolling();showLoginForm();return false"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg> Back to sign in</a>
   </div>
   <div id="pending-screen">
-    <div class="ps-icon">⏳</div>
+    <div class="ps-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clock"/></svg></div>
     <div class="ps-title">Account Pending Approval</div>
     <div class="ps-msg">Signed in as <span class="ps-email" id="pending-email"></span><br>A director needs to assign your role before you can access the console.</div>
     <div class="ps-roles-section">
@@ -1933,7 +1937,7 @@
   </div>
   <!-- TRIAL EXPIRED / SUBSCRIPTION PAYWALL -->
   <div id="trial-expired-screen">
-    <div class="te-icon">⏰</div>
+    <div class="te-icon"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-clock"/></svg></div>
     <div class="te-title" id="te-title">Your 3-day trial has ended</div>
     <div class="te-msg">Choose a plan to continue using CueDeck. All plans include all 6 operator roles, real-time sync, and delay cascade.</div>
     <div class="te-toggle">
@@ -2193,7 +2197,7 @@
 <input type="file" id="csv-import-input" accept=".csv,text/csv">
 
 <!-- SIDEBAR TOGGLE + BACKDROP -->
-<button id="sidebar-toggle" onclick="toggleSidebar()">&#9664;</button>
+<button id="sidebar-toggle" onclick="toggleSidebar()" aria-label="Inspector" data-i18n-aria="cc.a11y.inspector"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg></button>
 <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 
 <!-- MAIN -->
@@ -2247,7 +2251,7 @@
 
 <!-- STAGE MONITOR (fullscreen overlay) -->
 <div id="stage-monitor" style="display:none">
-  <button id="sm-close" onclick="closeStageMonitor()">EXIT MONITOR ✕</button>
+  <button id="sm-close" onclick="closeStageMonitor()">Exit monitor <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"/></svg></button>
   <div id="sm-body">
     <div id="sm-status" class="sm-status-standby">— STANDBY</div>
     <div id="sm-title"  class="sm-title">STANDING BY</div>
@@ -2333,7 +2337,7 @@
       </label>
       <div id="dm-seq-builder" style="display:none">
         <div id="dm-seq-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
-        <button type="button" onclick="addSeqSlide()" class="abtn btn-blue" style="font-size:11px;padding:4px 10px">＋ Add Slide</button>
+        <button type="button" onclick="addSeqSlide()" class="abtn btn-blue" style="font-size:11px;padding:4px 10px"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-plus"/></svg> Add slide</button>
       </div>
     </div>
 
@@ -2398,7 +2402,7 @@
       <div id="inv-status" style="font-size:11px;min-height:16px;margin-top:4px"></div>
     </div>
     <div style="padding:8px 0">
-      <input id="um-search" type="text" placeholder="🔍  Search operators..." oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit">
+      <input id="um-search" type="text" placeholder="Search operators" oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit">
     </div>
     <div id="users-modal-body">
       <div class="um-empty">Loading…</div>
@@ -2412,7 +2416,7 @@
 <!-- WELCOME MODAL (shown once after role approval) -->
 <div id="welcome-modal" class="ev-modal-backdrop" data-esc="off" style="display:none" onclick="if(event.target===this)dismissWelcome(false)">
   <div class="ev-modal-card" role="dialog" aria-modal="true" aria-labelledby="welcome-modal-title" style="max-width:420px">
-    <div style="font-size:28px;text-align:center">🎉</div>
+    <div style="text-align:center"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg></div>
     <div class="ev-modal-title" id="welcome-modal-title" style="font-size:16px">Welcome to CueDeck!</div>
     <div id="welcome-role-name" style="font-size:13px;color:var(--blue);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-top:2px;text-align:center"></div>
     <div id="welcome-role-desc" style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin:4px 0;text-align:center"></div>
@@ -2495,7 +2499,7 @@
     <div class="ev-modal-title" id="invoice-modal-title">Invoice History</div>
     <div id="invoice-list" style="max-height:400px;overflow-y:auto"></div>
     <div id="invoice-empty" style="display:none;text-align:center;padding:32px 16px;color:var(--dim)">
-      <div style="font-size:32px;margin-bottom:12px">&#x1F4CB;</div>
+      <div style="margin-bottom:12px"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-report"/></svg></div>
       <div style="font-size:13px">No invoices yet</div>
       <div style="font-size:11px;margin-top:4px">Invoices will appear here after your first payment.</div>
     </div>
@@ -2549,7 +2553,7 @@
   <button type="button" id="bc-clear" class="btn md" onclick="clearBroadcast()" data-i18n="cc.bc.clear">Clear</button>
 </div>
 
-<div id="rc-overlay">⟳ RECONNECTING — DATA MAY BE STALE</div>
+<div id="rc-overlay"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg> Reconnecting: data may be stale</div>
 
 <!-- SESSION MODAL -->
 <div id="sess-modal" class="ev-modal-backdrop" style="display:none"
@@ -3155,7 +3159,7 @@ async function executeUndo() {
     .select('id');
   if (error) { pushToast(`Undo failed: ${error.message}`, 'error'); return; }
   if (!data || data.length === 0) {
-    pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+    pushToast(t('toast.versionConflict'), 'warn');
     if (S.event) loadSessions(S.event.id);
     return;
   }
@@ -3226,7 +3230,7 @@ async function transition(sessionId, toStatus) {
           if (toStatus === 'ENDED') s.actual_end   = null;
           renderSessions();
           pushLog('ERROR', 'Version conflict — session changed by another operator', sessionId);
-          pushToast('⚠ Updated by another operator — refreshing', 'warn');
+          pushToast('Updated by another operator, refreshing', 'warn');
           if (S.event) loadSessions(S.event.id);
           return;
         }
@@ -3242,7 +3246,7 @@ async function transition(sessionId, toStatus) {
           if (toStatus === 'ENDED') s.actual_end   = null;
           renderSessions();
           pushLog('ERROR', `${toStatus} refused by the server (403)`, sessionId);
-          pushToast('✕ ' + t('toast.forbidden'), 'error');
+          pushToast(t('toast.forbidden'), 'error');
           return;
         }
         // Other EF errors fall through to direct DB attempt
@@ -3272,7 +3276,7 @@ async function transition(sessionId, toStatus) {
       if (toStatus === 'ENDED') s.actual_end   = null;
       renderSessions();
       pushLog('ERROR', 'direct write matched no row (version moved on or not allowed)', sessionId);
-      pushToast('⚠ ' + t('toast.notSaved'), 'warn');
+      pushToast(t('toast.notSaved'), 'warn');
       if (S.event) loadSessions(S.event.id);
       return;
     }
@@ -3286,12 +3290,12 @@ async function transition(sessionId, toStatus) {
         ? `RLS blocked write — deploy /${efName} or add service key`
         : error.message;
       pushLog('ERROR', hint, sessionId);
-      pushToast(`✕ ${hint}`, 'error');
+      pushToast(hint, 'error');
       if (S.efStatus !== 'ok') S.efStatus = 'not-deployed';
       refreshDiag();
     } else {
       success = true;
-      pushLog('DB', `${toStatus} via direct write ✓`, sessionId);
+      pushLog('DB', `${toStatus} via direct write`, sessionId);
       // Write to event_log (best-effort)
       sb.from('leod_event_log').insert({
         event_id: S.event?.id, session_id: sessionId, operator_id: S.user?.id ?? null,
@@ -3346,7 +3350,7 @@ function confirmRestart() {
   if (!target) return;
   const s = S.sessions.find(x => x.id === target.id);
   if (!s || s.status !== target.status) {
-    pushToast('⚠ ' + t('toast.restartStale'), 'warn');
+    pushToast(t('toast.restartStale'), 'warn');
     return;
   }
   restartSession(target.id, target.version);
@@ -3366,35 +3370,35 @@ async function restartSession(sessionId, version) {
       if (typeof data.version === 'number') s.version = data.version;
       if (_undoState?.sessionId === sessionId) dismissUndo(); // its undo would bring back the old run
       renderSessions();
-      pushLog('EF', `RESTART → READY via /restart-session ✓`, sessionId);
-      pushToast(`✓ ${t('toast.restarted')}: ${s.title || ''}`, 'success');
+      pushLog('EF', `RESTART → READY via /restart-session`, sessionId);
+      pushToast(`${t('toast.restarted')}: ${s.title || ''}`, 'success');
       return;
     }
     let errBody = {};
     try { if (typeof error?.context?.json === 'function') errBody = await error.context.json(); } catch {}
     if (errBody?.error === 'IN_FLIGHT') return; // realtime confirms the result
     if (errBody?.error === 'Version conflict') {
-      pushToast('⚠ ' + t('toast.versionConflict'), 'warn');
+      pushToast(t('toast.versionConflict'), 'warn');
       if (S.event) loadSessions(S.event.id);
       return;
     }
     if (error?.context?.status === 403 || errBody?.error === 'Forbidden') {
       pushLog('ERROR', 'restart refused by the server (403)', sessionId);
-      pushToast('✕ ' + t('toast.forbidden'), 'error');
+      pushToast(t('toast.forbidden'), 'error');
       return;
     }
     if (errBody?.error === 'NOT_RESTARTABLE') {
       pushLog('ERROR', `restart refused: ${errBody.status ?? ''} not restartable`, sessionId);
-      pushToast('✕ ' + t('toast.notRestartable'), 'error');
+      pushToast(t('toast.notRestartable'), 'error');
       if (S.event) loadSessions(S.event.id);
       return;
     }
     const why = errBody?.error || error?.message || 'unknown error';
     pushLog('ERROR', `restart failed: ${why}`, sessionId);
-    pushToast(`✕ ${t('toast.restartFailed')}: ${why}`, 'error');
+    pushToast(`${t('toast.restartFailed')}: ${why}`, 'error');
   } catch (e) {
     pushLog('ERROR', `restart failed: ${e?.message ?? e}`, sessionId);
-    pushToast(`✕ ${t('toast.restartFailed')}`, 'error');
+    pushToast(t('toast.restartFailed'), 'error');
   }
 }
 
@@ -3409,20 +3413,20 @@ async function applyDelay(sessionId, minutes) {
     });
     if (!error && data) {
       const affected = data?.affected ?? '?';
-      pushLog('DELAY', `+${minutes}min via /apply-delay ✓`, sessionId);
-      pushToast(`✓ Delay applied — ${affected} session${affected === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
+      pushLog('DELAY', `+${minutes}min via /apply-delay`, sessionId);
+      pushToast(`Delay applied: ${affected} session${affected === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
       return;
     }
     if (error) {
       let errBody = {};
       try { if (typeof error.context?.json === 'function') errBody = await error.context.json(); } catch {}
       if (errBody?.error === 'IN_FLIGHT') {
-        pushToast('⚠ Another delay is being applied — wait and retry', 'warn');
+        pushToast('Another delay is being applied: wait and retry', 'warn');
         return;
       }
       if (error.context?.status === 403 || errBody?.error === 'Forbidden') {
         pushLog('ERROR', `delay refused by the server (403)`, sessionId);
-        pushToast('✕ ' + t('toast.forbidden'), 'error');
+        pushToast(t('toast.forbidden'), 'error');
         return;
       }
     }
@@ -3460,12 +3464,12 @@ async function applyDelay(sessionId, minutes) {
   const failed = results.filter(Boolean).length;
   if (failed) {
     results.forEach((why, i) => { if (why) pushLog('ERROR', `delay cascade write failed: ${why}`, affected[i].id); });
-    pushToast(`✕ ${t('toast.delayFailed')} (${failed}/${affected.length})`, 'error');
+    pushToast(`${t('toast.delayFailed')} (${failed}/${affected.length})`, 'error');
     if (S.event) loadSessions(S.event.id);
     return;
   }
   pushLog('DELAY', `+${minutes}min cascaded → ${affected.length} sessions`, sessionId);
-  pushToast(`✓ Delay applied — ${affected.length} session${affected.length === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
+  pushToast(`Delay applied: ${affected.length} session${affected.length === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
 }
 
 async function markArrived(sessionId, arrived) {
@@ -3561,7 +3565,7 @@ async function clearBroadcast() {
     .eq('id', S.event.id).eq('event_id', S.event.id);
   if (error) {
     pushLog('ERROR', `broadcast clear failed: ${error.message}`, null);
-    pushToast(`✕ ${error.message}`, 'error');
+    pushToast(error.message, 'error');
     return;
   }
   hideBCBanner();
@@ -3774,6 +3778,7 @@ function tsHM(ts) {
 // Static labels carry data-i18n; this fills them in the current language.
 function applyI18nAttrs(root = document) {
   root.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  root.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
 }
 applyI18nAttrs();
 
@@ -4733,7 +4738,7 @@ async function resetAllDelays() {
   const failed = results.filter(Boolean).length;
   if (failed) {
     results.forEach((why, i) => { if (why) pushLog('ERROR', `delay reset write failed: ${why}`, toReset[i].id); });
-    pushToast(`✕ ${t('toast.delayResetFailed')} (${failed}/${toReset.length})`, 'error');
+    pushToast(`${t('toast.delayResetFailed')} (${failed}/${toReset.length})`, 'error');
     if (S.event) loadSessions(S.event.id);
     return;
   }
@@ -4875,26 +4880,26 @@ function buildRoleCtxPanel() {
     html += sectionLbl('DISPLAYS');
     html += `<div style="font-size:11px;color:var(--dim);padding:2px 2px 5px">${dispCount} registered · <span style="color:var(--green)">${onlineCount} online</span></div>`;
     html += sectionLbl('GLOBAL OVERRIDE');
-    html += cbtn('☕ Break Screen',  'btn-purple', "sendGlobalOverride('break')");
-    html += cbtn('⚡ 5-Min Recall', 'btn-amber',  "sendGlobalOverride('recall')");
-    html += cbtn('🏢 Sponsor Reel', 'btn-blue',   "sendGlobalOverride('sponsors')");
-    html += cbtn('📋 Back to Schedule','btn-grey', "sendGlobalOverride('schedule')");
+    html += cbtn('Break Screen', 'btn-purple', "sendGlobalOverride('break')", 'coffee');
+    html += cbtn('5-Min Recall', 'btn-amber', "sendGlobalOverride('recall')", 'bell');
+    html += cbtn('Sponsor Reel', 'btn-blue', "sendGlobalOverride('sponsors')", 'star');
+    html += cbtn('Back to Schedule', 'btn-grey', "sendGlobalOverride('schedule')", 'list');
     if (S.displays.some(d => d.override_content?.mode))
-      html += cbtn('✕ Clear Override','btn-grey','clearGlobalOverride()');
+      html += cbtn('Clear Override', 'btn-grey', 'clearGlobalOverride()', 'x');
     html += sectionLbl('MONITOR');
-    html += cbtn('⊡ STAGE MONITOR', 'btn-blue', 'openStageMonitor()');
+    html += cbtn('Stage monitor', 'btn-blue', 'openStageMonitor()', 'monitor');
 
   } else if (role === 'reg') {
     html += sectionLbl('LOBBY');
     if (tgt) html += cbtn('ANNOUNCE SESSION', 'btn-blue',
-      `sendBroadcastQuick('📢 ${esc(tgt.title).substring(0,40)} — starting now. Please take your seats.','info')`, 'broadcast');
-    html += cbtn('BREAK ALERT', 'btn-amber', "sendBroadcastQuick('☕ Coffee break starting now','info')", 'coffee');
+      `sendBroadcastQuick('${esc(tgt.title).substring(0,40)} is starting now. Please take your seats.','info')`, 'broadcast');
+    html += cbtn('Break alert', 'btn-amber', "sendBroadcastQuick('Coffee break starting now','info')", 'coffee');
 
   } else if (role === 'interp') {
     if (tgt) {
       html += sectionLbl('BOOTH STATUS');
       const isActive = tgt.status === 'LIVE' || tgt.status === 'OVERRUN';
-      html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${isActive ? '◉ SESSION LIVE' : '◈ STANDBY'}</div>`;
+      html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${isActive ? 'Session live' : 'Standby'}</div>`;
       if (tgt.interpretation && tgt.languages?.length) {
         html += sectionLbl('CHANNELS');
         tgt.languages.forEach(lang => { html += `<span class="ctx-lang-chip">${esc(lang)}</span>`; });
@@ -4987,7 +4992,7 @@ function renderSeqList() {
         <span style="font-size:11px;color:var(--dim)">s</span>
       </div>
       <button onclick="removeSeqSlide(${i})"
-        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1">✕</button>
+        style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;line-height:1" aria-label="${esc(t('cc.a11y.removeSlide'))}">${icon('x')}</button>
     </div>
   `).join('');
 }
@@ -5065,7 +5070,7 @@ function renderSignagePanel() {
         const hasOverride = !!(d.override_content?.mode);
         const cardCls  = hasOverride ? 'override-active' : (online ? 'online' : 'offline');
         const dot      = online ? 'online' : 'offline';
-        const orientIcon = d.orientation === 'portrait' ? '▯' : '▭';
+        const orientIcon = icon('monitor');
         const displayUrl = buildDisplayUrl(d);
         return `<div class="sp-display-wrap">
           <div class="sp-display-card ${cardCls}">
@@ -5077,9 +5082,9 @@ function renderSignagePanel() {
             <div class="sp-disp-meta">
               <span class="sp-disp-mode">${esc(d.content_mode)}</span>
               <span>${orientIcon} ${esc(d.orientation)}</span>
-              ${d.filter_room ? `<span>🚪 ${esc(d.filter_room)}</span>` : ''}
-              ${d.sequence?.length ? `<span class="sp-seq-tag">⟳ ${d.sequence.length} slides</span>` : ''}
-              <span${online ? ' class="sp-status-on"' : ''}>${online ? '● online' : '○ offline'}</span>
+              ${d.filter_room ? `<span>${icon('door')} ${esc(d.filter_room)}</span>` : ''}
+              ${d.sequence?.length ? `<span class="sp-seq-tag">${icon('refresh')} ${d.sequence.length} slides</span>` : ''}
+              <span${online ? ' class="sp-status-on"' : ''}>${online ? 'online' : 'offline'}</span>
               ${(() => {
                 if (!d.last_seen_at) return '';
                 const diff = now - new Date(d.last_seen_at).getTime();
@@ -5091,16 +5096,16 @@ function renderSignagePanel() {
                 return `<span style="font-size:11px;color:var(--dim)">${agoText}</span>`;
               })()}
             </div>
-            ${hasOverride ? `<div class="sp-override-tag">⚡ override: ${esc(d.override_content.mode)}</div>` : ''}
+            ${hasOverride ? `<div class="sp-override-tag">${icon('bell')} override: ${esc(d.override_content.mode)}</div>` : ''}
             <div class="sp-disp-actions">
-              <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">▶ Launch</a>
-              <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">⊞ QR</button>
-              <button class="id-btn" onclick="copyAndIdentifyDisplay('${esc(d.id)}')" title="Copy the display link and flash the screen">📋 Copy link</button>
+              <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">${icon('play')} Launch</a>
+              <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">${icon('grid')} QR</button>
+              <button class="id-btn" onclick="copyAndIdentifyDisplay('${esc(d.id)}')" title="Copy the display link and flash the screen">${icon('link')} Copy link</button>
             </div>
           </div>
           <div class="sp-card-mgmt">
             <button onclick="openDisplayModal('edit','${esc(d.id)}')">${icon('edit')} Edit</button>
-            ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
+            ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">${icon('refresh')} Reset</button>` : ''}
             <button onclick="resetDisplayKey('${esc(d.id)}', this)" title="Give this display a new key. The screen will need to be paired again; its current link and QR code stop working.">Reset key</button>
           </div>
         </div>`;
@@ -5112,7 +5117,7 @@ function renderSignagePanel() {
         <div class="sp-sponsor-card">
           ${s.logo_url
             ? (/\.(mp4|webm|ogg|mov)(\?|$)/i.test(s.logo_url)
-                ? `<div class="sp-sponsor-placeholder video">▶ video</div>`
+                ? `<div class="sp-sponsor-placeholder video">${icon('play')} video</div>`
                 : `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`)
             : `<div class="sp-sponsor-placeholder">no logo</div>`}
           <div class="sp-sponsor-name">${esc(s.name)}</div>
@@ -5122,26 +5127,26 @@ function renderSignagePanel() {
 
   const activeOverride = S.displays.some(d => d.override_content?.mode);
   const overrideModes = [
-    { key: 'break',     label: '☕ Break Screen' },
-    { key: 'recall',    label: '⚡ 5-Min Recall' },
-    { key: 'sponsors',  label: '🏢 Sponsors' },
-    { key: 'agenda',    label: '📊 Agenda Grid' },
-    { key: 'timeline',  label: '📜 Programme List' },
-    { key: 'programme', label: '🗓 Day Grid' },
-    { key: 'wifi',      label: '📶 WiFi Info' },
-    { key: 'schedule',  label: '📋 Schedule' },
+    { key: 'break',     label: 'Break Screen', ico: 'coffee' },
+    { key: 'recall',    label: '5-Min Recall', ico: 'bell' },
+    { key: 'sponsors',  label: 'Sponsors', ico: 'star' },
+    { key: 'agenda',    label: 'Agenda Grid', ico: 'grid' },
+    { key: 'timeline',  label: 'Programme List', ico: 'list' },
+    { key: 'programme', label: 'Day Grid', ico: 'calendar' },
+    { key: 'wifi',      label: 'WiFi Info', ico: 'wifi' },
+    { key: 'schedule',  label: 'Schedule', ico: 'list' },
   ];
 
   list.innerHTML = `
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
       <span class="sp-section-title">${t('sign.globalOverride')}</span>
-      ${activeOverride ? `<button class="abtn abtn-sm btn-grey" onclick="clearGlobalOverride()">✕ Clear All</button>` : ''}
+      ${activeOverride ? `<button class="abtn abtn-sm btn-grey" onclick="clearGlobalOverride()">${icon('x')} Clear All</button>` : ''}
     </div>
     <div class="sp-global-bar">
       <label>PUSH ALL →</label>
       <div class="sp-override-btns">
-        ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${m.label}</button>`).join('')}
+        ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${m.label}</button>`).join('')}
       </div>
     </div>
   </div>
@@ -5149,14 +5154,14 @@ function renderSignagePanel() {
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
       <span class="sp-section-title">${t('sign.registeredDisplays')} (${S.displays.length})</span>
-      <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">＋ ${t('btn.addDisplay')}</button>
+      <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">${icon('plus')} ${t('btn.addDisplay')}</button>
     </div>
     <div class="sp-grid">${displayCards}</div>
     <div style="border-top:1px solid var(--border-section);margin-top:12px;padding-top:12px">
       <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">${t('sign.pairDisplay')}</div>
       <div style="display:flex;gap:6px">
         <input id="sp-pair-code" type="text" placeholder="${t('sign.enterCode')} (e.g. A7K-3M2)" style="flex:1;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:2px;text-transform:uppercase">
-        <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">🔗 Pair</button>
+        <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">${icon('link')} Pair</button>
       </div>
       <div style="margin-top:10px;padding:10px 12px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.8">
         <div style="color:#60a5fa;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">${t('sign.howToConnect')}</div>
@@ -5183,7 +5188,7 @@ function renderSignagePanel() {
   <div class="sp-section bordered">
     <div class="sp-section-hdr">
       <span class="sp-section-title">${t('sign.sponsorLibrary')} (${S.sponsors.length})</span>
-      <button class="abtn abtn-sm btn-blue" onclick="openSponsorModal('add')">＋ ${t('btn.addSponsor')}</button>
+      <button class="abtn abtn-sm btn-blue" onclick="openSponsorModal('add')">${icon('plus')} ${t('btn.addSponsor')}</button>
     </div>
     <div class="sp-sponsor-grid">${sponsorCards}</div>
   </div>
@@ -5259,7 +5264,7 @@ async function pairDisplayByCode(code) {
     return;
   }
 
-  pushToast('✓ ' + t('toast.displayPaired'), 'success');
+  pushToast(t('toast.displayPaired'), 'success');
   await loadDisplays(S.event.id);
   if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
 }
@@ -5673,7 +5678,7 @@ function updateStageMonitor() {
       }
       _smHold = { id: live.id, text: frozen };
     }
-    smStatus.innerHTML  = '❚❚ PLEASE HOLD';
+    smStatus.innerHTML  = icon('pause') + ' PLEASE HOLD';
     smStatus.className  = 'sm-status-hold';
     smTitle.textContent = live.title;
     smSpk.textContent   = live.speaker || '';
@@ -5709,7 +5714,7 @@ function updateStageMonitor() {
     smLbl.textContent   = '';
 
   } else if (ready) {
-    smStatus.innerHTML  = '◈ STANDING BY — STARTING SHORTLY';
+    smStatus.innerHTML  = 'STANDING BY: STARTING SHORTLY';
     smStatus.className  = 'sm-status-standby';
     smTitle.textContent = ready.title;
     smSpk.textContent   = ready.speaker || '';
@@ -5910,7 +5915,7 @@ function toggleAutoStart() {
   const btn = document.getElementById('auto-start-btn');
   if (btn) btn.classList.toggle('enabled', S.autoStart);
   if (btn) btn.setAttribute('aria-checked', String(S.autoStart));
-  pushToast(S.autoStart ? '⏱ ' + t('toast.autoStartEnabled') : t('toast.autoStartDisabled'), 'info');
+  pushToast(S.autoStart ? t('toast.autoStartEnabled') : t('toast.autoStartDisabled'), 'info');
 }
 
 function checkAutoStart() {
@@ -5924,7 +5929,7 @@ function checkAutoStart() {
   if (!(ROLE_WRITE[S.role] || []).includes('LIVE')) return;
   S._autoStarted.add(toStart.id);
   transition(toStart.id, 'LIVE');
-  pushToast(`⏱ Auto-started: ${toStart.title}`, 'info');
+  pushToast(`Auto-started: ${toStart.title}`, 'info');
   pushLog('AUTO-START', `auto go-live: ${toStart.title}`, toStart.id);
 }
 
@@ -6009,7 +6014,7 @@ async function handleCSVImport(file) {
   if (!sessions.length) { pushToast(t('toast.noValidRows'), 'warn'); return; }
   const { error } = await sb.from('leod_sessions').insert(sessions);
   if (error) { pushToast(`Import failed: ${error.message}`, 'error'); return; }
-  pushToast(`✓ Imported ${sessions.length} session${sessions.length !== 1 ? 's' : ''}`, 'success');
+  pushToast(`Imported ${sessions.length} session${sessions.length !== 1 ? 's' : ''}`, 'success');
   pushLog('IMPORT', `CSV: ${sessions.length} sessions from ${file.name}`, null);
 }
 
@@ -6528,9 +6533,9 @@ async function deactivateEvent() {
       document.getElementById('event-name').textContent = 'No active events';
       document.getElementById('sessions-list').innerHTML = `
         <div id="empty">
-          <div class="ei">📅</div>
+          <div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"/></svg></div>
           <h2>No active events</h2>
-          <p>Use the <strong>＋</strong> button above to create a new event.</p>
+          <p>Use <strong>New event</strong> in the event menu to create a new event.</p>
         </div>`;
     }
   }
@@ -7469,13 +7474,13 @@ function renderOperatorRows(data) {
     if (!isSelf) {
       if (isPending) {
         actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Approve</button>' +
-          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')">&#x1F5D1;</button>';
+          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')" aria-label="' + esc(t('cc.a11y.remove')) + '"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg></button>';
       } else if (isSuspended) {
-        actions = '<button class="um-activate-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'reactivate\')">\u25B6 Activate</button>' +
-          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')">&#x1F5D1;</button>';
+        actions = '<button class="um-activate-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'reactivate\')">' + icon('play') + ' Activate</button>' +
+          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')" aria-label="' + esc(t('cc.a11y.remove')) + '"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg></button>';
       } else {
         actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Update</button>' +
-          '<button class="um-suspend-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'suspend\')">\u23F8</button>';
+          '<button class="um-suspend-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'suspend\')" aria-label="' + esc(t('cc.a11y.suspend')) + '" title="' + esc(t('cc.a11y.suspend')) + '">' + icon('pause') + '</button>';
       }
     }
 
@@ -7585,9 +7590,9 @@ function showWelcomeModal(role) {
   if (isNewDirector) {
     card.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-        <div style="width:38px;height:38px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🎬</div>
+        <div style="width:38px;height:38px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${icon('sparkle')}</div>
         <div>
-          <div style="font-size:15px;font-weight:700;color:#f1f5f9">Welcome, ${esc(firstName)}! 👋</div>
+          <div style="font-size:15px;font-weight:700;color:#f1f5f9">Welcome, ${esc(firstName)}</div>
           <div style="font-size:11px;color:var(--dim);margin-top:2px">You're set up as Director</div>
         </div>
       </div>
@@ -7672,7 +7677,7 @@ async function inviteOperator() {
       } catch {}
       status.innerHTML = `<span style="color:var(--red)">${esc(errMsg)}</span>`;
     } else {
-      status.innerHTML = `<span style="color:var(--green)">✓ Invite sent to ${esc(email)} as ${esc(role)}</span>`;
+      status.innerHTML = `<span style="color:var(--green)">Invite sent to ${esc(email)} as ${esc(role)}</span>`;
       document.getElementById('inv-email').value = '';
       document.getElementById('inv-name').value = '';
       await refreshUsersModal();
@@ -7875,7 +7880,7 @@ function toggleProfileEdit() {
       billingSection.style.display = 'none';
     }
     section.style.display = '';
-    btn.textContent = '✕ Cancel';
+    btn.textContent = 'Cancel';
   }
 }
 
@@ -8088,7 +8093,7 @@ async function redeemPromoCode(prefix) {
       return;
     }
 
-    statusEl.textContent = '✓ ' + (data.message || 'Code applied!');
+    statusEl.textContent = (data.message || 'Code applied!');
     statusEl.style.color = '#34d399';
     input.value = '';
 
@@ -8107,7 +8112,7 @@ async function redeemPromoCode(prefix) {
           window.location.reload();
         } else {
           closeBillingModal();
-          pushToast('✓ ' + (data.message || 'Code applied!'), 'success');
+          pushToast((data.message || 'Code applied!'), 'success');
         }
       }, 1500);
     }
@@ -8228,13 +8233,13 @@ function renderInvoiceList(invoices) {
       '<span class="inv-status ' + inv.status + '">' + inv.status + '</span>' +
       '<div class="inv-actions">' +
         '<button class="inv-btn primary" onclick="downloadInvoice(\'' + esc(inv.id) + '\',\'' + esc(inv.invoice_number) + '\')" title="Download PDF">' +
-          '<span>&#x1F4E5;</span> PDF' +
+          icon('download') + ' PDF' +
         '</button>' +
         '<button class="inv-btn" onclick="viewInvoice(\'' + esc(inv.id) + '\')" title="View in browser">' +
-          '<span>&#x1F441;</span>' +
+          icon('eye') +
         '</button>' +
         '<button class="inv-btn" onclick="emailInvoice(\'' + esc(inv.id) + '\')" title="Resend email">' +
-          '<span>&#x2709;</span>' +
+          icon('mail') +
         '</button>' +
       '</div>';
 
@@ -8348,7 +8353,7 @@ function showSuspendedScreen() {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center';
   var inner = document.createElement('div');
   inner.style.cssText = 'text-align:center;max-width:360px;padding:40px';
-  inner.innerHTML = '<div style="font-size:48px;margin-bottom:12px">\u26A0\uFE0F</div>' +
+  inner.innerHTML = '<div style="margin-bottom:12px">' + icon('alert', 'ico-xl') + '</div>' +
     '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px">Account Suspended</div>' +
     '<div style="font-size:13px;color:var(--dim);line-height:1.6;margin-bottom:24px">Your account has been suspended by your director. Contact them to restore access.</div>' +
     '<button onclick="doLogout()" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Sign Out</button>';
@@ -8415,8 +8420,8 @@ async function loadUserRole() {
     var adminInner = document.createElement('div');
     adminInner.style.cssText = 'text-align:center;max-width:360px;padding:40px';
     var adminIcon = document.createElement('div');
-    adminIcon.style.cssText = 'font-size:48px;margin-bottom:12px';
-    adminIcon.textContent = '\uD83D\uDD12';
+    adminIcon.style.cssText = 'margin-bottom:12px';
+    adminIcon.innerHTML = icon('info', 'ico-xl');
     var adminTitle = document.createElement('div');
     adminTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff;margin-bottom:8px';
     adminTitle.textContent = 'Admin Account';
@@ -8971,7 +8976,7 @@ async function boot() {
       S.dbStatus = 'error'; refreshDiag();
       document.getElementById('sessions-list').innerHTML = `
         <div id="empty">
-          <div class="ei">⚠️</div>
+          <div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg></div>
           <h2>Database schema not found</h2>
           <p>The <code>leod_events</code> table doesn't exist yet.<br>
              Run the DDL from the implementation spec, then refresh.</p>
@@ -9012,10 +9017,10 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         </div>`).join('');
       const directorCTA = (S.role === 'director') ? `
         <button class="abtn" style="height:auto;padding:12px 24px;font-size:13px;font-weight:700;background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;border:none;box-shadow:0 4px 16px rgba(59,130,246,.3)"
-          onclick="openEvModal('create')">＋ Create Your First Event</button>
+          onclick="openEvModal('create')">${icon('plus')} Create your first event</button>
         <div style="display:flex;margin-top:20px;border-top:1px solid var(--border);padding-top:16px">${stepsHtml}</div>` : '';
       document.getElementById('sessions-list').innerHTML =
-        `<div id="empty"><div class="ei">📅</div><h2>No events yet</h2>` +
+        `<div id="empty"><div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-calendar"/></svg></div><h2>No events yet</h2>` +
         `<p>Start by creating your first event, then add your sessions and team.</p>` +
         `${directorCTA}</div>`;
       document.getElementById('event-name').textContent = 'No active events';
@@ -9225,7 +9230,7 @@ function toggleSidebar() {
   const toggle = document.getElementById('sidebar-toggle');
   const isOpen = sidebar.classList.toggle('sidebar-open');
   backdrop.classList.toggle('visible', isOpen);
-  if (toggle) toggle.textContent = isOpen ? '\u25B6' : '\u25C0';
+  if (toggle) toggle.innerHTML = icon(isOpen ? 'chev-right' : 'chev-left');
 }
 
 function toggleHamburger() {
@@ -9397,11 +9402,11 @@ function openQuickRefModal() {
     tableHtml += `<tr><td style="font-weight:600">${role}</td>`;
     for (const st of allStates) {
       tableHtml += ROLE_WRITE[role].includes(st)
-        ? '<td class="qr-check">✓</td>'
+        ? '<td class="qr-check">' + icon('check') + '</td>'
         : '<td class="qr-dash">–</td>';
     }
     tableHtml += ROLE_DELAY[role]
-      ? '<td class="qr-check">✓</td>'
+      ? '<td class="qr-check">' + icon('check') + '</td>'
       : '<td class="qr-dash">–</td>';
     tableHtml += '</tr>';
   }
@@ -9412,7 +9417,7 @@ function openQuickRefModal() {
     <div class="qr-section">
       <div class="qr-section-title">Key Workflows</div>
       <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin:6px 0 2px">Create & Launch an Event</div>
-      <ol class="qr-wf"><li>Click <strong>＋</strong> to create an event</li><li>Add sessions with times, rooms, speakers</li><li>Invite operators via the Operators panel</li><li>Set up signage displays in the sidebar</li><li>Move sessions through: READY → CALLING → LIVE → ENDED</li></ol>
+      <ol class="qr-wf"><li>Open the event menu and choose <strong>New event</strong></li><li>Add sessions with times, rooms, speakers</li><li>Invite operators via the Operators panel</li><li>Set up signage displays in the sidebar</li><li>Move sessions through: READY → CALLING → LIVE → ENDED</li></ol>
       <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin:10px 0 2px">Handle a Delay</div>
       <ol class="qr-wf"><li>Click <strong>+5/10/15 min</strong> on the running session</li><li>Delay cascade auto-adjusts all following sessions</li><li>Click <strong>Reset delays</strong> to revert all shifts</li></ol>
     </div>`;
@@ -9445,16 +9450,16 @@ function closeCmdPalette() {
 
 function getCmdStaticItems() {
   return [
-    { cat: 'Actions', icon: '▶️', label: 'Refresh sessions', hint: 'R', action: () => { if (S.event) { loadSnapshot(S.event.id); pushToast('Refreshed','info'); } } },
-    { cat: 'Actions', icon: '📢', label: 'Focus broadcast', hint: 'B', action: () => document.getElementById('bc-input')?.focus() },
-    { cat: 'Actions', icon: '🔍', label: 'Focus search', hint: '/', action: () => document.getElementById('fb-search')?.focus() },
-    { cat: 'Navigation', icon: '📋', label: 'Quick Reference', action: () => openQuickRefModal() },
-    { cat: 'Navigation', icon: '⌨️', label: 'Keyboard Shortcuts', hint: '?', action: () => openShortcutsModal() },
-    { cat: 'Navigation', icon: '🆕', label: 'What\'s New', action: () => openChangelogModal() },
-    { cat: 'Navigation', icon: 'ℹ️', label: 'About CueDeck', action: () => openAboutModal() },
-    { cat: 'Navigation', icon: '💰', label: 'Open Billing', action: () => openBillingModal() },
-    { cat: 'Navigation', icon: '👥', label: 'Manage Operators', action: () => openUsersModal() },
-    { cat: 'Help', icon: '💬', label: 'Send Feedback', action: () => openFeedbackModal() },
+    { cat: 'Actions', icon: 'refresh', label: 'Refresh sessions', hint: 'R', action: () => { if (S.event) { loadSnapshot(S.event.id); pushToast('Refreshed','info'); } } },
+    { cat: 'Actions', icon: 'broadcast', label: 'Focus broadcast', hint: 'B', action: () => document.getElementById('bc-input')?.focus() },
+    { cat: 'Actions', icon: 'search', label: 'Focus search', hint: '/', action: () => document.getElementById('fb-search')?.focus() },
+    { cat: 'Navigation', icon: 'list', label: 'Quick Reference', action: () => openQuickRefModal() },
+    { cat: 'Navigation', icon: 'keyboard', label: 'Keyboard Shortcuts', hint: '?', action: () => openShortcutsModal() },
+    { cat: 'Navigation', icon: 'sparkle', label: 'What\'s New', action: () => openChangelogModal() },
+    { cat: 'Navigation', icon: 'info', label: 'About CueDeck', action: () => openAboutModal() },
+    { cat: 'Navigation', icon: 'card', label: 'Open Billing', action: () => openBillingModal() },
+    { cat: 'Navigation', icon: 'team', label: 'Manage Operators', action: () => openUsersModal() },
+    { cat: 'Help', icon: 'message', label: 'Send Feedback', action: () => openFeedbackModal() },
   ];
   // Role switching
 }
@@ -9467,7 +9472,7 @@ function renderPaletteResults(query) {
   if (S.sessions?.length) {
     const matching = S.sessions.filter(s => s.title?.toLowerCase().includes(q) || s.speaker?.toLowerCase().includes(q));
     for (const s of matching.slice(0, 8)) {
-      results.push({ cat: 'Sessions', icon: '📅', label: s.title, hint: s.status, action: () => {
+      results.push({ cat: 'Sessions', icon: 'calendar', label: s.title, hint: s.status, action: () => {
         closeCmdPalette();
         const card = document.getElementById('card-' + s.id);
         if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.focus(); card.style.outline = '2px solid var(--blue)'; setTimeout(() => card.style.outline = '', 2000); }
@@ -9486,7 +9491,7 @@ function renderPaletteResults(query) {
   const roles = roleLocked() ? [] : ['director','stage','av','interp','reg','signage'];
   for (const role of roles) {
     if (!q || role.includes(q) || 'switch role'.includes(q)) {
-      results.push({ cat: 'Roles', icon: '🎭', label: `Switch to ${role.toUpperCase()}`, action: () => {
+      results.push({ cat: 'Roles', icon: 'user', label: `Switch to ${role.toUpperCase()}`, action: () => {
         closeCmdPalette();
         const btn = document.querySelector(`.rbtn[data-role="${role}"]`) || [...document.querySelectorAll('.rbtn')].find(b => b.textContent.trim().toLowerCase() === role);
         if (btn) btn.click();
@@ -9503,7 +9508,7 @@ function renderPaletteResults(query) {
   results.forEach((r, i) => {
     if (r.cat !== lastCat) { html += `<div class="cmd-cat">${r.cat}</div>`; lastCat = r.cat; }
     html += `<div class="cmd-item${i === _cmdActiveIdx ? ' active' : ''}" data-idx="${i}" onclick="executeCmdItem(${i})" onmouseenter="_cmdActiveIdx=${i};highlightCmdItem()">
-      <span class="cmd-item-icon">${r.icon}</span>
+      <span class="cmd-item-icon">${icon(r.icon)}</span>
       <span class="cmd-item-label">${r.label}</span>
       ${r.hint ? `<span class="cmd-item-hint">${r.hint}</span>` : ''}
     </div>`;
@@ -9646,11 +9651,11 @@ async function submitFeedback() {
     </label>
     <label>Rating <span style="font-size:11px;color:var(--dim)">(optional)</span>
       <div class="fb-stars" id="fb-stars">
-        <span class="fb-star" data-v="1" onclick="setFbRating(1)">★</span>
-        <span class="fb-star" data-v="2" onclick="setFbRating(2)">★</span>
-        <span class="fb-star" data-v="3" onclick="setFbRating(3)">★</span>
-        <span class="fb-star" data-v="4" onclick="setFbRating(4)">★</span>
-        <span class="fb-star" data-v="5" onclick="setFbRating(5)">★</span>
+        <span class="fb-star" data-v="1" onclick="setFbRating(1)"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-star"/></svg></span>
+        <span class="fb-star" data-v="2" onclick="setFbRating(2)"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-star"/></svg></span>
+        <span class="fb-star" data-v="3" onclick="setFbRating(3)"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-star"/></svg></span>
+        <span class="fb-star" data-v="4" onclick="setFbRating(4)"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-star"/></svg></span>
+        <span class="fb-star" data-v="5" onclick="setFbRating(5)"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-star"/></svg></span>
       </div>
     </label>
     <label>Message
