@@ -48,7 +48,10 @@
 .link-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brandmark{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;overflow:hidden;flex:none}
 .brandmark img{width:100%;height:100%;object-fit:contain;background:#fff}
-.bp{border:1px solid var(--bd);border-radius:16px;background:#F6F5F2;overflow:hidden;position:sticky;top:76px}
+/* The preview uses the registration page's own fonts (cuedeck-register.html), so it looks like what guests see. */
+@font-face{font-family:'Geist';src:url('/fonts/geist-var.woff2') format('woff2');font-weight:100 900;font-display:swap}
+@font-face{font-family:'Instrument Serif';src:url('/fonts/instrument-serif-400.woff2') format('woff2');font-weight:400;font-display:swap}
+.bp{border:1px solid var(--bd);border-radius:16px;background:#F6F5F2;overflow:hidden;position:sticky;top:76px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
 .bp-top{display:flex;align-items:center;gap:8px;padding:12px 14px}
 .bp-mark{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:10px;overflow:hidden}
 .bp-mark img{width:100%;height:100%;object-fit:contain;background:#fff}
@@ -57,7 +60,7 @@
 .bp-cover{margin:0 14px;height:110px;border-radius:12px;overflow:hidden}
 .bp-cover img{width:100%;height:100%;object-fit:cover}
 .bp-body{padding:12px 14px 16px;display:grid;gap:10px}
-.bp-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.05;overflow-wrap:anywhere}
+.bp-title{font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:26px;line-height:1.05;letter-spacing:-.2px;overflow-wrap:anywhere}
 .bp-card{background:#fff;border:1px solid #E6E4DD;border-radius:10px;padding:10px;font-size:12px}
 .bp-btn{height:32px;border-radius:8px;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
 .uses{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
