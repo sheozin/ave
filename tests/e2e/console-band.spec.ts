@@ -135,14 +135,16 @@ test('band: the final minute shows tenths and the wrap-up colour in the lane', a
   await ctx.close();
 });
 
-test('layout: at 1440x900 both lanes and at least 8 list rows are on screen', async ({ browser }) => {
+// Round 2 (owner, 7 Oct): lanes at the demo's height (69 + 45 px); the floor is 6 list rows, not 8.
+test('layout: at 1440x900 both lanes and at least 6 list rows are on screen', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { sessions: manySessions() });
   const col = page.locator('#sessions-col');
   expect(await col.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);   // the list really is longer than the screen
   const colBottom = await col.evaluate(el => el.getBoundingClientRect().bottom);
   // List rows: session rows plus the folded "N completed" row (a 34 px row in spec 2.2).
   const rows = await page.locator('#sessions-list .sc, #sessions-list .sc-fold').evaluateAll((els, bottom) => els.filter(e => e.getBoundingClientRect().bottom <= (bottom as number)).length, colBottom);
-  expect(rows).toBeGreaterThanOrEqual(8);
+  console.log(`list rows on screen at 1440x900 (manySessions): ${rows}`);
+  expect(rows).toBeGreaterThanOrEqual(6);
   for (const room of ['Main Stage', 'Hall B']) {
     const b = (await page.locator(`#band .lane[data-room="${room}"] .lane-next`).boundingBox())!;
     expect(b.y + b.height).toBeLessThanOrEqual(900);
@@ -239,7 +241,7 @@ for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
     const hb = '#band .lane[data-room="Hall B"] .lane-now';
     // At rest: compact (the demo: Hold about 75, End… 62), and the same slots in both lanes.
     const msEnd = await box(page, `${ms} .btn.danger`), hbEnd = await box(page, `${hb} .btn.danger`);
-    if (locale === 'en') { expect(msEnd.width).toBeLessThanOrEqual(70); expect((await box(page, `${ms} .lane-lead`)).width).toBeLessThanOrEqual(90); }
+    if (locale === 'en') expect((await box(page, `${ms} .lane-lead`)).width).toBeLessThanOrEqual(90);
     expect(Math.abs(msEnd.x - hbEnd.x)).toBeLessThan(1);
     expect(Math.abs(msEnd.width - hbEnd.width)).toBeLessThan(1);
     expect(Math.abs((await box(page, `${ms} .lane-lead`)).x - (await box(page, `${hb} .lane-lead`)).x)).toBeLessThan(1);
@@ -295,11 +297,11 @@ test('band: held count is light amber and overrun count light magenta, both read
   await o.ctx.close();
 });
 
-test('band: now row at least 58 px and next row at least 40 px at 1440', async ({ browser }) => {
+test('band: now row at least 69 px and next row at least 45 px at 1440 (the demo)', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   for (const room of ['Main Stage', 'Hall B']) {
-    expect((await box(page, `#band .lane[data-room="${room}"] .lane-now`)).height).toBeGreaterThanOrEqual(58);
-    expect((await box(page, `#band .lane[data-room="${room}"] .lane-next`)).height).toBeGreaterThanOrEqual(40);
+    expect((await box(page, `#band .lane[data-room="${room}"] .lane-now`)).height).toBeGreaterThanOrEqual(69);
+    expect((await box(page, `#band .lane[data-room="${room}"] .lane-next`)).height).toBeGreaterThanOrEqual(45);
   }
   await ctx.close();
 });
@@ -321,4 +323,55 @@ test('layout: at 1280x720 the now title has at least 200 px, and in overrun the 
   expect(rb.x).toBeGreaterThanOrEqual(nb.x);
   expect(rb.x + rb.width).toBeLessThanOrEqual(nb.x + nb.width);
   await o.ctx.close();
+});
+
+
+// ── Round 2: HOLD and END never move, also while End is armed ───────────────
+const near = (a: number, b: number) => Math.abs(a - b) <= 0.5;
+for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
+  test(`band (${locale}): arming End moves neither Hold nor End, on a LIVE and on an OVERRUN lane`, async ({ browser }) => {
+    for (const sessions of [undefined, overrunSessions()]) {
+      const { ctx, page } = await openConsole(browser, { locale, sessions });
+      const ms = '#band .lane[data-room="Main Stage"] .lane-now';
+      await expect(page.locator('#band .lane[data-room="Main Stage"]')).toHaveClass(sessions ? /is-over/ : /is-live/);
+      const hold0 = await box(page, `${ms} .lane-lead .btn`), end0 = await box(page, `${ms} .btn.danger`);
+      await page.locator(`${ms} .btn.danger`).click();
+      await page.clock.runFor(1100);
+      const end = page.locator(`${ms} .btn.danger`);
+      await expect(end).toHaveClass(/confirm-pending/);
+      const hold1 = await box(page, `${ms} .lane-lead .btn`), end1 = await box(page, `${ms} .btn.danger`);
+      expect(near(hold1.x, hold0.x)).toBe(true);
+      expect(near(end1.x, end0.x)).toBe(true);
+      expect(near(end1.width, end0.width)).toBe(true);
+      expect(await end.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+      await ctx.close();
+    }
+  });
+
+  test(`list row and drawer (${locale}): arming End moves neither Hold nor End`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { locale });
+    await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
+    const row = `#card-${PANEL_ID} .sc-act .btn.danger`;
+    const dEnd = `#card-${PANEL_ID} .sc-drawer button[onclick*="confirmEnd"]`;
+    const dHold = `#card-${PANEL_ID} .sc-drawer button[onclick*="'HOLD'"]`;
+    const r0 = await box(page, row), e0 = await box(page, dEnd), h0 = await box(page, dHold);
+    await page.locator(row).click();
+    await page.clock.runFor(1100);
+    await expect(page.locator(row)).toHaveClass(/confirm-pending/);
+    const r1 = await box(page, row), e1 = await box(page, dEnd), h1 = await box(page, dHold);
+    expect(near(r1.x, r0.x) && near(r1.width, r0.width)).toBe(true);
+    expect(near(e1.x, e0.x)).toBe(true);
+    expect(near(h1.x, h0.x)).toBe(true);
+    for (const sel of [row, dEnd]) expect(await page.locator(sel).evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await ctx.close();
+  });
+}
+
+test('layout: at 1440x900 with the GTR data the list still shows at least 6 rows', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const bottom = await page.locator('#sessions-col').evaluate(el => el.getBoundingClientRect().bottom);
+  const rows = await page.locator('#sessions-list .sc, #sessions-list .sc-fold').evaluateAll((els, b) => els.filter(e => e.getBoundingClientRect().bottom <= (b as number)).length, bottom);
+  console.log(`list rows on screen at 1440x900 (GTR data): ${rows}`);
+  expect(rows).toBeGreaterThanOrEqual(6);
+  await ctx.close();
 });

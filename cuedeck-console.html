@@ -1668,8 +1668,8 @@
     .lane-room span { overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
     .lane-body { display: grid; min-width: 0; }
     .lane-now, .lane-next { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto auto; align-items: center; column-gap: 14px; padding: 7px 14px; min-width: 0; }
-    .lane-now { min-height: 58px; }
-    .lane-next { min-height: 40px; padding-block: 4px; border-top: 1px dashed var(--border-divider); color: var(--text-secondary); font-size: var(--fs-13); }
+    .lane-now { min-height: 69px; }   /* the approved demo's lane: now 69 px, next 45 px */
+    .lane-next { min-height: 45px; padding-block: 4px; border-top: 1px dashed var(--border-divider); color: var(--text-secondary); font-size: var(--fs-13); }
     .lane-what { display: grid; gap: 2px; min-width: 0; }
     .lane-title { font-size: var(--fs-16); font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .lane-who { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--fs-12); color: var(--text-tertiary); white-space: nowrap; overflow: hidden; }
@@ -1682,9 +1682,18 @@
     /* Demo-sized controls (md, natural width: Hold about 75, End… 62). Each slot's min-width is
        the longest label it can show in the page language, so Hold and End line up in every
        lane; the armed End grows to the left from the same right edge and is never clipped. */
-    .lane-now { --lane-lead-w: 84px; --lane-end-w: 62px; }
-    :lang(ar) .lane-now { --lane-lead-w: 92px; --lane-end-w: 62px; }
-    :lang(pl) .lane-now, :lang(de) .lane-now { --lane-lead-w: 117px; --lane-end-w: 95px; }
+    /* HOLD and END never move (spec 2.3): every End button reserves the width of its armed
+       label in the page language ("CONFIRM END", measured at md; whichever End label is longest), so arming changes neither
+       End's edges nor anything beside it. */
+    html { --end-armed-w: 119px; }
+    html:lang(ar) { --end-armed-w: 94px; }   /* the drawer's "End session" (93 px) is longer than the armed label here */
+    html:lang(pl) { --end-armed-w: 202px; }
+    html:lang(de) { --end-armed-w: 173px; }
+    @media (min-width: 768px) { .sc { grid-template-columns: 100px 28px minmax(0, 1fr) 110px 120px 44px max(150px, var(--end-armed-w)); } }
+    .sc-act .btn.danger, .sc-drawer [data-fk^="drw-ENDED-"] { min-width: var(--end-armed-w); }
+    .lane-now { --lane-lead-w: 84px; --lane-end-w: var(--end-armed-w); }
+    :lang(ar) .lane-now { --lane-lead-w: 92px; }
+    :lang(pl) .lane-now, :lang(de) .lane-now { --lane-lead-w: 117px; }
     .lane-lead { display: inline-flex; flex: none; min-width: var(--lane-lead-w); justify-content: flex-end; }
     .lane-lead .btn { width: 100%; }
     .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { flex: none; min-width: var(--lane-end-w); white-space: nowrap; }
@@ -1714,7 +1723,7 @@
     .lane-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* 1280×720: now and next side by side on one 44 px line (spec 2.6) */
     @media (max-width: 1439px) {
-      .lane-body { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }   /* now gets two thirds: its title is the one the operator acts on */
+      .lane-body { grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); }   /* now gets two thirds: its title is the one the operator acts on */
       .lane-now { min-height: 44px; padding: 4px 10px; grid-template-columns: auto minmax(0, 1fr) auto auto; column-gap: 10px; }
       .lane-next { min-height: 44px; border-top: 0; border-inline-start: 1px dashed var(--border-divider); padding: 4px 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
       .lane-next-state, .lane-who, .lane-unit { display: none; }
