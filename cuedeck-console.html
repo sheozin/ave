@@ -1717,7 +1717,9 @@
     :focus-visible { outline: none !important; box-shadow: var(--focus-ring) !important; transition: none !important; }
     /* Only exceptions animate; nothing animates under reduced motion */
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { animation: none !important; transition: none !important; }
+      /* .rbtn-pulse sets its animation with !important on a class, which
+         outranks *; it is named here so it stops too */
+      *, *::before, *::after, .rbtn-pulse { animation: none !important; transition: none !important; }
     }
 </style>
 </head>

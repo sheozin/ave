@@ -30,3 +30,42 @@ describe('display page status colours', () => {
     expect(SRC).toContain("pb.style.background = ov ? '#ef4444'");
   });
 });
+
+// Every rule keyed on a status class paints only with that status's colour:
+// var(--st-<status>) or its rgb at any alpha. A green LIVE card or a blue
+// READY row fails here. The big title on a live slide stays white text.
+const STATUS_RGB: Record<string, string> = {
+  live: '239,68,68', ready: '52,211,153', calling: '250,204,21', hold: '251,146,60', overrun: '232,121,249',
+};
+const NEUTRAL_OK: Record<string, string[]> = { '.d-big-title.live': ['#fff'] };
+const COLOUR = /#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|var\(--[\w-]+\)/g;
+
+export function statusRuleMismatches(src: string): string[] {
+  const css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('\n');
+  const bad: string[] = [];
+  for (const [, selRaw, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const sel of selRaw.split(',').map(s => s.trim())) {
+      const st = [...new Set([...sel.matchAll(/\.(live|ready|calling|hold|overrun)(?![\w-])/gi)].map(m => m[1].toLowerCase()))];
+      if (st.length !== 1) continue;
+      const s = st[0];
+      for (const c of body.match(COLOUR) ?? []) {
+        const rgb = c.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+        const ok = c === `var(--st-${s})`
+          || (rgb && `${rgb[1]},${rgb[2]},${rgb[3]}` === STATUS_RGB[s])
+          || (NEUTRAL_OK[sel] ?? []).includes(c.toLowerCase());
+        if (!ok) bad.push(`${sel} { ${c} }`);
+      }
+    }
+  }
+  return bad;
+}
+
+describe('display page status rules follow the status tokens', () => {
+  it('flags a mismatched rule (self-check)', () => {
+    expect(statusRuleMismatches('<style>.ag-card.live{background:rgba(34,197,94,.08)}.x.ready{color:var(--st-ready)}</style>'))
+      .toEqual(['.ag-card.live { rgba(34,197,94,.08) }']);
+  });
+  it('every status-keyed rule uses its own status colour', () => {
+    expect(statusRuleMismatches(SRC)).toEqual([]);
+  });
+});
