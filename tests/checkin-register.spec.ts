@@ -157,3 +157,28 @@ describe('page design helpers', () => {
     expect(page.mapsUrl(null, '')).toBe('');
   });
 });
+
+describe('plus-ones: server and page agree', () => {
+  const cases: [string, unknown, number, string[], number][] = [
+    ['none', [], 2, [], 0],
+    ['two good names', [{ first_name: 'Ola', last_name: 'Nowak' }, { first_name: ' Jan ', last_name: 'Kim' }], 2, [], 2],
+    ['an empty row is dropped', [{ first_name: '', last_name: ' ' }, { first_name: 'Ola', last_name: 'Nowak' }], 1, [], 1],
+    ['half a name', [{ first_name: 'Ola', last_name: '' }], 2, ['plus:0'], 0],
+    ['a link as a name', [{ first_name: 'evil.com', last_name: 'X' }], 2, ['plus:0'], 0],
+    ['zero-width hidden link', [{ first_name: 'evil\u200b.com', last_name: 'X' }], 2, ['plus:0'], 0],
+    ['too many', [{ first_name: 'A', last_name: 'B' }, { first_name: 'C', last_name: 'D' }], 1, ['plus_too_many'], 2],
+    ['not a list', 'x', 2, [], 0],
+  ];
+  for (const [name, list, max, errors, n] of cases) {
+    it(name, () => {
+      for (const impl of [server, page]) {
+        const r = impl.validatePlusOnes(list, max);
+        expect(r.errors).toEqual(errors);
+        expect(r.names).toHaveLength(n);
+      }
+    });
+  }
+  it('stores the cleaned name', () => {
+    expect(server.validatePlusOnes([{ first_name: ' Jan ', last_name: 'Kim' }], 1).names[0]).toEqual({ first_name: 'Jan', last_name: 'Kim' });
+  });
+});

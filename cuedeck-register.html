@@ -110,6 +110,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .tix-o .nm small{display:block;font-size:13px;color:var(--t3);overflow-wrap:anywhere}
 .tix-o .pr{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
 .tix.bad .tix-o{border-color:#B3261E}
+.plus-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start}
+.plus-row .x{height:48px;width:44px;border:1px solid var(--line2);border-radius:12px;background:#fff;cursor:pointer;font-size:18px;color:var(--t2)}
+.plus-row.bad input{border-color:#B3261E}
+@media (max-width:420px){.plus-row{grid-template-columns:1fr 1fr 44px}}
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--t2);line-height:1.45}
 .consent input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
 .consent.bad{color:#B3261E}
@@ -212,6 +216,13 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
             <label class="f" data-f="email">Email<input type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" required><span class="hint">Your QR ticket is sent here.</span><span class="err"></span></label>
             <label class="f" data-f="company"><span class="lt">Company <span class="opt">(optional)</span></span><input type="text" name="company" autocomplete="organization" maxlength="80"><span class="err"></span></label>
             <div id="questions" style="display:grid;gap:16px"></div>
+            <div id="plus" data-f="plus" hidden style="display:grid;gap:10px">
+              <div style="font-size:14px;font-weight:600">Bringing someone? <span class="opt" id="plus-max"></span></div>
+              <div id="plus-rows" style="display:grid;gap:10px"></div>
+              <button class="btn2" type="button" id="plus-add" style="justify-self:start">Add a guest</button>
+              <span class="hint">Each guest gets their own QR ticket, sent to you.</span>
+              <span class="err"></span>
+            </div>
             <div class="hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
             <label class="consent" data-f="consent"><input type="checkbox" name="consent"><span id="consent-t">I agree that the organizer of this event may use these details to manage my registration and check-in. CueDeck processes them on the organizer's behalf.</span></label>
             <div id="ts"></div>
@@ -257,6 +268,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
               <div class="perf"></div>
               <div class="qr"><img id="tk-qr" alt="Your check-in QR code"><span class="code" id="tk-code"></span><small>Show this at the entrance. The code works if the QR will not scan.</small></div>
             </div>
+            <div id="tk-plus" style="display:grid;gap:12px;width:100%"></div>
             <button class="btn2" type="button" id="tk-cal">Add to calendar</button>
           </div>
         </section>

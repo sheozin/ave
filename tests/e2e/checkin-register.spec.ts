@@ -351,3 +351,44 @@ test('tickets: paid in another browser, the return says the ticket is on its way
   await page.goto(URL_ + '&paid=1');
   await expect(page.locator('#done-h')).toHaveText('Finishing your registration');
 });
+
+// ── Plus-ones (114) ──
+test('plus-ones: a guest adds up to the limit, names are checked, and their tickets show', async ({ page }) => {
+  const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>');
+  const sent = await setup(page, { config: CONFIG({ plus_ones: 2 }), confirm: () => ({ body: { status: 'registered', first_name: 'Maya',
+    ticket: { first_name: 'Maya', last_name: 'Lindqvist', ticket_type: 'Delegate', code: 'B4K2C7', qr_svg: svg },
+    plus_tickets: [{ first_name: 'Ola', last_name: 'Nowak', ticket_type: 'Delegate', code: 'Q9W8E7', qr_svg: svg }] } }) });
+  await page.goto(URL_);
+  await expect(page.locator('#plus')).toBeVisible();
+  await expect(page.locator('#plus-max')).toHaveText('(up to 2)');
+  await fill(page);
+  await page.click('#plus-add'); await page.click('#plus-add');
+  await expect(page.locator('#plus-add')).toBeHidden();
+  const rows = page.locator('#plus-rows .plus-row');
+  await rows.nth(0).locator('input').nth(0).fill('Ola'); await rows.nth(0).locator('input').nth(1).fill('Nowak');
+  await rows.nth(1).locator('input').nth(0).fill('evil.com');
+  await rows.nth(1).locator('input').nth(1).fill('X');
+  await page.click('#submit');
+  await expect(page.locator('#plus .err')).toContainText('first and last name');
+  expect(sent).toHaveLength(0);
+  await rows.nth(1).locator('.x').click();
+  await expect(page.locator('#plus-add')).toBeVisible();
+  await page.click('#submit');
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent[0]).toMatchObject({ action: 'register', plus_ones: [{ first_name: 'Ola', last_name: 'Nowak' }] });
+  // The confirmed ticket page shows the plus-one's ticket too.
+  await page.goto('about:blank');
+  await page.goto(URL_ + '#t=' + 'P'.repeat(43));
+  await page.click('#cf-btn');
+  await expect(page.locator('#tk-plus .ticket')).toHaveCount(1);
+  await expect(page.locator('#tk-plus')).toContainText('Ola Nowak');
+});
+
+test('plus-ones: hidden for a paid ticket', async ({ page }) => {
+  await setup(page, { config: CONFIG({ plus_ones: 2, tickets: TICKETS }) });
+  await page.goto(URL_);
+  await page.locator('.tix-o', { hasText: 'Community' }).click();
+  await expect(page.locator('#plus')).toBeVisible();
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await expect(page.locator('#plus')).toBeHidden();
+});

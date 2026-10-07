@@ -1498,3 +1498,31 @@ Deno.test(`${RM} test: goes only to the organizer, marked as a test`, async () =
   const m = world.emails![0] as { to: string; subject: string }
   assert(m.to === 'desk@stub.test' && m.subject === '[Test] Thank you for coming to Stub event', m.subject)
 })
+
+// ── Plus-ones (114) ─────────────────────────────────────────────────
+Deno.test(`${RG} confirm: each plus-one's ticket is emailed to the guest who brought them`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'registered', first_name: 'Maya',
+    attendee: { id: ATT, first_name: 'Maya', email: 'maya@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null },
+    plus_ones: [{ id: 'p1000000-0000-4000-8000-000000000001', first_name: 'Ola', last_name: 'Nowak', qr_token: 'tok00000000000000000000000000002' }] }
+  world.tables.leod_checkin_attendees = [
+    { id: ATT, event_id: EVENT, first_name: 'Maya', last_name: 'L', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' },
+    { id: 'p1000000-0000-4000-8000-000000000001', event_id: EVENT, first_name: 'Ola', last_name: 'Nowak', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000002' }]
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && (r.body.plus_tickets as unknown[]).length === 1, JSON.stringify(r).slice(0, 300))
+  const mails = world.emails as { to: string; subject: string; html: string }[]
+  assert(mails.length === 2 && mails.every(m => m.to === 'maya@stub.test'), JSON.stringify(mails.map(m => [m.to, m.subject])))
+  assert(mails[1].subject === 'Ticket for Ola: Stub event' && mails[1].html.includes('coming with you'), mails[1].subject)
+})
+Deno.test('checkin-held fill: a party joins only if all of it fits', async () => {
+  setup('organizer', { ent: { checkin_core: true, status: 'live', registration_capacity: 10 } })
+  world.rpcResult.checkin_web_places_taken = 8   // 2 places free
+  world.tables.leod_checkin_held = [
+    { id: 'h1', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [{ first_name: 'A', last_name: 'B' }, { first_name: 'C', last_name: 'D' }], created_at: '1' },
+    { id: 'h2', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [], created_at: '2' }]
+  world.rpcResult.checkin_web_release_held = { status: 'released', is_test: false, attendee: null, plus_ones: [] }
+  const r = await call('checkin-held', { event_id: EVENT, action: 'fill' })
+  const asked = world.rpcCalls.filter(c => c.name === 'checkin_web_release_held').map(c => c.args.p_held_id)
+  // The first party needs 3 places: the queue stops there rather than jumping it.
+  assert(r.status === 200 && asked.length === 0, JSON.stringify(r) + ' ' + JSON.stringify(asked))
+})

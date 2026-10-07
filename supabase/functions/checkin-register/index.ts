@@ -43,7 +43,7 @@ import { stripe } from '../_shared/stripe.ts'
 import { loadOrder, money, openCheckout, sessionExpiry, settleOrder } from '../_shared/checkin-tickets.ts'
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import {
-  isRegistrationCode, validateRegistration, mayResend, cleanText, clientKey, type Question,
+  isRegistrationCode, validateRegistration, validatePlusOnes, mayResend, cleanText, clientKey, type Question,
 } from '../_shared/checkin-register.ts'
 
 const TURNSTILE_VERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -211,6 +211,7 @@ Deno.serve(async (req) => {
     }
     return json({
       state, test, places_left: placesLeft, approval: !!ent.registration_approval, tickets,
+      plus_ones: ent.registration_plus_ones ?? 0,
       event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
@@ -360,12 +361,21 @@ Deno.serve(async (req) => {
     const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null } | null
     // 'already': the owner of an address already on the list gets their QR
     // again, at most every 10 minutes.
+    const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
     if (attendee && (status === 'registered' || mayResend(attendee.qr_email_sent_at, Date.now()))) {
-      const res = await sendQrEmailsForAttendees(sb, await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue }), [attendee])
+      const brand = await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue })
+      const res = await sendQrEmailsForAttendees(sb, brand, [attendee])
       if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
+      // (114) Each plus-one's ticket goes to the guest who brought them.
+      if (plusOnes.length && attendee.email) {
+        const pr = await sendQrEmailsForAttendees(sb, brand, plusOnes.map(p => ({ ...p, email: null })), { overrideTo: attendee.email, guestOf: attendee.first_name })
+        if (pr.some(r => r.status === 'error')) console.error('checkin-register: plus-one QR email failed, guest', attendee.id)
+      }
     }
     console.log('checkin-register: confirmed (' + status + '), event', ent.event_id)
-    return json({ status: 'registered', first_name: String(out.first_name ?? ''), ticket: attendee ? await ticketFor(attendee.id) : null })
+    const plusTickets = []
+    for (const p of plusOnes) { const t = await ticketFor(p.id); if (t) plusTickets.push(t) }
+    return json({ status: 'registered', first_name: String(out.first_name ?? ''), ticket: attendee ? await ticketFor(attendee.id) : null, plus_tickets: plusTickets })
   }
 
   if (body.action !== 'register') return json({ error: 'Bad request' }, 400)
@@ -387,7 +397,9 @@ Deno.serve(async (req) => {
     consent: body.consent === true,
   }
   const { errors, answers } = validateRegistration(form, questions)
-  if (errors.length) return json({ error: 'Invalid submission', fields: errors }, 400)
+  // (114) Plus-ones, up to the event's limit.
+  const plus = validatePlusOnes(body.plus_ones, ent.registration_plus_ones ?? 0)
+  if (errors.length || plus.errors.length) return json({ error: 'Invalid submission', fields: [...errors, ...plus.errors] }, 400)
   // (109) The ticket picked, if the event sells any. The database decides
   // whether one is required and whether it is still on sale.
   const ticketTypeId = typeof body.ticket_type_id === 'string' && UUID.test(body.ticket_type_id) ? body.ticket_type_id : null
@@ -417,7 +429,7 @@ Deno.serve(async (req) => {
   const { data: out, error: regErr } = await sb.rpc('checkin_web_request', {
     p_code: code, p_first_name: cleanText(form.first_name), p_last_name: cleanText(form.last_name),
     p_email: form.email.trim(), p_company: cleanText(form.company), p_answers: answers, p_token_hash: await sha256Hex(token),
-    p_ticket_type_id: ticketTypeId,
+    p_ticket_type_id: ticketTypeId, p_plus_ones: plus.names,
   })
   if (regErr || !out) {
     // Code only: the message of a constraint error can carry the address.

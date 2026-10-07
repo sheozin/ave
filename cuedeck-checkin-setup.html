@@ -308,6 +308,9 @@
       </div>
       <div style="overflow-x:auto"><table class="tbl" style="margin-top:8px"><thead><tr><th>Guest</th><th class="hide-sm">Company</th><th>Waiting for</th><th></th></tr></thead><tbody id="held-body"></tbody></table></div>
     </div>
+    <h3 class="sc-h">Plus-ones</h3>
+    <div class="toggle"><div><b>Guests may bring</b><p>Each plus-one gets their own QR ticket, sent to the guest who brought them, and takes a place within your capacity. Paid tickets have no plus-ones: everyone buys their own.</p></div>
+      <select id="rg-plus" aria-label="Plus-ones per guest" style="height:40px;border-radius:10px;border:1px solid var(--bd2);padding:0 10px"><option value="0">Nobody</option><option value="1">1 guest</option><option value="2">2 guests</option><option value="3">3 guests</option><option value="4">4 guests</option><option value="5">5 guests</option></select></div>
     <h3 class="sc-h">Limits</h3>
     <div class="row2" style="gap:12px">
       <div class="field"><label for="rg-cap">Capacity</label><input id="rg-cap" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
@@ -618,7 +621,7 @@ function renderOverview() {
   $('ov-meta').textContent = [fmtDate(EV.date), EV.event_start && EV.event_end ? EV.event_start.slice(0, 5) + ' to ' + EV.event_end.slice(0, 5) : '', EV.venue].filter(Boolean).join(' · ');
   $('ov-desk').href = '/checkin/desk?event=' + EVENT_ID; $('ov-desk').textContent = isLive() ? 'Open the desk' : 'Try the desk';
   $('ov-dash').href = '/checkin/dashboard?event=' + EVENT_ID;
-  const web = ATT.filter(a => a.source === 'web').length, kiosk = ATT.filter(a => a.source === 'kiosk' || a.source === 'walk_in').length;
+  const web = ATT.filter(a => a.source === 'web' || a.source === 'plus_one').length, kiosk = ATT.filter(a => a.source === 'kiosk' || a.source === 'walk_in').length;
   const withEmail = ATT.filter(a => a.email), sent = withEmail.filter(a => a.qr_email_sent_at).length;
   const team = STAFF.filter(s => !s.is_owner);
   const inNow = ATT.filter(a => a.checked_in_at && (isLive() ? !a.is_test : true)).length;
@@ -674,7 +677,7 @@ function renderReports() {
   $('rp-export').hidden = !can(ROLE, 'export');
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
-  $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
+  $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
 
@@ -969,7 +972,7 @@ async function previewImport(file) {
 $('att-export').onclick = () => {
   // One column per registration answer: the current questions in order,
   // then any answered question since removed, under the label it had.
-  const SOURCE = { import: 'Imported', kiosk: 'Kiosk', walk_in: 'Walk-in', web: 'Registration page' };
+  const SOURCE = { import: 'Imported', kiosk: 'Kiosk', walk_in: 'Walk-in', web: 'Registration page', plus_one: 'Plus-one' };
   const cols = (ENT.registration_questions || []).map(q => ({ id: q.id, label: q.label }));
   for (const a of ATT) for (const [id, v] of Object.entries(a.custom_fields || {})) {
     if (v && typeof v === 'object' && 'value' in v && !cols.some(c => c.id === id)) cols.push({ id, label: String(v.label || id) });
@@ -1001,6 +1004,7 @@ async function loadHeld() {
 const sinceText = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
 function renderHeld() {
   $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
+  $('rg-plus').value = String(ENT.registration_plus_ones || 0);
   const wl = HELD.filter(h => h.kind === 'waitlist').length, ap = HELD.length - wl;
   $('held-box').hidden = !HELD.length;
   $('held-title').textContent = [ap ? ap + ' awaiting approval' : '', wl ? wl + ' on the waitlist' : ''].filter(Boolean).join(' · ');
@@ -1046,6 +1050,12 @@ async function saveFlow() {
   $('held-ok').textContent = 'Saved.';
 }
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-plus').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_plus_ones', { p_event_id: EVENT_ID, p_n: parseInt($('rg-plus').value, 10) });
+  if (error) { $('held-err').textContent = error.message; $('rg-plus').value = String(ENT.registration_plus_ones || 0); return; }
+  ENT.registration_plus_ones = data; $('held-ok').textContent = 'Saved.';
+};
 
 // ── badge designer (migration 111) ──
 // BD is the design being edited; the preview redraws on every change and

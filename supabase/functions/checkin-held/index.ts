@@ -53,14 +53,21 @@ Deno.serve(async (req) => {
     // The waitlist, oldest first, into the places capacity leaves free.
     const test = ent.status !== 'live'
     if (!ent.registration_capacity) return json({ error: 'Set a capacity first: with no capacity there are no free places to fill.' }, 400)
-    const { count, error: cErr } = await sb.from('leod_checkin_attendees').select('id', { count: 'exact', head: true }).eq('event_id', event_id).eq('is_test', test)
+    // Places taken as the registration page counts them (orders being paid
+    // hold theirs, 109), and a guest comes with their plus-ones (114): the
+    // queue is filled in order while whole parties fit.
+    const { data: taken, error: cErr } = await sb.rpc('checkin_web_places_taken', { p_event_id: event_id, p_test: test })
     if (cErr) return json({ error: cErr.message }, 500)
-    const free = Math.max(0, ent.registration_capacity - (count ?? 0))
+    let free = Math.max(0, ent.registration_capacity - Number(taken ?? 0))
     if (!free) return json({ ok: true, released: 0, emailed: 0, free: 0 })
-    const { data: rows, error: hErr } = await sb.from('leod_checkin_held').select('id')
-      .eq('event_id', event_id).eq('kind', 'waitlist').eq('is_test', test).order('created_at').limit(free)
+    const { data: rows, error: hErr } = await sb.from('leod_checkin_held').select('id, plus_ones')
+      .eq('event_id', event_id).eq('kind', 'waitlist').eq('is_test', test).order('created_at').limit(500)
     if (hErr) return json({ error: hErr.message }, 500)
-    ids = (rows ?? []).map(r => r.id)
+    for (const r of rows ?? []) {
+      const need = 1 + (Array.isArray(r.plus_ones) ? r.plus_ones.length : 0)
+      if (need > free) break
+      ids.push(r.id); free -= need
+    }
   } else {
     return json({ error: 'Bad request' }, 400)
   }
@@ -78,6 +85,13 @@ Deno.serve(async (req) => {
       const res = await sendQrEmailsForAttendees(sb, branded, [out.attendee])
       if (res.some(r => r.status === 'error')) console.error('checkin-held: QR email failed, attendee', out.attendee.id)
       else emailed++
+      // (114) Their plus-ones' tickets go to them too.
+      const plus = Array.isArray(out.plus_ones) ? out.plus_ones : []
+      if (plus.length && out.attendee.email) {
+        const pr = await sendQrEmailsForAttendees(sb, branded, plus.map((p: { id: string; first_name: string; qr_token: string }) => ({ ...p, email: null })),
+          { overrideTo: out.attendee.email, guestOf: out.attendee.first_name })
+        if (pr.some(r => r.status === 'error')) console.error('checkin-held: plus-one QR email failed, guest', out.attendee.id)
+      }
     }
   }
   console.log('checkin-held:', body.action, 'released', released, 'emailed', emailed, 'event', event_id)

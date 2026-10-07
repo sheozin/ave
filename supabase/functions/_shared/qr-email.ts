@@ -69,7 +69,7 @@ export function generateQrDataUrl(token: string): string {
   return qr.createDataURL()
 }
 
-function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string): string {
+function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string, guestOf?: string): string {
   const safeName = escapeHtml(event.name)
   const safeFirstName = escapeHtml(attendee.first_name)
   const venueLine = event.venue ? ` &middot; ${escapeHtml(event.venue)}` : ''
@@ -94,8 +94,11 @@ function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDat
         <div style="color:#6b7280;font-size:12px;margin-top:6px;">${formatEventDate(event.date)}${venueLine}</div>
       </div>
       <div style="padding:28px 24px;color:#374151;">
-        <p style="margin:0 0 8px;font-size:15px;">Hi ${safeFirstName},</p>
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">Show this QR code at the entrance to check in — no need to print anything, your phone screen works fine.</p>
+        ${guestOf
+          ? `<p style="margin:0 0 8px;font-size:15px;">Hi ${escapeHtml(guestOf)},</p>
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">This is the check-in QR code for <b>${safeFirstName}</b>, who is coming with you. Forward it to them, or show it at the entrance together.</p>`
+          : `<p style="margin:0 0 8px;font-size:15px;">Hi ${safeFirstName},</p>
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">Show this QR code at the entrance to check in — no need to print anything, your phone screen works fine.</p>`}
         <div style="text-align:center;margin:0 0 20px;">
           <img src="${qrDataUrl}" width="160" height="160" alt="Your check-in QR code" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
         </div>
@@ -123,7 +126,9 @@ export async function sendQrEmailsForAttendees(
   // overrideTo: deliver to this address instead (the organizer's own
   // "send a test to myself"). recordSent false: do not stamp
   // qr_email_sent_at, because the guest has not been emailed.
-  opts: { overrideTo?: string; recordSent?: boolean } = {},
+  // guestOf: these are plus-ones (migration 114) and overrideTo is the
+  // guest who brought them; the email says whose ticket it is.
+  opts: { overrideTo?: string; recordSent?: boolean; guestOf?: string } = {},
 ): Promise<QrEmailResult[]> {
   const results: QrEmailResult[] = []
 
@@ -142,11 +147,11 @@ export async function sendQrEmailsForAttendees(
     try {
       const safeFrom = event.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck'
       const qrDataUrl = generateQrDataUrl(attendee.qr_token)
-      const html = renderQrEmailHtml(event, attendee, qrDataUrl)
+      const html = renderQrEmailHtml(event, attendee, qrDataUrl, opts.guestOf)
 
       const { error } = await sendEmail({
         to,
-        subject: `Your check-in QR code — ${event.name}`,
+        subject: opts.guestOf ? `Ticket for ${attendee.first_name}: ${event.name}` : `Your check-in QR code — ${event.name}`,
         html,
         fromName: `${safeFrom} Check-in`,
       })

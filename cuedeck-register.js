@@ -3,7 +3,7 @@
 // pure helpers come from /checkin-register.js; the server is
 // checkin-register. Design approved 2026-10-06.
 import {
-  validateRegistration, fieldMessage, formatEventDate, isRegistrationCode,
+  validateRegistration, validatePlusOnes, fieldMessage, formatEventDate, isRegistrationCode,
   palette, tzLabel, initials, buildIcs, googleCalUrl, outlookCalUrl, mapsUrl,
 } from '/checkin-register.js';
 
@@ -237,6 +237,39 @@ function loadTurnstile(siteKey) {
   });
 }
 
+// ── plus-ones (migration 114) ──
+// Hidden for a paid ticket: each person buys their own.
+function plusAllowed() {
+  const max = config.plus_ones || 0;
+  const tid = $('form').elements.ticket_type_id ? $('form').elements.ticket_type_id.value : '';
+  const t = (config.tickets || []).find(x => x.id === tid);
+  return t && t.price_cents > 0 && !config.test ? 0 : max;
+}
+function renderPlus() {
+  const max = plusAllowed();
+  $('plus').hidden = !max;
+  if (!max) { $('plus-rows').replaceChildren(); return; }
+  $('plus-max').textContent = '(up to ' + max + ')';
+  while ($('plus-rows').children.length > max) $('plus-rows').lastElementChild.remove();
+  $('plus-add').hidden = $('plus-rows').children.length >= max;
+}
+function addPlusRow() {
+  const i = $('plus-rows').children.length;
+  const row = el('div', { class: 'plus-row', 'data-f': 'plus:' + i });
+  const f = el('input', { type: 'text', maxlength: '80', autocomplete: 'off', placeholder: 'First name', 'aria-label': 'Guest ' + (i + 1) + ' first name' });
+  const l = el('input', { type: 'text', maxlength: '80', autocomplete: 'off', placeholder: 'Last name', 'aria-label': 'Guest ' + (i + 1) + ' last name' });
+  const x = el('button', { type: 'button', class: 'x', 'aria-label': 'Remove guest ' + (i + 1) }, '×');
+  x.addEventListener('click', () => { row.remove(); [...$('plus-rows').children].forEach((r, k) => r.setAttribute('data-f', 'plus:' + k)); renderPlus(); });
+  row.append(f, l, x);
+  $('plus-rows').append(row);
+  renderPlus();
+  f.focus();
+}
+$('plus-add').addEventListener('click', addPlusRow);
+function plusValues() {
+  return [...$('plus-rows').children].map(r => { const [f, l] = r.querySelectorAll('input'); return { first_name: f.value, last_name: l.value }; });
+}
+
 // ── tickets (paid tickets, migration 109) ──
 function renderTickets(list) {
   const box = $('tix-list');
@@ -249,6 +282,7 @@ function renderTickets(list) {
     hidden.value = t.id;
     for (const x of box.querySelectorAll('.tix-o')) x.setAttribute('aria-checked', String(x === b));
     $('tix-pay').hidden = !(t.price && !config.test);
+    renderPlus();
     $('tix').classList.remove('bad'); $('tix').querySelector('.err').textContent = '';
   };
   const buyable = list.filter(t => !t.sold_out && t.on_sale);
@@ -304,6 +338,7 @@ function formValues() {
     email: f.elements.email.value, company: f.elements.company.value,
     answers, consent: f.elements.consent.checked,
     ticket_type_id: f.elements.ticket_type_id ? f.elements.ticket_type_id.value : '',
+    plus_ones: plusAllowed() ? plusValues() : [],
   };
 }
 function message(text) { $('msg').textContent = text; $('msg').hidden = false; }
@@ -314,8 +349,10 @@ $('form').addEventListener('submit', async (ev) => {
   const v = formValues();
   const { errors } = validateRegistration(v, config.questions);
   const noTicket = ticketMissing();
-  if (errors.length) markErrors(errors);
-  if (noTicket || errors.length) return;
+  const plusErr = validatePlusOnes(v.plus_ones, plusAllowed()).errors;
+  if (errors.length || plusErr.length) markErrors([...errors, ...plusErr]);
+  if (plusErr.length) $('plus').querySelector('.err').textContent = plusErr.includes('plus_too_many') ? 'That is more guests than this event allows.' : 'Please enter each guest\'s first and last name in letters.';
+  if (noTicket || errors.length || plusErr.length) return;
   const btn = $('submit');
   btn.disabled = true; btn.textContent = 'Registering…';
   try {
@@ -341,7 +378,11 @@ $('form').addEventListener('submit', async (ev) => {
     if (b.status === 'sold_out') return message('That ticket has just sold out. Please choose another.');
     if (b.status === 'bad_ticket') return message('That ticket is no longer available. Reload the page and choose another.');
     if (r.status === 404) return closed(...NOT_ACTIVE);
-    if (r.status === 400 && Array.isArray(b.fields)) { markErrors(b.fields); return; }
+    if (r.status === 400 && Array.isArray(b.fields)) {
+      markErrors(b.fields);
+      if (b.fields.some(f => String(f).startsWith('plus'))) $('plus').querySelector('.err').textContent = 'Please check the names of your guests.';
+      return;
+    }
     message(b.error || 'Registration failed. Please try again.');
   } catch {
     message('Could not reach the server. Check your connection and try again.');
@@ -362,7 +403,7 @@ const dropToken = () => {
 };
 const NOT_YET = 'Your link keeps working: open it again later to finish.';
 
-function showTicket(first, t) {
+function showTicket(first, t, plusTickets) {
   const e = config.event || {}, pg = config.page || {};
   $('tk-h').textContent = first ? 'You are registered, ' + first : 'You are registered';
   $('tk-host').textContent = pg.host_name || '';
@@ -373,6 +414,15 @@ function showTicket(first, t) {
   $('tk-venue').textContent = e.venue || '';
   $('tk-qr').src = t.qr_svg; $('tk-code').textContent = t.code || '';
   $('tk-cal').hidden = !calInfo();
+  // (114) The plus-ones' tickets, under the guest's own.
+  $('tk-plus').replaceChildren(...(plusTickets || []).map(p => {
+    const box = el('div', { class: 'ticket' });
+    const tt = el('div', { class: 'tt' }); tt.append(el('span', null, 'Guest of ' + (t.first_name || '')), el('b', null, [p.first_name, p.last_name].filter(Boolean).join(' ')));
+    const qr = el('div', { class: 'qr' }); const img = el('img', { alt: 'QR code for ' + p.first_name }); img.src = p.qr_svg;
+    qr.append(img, el('span', { class: 'code' }, p.code || ''));
+    box.append(tt, el('div', { class: 'perf' }), qr);
+    return box;
+  }));
   card('ticket');
 }
 
@@ -416,7 +466,7 @@ $('cf-btn').addEventListener('click', async () => {
       return;
     }
     if (r.status === 200 && b.status === 'registered') {
-      if (b.ticket && b.ticket.qr_svg) return showTicket(b.first_name, b.ticket);
+      if (b.ticket && b.ticket.qr_svg) return showTicket(b.first_name, b.ticket, b.plus_tickets);
       $('done-h').textContent = b.first_name ? 'You are registered, ' + b.first_name : 'You are registered';
       $('done-p').textContent = 'Your QR code is on its way by email. Show it at the entrance to check in. If it has not arrived in 10 minutes, check your spam folder.';
       card('done');
@@ -504,6 +554,7 @@ $('cf-no').addEventListener('click', async () => {
   if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
   renderQuestions(config.questions);
   renderTickets(config.tickets || []);
+  renderPlus();
   card('open');
   await loadTurnstile(config.turnstile_site_key);
 })();
