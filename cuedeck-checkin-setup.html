@@ -268,6 +268,17 @@
       <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
+    <h3 class="sc-h">Waitlist and approval</h3>
+    <div class="toggle"><div><b>Waitlist when full</b><p>When you reach capacity, guests can join a waitlist. Offer them places from the list below and their ticket is emailed.</p></div><label class="sw"><input type="checkbox" id="rg-waitlist"><span></span></label></div>
+    <div class="toggle"><div><b>Approve each registration</b><p>Registrations wait here for you. Guests get their ticket only once you approve them.</p></div><label class="sw"><input type="checkbox" id="rg-approval"><span></span></label></div>
+    <div class="err" id="held-err"></div><div class="ok" id="held-ok"></div>
+    <div id="held-box" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <b id="held-title" style="font-size:14px"></b>
+        <button class="btn btn-s" id="held-fill" type="button" hidden>Offer free places to the waitlist</button>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl" style="margin-top:8px"><thead><tr><th>Guest</th><th class="hide-sm">Company</th><th>Waiting for</th><th></th></tr></thead><tbody id="held-body"></tbody></table></div>
+    </div>
     <h3 class="sc-h">Limits</h3>
     <div class="row2" style="gap:12px">
       <div class="field"><label for="rg-cap">Capacity</label><input id="rg-cap" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
@@ -483,7 +494,7 @@ function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['overview', 'details', 'attendees', 'register', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: renderRegister, branding: () => { renderDesign(); renderPreview(); },
+  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
@@ -536,7 +547,8 @@ function renderOverview() {
   $('ov-reg-link').textContent = code ? location.origin.replace(/^https?:\/\//, '') + '/r/' + code : 'Not set up yet';
   $('ov-reg-copy').hidden = !code || !on; $('ov-reg-open').hidden = !code || !on;
   if (code) $('ov-reg-open').href = '/r/' + code;
-  $('ov-reg-sub').textContent = on ? web + ' registered here' + (ENT.registration_capacity ? ' · capacity ' + ENT.registration_capacity : '') : 'Turned off. Turn it on under Registration.';
+  $('ov-reg-sub').textContent = on ? web + ' registered here' + (ENT.registration_capacity ? ' · capacity ' + ENT.registration_capacity : '')
+    + (HELD.length ? ' · ' + HELD.length + ' waiting for you' : '') : 'Turned off. Turn it on under Registration.';
   markInto($('ov-brand-mark'), ENT.registration_logo_path, ENT.registration_host_name || EV.name, brandColor());
   $('ov-brand-host').textContent = ENT.registration_host_name || 'No host name yet';
   $('ov-brand-sub').textContent = brandSet ? 'Logo, cover or colour set' : 'Using the default look';
@@ -845,6 +857,62 @@ let RG_QS = [];
 const rgUrl = (code) => location.origin + '/r/' + code;
 const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
 const newQid = () => 'q' + Array.from(crypto.getRandomValues(new Uint8Array(4)), b => b.toString(16).padStart(2, '0')).join('').slice(0, 7);
+
+// ── waitlist and approval (migration 108) ──
+let HELD = [];
+async function loadHeld() {
+  const { data, error } = await sb.rpc('checkin_held_list', { p_event_id: EVENT_ID });
+  if (error) { $('held-err').textContent = error.message; HELD = []; return; }
+  HELD = data || [];
+}
+const sinceText = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
+function renderHeld() {
+  $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
+  const wl = HELD.filter(h => h.kind === 'waitlist').length, ap = HELD.length - wl;
+  $('held-box').hidden = !HELD.length;
+  $('held-title').textContent = [ap ? ap + ' awaiting approval' : '', wl ? wl + ' on the waitlist' : ''].filter(Boolean).join(' · ');
+  $('held-fill').hidden = !wl || !ENT.registration_capacity;
+  $('held-body').replaceChildren(...HELD.map(h => {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('div', 'nm', h.first_name + ' ' + h.last_name), el('div', 'em', h.email));
+    const kind = el('td'); kind.append(el('span', 'tag ' + (h.kind === 'waitlist' ? 't-wait' : 't-sent'), h.kind === 'waitlist' ? 'Waitlist' : 'Approval'), el('div', 'em', sinceText(h.created_at)));
+    const acts = el('td'); acts.style.whiteSpace = 'nowrap';
+    const go_ = el('button', 'btn btn-s', h.kind === 'waitlist' ? 'Offer a place' : 'Approve'); go_.type = 'button';
+    go_.onclick = () => heldAction('release', h.id, go_);
+    const rm = el('button', 'link', 'Remove'); rm.type = 'button'; rm.style.marginLeft = '10px';
+    let armed = null;
+    rm.onclick = async () => {
+      if (!armed) { rm.textContent = 'Click again'; armed = setTimeout(() => { armed = null; rm.textContent = 'Remove'; }, 3500); return; }
+      clearTimeout(armed);
+      const { error } = await sb.rpc('checkin_held_remove', { p_event_id: EVENT_ID, p_held_id: h.id });
+      if (error) { $('held-err').textContent = error.message; return; }
+      await loadHeld(); renderHeld(); renderChrome();
+    };
+    acts.append(go_, rm);
+    tr.append(who, el('td', 'hide-sm', h.company || ''), kind, acts);
+    return tr;
+  }));
+}
+async function heldAction(action, heldId, btn) {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  const { data, error } = await sb.functions.invoke('checkin-held', { body: { event_id: EVENT_ID, action, held_id: heldId } });
+  if (error) { $('held-err').textContent = await fnError(error); if (btn) btn.disabled = false; renderHeld(); return; }
+  $('held-ok').textContent = data.released
+    ? data.released + (data.released === 1 ? ' guest' : ' guests') + ' added to your guest list' + (isLive() ? ', ticket emailed.' : '. Test mode sends no email.')
+    : 'No free places to fill. Raise the capacity first.';
+  await Promise.all([loadHeld(), loadAttendees()]);
+  renderHeld(); renderChrome();
+}
+$('held-fill').onclick = () => heldAction('fill', null, $('held-fill'));
+async function saveFlow() {
+  $('held-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_registration_flow', { p_event_id: EVENT_ID, p_waitlist: $('rg-waitlist').checked, p_approval: $('rg-approval').checked });
+  if (error) { $('held-err').textContent = error.message; renderHeld(); return; }
+  ENT.registration_waitlist = data.waitlist; ENT.registration_approval = data.approval;
+  $('held-ok').textContent = 'Saved.';
+}
+$('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
 
 function renderRegister() {
   const on = !!ENT.registration_enabled;
@@ -1272,7 +1340,7 @@ async function waitForLive() {
     const staff = loadStaff();
     staff.catch(() => {});
     if (!(await loadEvent())) return;
-    await Promise.all([loadAttendees(), staff]);
+    await Promise.all([loadAttendees(), staff, can(ROLE, 'test_setup') ? loadHeld() : null]);
   } catch (e) { $('page-loading').hidden = true; $('page-err').textContent = 'Could not load this event: ' + e.message; return; }
   $('page-loading').hidden = true;
   $('layout').hidden = false; renderChrome();

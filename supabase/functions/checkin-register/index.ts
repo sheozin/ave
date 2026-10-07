@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
   if (body.action === 'config') {
     // The same closing rules checkin_web_register applies; the database is
     // the authority at submit time, this is so the page can say so first.
-    let state: 'open' | 'closed' | 'full' = 'open'
+    let state: 'open' | 'closed' | 'full' | 'waitlist' = 'open'
     const closeAt = ent.registration_closes_at ? Date.parse(ent.registration_closes_at) : NaN
     if (!Number.isNaN(closeAt) && Date.now() >= closeAt) state = 'closed'
     // Guarded like the SQL: an event without a date or timezone has no window to close.
@@ -146,7 +146,8 @@ Deno.serve(async (req) => {
         .select('id', { count: 'exact', head: true }).eq('event_id', ent.event_id).eq('is_test', test)
       if (!error) {
         placesLeft = Math.max(0, ent.registration_capacity - (count ?? 0))
-        if (state === 'open' && placesLeft === 0) state = 'full'
+        // (108) Full with a waitlist: the page offers the waitlist instead.
+        if (state === 'open' && placesLeft === 0) state = ent.registration_waitlist ? 'waitlist' : 'full'
       }
     }
     // The page's design (migration 104). Only the brand colour falls back
@@ -167,7 +168,7 @@ Deno.serve(async (req) => {
       programme = (rows ?? []).map(r => ({ time: hhmm(r.scheduled_start ?? r.planned_start), title: r.title, room: r.room ?? null, speaker: r.speaker ?? null }))
     }
     return json({
-      state, test, places_left: placesLeft,
+      state, test, places_left: placesLeft, approval: !!ent.registration_approval,
       event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
@@ -244,6 +245,11 @@ Deno.serve(async (req) => {
     }
     const status = String(out.status)
     if (status === 'not_found') return json({ error: 'not_found' }, 404)
+    // (108) Held on the waitlist or for approval: no ticket yet.
+    if (status === 'waitlisted' || status === 'awaiting_approval') {
+      console.log('checkin-register: confirmed into ' + status + ', event', ent.event_id)
+      return json({ status, first_name: String(out.first_name ?? ''), position: typeof out.position === 'number' ? out.position : null })
+    }
     if (status !== 'registered' && status !== 'already') return json({ status })
     const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null } | null
     // 'already': the owner of an address already on the list gets their QR
@@ -333,7 +339,8 @@ Deno.serve(async (req) => {
     // One answer for a new and an already listed address (security review of 101).
     console.log('checkin-register: test registration (' + status + '), event', ent.event_id)
     await pad()
-    return json({ status: 'ok', test: true })
+    const held = status === 'waitlisted' ? 'waitlist' : status === 'awaiting_approval' ? 'approval' : null
+    return json(held ? { status: 'ok', test: true, held } : { status: 'ok', test: true })
   }
 
   if (out.send === true) {

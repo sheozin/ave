@@ -170,7 +170,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -221,6 +221,7 @@ const ALLOWED: Record<string, Who[]> = {
   'checkin-kiosk-pair': ['owner', 'organizer', 'lead'],
   'checkin-record-scans': ['owner', 'organizer', 'lead', 'crew'],
   'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
+  'checkin-held': ['owner', 'organizer'],
 }
 const BODY: Record<string, Row> = {
   'checkin-create-checkout': { event_id: EVENT },
@@ -229,6 +230,7 @@ const BODY: Record<string, Row> = {
   'checkin-kiosk-pair': { action: 'mint', event_id: EVENT, label: 'Lobby' },
   'checkin-record-scans': { event_id: EVENT, items: [] },
   'checkin-add-walk-in': { event_id: EVENT, first_name: 'Ewa', last_name: 'Sample' },
+  'checkin-held': { event_id: EVENT, action: 'fill' },
 }
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -1127,4 +1129,26 @@ Deno.test('checkin-send-qr-emails: the guest email carries the event brand (Even
   assert(html.includes('border-top:4px solid #0F766E'), 'colour ' + html.slice(0, 300))
   assert(html.includes('/storage/v1/object/public/checkin-public/' + EVENT + '/logo-abcdef12.png'), 'logo')
   assert(html.includes('Northwind &lt;Events&gt;') && !html.includes('<Events>'), 'host escaped')
+})
+
+Deno.test('checkin-held: releasing a held guest on a live event emails their ticket', async () => {
+  setup('organizer', { ent: { checkin_core: true, status: 'live', registration_capacity: 10 } })
+  world.rpcResult.checkin_web_release_held = { status: 'released', kind: 'waitlist', is_test: false,
+    attendee: { id: 'c1000000-0000-4000-8000-000000000001', first_name: 'Wes', email: 'wes@stub.test', qr_token: 'tok00000000000000000000000000009', qr_email_sent_at: null } }
+  const r = await call('checkin-held', { event_id: EVENT, action: 'release', held_id: 'd1000000-0000-4000-8000-000000000001' })
+  assert(r.status === 200 && r.body.released === 1 && r.body.emailed === 1, JSON.stringify(r))
+  assert(world.rpcCalls.some(c => c.name === 'checkin_web_release_held'), 'rpc not called')
+  assert(String(world.emails?.[0]?.to) === 'wes@stub.test', 'no email to the guest')
+})
+Deno.test('checkin-held: test mode releases without emailing', async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'test', registration_capacity: 10 } })
+  world.rpcResult.checkin_web_release_held = { status: 'released', kind: 'approval', is_test: true,
+    attendee: { id: 'c1000000-0000-4000-8000-000000000002', first_name: 'Ada', email: 'ada@stub.test', qr_token: 'tok00000000000000000000000000008', qr_email_sent_at: null } }
+  const r = await call('checkin-held', { event_id: EVENT, action: 'release', held_id: 'd1000000-0000-4000-8000-000000000002' })
+  assert(r.status === 200 && r.body.released === 1 && r.body.emailed === 0 && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test('checkin-held: a bad held id or action is a 400', async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live' } })
+  assert((await call('checkin-held', { event_id: EVENT, action: 'release', held_id: 'nope' })).status === 400, 'held id')
+  assert((await call('checkin-held', { event_id: EVENT, action: 'promote' })).status === 400, 'action')
 })

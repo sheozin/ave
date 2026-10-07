@@ -234,3 +234,45 @@ test('an event with no times, venue or description hides those parts', async ({ 
   await expect(page.locator('#left')).toBeHidden();
   await expect(page.locator('#mark')).toHaveText('BE');
 });
+
+// ── waitlist and approval (migration 108) ───────────────────────────
+test('a full event with a waitlist offers the waitlist, and confirming says so with the position', async ({ page }) => {
+  const sent = await setup(page, { config: CONFIG({ state: 'waitlist', places_left: 0 }),
+    confirm: () => ({ body: { status: 'waitlisted', first_name: 'Maya', position: 3 } }) });
+  await page.goto(URL_);
+  await expect(page.locator('#open h2')).toHaveText('Join the waitlist');
+  await expect(page.locator('#submit')).toHaveText('Join the waitlist');
+  await expect(page.locator('#flow-note')).toContainText('This event is full');
+  await expect(page.locator('#left')).toBeHidden();
+  await fill(page);
+  await page.click('#submit');
+  await expect(page.locator('#done')).toBeVisible();
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent.some(b => b.action === 'register')).toBe(true);
+  const p2 = await page.context().newPage();
+  await setup(p2, { config: CONFIG({ state: 'waitlist' }), confirm: () => ({ body: { status: 'waitlisted', first_name: 'Maya', position: 3 } }) });
+  await p2.goto(URL_ + '#t=' + TOKEN);
+  await p2.click('#cf-btn');
+  await expect(p2.locator('#done-h')).toHaveText('You are on the waitlist, Maya');
+  await expect(p2.locator('#done-p')).toContainText('You are number 3 on the waitlist');
+});
+
+test('approval: the form says so, and confirming says the ticket follows approval', async ({ page }) => {
+  await setup(page, { config: CONFIG({ approval: true }), confirm: () => ({ body: { status: 'awaiting_approval', first_name: 'Maya' } }) });
+  await page.goto(URL_);
+  await expect(page.locator('#flow-note')).toContainText('The organizer reviews each registration');
+  const p2 = await page.context().newPage();
+  await setup(p2, { config: CONFIG({ approval: true }), confirm: () => ({ body: { status: 'awaiting_approval', first_name: 'Maya' } }) });
+  await p2.goto(URL_ + '#t=' + TOKEN);
+  await p2.click('#cf-btn');
+  await expect(p2.locator('#done-h')).toHaveText('Thanks, Maya');
+  await expect(p2.locator('#done-p')).toContainText('once yours is approved');
+});
+
+test('test mode: a waitlisted test registration says so', async ({ page }) => {
+  await setup(page, { config: CONFIG({ test: true, state: 'waitlist' }), register: () => ({ body: { status: 'ok', test: true, held: 'waitlist' } }) });
+  await page.goto(URL_);
+  await fill(page);
+  await page.click('#submit');
+  await expect(page.locator('#done-h')).toHaveText('Added to the waitlist (test)');
+});

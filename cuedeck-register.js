@@ -120,7 +120,15 @@ function renderEvent() {
     return row;
   }));
 
-  $('left').hidden = config.places_left == null;
+  // (108) Full with a waitlist: the same form, joining the waitlist.
+  const wl = config.state === 'waitlist';
+  document.querySelector('#open .card-h h2').textContent = wl ? 'Join the waitlist' : 'Register';
+  $('submit').textContent = wl ? 'Join the waitlist' : 'Register';
+  $('flow-note').hidden = !(wl || config.approval);
+  $('flow-note').textContent = wl
+    ? 'This event is full. Join the waitlist and your ticket is emailed to you if a place opens up.'
+    : 'The organizer reviews each registration. Your ticket is emailed to you once it is approved.';
+  $('left').hidden = config.places_left == null || wl;
   $('left').textContent = config.places_left == null ? '' : config.places_left + (config.places_left === 1 ? ' place left' : ' places left');
   $('test-note').hidden = !config.test;
   // The consent names "the organizer", not the host shown on the page: the
@@ -266,7 +274,10 @@ $('form').addEventListener('submit', async (ev) => {
     const b = r.body;
     if (r.status === 200 && b.status === 'check_email') { card('done'); return; }
     if (r.status === 200 && b.status === 'ok') {
-      if (b.test) {
+      if (b.test && b.held) {
+        $('done-h').textContent = b.held === 'waitlist' ? 'Added to the waitlist (test)' : 'Awaiting approval (test)';
+        $('done-p').textContent = 'Test mode sends no email. The organizer finds this guest in the Event admin, under Registration.';
+      } else if (b.test) {
         $('done-h').textContent = 'Test registration recorded';
         $('done-p').textContent = 'Test mode sends no email. The organizer finds this guest in Setup, under Attendees, and test guests are cleared when the event goes live.';
       }
@@ -282,7 +293,7 @@ $('form').addEventListener('submit', async (ev) => {
   } catch {
     message('Could not reach the server. Check your connection and try again.');
   } finally {
-    btn.disabled = false; btn.textContent = 'Register';
+    btn.disabled = false; btn.textContent = config.state === 'waitlist' ? 'Join the waitlist' : 'Register';
     tsToken = '';
     if (tsWidget != null && window.turnstile) window.turnstile.reset(tsWidget);
   }
@@ -315,6 +326,15 @@ $('cf-btn').addEventListener('click', async () => {
     const r = await call({ action: 'confirm', token });
     const b = r.body;
     dropToken();
+    if (r.status === 200 && (b.status === 'waitlisted' || b.status === 'awaiting_approval')) {
+      const who = b.first_name ? ', ' + b.first_name : '';
+      $('done-h').textContent = b.status === 'waitlisted' ? 'You are on the waitlist' + who : 'Thanks' + who;
+      $('done-p').textContent = b.status === 'waitlisted'
+        ? (b.position ? 'You are number ' + b.position + ' on the waitlist. ' : '') + 'If a place opens up, your ticket arrives by email.'
+        : 'The organizer reviews each registration. Your ticket arrives by email once yours is approved.';
+      card('done');
+      return;
+    }
     if (r.status === 200 && b.status === 'registered') {
       if (b.ticket && b.ticket.qr_svg) return showTicket(b.first_name, b.ticket);
       $('done-h').textContent = b.first_name ? 'You are registered, ' + b.first_name : 'You are registered';
@@ -374,6 +394,7 @@ $('cf-no').addEventListener('click', async () => {
     return card('confirm');
   }
   if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
+  // 'waitlist' falls through to the form: the guest joins the waitlist.
   if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');
   renderQuestions(config.questions);
   card('open');
