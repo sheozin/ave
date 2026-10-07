@@ -574,3 +574,27 @@ test('emails tab: automatic reminder and thank-you settings save, and a test goe
   await expect(page.locator('#rm-ok')).toContainText('Sent to probe@cuedeck-test.io');
   expect(tests[0]).toMatchObject({ event_id: EVENT_ID, action: 'test', kind: 'thankyou' });
 });
+
+test('badges tab: the designer previews at the stock size and saves the design', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [{ id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso', ticket_type: 'VIP', is_test: true, source: 'web', created_at: FIXED_NOW.toISOString() }]);
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 0, payout: { connected: false, charges_enabled: false, details_submitted: false }, types: [], revenue: {} });
+    await rpc(page, 'checkin_orders_list', []);
+    await rpc(page, 'checkin_set_badge_design', (a) => { saved.push(a); return a.p_design; });
+  });
+  await expect(page.locator('#p-badges')).toBeVisible();
+  await expect(page.locator('#bd-size')).toHaveValue('100x70');
+  const badge = page.locator('#bd-prev .badge').first();
+  await expect(badge).toContainText('Maya Lindqvist');
+  await page.selectOption('#bd-size', '148x105');
+  await expect(badge).toHaveAttribute('style', /width: 148mm; height: 105mm/);
+  await page.locator('#bd-qr').evaluate((e: HTMLInputElement) => e.click());
+  await expect(badge.locator('svg')).toHaveCount(1);
+  await page.locator('#bd-name button[data-v="split"]').click();
+  await expect(page.locator('#bd-colors .row', { hasText: 'VIP' })).toBeVisible();
+  await page.locator('#bd-colors .row', { hasText: 'VIP' }).locator('input[type=color]').fill('#c9a227');
+  await page.click('#bd-save');
+  await expect(page.locator('#bd-ok')).toContainText('Saved.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_design: { w: 148, h: 105, qr: true, name: 'split', colors: { VIP: '#C9A227' } } });
+});
