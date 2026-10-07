@@ -301,6 +301,11 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="search" id="rg-link" readonly style="flex:1;min-width:220px"><button class="btn btn-s" id="rg-copy" type="button">Copy</button><a class="btn btn-s" id="rg-open" target="_blank" rel="noopener">Open</a></div>
       </div>
       <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">Put the form on your own website</summary>
+        <p class="small" style="margin:8px 0">Paste this where the form should appear. It fits itself to your page, and confirmation emails and payments still open on CueDeck's own page.</p>
+        <textarea id="rg-embed" readonly rows="4" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;border-radius:10px;padding:10px;border:1px solid var(--bd2);background:var(--wm)"></textarea>
+        <p style="margin:8px 0 0;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s" id="rg-embed-copy" type="button">Copy code</button><a class="btn btn-s" id="rg-embed-open" target="_blank" rel="noopener">Preview</a></p>
+      </details>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
     <h3 class="sc-h">Who can register</h3>
@@ -1128,6 +1133,11 @@ async function saveFlow() {
   ENT.registration_waitlist = data.waitlist; ENT.registration_approval = data.approval;
   $('held-ok').textContent = 'Saved.';
 }
+$('rg-embed-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('rg-embed').value); $('rg-embed-copy').textContent = 'Copied'; }
+  catch { $('rg-embed').select(); }
+  setTimeout(() => { $('rg-embed-copy').textContent = 'Copy code'; }, 1800);
+};
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
 $('rg-invite').onchange = async () => {
   $('held-err').textContent = ''; $('held-ok').textContent = '';
@@ -1376,7 +1386,14 @@ function renderRegister() {
   $('rg-on').checked = on;
   $('rg-state').textContent = on ? 'On. Anyone with the link can register.' : (ENT.registration_code ? 'Off. The link shows "not active" until you turn it back on.' : 'Off. Turn it on to get a link you can share.');
   $('rg-linkbox').hidden = !ENT.registration_code;
-  if (ENT.registration_code) { $('rg-link').value = rgUrl(ENT.registration_code); $('rg-open').href = rgUrl(ENT.registration_code); }
+  if (ENT.registration_code) {
+    $('rg-link').value = rgUrl(ENT.registration_code); $('rg-open').href = rgUrl(ENT.registration_code);
+    // The embed (vercel.json /e/): the form card in an iframe, sized by /embed.js.
+    const src = location.origin + '/e/' + ENT.registration_code;
+    const title = ('Register: ' + (EV.name || 'event')).replace(/[<>"&]/g, '');
+    $('rg-embed').value = '<iframe src="' + src + '" title="' + title + '" style="width:100%;max-width:560px;border:0;min-height:700px" loading="lazy"></iframe>\n<script src="' + location.origin + '/embed.js" async></' + 'script>';
+    $('rg-embed-open').href = src;
+  }
   $('rg-test').hidden = isLive();
   $('rg-cap').value = ENT.registration_capacity ?? '';
   $('rg-close').value = toLocalInput(ENT.registration_closes_at);

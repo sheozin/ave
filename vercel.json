@@ -11,7 +11,8 @@
     { "source": "/checkin/dashboard", "destination": "/cuedeck-checkin-dashboard.html" },
     { "source": "/checkin/report",    "destination": "/cuedeck-checkin-report.html" },
     { "source": "/checkin/scan",      "destination": "/cuedeck-scanner.html" },
-    { "source": "/r/:code",           "destination": "/cuedeck-register.html" }
+    { "source": "/r/:code",           "destination": "/cuedeck-register.html" },
+    { "source": "/e/:code",           "destination": "/cuedeck-register.html" }
   ],
   "redirects": [
     { "source": "/kiosk", "destination": "/checkin/desk?mode=kiosk", "permanent": false }
@@ -29,7 +30,16 @@
       ]
     },
     {
-      "source": "/(.*)",
+      "source": "/e/(.*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src https://sawekpguemzvuvvulfbc.supabase.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://sawekpguemzvuvvulfbc.supabase.co; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors https:" },
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/((?!e/).*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options",        "value": "SAMEORIGIN" },

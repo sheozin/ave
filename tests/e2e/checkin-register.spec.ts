@@ -427,3 +427,23 @@ test('invite-only: the public page explains instead of showing a form; with appr
   await expect(page.locator('#open .card-h h2')).toHaveText('Request an invitation');
   await expect(page.locator('#submit')).toHaveText('Send my request');
 });
+
+// ── On the organizer's website (/e/) ──
+test('embedded: the form card only, sized by embed.js, and links from emails never run framed', async ({ page }) => {
+  const sent = await setup(page);
+  // A host page on another origin would be the organizer's site; here the
+  // local server plays both, which is enough for the height handshake.
+  await page.route('http://127.0.0.1:7271/host.html', r => r.fulfill({ contentType: 'text/html', body:
+    '<!doctype html><body style="margin:0"><iframe id="f" src="/cuedeck-register.html?code=' + CODE + '&embed=1#t=' + 'T'.repeat(43) + '" style="width:420px;border:0;height:150px"></iframe>'
+    + '<script src="/embed.js"></script></body>' }));
+  await page.goto('/host.html');
+  const f = page.frameLocator('#f');
+  await expect(f.locator('#open')).toBeVisible();
+  await expect(f.locator('.hero')).toBeHidden();
+  await expect(f.locator('#embed-ev')).toContainText('Northwind Summit 2026');
+  // The #t= token was ignored: no confirmation screen inside the frame.
+  await expect(f.locator('#confirm')).toBeHidden();
+  expect(sent.filter(b => b.action === 'confirm' || b.action === 'preview')).toHaveLength(0);
+  // embed.js grew the frame to the form.
+  await expect.poll(async () => (await page.locator('#f').boundingBox())!.height).toBeGreaterThan(500);
+});

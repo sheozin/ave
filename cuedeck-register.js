@@ -16,17 +16,29 @@ const money = (cents, cur) => {
 };
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-// /r/<code>, or ?code= when served from a dev server without the rewrite.
-const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
+// /r/<code> (the page) or /e/<code> (embedded on the organizer's site), or
+// ?code= when served from a dev server without the rewrite.
+const code = (location.pathname.match(/^\/[re]\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
+// Embedded: the form card only, its height reported to the host page
+// (/embed.js). Links from emails (#t=, #i=) and payment never run framed:
+// they open on CueDeck's own page, where nobody can overlay them.
+const EMBED = /^\/e\//.test(location.pathname) || new URLSearchParams(location.search).get('embed') === '1';
+if (EMBED) {
+  document.body.classList.add('embed');
+  for (const a of document.querySelectorAll('a')) { a.target = '_blank'; a.rel = 'noopener'; }
+  const post = () => { try { parent.postMessage({ type: 'cuedeck:height', height: Math.ceil(document.documentElement.scrollHeight) }, '*'); } catch { /* not framed */ } };
+  new ResizeObserver(post).observe(document.documentElement);
+  addEventListener('load', post);
+}
 // The emailed link carries its token in the fragment (#t=), which browsers never send to a server.
-let token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+let token = EMBED ? '' : new URLSearchParams(location.hash.slice(1)).get('t') || '';
 // (116) A personal invitation link: /r/<code>#i=<token>.
-const inviteToken = new URLSearchParams(location.hash.slice(1)).get('i') || '';
+const inviteToken = EMBED ? '' : new URLSearchParams(location.hash.slice(1)).get('i') || '';
 // Back from Stripe Checkout (paid tickets): the link's token was kept in
 // this tab while the guest paid, so the page can finish the order.
 const back = new URLSearchParams(location.search);
 const PAY_KEY = 'cuedeck-pay:' + code;
-const fromStripe = back.has('paid') ? 'paid' : back.has('unpaid') ? 'unpaid' : null;
+const fromStripe = EMBED ? null : back.has('paid') ? 'paid' : back.has('unpaid') ? 'unpaid' : null;
 if (!token && fromStripe) { try { token = sessionStorage.getItem(PAY_KEY) || ''; } catch { /* storage blocked */ } }
 let config = null;
 
@@ -52,7 +64,7 @@ function solo(h, p) {
 }
 function card(id) {
   for (const s of ['open', 'invite', 'confirm', 'done', 'ticket', 'shut']) $(s).hidden = s !== id;
-  if (window.matchMedia('(max-width: 900px)').matches && id !== 'open') $('card-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!EMBED && window.matchMedia('(max-width: 900px)').matches && id !== 'open') $('card-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function closed(h, p) {
   if (!config) return solo(h, p);
@@ -628,6 +640,7 @@ $('iv-no').addEventListener('click', () => answerInvite(false));
   renderQuestions(config.questions);
   renderTickets(config.tickets || []);
   renderPlus();
+  $('embed-ev').textContent = [config.event?.name, formatEventDate(config.event?.date), config.event?.venue].filter(Boolean).join(' · ');
   card('open');
   await loadTurnstile(config.turnstile_site_key);
 })();

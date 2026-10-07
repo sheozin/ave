@@ -149,6 +149,17 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .below a{color:var(--t3)}
 
 .solo{max-width:520px;margin:12vh auto 0;padding:0 20px}
+/* Embedded on the organizer's own site (/e/<code>): the form card only. */
+body.embed{background:transparent}
+body.embed .top,body.embed .hero,body.embed .facts,body.embed .about,body.embed .prog{display:none!important}
+body.embed .wrap{display:flex!important;flex-direction:column;max-width:none!important;padding:0!important;margin:0!important}
+body.embed .card-area{order:-1}
+body.embed .card-area{position:static!important;margin:0!important}
+body.embed .card{box-shadow:none;border-radius:16px}
+body.embed .foot{margin:10px 2px 0;text-align:center}
+body.embed .solo{margin:16px auto}
+.embed-ev{display:none;margin:-8px 0 16px;font-size:14px;color:var(--t2)}
+body.embed .embed-ev{display:block}
 </style>
 </head>
 <body>
@@ -200,6 +211,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
       <div class="card">
         <section id="open" hidden>
           <div class="card-h"><h2>Register</h2><span class="left" id="left" hidden></span></div>
+          <p class="embed-ev" id="embed-ev"></p>
           <p class="hint" id="flow-note" hidden style="margin:-6px 0 14px;color:var(--t2)"></p>
           <p class="hint" id="test-note" hidden style="margin:-6px 0 16px">Test mode: registrations are for trying the page. No email is sent, and they are cleared when the event goes live.</p>
           <form id="form" novalidate>
