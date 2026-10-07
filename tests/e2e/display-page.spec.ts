@@ -1035,6 +1035,33 @@ test.describe('Display: message to speaker', () => {
     await expect(page.locator('.st-msg-text')).toHaveText('Stay on stage');
   });
 
+  test('72f a room TV whose room is idle does not say LIVE in the header', async ({ page }) => {
+    const f = twoRoomFeed('Hall B');
+    (f.sessions[2] as Record<string, unknown>).status = 'ENDED';     // Hall B idle, Hall A still LIVE
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-standby-session')).toHaveText('Breakout: venue sales · Ali Hassan');
+    await page.waitForTimeout(1200);                                  // let the 1 s tick run
+    await expect(page.locator('#d-status-lbl')).not.toContainText('LIVE');
+    await expect(page.locator('#d-status-lbl')).toHaveText('STANDBY');
+    expect(await page.evaluate(() => document.body.classList.contains('is-live'))).toBe(false);
+  });
+
+  test('72g a room TV says LIVE when its own room is live; a lobby TV still follows the event', async ({ page }) => {
+    let f = twoRoomFeed('Hall B');
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Breakout: hotel tech');
+    await expect(page.locator('#d-status-lbl')).toContainText('LIVE');
+    // schedule mode with a room filter keeps the event-wide header, as before
+    f = twoRoomFeed('Hall B');
+    (f.display as Record<string, unknown>).content_mode = 'schedule';
+    (f.sessions[2] as Record<string, unknown>).status = 'ENDED';
+    await expect(page.locator('#d-status-lbl')).toContainText('LIVE', { timeout: 6000 });
+    await expect(page.locator('.st-wrap')).toHaveCount(0, { timeout: 6000 });
+    await expect(page.locator('#d-status-lbl')).toContainText('LIVE');
+  });
+
   test('73 the band goes when the feed drops the message, and comes back', async ({ page }) => {
     let msgs: unknown[] = [msg('s1', 'Please wrap up')];
     await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' }, stage_messages: msgs }) });

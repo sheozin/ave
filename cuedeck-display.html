@@ -844,8 +844,11 @@ function tick() {
   const clockEl = document.getElementById('d-clock');
   if (clockEl) clockEl.textContent = correctedHMS();
 
-  const lv = liveSession();
-  const rd = readySession();
+  // A stage-timer TV with a room follows that room's sessions (ruling 3);
+  // every other screen keeps the event-wide status, as before.
+  const roomList = activeMode() === 'stage-timer' && D?.filter_room ? stSessions() : null;
+  const lv = roomList ? roomList.find(s => s.status === 'LIVE' || s.status === 'OVERRUN') : liveSession();
+  const rd = roomList ? roomList.find(s => s.status === 'READY' || s.status === 'CALLING') : readySession();
 
   // Update header status label
   const statusEl = document.getElementById('d-status-lbl');
