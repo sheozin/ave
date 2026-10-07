@@ -174,3 +174,54 @@ test('list: an armed Reset delays keeps its confirm label through the 1 s re-ren
   await expect(page.locator('#ds-reset-btn')).toHaveText(armedLabel);
   await ctx.close();
 });
+
+// The harness jumps the paused clock 45 s at boot; the tick answers that with a
+// clock resync and a snapshot reload. Let both land before a test runs the clock.
+async function settleBootResync(page: import('@playwright/test').Page) {
+  for (let i = 0; i < 20 && await evalPage(page, 'S.clockOffset') === 0; i++) await page.clock.runFor(250);
+  await page.clock.runFor(500);
+  await page.waitForTimeout(300);
+  await evalPage(page, 'S.clockOffset = 0; renderSessions();');
+}
+
+test('list: keyboard focus stays on the drawer END through the 1 s re-render; Enter twice ends', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await settleBootResync(page);
+  await evalPage(page, `window.__calls = []; window.transition = (id, to) => { window.__calls.push([id, to]); }; S.selectedId = '${PANEL_ID}'; renderSessions();`);
+  const endSel = `#card-${PANEL_ID} .sc-drawer .sc-actions button[onclick^="confirmEnd"]`;
+  await page.locator(endSel).focus();
+  await page.keyboard.press('Enter');                                                                // arms
+  await expect(page.locator(endSel)).toHaveClass(/confirm-pending/);
+  await page.clock.runFor(1500);                                                                     // at least one 1 s re-render
+  expect(await page.evaluate((sel) => document.activeElement === document.querySelector(sel), endSel)).toBe(true);
+  await page.keyboard.press('Enter');                                                                // confirms
+  expect(await evalPage(page, 'window.__calls')).toEqual([[PANEL_ID, 'ENDED']]);
+  await ctx.close();
+});
+
+test('list: every interactive element the list re-renders carries a stable focus key', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.foldOpen = { ENDED: true, CANCELLED: true }; renderSessions();`);
+  const missing = await page.evaluate(() => [...document.querySelectorAll('#sessions-list button, #sessions-list input, #sessions-list [tabindex="0"]')]
+    .filter(el => !el.hasAttribute('data-fk')).map(el => el.outerHTML.slice(0, 80)));
+  expect(missing).toEqual([]);
+  await ctx.close();
+});
+
+test('roles: a role-locked operator cannot switch role from the command palette; a director can', async ({ browser }) => {
+  for (const [role, expected] of [['stage', 'stage'], ['director', 'director']] as const) {
+    const { ctx, page } = await openConsole(browser, { role });
+    await evalPage(page, `openCmdPalette(); renderPaletteResults('director');
+      const i = (window._cmdResults || []).findIndex(r => r.label === 'Switch to DIRECTOR');
+      if (i >= 0) executeCmdItem(i);
+      setRole('director');`);
+    expect(await evalPage(page, 'S.role')).toBe(expected);
+    if (role === 'stage') expect(await evalPage(page, `(renderPaletteResults(''), (window._cmdResults || []).filter(r => r.cat === 'Roles').length)`)).toBe(0);
+    await ctx.close();
+  }
+  // A director switches through the palette to another role.
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `openCmdPalette(); renderPaletteResults('stage'); executeCmdItem((window._cmdResults || []).findIndex(r => r.label === 'Switch to STAGE'));`);
+  expect(await evalPage(page, 'S.role')).toBe('stage');
+  await ctx.close();
+});

@@ -1396,7 +1396,7 @@
       *, *::before, *::after, .rbtn-pulse { animation: none !important; transition: none !important; }
     }
     body { font-family: var(--font-sans); }
-    .tv, .lt-remain, .lt-elapsed, .le-ts, .ck-val, #hdr-clock { font-variant-numeric: tabular-nums; }
+    .le-ts, .ck-val, #hdr-clock { font-variant-numeric: tabular-nums; }
     /* ═══ Command center components (stage 2) ═══ */
     .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
     .btn, .abtn {
@@ -3831,7 +3831,7 @@ function rowHTML(s, nowMs, ctx) {
     ? `<span class="sc-time ${cd.cls}" data-timer><span class="cd-txt"${running ? ` data-cd-sid="${s.id}" data-cd-fmt="text"` : ''}>${esc(cd.text)}</span><small>${sessionSpan(s)}</small></span>`
     : `<span class="sc-time">${sessionSpan(s)}${delayed ? `<small>${esc(tf('cc.list.was', { time: hm(s.planned_start) }))}</small>` : ''}</span>`;
   const tools = isDirector ? `<span class="sc-tools" onclick="event.stopPropagation()">
-      <input type="checkbox" class="batch-chk" data-sid="${s.id}" aria-label="${esc(tf('cc.list.selectFor', { title: s.title }))}" onclick="toggleBatchSelect('${s.id}',this.checked)" ${_batchSelected.has(s.id) ? 'checked' : ''}>
+      <input type="checkbox" class="batch-chk" data-fk="chk-${s.id}" data-sid="${s.id}" aria-label="${esc(tf('cc.list.selectFor', { title: s.title }))}" onclick="toggleBatchSelect('${s.id}',this.checked)" ${_batchSelected.has(s.id) ? 'checked' : ''}>
       <button type="button" class="btn ghost sm icon-only" data-fk="up-${s.id}" title="${esc(t('cc.list.moveUp'))}" aria-label="${esc(t('cc.list.moveUp'))}" onclick="reorderSession('${s.id}','up')">${icon('arrow-up')}</button>
       <button type="button" class="btn ghost sm icon-only" data-fk="down-${s.id}" title="${esc(t('cc.list.moveDown'))}" aria-label="${esc(t('cc.list.moveDown'))}" onclick="reorderSession('${s.id}','down')">${icon('arrow-down')}</button>
       <button type="button" class="btn ghost sm icon-only" data-fk="edit-${s.id}" title="${esc(t('cc.list.edit'))}" aria-label="${esc(t('cc.list.edit'))}" onclick="openSessModal('edit','${s.id}')">${icon('edit')}</button>
@@ -3927,8 +3927,8 @@ function renderSessions() {
       <h2>No sessions yet</h2>
       <p>Add your first session to get started with this event.</p>
       ${isDirector ? `<div class="sc-addrow">
-        <button type="button" class="btn md primary" onclick="openSessModal('add')">${icon('plus')}${esc(t('cc.list.addSession'))}</button>
-        <button type="button" class="btn md import-btn" onclick="triggerCSVImport()" title="Import sessions from CSV">${icon('upload')}${esc(t('cc.list.importCsv'))}</button>
+        <button type="button" class="btn md primary" data-fk="add-session" onclick="openSessModal('add')">${icon('plus')}${esc(t('cc.list.addSession'))}</button>
+        <button type="button" class="btn md import-btn" data-fk="import-csv" onclick="triggerCSVImport()" title="Import sessions from CSV">${icon('upload')}${esc(t('cc.list.importCsv'))}</button>
       </div>` : ''}
     </div>`;
     updateDelayStrip(); buildCtxPanel();
@@ -3939,7 +3939,7 @@ function renderSessions() {
       <div class="ei">${icon('search')}</div>
       <h2>No sessions match the filters</h2>
       <p>Try adjusting or clearing the filters.</p>
-      <button type="button" class="btn sm" onclick="clearFilters()">${esc(t('filter.clearAll'))}</button>
+      <button type="button" class="btn sm" data-fk="clear-filters" onclick="clearFilters()">${esc(t('filter.clearAll'))}</button>
     </div>`;
     updateDelayStrip(); buildCtxPanel();
     return;
@@ -3973,8 +3973,8 @@ function renderSessions() {
     if (unfold) cancelled.forEach(s => out.push(rowHTML(s, nowMs, ctx)));
   }
   if (isDirector) out.push(`<div class="sc-addrow">
-      <button type="button" class="btn md" onclick="openSessModal('add')">${icon('plus')}${esc(t('cc.list.addSession'))}</button>
-      <button type="button" class="btn md import-btn" onclick="triggerCSVImport()" title="Import sessions from CSV">${icon('upload')}${esc(t('cc.list.importCsv'))}</button>
+      <button type="button" class="btn md" data-fk="add-session" onclick="openSessModal('add')">${icon('plus')}${esc(t('cc.list.addSession'))}</button>
+      <button type="button" class="btn md import-btn" data-fk="import-csv" onclick="triggerCSVImport()" title="Import sessions from CSV">${icon('upload')}${esc(t('cc.list.importCsv'))}</button>
     </div>`);
   list.innerHTML = out.join('');
   restoreFocus(fk);
@@ -4336,18 +4336,18 @@ function buildButtons(s) {
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
       const armed = isArmed(_cancelPending, s);
-      return `<button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
+      return `<button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" data-fk="drw-CANCELLED-${s.id}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
     }
     // END SESSION uses two-step confirmation to prevent accidental ending
     if (to === 'ENDED') {
       const armed = isArmed(_endPending, s);
-      return `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
+      return `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" data-fk="drw-ENDED-${s.id}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
     }
-    return `<button class="btn md ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
+    return `<button class="btn md ${cfg.cls}" data-fk="drw-${to}-${s.id}" onclick="transition('${s.id}','${to}')">${label}</button>`;
   }).join('');
 
   const arriveHtml = canArrive
-    ? `<button class="btn sm"
+    ? `<button class="btn sm" data-fk="drw-arrive-${s.id}"
          onclick="markArrived('${s.id}', ${!s.speaker_arrived})"
          title="Toggle speaker arrival">${s.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED'}</button>`
     : '';
@@ -4355,9 +4355,9 @@ function buildButtons(s) {
   const delayHtml = canDelay
     ? `<div class="delay-grp">
          <span class="dl">+MIN</span>
-         <button class="btn sm" onclick="applyDelay('${s.id}',5)">5</button>
-         <button class="btn sm" onclick="applyDelay('${s.id}',10)">10</button>
-         <button class="btn sm" onclick="applyDelay('${s.id}',15)">15</button>
+         <button class="btn sm" data-fk="drw-delay5-${s.id}" onclick="applyDelay('${s.id}',5)">5</button>
+         <button class="btn sm" data-fk="drw-delay10-${s.id}" onclick="applyDelay('${s.id}',10)">10</button>
+         <button class="btn sm" data-fk="drw-delay15-${s.id}" onclick="applyDelay('${s.id}',15)">15</button>
        </div>`
     : '';
 
@@ -4367,13 +4367,13 @@ function buildButtons(s) {
   const nudgeHtml = canNudge
     ? `<div class="delay-grp">
          <span class="dl">NUDGE</span>
-         <button class="btn sm" onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
-         <button class="btn sm" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
+         <button class="btn sm" data-fk="drw-nudge-dn-${s.id}" onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
+         <button class="btn sm" data-fk="drw-nudge-up-${s.id}" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
        </div>`
     : '';
 
   const restartHtml = canRestart
-    ? `<button class="btn sm" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
+    ? `<button class="btn sm" data-fk="drw-restart-${esc(s.id)}" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
     : '';
 
   return `<div class="sc-actions">${btnHtml}${arriveHtml}${restartHtml}${delayHtml}${nudgeHtml}</div>`;
@@ -5832,7 +5832,12 @@ const ROLE_FILTER_DEFAULT = {
   reg:      'PLANNED',  // registration monitors upcoming sessions
   signage:  '',
 };
+// Operators invited to one role are locked to it (the same rule that shows #role-lock in
+// loadUserRole); only a director may view as another role. loadUserRole's own
+// setRole(data.role) passes, because it sets S.userRole first.
+function roleLocked() { return !!S.userRole && S.userRole !== 'director'; }
 function setRole(role) {
+  if (roleLocked() && role !== S.userRole) return;
   S.role = role;
   // Apply default status filter for the new role (only when the filter isn't already set by user)
   if (ROLE_FILTER_DEFAULT[role] !== undefined) {
@@ -5924,7 +5929,7 @@ function buildFilterBar() {
     '<input id="fb-search" type="search" placeholder="' + t('filter.searchPlaceholder') + '"' +
     ' aria-label="' + t('filter.searchPlaceholder') + '"' +
     ' value="' + esc(F.text) + '" oninput="onFilterInput(event)">' +
-    '<button type="button" id="filter-toggle-btn" class="btn sm" onclick="toggleFilters()">' + icon('chev-right') + ' Filters</button>' +
+    '<button type="button" id="filter-toggle-btn" class="btn sm" onclick="toggleFilters()">' + icon('chev-right') + esc(t('cc.filter.filters')) + '</button>' +
     '<select id="fb-status" onchange="onFilterChange()">' +
     '<option value="' + (!F.status?'" selected':'"') + '>' + t('misc.allStatuses') + '</option>' +
     '<option value="ACTIVE"' + (F.status==='ACTIVE'?' selected':'') + '>' + t('misc.activeStatuses') + '</option>' + stOpts +
@@ -5934,7 +5939,7 @@ function buildFilterBar() {
     '</select>' +
     '<button type="button" id="fb-clear" class="btn sm ghost ' + (isFilterActive() ? 'visible' : '') + '" onclick="clearFilters()">' + icon('x') + esc(t('filter.clearAll')) + '</button>' +
     '<span id="fb-count"></span>' +
-    '<div class="fb-view-pill" role="group" aria-label="View">' +
+    '<div class="fb-view-pill" role="group" aria-label="' + esc(t('cc.filter.view')) + '">' +
     '<button type="button" class="fvp-btn' + (S.viewMode === 'list' ? ' active' : '') + '" data-view="list" aria-pressed="' + (S.viewMode === 'list') + '" onclick="setViewMode(\'list\')">' + icon('list') + esc(t('filter.list')) + '</button>' +
     '<button type="button" class="fvp-btn' + (S.viewMode === 'timeline' ? ' active' : '') + '" data-view="timeline" aria-pressed="' + (S.viewMode === 'timeline') + '" onclick="setViewMode(\'timeline\')">' + icon('clock') + esc(t('filter.timeline')) + '</button>' +
     '</div>' +
@@ -9052,8 +9057,8 @@ function renderPaletteResults(query) {
     }
   }
 
-  // Role switch commands
-  const roles = ['director','stage','av','interp','reg','signage'];
+  // Role switch commands (not for an operator locked to one role)
+  const roles = roleLocked() ? [] : ['director','stage','av','interp','reg','signage'];
   for (const role of roles) {
     if (!q || role.includes(q) || 'switch role'.includes(q)) {
       results.push({ cat: 'Roles', icon: '🎭', label: `Switch to ${role.toUpperCase()}`, action: () => {

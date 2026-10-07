@@ -285,10 +285,10 @@ export async function freeze(page: Page) {
 export const evalPage = (page: Page, code: string) => page.evaluate((c) => (0, eval)(c), code);
 
 // Live timers are masked even though the clock is frozen (spec stage 0).
-// '#sb-time', '.lt-remain', '.lt-elapsed' and '.le-ts' disappear in stages 3
-// and 4; a mask locator that matches nothing is harmless. Every new countdown
-// sits inside an element with data-timer.
-export const MASK_SELECTORS = ['#hdr-clock', '#hdr-offset', '#sb-time', '.ck-val', '.lt-remain', '.lt-elapsed', '.le-ts', '[data-timer]'];
+// The card timers ('.lt-remain', '.lt-elapsed') went with stage 3; '#sb-time'
+// and '.le-ts' go in stage 4. A mask locator that matches nothing is harmless.
+// Every new countdown sits inside an element with data-timer.
+export const MASK_SELECTORS = ['#hdr-clock', '#hdr-offset', '#sb-time', '.ck-val', '.le-ts', '[data-timer]'];
 
 // toHaveScreenshot against the committed baseline, or, with CONSOLE_NOTES_DIR
 // set, a plain PNG for the before/after note to Sherif (use CONSOLE_DSF=2).
