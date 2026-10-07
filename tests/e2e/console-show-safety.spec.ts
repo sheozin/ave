@@ -50,7 +50,7 @@ async function controls(page: Page, id: string) {
   return page.locator('#ctx-wrap #ctx-actions');
 }
 // Labels as those controls render them (cc.act.* and the new confirm.* values).
-const L = { end: 'End…', armedEnd: 'Press again to end', cancel: 'Cancel session', armedCancel: 'Press again to cancel', hold: 'Hold', endAll: 'END ALL' };
+const L = { end: 'End…', armedEnd: 'Press again to end', cancel: 'Cancel session', armedCancel: 'Press again to cancel', hold: 'Hold', endAll: 'End all' };
 
 // ── 1. END / CANCEL confirm survives the 1 s re-render ────────────────────
 test.describe('END and CANCEL confirm', () => {

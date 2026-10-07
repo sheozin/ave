@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>CueDeck — Production Console</title>
+  <title>CueDeck: Production Console</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="apple-touch-icon" href="/favicon.svg">
   <link rel="manifest" href="/console-manifest.json">
@@ -147,7 +147,7 @@
       display: none; flex-direction: column; align-items: stretch;
       gap: 10px; width: 280px;
     }
-    .lf-title { font-size: var(--fs-13); font-weight: 600; color: var(--dim); text-align: center; letter-spacing: .08em; }
+    .lf-title { font-size: var(--fs-13); font-weight: 600; color: var(--dim); text-align: center; letter-spacing: 0; }
     /* Auth inputs use the field recipe (stage 2 components) */
     #login-form button[type=submit] {
       background: var(--blue); color: #fff; border: none;
@@ -283,6 +283,7 @@
       background:rgba(37,99,235,0.12); color:#93C5FD; border:1px solid rgba(37,99,235,0.25); font-weight:500; white-space:nowrap; }
     #plan-badge.trial { background:rgba(249,115,22,0.12); color:var(--amber-lt); border-color:rgba(249,115,22,0.25); }
     #plan-badge.past_due { background:rgba(239,68,68,0.12); color:var(--red-lt); border-color:rgba(239,68,68,0.25); }
+    #plan-badge { text-transform: uppercase; letter-spacing: var(--ls-badge); }
     /* ── BILLING MODAL ── */
     #billing-modal { display:none; }
     .bm-plans { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0; }
@@ -1111,6 +1112,7 @@
     .toast-close:hover { color: var(--text-primary); }
     .toast .toast-close { display: inline-flex; align-items: center; justify-content: center; }
     .toast .toast-close .ico { color: inherit; width: 14px; height: 14px; }
+    .toast-close { min-width: 24px; min-height: 24px; }
 
     /* ── RESPONSIVE ── */
 
@@ -1569,6 +1571,9 @@
     /* 1280 to 1439: a 320 px rail (below 1280 the rail is a drawer and #main is one column) */
     @media (min-width: 1280px) and (max-width: 1439px) { #main { grid-template-columns: minmax(0, 1fr) 320px; } }
     .band { display: grid; background: var(--panel); border-bottom: 1px solid var(--border-section); }
+    .skip-link { position: absolute; inset-inline-start: 8px; top: -48px; z-index: 2000; padding: 8px 12px; border-radius: var(--r-ctl); background: var(--accent); color: var(--on-accent); font: 600 var(--fs-13) var(--font-sans); text-decoration: none; }
+    .skip-link:focus { top: 8px; }
+    #band:focus, #sessions-list:focus { outline: none; box-shadow: var(--focus-ring); }
     .band[hidden] { display: none; }
     /* The filter row now shares the main column with the band: from 768 to 1599 px "Edit run of
        show" is its icon (name in aria-label and title), and the row wraps rather than clip */
@@ -1799,7 +1804,10 @@
       body[data-ph-tab="send"] #bc-bar { display: flex; flex-wrap: wrap; height: auto; gap: 8px; padding: 12px; position: fixed; inset-inline: 0; bottom: 56px; z-index: 150; background: var(--overlay); border-top: 1px solid var(--border-section); border-radius: var(--r-modal) var(--r-modal) 0 0; }
       #bc-bar > .lbl, #bc-bar .bc-presets, #bc-bar .bc-char { display: none; }
       #bc-input { flex: 1 1 100%; height: 44px; }
-      #bc-pri { height: 44px; flex: 1 1 auto; }
+      #bc-pri { height: 44px; flex: 1 1 100%; }
+      /* Send and Clear split the last row in fixed halves, so a longer armed label
+         ("Press again to clear") wraps inside its button and never moves it. */
+      #bc-send, #bc-clear { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.15; text-align: center; padding: 0 8px; }
       #phone-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); position: fixed; inset-inline: 0; bottom: 0; height: 56px; z-index: 160; background: var(--panel); border-top: 1px solid var(--border-section); }
       #phone-tabs button { display: grid; place-items: center; align-content: center; gap: 2px; min-height: 56px; border: 0; background: transparent; color: var(--text-tertiary); font: 600 var(--fs-12) var(--font-sans); cursor: pointer; }
       #phone-tabs button[aria-current="page"] { color: var(--text-primary); }
@@ -1853,6 +1861,8 @@
 </style>
 </head>
 <body>
+<a href="#band" class="skip-link" data-i18n="cc.a11y.skip"
+   onclick="event.preventDefault();(document.querySelector('#band:not([hidden])')||document.getElementById('sessions-list')).focus()">Skip to now and next</a>
 <!-- ICON SPRITE (16 px line set, stroke currentColor) -->
 <svg id="cd-icons" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/></symbol>
@@ -1922,7 +1932,7 @@
   display:none;align-items:center;gap:12px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5);
   font-size:13px;color:var(--text-primary)">
   <span id="undo-msg"></span>
-  <button id="undo-btn" class="btn sm" onclick="executeUndo()">UNDO</button>
+  <button id="undo-btn" class="btn sm" onclick="executeUndo()" data-i18n="undo.undo">Undo</button>
   <span id="undo-timer" style="font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:20px"></span>
   <button style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:0 2px" onclick="dismissUndo()">×</button>
 </div>
@@ -1933,9 +1943,9 @@
   align-items:center;gap:10px;z-index:9998;box-shadow:0 8px 32px rgba(0,0,0,.5);
   font-size:12px;color:var(--text-primary)">
   <span id="batch-count" style="font-weight:700"></span>
-  <button class="btn sm fwd fwd-ready" data-batch="READY" onclick="batchTransition('READY')">SET READY</button>
-  <button class="btn sm danger" data-batch="ENDED" onclick="batchTransition('ENDED')">END ALL</button>
-  <button class="btn sm danger" data-batch="CANCELLED" onclick="batchTransition('CANCELLED')">CANCEL ALL</button>
+  <button class="btn sm fwd fwd-ready" data-batch="READY" onclick="batchTransition('READY')" data-i18n="batch.setReady">Set ready</button>
+  <button class="btn sm danger" data-batch="ENDED" onclick="batchTransition('ENDED')" data-i18n="batch.endAll">End all</button>
+  <button class="btn sm danger" data-batch="CANCELLED" onclick="batchTransition('CANCELLED')" data-i18n="batch.cancelAll">Cancel all</button>
   <button class="btn sm ghost" onclick="clearBatchSelection()" style="margin-left:4px">Clear</button>
 </div>
 
@@ -1945,7 +1955,7 @@
   <div class="spinner" id="load-spinner"></div>
   <div class="load-step" id="load-step">Connecting…</div>
   <form id="login-form" onsubmit="handleLoginSubmit(event)">
-    <div class="lf-title">OPERATOR SIGN IN</div>
+    <div class="lf-title">Operator sign in</div>
     <input id="lf-email"    type="email"    placeholder="Email"    autocomplete="username"         required>
     <input id="lf-password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
@@ -1956,18 +1966,18 @@
     </div>
   </form>
   <form id="reset-form" onsubmit="handleResetSubmit(event)">
-    <div class="lf-title">RESET PASSWORD</div>
+    <div class="lf-title">Reset password</div>
     <input id="rst-email" type="email" placeholder="Email" autocomplete="username" required>
-    <button type="submit">Send Reset Link</button>
+    <button type="submit">Send reset link</button>
     <div id="rst-error"></div>
     <div id="rst-success" style="display:none">Check your inbox for a password reset link.</div>
     <a href="#" class="lf-toggle-link" onclick="showLoginForm();return false"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-left"/></svg> Back to sign in</a>
   </form>
   <form id="register-form" onsubmit="handleRegisterSubmit(event)">
-    <div class="lf-title">CREATE ACCOUNT</div>
-    <input id="rf-name"     type="text"     placeholder="Full Name"             autocomplete="name"             required>
+    <div class="lf-title">Create account</div>
+    <input id="rf-name"     type="text"     placeholder="Full name"             autocomplete="name"             required>
     <input id="rf-org"      type="text"     placeholder="Organization / Company" autocomplete="organization"     required>
-    <input id="rf-email"    type="email"    placeholder="Work Email"             autocomplete="username"         required>
+    <input id="rf-email"    type="email"    placeholder="Work email"             autocomplete="username"         required>
     <input id="rf-password" type="password" placeholder="Password (10+ chars)"   autocomplete="new-password"     required minlength="10">
     <div class="rf-hint">Use 12+ characters for a strong password</div>
     <input id="rf-confirm"  type="password" placeholder="Confirm Password"       autocomplete="new-password"     required>
@@ -1999,7 +2009,7 @@
     <div class="ps-roles-section">
       <div class="ps-roles-title">Available Roles</div>
       <div class="ps-roles-grid">
-        <div class="ps-role-card"><div class="ps-role-name" style="color:var(--blue)">Director</div><div class="ps-role-desc">Full control — all transitions, delay management, event editing, operator management</div></div>
+        <div class="ps-role-card"><div class="ps-role-name" style="color:var(--blue)">Director</div><div class="ps-role-desc">Full control: all transitions, delay management, event editing, operator management</div></div>
         <div class="ps-role-card"><div class="ps-role-name" style="color:var(--green)">Stage</div><div class="ps-role-desc">Arm, call, go-live, hold, and end sessions</div></div>
         <div class="ps-role-card"><div class="ps-role-name" style="color:var(--amber)">AV</div><div class="ps-role-desc">Hold sessions only</div></div>
         <div class="ps-role-card"><div class="ps-role-name" style="color:var(--purple)">Interp</div><div class="ps-role-desc">Read-only interpreter view</div></div>
@@ -2135,26 +2145,26 @@
       <span id="viewas-lbl">View as Director</span><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg>
     </button>
     <div id="viewas-menu" class="hdr-menu" role="menu" hidden>
-      <button type="button" class="rbtn active" role="menuitemradio" aria-checked="true"  data-role="director" onclick="setRole('director');closePopovers()">director</button>
-      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="stage"    onclick="setRole('stage');closePopovers()">stage</button>
-      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="av"       onclick="setRole('av');closePopovers()">av</button>
-      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="interp"   onclick="setRole('interp');closePopovers()">interp</button>
-      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="reg"      onclick="setRole('reg');closePopovers()">reg</button>
-      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="signage"  onclick="setRole('signage');closePopovers()">signage</button>
+      <button type="button" class="rbtn active" role="menuitemradio" aria-checked="true"  data-role="director" onclick="setRole('director');closePopovers()" data-i18n="role.director">Director</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="stage"    onclick="setRole('stage');closePopovers()" data-i18n="role.stage">Stage</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="av"       onclick="setRole('av');closePopovers()" data-i18n="role.av">AV</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="interp"   onclick="setRole('interp');closePopovers()" data-i18n="role.interp">Interp</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="reg"      onclick="setRole('reg');closePopovers()" data-i18n="role.reg">Reg</button>
+      <button type="button" class="rbtn"        role="menuitemradio" aria-checked="false" data-role="signage"  onclick="setRole('signage');closePopovers()" data-i18n="role.signage">Signage</button>
     </div>
     <span id="role-lock" class="pill role-lock" hidden></span>
   </div>
   <button type="button" id="help-btn" class="btn sm ghost" onclick="toggleHelpMenu()" aria-haspopup="menu" title="Help · Press ? anytime"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-help"/></svg><span>Help</span><span id="cl-badge" class="changelog-badge" style="display:none"></span></button>
   <div id="help-dropdown" class="help-dropdown" role="menu">
-    <button role="menuitem" onclick="openShortcutsModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg><span class="hd-label">Keyboard Shortcuts</span></button>
-    <button role="menuitem" onclick="openQuickRefModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg><span class="hd-label">Quick Reference</span></button>
-    <button role="menuitem" onclick="openChangelogModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg><span class="hd-label">What's New</span></button>
+    <button role="menuitem" onclick="openShortcutsModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg><span class="hd-label" data-i18n="help.shortcuts">Keyboard shortcuts</span></button>
+    <button role="menuitem" onclick="openQuickRefModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg><span class="hd-label" data-i18n="help.quickRef">Quick reference</span></button>
+    <button role="menuitem" onclick="openChangelogModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg><span class="hd-label" data-i18n="help.whatsNew">What's new</span></button>
     <div class="hd-sep"></div>
-    <button role="menuitem" onclick="window.open('https://www.cuedeck.io/docs','_blank');closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-book"/></svg><span class="hd-label">Documentation</span></button>
-    <button role="menuitem" onclick="openFeedbackModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-message"/></svg><span class="hd-label">Send Feedback</span></button>
-    <button role="menuitem" onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg><span class="hd-label">Contact Support</span></button>
+    <button role="menuitem" onclick="window.open('https://www.cuedeck.io/docs','_blank');closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-book"/></svg><span class="hd-label" data-i18n="help.docs">Documentation</span></button>
+    <button role="menuitem" onclick="openFeedbackModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-message"/></svg><span class="hd-label" data-i18n="help.feedback">Send feedback</span></button>
+    <button role="menuitem" onclick="location.href='mailto:support@cuedeck.io';closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg><span class="hd-label" data-i18n="help.contact">Contact support</span></button>
     <div class="hd-sep"></div>
-    <button role="menuitem" onclick="openAboutModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span class="hd-label">About CueDeck</span></button>
+    <button role="menuitem" onclick="openAboutModal();closeHelpMenu()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg><span class="hd-label" data-i18n="help.about">About CueDeck</span></button>
   </div>
   <button type="button" id="user-chip" class="user-chip" aria-haspopup="menu" aria-expanded="false" aria-label="Account" onclick="toggleProfilePanel(event)">
     <span id="user-chip-avatar" class="uc-avatar"></span><span id="user-chip-name" class="uc-name"></span><span id="user-chip-role" class="uc-role" hidden></span><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-chev-down"/></svg>
@@ -2281,10 +2291,10 @@
 <!-- MAIN -->
 <div id="main">
   <div id="main-col">
-    <section id="band" class="band" aria-label="Now and next" hidden></section>
+    <section id="band" class="band" aria-label="Now and next" tabindex="-1" hidden></section>
     <div id="filter-bar"><div id="fb-controls"></div><span class="fb-spacer"></span><div id="delay-strip" hidden></div></div>
     <div id="sessions-col">
-      <div id="sessions-list">
+      <div id="sessions-list" tabindex="-1">
         <div id="empty">
           <div class="ei"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg></div>
           <h2>Loading sessions…</h2>
@@ -2329,20 +2339,20 @@
 
 <!-- STAGE MONITOR (fullscreen overlay) -->
 <div id="stage-monitor" style="display:none">
-  <button id="sm-close" onclick="closeStageMonitor()">Exit monitor <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"/></svg></button>
+  <button id="sm-close" onclick="closeStageMonitor()"><span data-i18n="cc.sm.exit">Exit monitor</span> <svg class="ico" aria-hidden="true" focusable="false"><use href="#i-x"/></svg></button>
   <div id="sm-body">
-    <div id="sm-status" class="sm-status-standby">— STANDBY</div>
+    <div id="sm-status" class="sm-status-standby">Standby</div>
     <div id="sm-title"  class="sm-title">STANDING BY</div>
     <div id="sm-speaker" class="sm-speaker"></div>
     <div id="sm-timer"   class="sm-timer" style="color:var(--dim)">--:--</div>
     <div id="sm-timer-lbl" class="sm-timer-lbl"></div>
     <div class="sm-divider"></div>
     <div class="sm-next-lbl">NEXT SESSION</div>
-    <div id="sm-next-title" class="sm-next-title">—</div>
+    <div id="sm-next-title" class="sm-next-title">–</div>
     <div id="sm-next-time"  class="sm-next-time"></div>
   </div>
   <div id="sm-footer">
-    <span id="sm-event-name" class="sm-footer-evt">—</span>
+    <span id="sm-event-name" class="sm-footer-evt">–</span>
     <span id="sm-clock"      class="sm-clock">--:--:--</span>
   </div>
 </div>
@@ -2383,7 +2393,7 @@
         <option value="stage-timer">Stage Timer (speaker countdown)</option>
       </select>
     </label>
-    <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — leave blank to show all)</span>
+    <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional: leave blank to show all)</span>
       <input id="dm-room" type="text" placeholder="e.g. Main Stage">
     </label>
 
@@ -2639,7 +2649,7 @@
   <button type="button" data-tab="send" onclick="setPhoneTab('send')"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-broadcast"/></svg><span data-i18n="cc.ph.send">Send</span></button>
 </nav>
 
-<div id="rc-overlay"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg> Reconnecting: data may be stale</div>
+<div id="rc-overlay"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-refresh"/></svg> <span data-i18n="cc.rc.reconnecting">Reconnecting: data may be stale</span></div>
 
 <!-- SESSION MODAL -->
 <div id="sess-modal" class="ev-modal-backdrop" style="display:none"
@@ -3243,7 +3253,7 @@ async function executeUndo() {
     .update({ status: prevStatus, actual_end: null, version: ver + 1 })
     .eq('id', sessionId).eq('version', ver)
     .select('id');
-  if (error) { pushToast(`Undo failed: ${error.message}`, 'error'); return; }
+  if (error) { pushToast(`${t('toast.undoFailed')}: ${error.message}`, 'error'); return; }
   if (!data || data.length === 0) {
     pushToast(t('toast.versionConflict'), 'warn');
     if (S.event) loadSessions(S.event.id);
@@ -3251,7 +3261,7 @@ async function executeUndo() {
   }
   const s = cur;
   s.status = prevStatus; s.actual_end = null; s.version = ver + 1; renderSessions();
-  pushToast(`Reverted to ${prevStatus}`, 'success');
+  pushToast(`${t('toast.reverted')} ${prevStatus}`, 'success');
   pushLog('UNDO', `reverted to ${prevStatus}`, sessionId);
 }
 
@@ -3316,7 +3326,7 @@ async function transition(sessionId, toStatus) {
           if (toStatus === 'ENDED') s.actual_end   = null;
           renderSessions();
           pushLog('ERROR', 'Version conflict — session changed by another operator', sessionId);
-          pushToast('Updated by another operator, refreshing', 'warn');
+          pushToast(t('toast.updatedByOther'), 'warn');
           if (S.event) loadSessions(S.event.id);
           return;
         }
@@ -3373,7 +3383,7 @@ async function transition(sessionId, toStatus) {
       if (toStatus === 'ENDED') s.actual_end = null;
       renderSessions();
       const hint = error.code === '42501'
-        ? `RLS blocked write — deploy /${efName} or add service key`
+        ? `RLS blocked write: deploy /${efName} or add service key`
         : error.message;
       pushLog('ERROR', hint, sessionId);
       pushToast(hint, 'error');
@@ -3500,14 +3510,14 @@ async function applyDelay(sessionId, minutes) {
     if (!error && data) {
       const affected = data?.affected ?? '?';
       pushLog('DELAY', `+${minutes}min via /apply-delay`, sessionId);
-      pushToast(`Delay applied: ${affected} session${affected === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
+      pushToast(tf(affected === 1 ? 'cc.toast.delayOne' : 'cc.toast.delayMany', { n: affected, m: minutes }), 'success');
       return;
     }
     if (error) {
       let errBody = {};
       try { if (typeof error.context?.json === 'function') errBody = await error.context.json(); } catch {}
       if (errBody?.error === 'IN_FLIGHT') {
-        pushToast('Another delay is being applied: wait and retry', 'warn');
+        pushToast(t('toast.delayRetry'), 'warn');
         return;
       }
       if (error.context?.status === 403 || errBody?.error === 'Forbidden') {
@@ -3555,7 +3565,7 @@ async function applyDelay(sessionId, minutes) {
     return;
   }
   pushLog('DELAY', `+${minutes}min cascaded → ${affected.length} sessions`, sessionId);
-  pushToast(`Delay applied: ${affected.length} session${affected.length === 1 ? '' : 's'} shifted +${minutes}m`, 'success');
+  pushToast(tf(affected.length === 1 ? 'cc.toast.delayOne' : 'cc.toast.delayMany', { n: affected.length, m: minutes }), 'success');
 }
 
 async function markArrived(sessionId, arrived) {
@@ -3569,7 +3579,7 @@ async function markArrived(sessionId, arrived) {
     const cur = S.sessions.find(x => x.id === sessionId);
     if (cur) cur.speaker_arrived = prev;
     renderSessions();
-    pushToast(`Arrival not saved: ${error.message}`, 'error');
+    pushToast(`${t('cc.toast.arrivalFailed')}: ${error.message}`, 'error');
     pushLog('ERROR', `arrival not saved: ${error.message}`, sessionId);
     return;
   }
@@ -4783,7 +4793,16 @@ function renderSessions() {
   restoreFocus(fk);
   if (!S.listOpened && open.length) {
     S.listOpened = true;
-    document.getElementById('card-' + open[0].id)?.scrollIntoView({ block: 'nearest' });
+    // Scroll the list by hand: scrollIntoView also moves the browser's Tab
+    // starting point into the list, so the first Tab skipped the skip link.
+    const card = document.getElementById('card-' + open[0].id);
+    let box = card && card.parentElement;
+    while (box && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+    if (box) {
+      const r = card.getBoundingClientRect(), b = box.getBoundingClientRect();
+      if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom, r.top - b.top);
+      else if (r.top < b.top) box.scrollTop -= b.top - r.top;
+    }
   }
   updateDelayStrip();
   buildCtxPanel();
@@ -5063,7 +5082,7 @@ async function batchTransition(toStatus) {
       // Armed END/CANCEL turn solid red; an armed forward action keeps its colour and gets a ring.
       btn.classList.add(toStatus === 'ENDED' || toStatus === 'CANCELLED' ? 'confirm-pending' : 'armed-fwd');
     }
-    pushToast(`Click again to ${toStatus} ${count} session${count>1?'s':''}`, 'warn');
+    pushToast(tf('cc.batch.pressAgain', { n: count }), 'warn');
     clearTimeout(_batchArmTimers[toStatus]);
     _batchArmTimers[toStatus] = setTimeout(disarm, 3000);
     return;
@@ -5137,31 +5156,31 @@ function buildRoleCtxPanel() {
       const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
       return t && (Date.now() - t) < 60_000;
     }).length;
-    html += sectionLbl('DISPLAYS');
-    html += `<div style="font-size:11px;color:var(--dim);padding:2px 2px 5px">${dispCount} registered · <span style="color:var(--green)">${onlineCount} online</span></div>`;
-    html += sectionLbl('GLOBAL OVERRIDE');
-    html += cbtn('Break Screen', 'btn-purple', "sendGlobalOverride('break')", 'coffee');
-    html += cbtn('5-Min Recall', 'btn-amber', "sendGlobalOverride('recall')", 'bell');
-    html += cbtn('Sponsor Reel', 'btn-blue', "sendGlobalOverride('sponsors')", 'star');
-    html += cbtn('Back to Schedule', 'btn-grey', "sendGlobalOverride('schedule')", 'list');
+    html += sectionLbl(esc(t('cc.role.displays')));
+    html += `<div style="font-size:11px;color:var(--dim);padding:2px 2px 5px">${esc(tf('cc.role.registered', { n: dispCount }))} · <span style="color:var(--green)">${esc(tf('cc.role.online', { n: onlineCount }))}</span></div>`;
+    html += sectionLbl(esc(t('cc.role.override')));
+    html += cbtn(esc(t('cc.role.breakScreen')), 'btn-purple', "sendGlobalOverride('break')", 'coffee');
+    html += cbtn(esc(t('cc.role.recall')), 'btn-amber', "sendGlobalOverride('recall')", 'bell');
+    html += cbtn(esc(t('cc.role.sponsorReel')), 'btn-blue', "sendGlobalOverride('sponsors')", 'star');
+    html += cbtn(esc(t('cc.role.backToSchedule')), 'btn-grey', "sendGlobalOverride('schedule')", 'list');
     if (S.displays.some(d => d.override_content?.mode))
-      html += cbtn('Clear Override', 'btn-grey', 'clearGlobalOverride()', 'x');
-    html += sectionLbl('MONITOR');
-    html += cbtn('Stage monitor', 'btn-blue', 'openStageMonitor()', 'monitor');
+      html += cbtn(esc(t('cc.role.clearOverride')), 'btn-grey', 'clearGlobalOverride()', 'x');
+    html += sectionLbl(esc(t('cc.role.monitor')));
+    html += cbtn(esc(t('cc.insp.stageMonitor')), 'btn-blue', 'openStageMonitor()', 'monitor');
 
   } else if (role === 'reg') {
-    html += sectionLbl('LOBBY');
-    if (tgt) html += cbtn('ANNOUNCE SESSION', 'btn-blue',
+    html += sectionLbl(esc(t('cc.role.lobby')));
+    if (tgt) html += cbtn(esc(t('cc.role.announce')), 'btn-blue',
       `sendBroadcastQuick('${esc(tgt.title).substring(0,40)} is starting now. Please take your seats.','info')`, 'broadcast');
-    html += cbtn('Break alert', 'btn-amber', "sendBroadcastQuick('Coffee break starting now','info')", 'coffee');
+    html += cbtn(esc(t('cc.role.breakAlert')), 'btn-amber', "sendBroadcastQuick('Coffee break starting now','info')", 'coffee');
 
   } else if (role === 'interp') {
     if (tgt) {
-      html += sectionLbl('BOOTH STATUS');
+      html += sectionLbl(esc(t('cc.role.booth')));
       const isActive = tgt.status === 'LIVE' || tgt.status === 'OVERRUN';
-      html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${isActive ? 'Session live' : 'Standby'}</div>`;
+      html += `<div class="ctx-booth${isActive ? ' ctx-booth-live' : ''}">${esc(t(isActive ? 'cc.role.sessionLive' : 'cc.role.standby'))}</div>`;
       if (tgt.interpretation && tgt.languages?.length) {
-        html += sectionLbl('CHANNELS');
+        html += sectionLbl(esc(t('cc.role.channels')));
         tgt.languages.forEach(lang => { html += `<span class="ctx-lang-chip">${esc(lang)}</span>`; });
       }
     }
@@ -5236,7 +5255,7 @@ function renderSeqList() {
   const el = document.getElementById('dm-seq-list');
   if (!el) return;
   if (!_seqSlides.length) {
-    el.innerHTML = `<div style="font-size:11px;color:var(--dim);text-align:center;padding:8px 0">No slides yet — click Add Slide</div>`;
+    el.innerHTML = `<div style="font-size:11px;color:var(--dim);text-align:center;padding:8px 0">No slides yet. Click Add slide</div>`;
     return;
   }
   el.innerHTML = _seqSlides.map((s, i) => `
@@ -5387,14 +5406,14 @@ function renderSignagePanel() {
 
   const activeOverride = S.displays.some(d => d.override_content?.mode);
   const overrideModes = [
-    { key: 'break',     label: 'Break Screen', ico: 'coffee' },
-    { key: 'recall',    label: '5-Min Recall', ico: 'bell' },
-    { key: 'sponsors',  label: 'Sponsors', ico: 'star' },
-    { key: 'agenda',    label: 'Agenda Grid', ico: 'grid' },
-    { key: 'timeline',  label: 'Programme List', ico: 'list' },
-    { key: 'programme', label: 'Day Grid', ico: 'calendar' },
-    { key: 'wifi',      label: 'WiFi Info', ico: 'wifi' },
-    { key: 'schedule',  label: 'Schedule', ico: 'list' },
+    { key: 'break',     label: t('cc.role.breakScreen'), ico: 'coffee' },
+    { key: 'recall',    label: t('cc.role.recall'), ico: 'bell' },
+    { key: 'sponsors',  label: t('cc.sign.sponsors'), ico: 'star' },
+    { key: 'agenda',    label: t('cc.sign.agenda'), ico: 'grid' },
+    { key: 'timeline',  label: t('cc.sign.programme'), ico: 'list' },
+    { key: 'programme', label: t('cc.sign.dayGrid'), ico: 'calendar' },
+    { key: 'wifi',      label: t('cc.sign.wifi'), ico: 'wifi' },
+    { key: 'schedule',  label: t('cc.sign.schedule'), ico: 'list' },
   ];
 
   list.innerHTML = `
@@ -5404,9 +5423,9 @@ function renderSignagePanel() {
       ${activeOverride ? `<button class="abtn abtn-sm btn-grey" onclick="clearGlobalOverride()">${icon('x')} Clear All</button>` : ''}
     </div>
     <div class="sp-global-bar">
-      <label>PUSH ALL →</label>
+      <label>${esc(t('sign.pushAll'))}</label>
       <div class="sp-override-btns">
-        ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${m.label}</button>`).join('')}
+        ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${esc(m.label)}</button>`).join('')}
       </div>
     </div>
   </div>
@@ -5435,7 +5454,7 @@ function renderSignagePanel() {
         </div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <span style="background:#3b82f6;color:#fff;font-size:11px;font-weight:700;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">2</span>
-          <span>A <strong style="color:#e2e8f0">pairing code</strong> will appear on screen — type it above and click Pair</span>
+          <span>A <strong style="color:#e2e8f0">pairing code</strong> will appear on screen: type it above and click Pair</span>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="background:#3b82f6;color:#fff;font-size:11px;font-weight:700;width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">3</span>
@@ -5454,7 +5473,7 @@ function renderSignagePanel() {
   </div>
 
   <div class="sp-section sp-info-footer">
-    <span class="sp-section-title">DISPLAY URL FORMAT</span>
+    <span class="sp-section-title">Display URL format</span>
     Displays connect via their own link:<br>
     <code>/display#id=DISPLAY_ID&amp;s=DISPLAY_KEY</code><br>
     Use Launch, QR or Copy link on a display card, or pair a screen with its code. Treat the link like a password: anyone with it can show this display's programme.
@@ -5891,7 +5910,7 @@ function openStageTimerDisplay() {
   if (d) {
     window.open(buildDisplayUrl(d), '_blank');
   } else {
-    pushToast('No Stage Timer display configured — add one in the Signage panel.', 'info');
+    pushToast(t('toast.noStageTimer'), 'info');
     const sp = document.getElementById('sp-wrap');
     if (sp) sp.scrollIntoView({ behavior: 'smooth' });
   }
@@ -5925,7 +5944,7 @@ function updateStageMonitor() {
 
   // Footer clock + event name
   if (smClock) smClock.textContent = correctedHMS();
-  if (smEvt) smEvt.textContent = (S.event?.name || '—').toUpperCase();
+  if (smEvt) smEvt.textContent = (S.event?.name || '–').toUpperCase();
 
   if (live && live.status === 'HOLD') {
     // Paused: freeze the remaining time seen when the hold was first shown.
@@ -5983,7 +6002,7 @@ function updateStageMonitor() {
     smLbl.textContent   = 'SCHEDULED START';
 
   } else {
-    smStatus.innerHTML  = '— STANDBY';
+    smStatus.innerHTML  = 'Standby';
     smStatus.className  = 'sm-status-standby';
     smTitle.textContent = S.event?.name ? S.event.name.toUpperCase() : 'STANDING BY';
     smSpk.textContent   = '';
@@ -6047,7 +6066,7 @@ function refreshClockUI() {
 
   document.getElementById('ck-rtt').textContent  = `${rtt}ms`;
   document.getElementById('ck-tick').textContent = S.clockTick;
-  document.getElementById('ck-sync').textContent = S.clockSynced ? timeSince(S.clockSynced) + ' ago' : '—';
+  document.getElementById('ck-sync').textContent = S.clockSynced ? timeSince(S.clockSynced) + ' ago' : '–';
   updateStageMonitor();
   checkChimes();
   if (S.autoStart) checkAutoStart();
@@ -6161,7 +6180,7 @@ async function nudgeSession(sessionId, minutes) {
   renderSessions(); buildCtxPanel();
   const { error } = await sb.from('leod_sessions').update({ scheduled_end: newEnd }).eq('id', sessionId);
   if (error) {
-    pushToast(`Nudge failed: ${error.message}`, 'error');
+    pushToast(`${t('cc.toast.nudgeFailed')}: ${error.message}`, 'error');
     s.scheduled_end = prevEnd; renderSessions(); return;
   }
   pushLog('NUDGE', `${minutes > 0 ? '+' : ''}${minutes}min end → ${newEnd}`, sessionId);
@@ -6189,7 +6208,7 @@ function checkAutoStart() {
   if (!(ROLE_WRITE[S.role] || []).includes('LIVE')) return;
   S._autoStarted.add(toStart.id);
   transition(toStart.id, 'LIVE');
-  pushToast(`Auto-started: ${toStart.title}`, 'info');
+  pushToast(`${t('toast.autoStarted')}: ${toStart.title}`, 'info');
   pushLog('AUTO-START', `auto go-live: ${toStart.title}`, toStart.id);
 }
 
@@ -6328,13 +6347,13 @@ function pushLog(action, detail, sessionId, ts) {
   const sess = sessionId ? S.sessions.find(x => x.id === sessionId) : null;
   const name = sess ? sess.title : '';
   if (action === 'STATUS' && detail) {
-    sendDesktopNotif(`${name || 'Session'}: ${detail}`, 'CueDeck — State Change', `status-${sessionId}`);
+    sendDesktopNotif(`${name || 'Session'}: ${detail}`, 'CueDeck: state change', `status-${sessionId}`);
   } else if (action === 'ERROR') {
-    sendDesktopNotif(`Error: ${detail}`, 'CueDeck — Alert', 'error');
+    sendDesktopNotif(`Error: ${detail}`, 'CueDeck: alert', 'error');
   } else if (action === 'DELAY') {
-    sendDesktopNotif(`Delay: ${detail}`, name ? `CueDeck — ${name}` : 'CueDeck', 'delay');
+    sendDesktopNotif(`Delay: ${detail}`, name ? `CueDeck: ${name}` : 'CueDeck', 'delay');
   } else if (action === 'BROADCAST' && detail !== 'cleared') {
-    sendDesktopNotif(`Broadcast: ${detail}`, 'CueDeck — Message', 'broadcast');
+    sendDesktopNotif(`Broadcast: ${detail}`, 'CueDeck: message', 'broadcast');
   }
 }
 
@@ -6447,11 +6466,11 @@ function hideBCBanner() {
 function dismissBanner() { S.bcReadKey = S.bcKey; setBannerRead(true); }
 
 const BC_PRESETS = [
-  { label: 'Break',  text: 'Coffee break starting now' },
-  { label: 'Seats',  text: 'Please take your seats, the next session is starting soon' },
-  { label: 'Delay',  text: 'Running a few minutes behind schedule' },
-  { label: 'Phones', text: 'Please silence your phones' },
-  { label: 'Hold',   text: 'Hold, please stand by' },
+  { key: 'bc.break',  text: 'Coffee break starting now' },
+  { key: 'bc.seats',  text: 'Please take your seats, the next session is starting soon' },
+  { key: 'bc.delay',  text: 'Running a few minutes behind schedule' },
+  { key: 'bc.phones', text: 'Please silence your phones' },
+  { key: 'bc.hold',   text: 'Hold, please stand by' },
 ];
 
 function buildBCPresets() {
@@ -6462,7 +6481,7 @@ function buildBCPresets() {
   wrap.innerHTML = `<details class="bc-presets-menu" id="bc-presets-menu">
     <summary class="btn sm">${esc(t('cc.bc.presets'))}${icon('chev-down')}</summary>
     <div class="hdr-menu bc-presets-list" role="menu">${BC_PRESETS.map((p, i) =>
-      `<button type="button" role="menuitem" class="bc-preset-btn" onclick="fillPreset(BC_PRESETS[${i}].text);document.getElementById('bc-presets-menu').open=false">${esc(p.label)}</button>`).join('')}</div>
+      `<button type="button" role="menuitem" class="bc-preset-btn" onclick="fillPreset(BC_PRESETS[${i}].text);document.getElementById('bc-presets-menu').open=false">${esc(t(p.key))}</button>`).join('')}</div>
   </details>`;
 }
 
@@ -6658,7 +6677,7 @@ function openEvModal(mode, eventId) {
     document.getElementById('evm-end').value   = '18:00';
     // Populate seed dropdown
     const sel = document.getElementById('evm-seed');
-    sel.innerHTML = '<option value="">— none —</option>' +
+    sel.innerHTML = '<option value="">None</option>' +
       S.events.map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('');
     document.getElementById('evm-seed-row').style.display = S.events.length ? '' : 'none';
     document.getElementById('evm-deact').style.display = 'none';
@@ -7264,7 +7283,7 @@ function fmtDur(ms) {
 }
 
 function fmtTS(ts) {
-  return ts ? eventLocalHMS(new Date(ts).getTime()) : '—';
+  return ts ? eventLocalHMS(new Date(ts).getTime()) : '–';
 }
 
 function timeSince(ts) {
@@ -7753,9 +7772,9 @@ function renderOperatorRows(data) {
     if (idx > 0) markup += '<div style="border-top:1px solid var(--border-section)"></div>';
     markup += '<div class="um-row" data-uid="' + esc(u.id) + '" style="' + (isSuspended ? 'opacity:0.6' : '') + '">' +
       '<div style="flex:1;min-width:0">' +
-        '<div class="um-name">' + esc(u.name || '\u2014') +
+        '<div class="um-name">' + esc(u.name || '\u2013') +
           (u.organization ? ' <span style="color:var(--dim);font-weight:400;font-size:11px">\u00B7 ' + esc(u.organization) + '</span>' : '') +
-          (isSuspended ? ' <span style="display:inline-block;font-size:11px;background:rgba(239,68,68,.12);color:#f87171;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px">SUSPENDED</span>' : '') +
+          (isSuspended ? ' <span style="display:inline-block;font-size:11px;background:rgba(239,68,68,.12);color:#f87171;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px;text-transform:uppercase;">Suspended</span>' : '') +
         '</div>' +
         '<div class="um-email">' + esc(u.email || '') + '</div>' +
         '<div style="font-size:11px;color:var(--dim);margin-top:2px">' +
@@ -7832,7 +7851,7 @@ function confirmRemoveUser(userId, displayName) {
 // ── ROLE DESCRIPTIONS (shared by pending screen + welcome modal) ──
 // ═══════════════════════════════════════════════════════════════════
 const ROLE_DESCRIPTIONS = {
-  director: 'Full control — all transitions, delay management, event editing, operator management',
+  director: 'Full control: all transitions, delay management, event editing, operator management',
   stage:    'Arm, call, go-live, hold, and end sessions',
   av:       'Hold sessions only',
   interp:   'Read-only interpreter view',
@@ -7859,7 +7878,7 @@ function showWelcomeModal(role) {
         </div>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);line-height:1.65;margin-bottom:16px">
-        Let's get your first event ready — it only takes 2 minutes.
+        Let's get your first event ready. It only takes 2 minutes.
       </div>
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:18px">
         <div style="flex:1;background:var(--bg);border:1px solid #1e3a5f;border-radius:8px;padding:9px 6px;text-align:center">
@@ -8267,7 +8286,7 @@ function updatePlanBadge() {
   }
 
   if (S.subscription.status === 'past_due') {
-    badge.textContent += ' · PAYMENT DUE';
+    badge.textContent += ' · Payment due';
     badge.className = 'past_due';
   }
 }
@@ -8848,24 +8867,24 @@ const ROLE_TIPS = {
     { target: '#ev-select-wrap',   text: 'This is your event selector. Create events and switch between them from here.' },
     { target: '#sessions-list',    text: 'Session cards appear here. Click + Add Session to build your run of show.' },
     { target: '#user-chip',        text: 'Invite operators and assign roles (stage, AV, signage) from the Operators panel.' },
-    { target: '#bc-bar',           text: 'Send broadcast messages to all connected operators instantly — pick a priority and hit Send.' },
+    { target: '#bc-bar',           text: 'Send broadcast messages to all connected operators instantly: pick a priority and press Send.' },
     { target: '#filter-bar',       text: 'Filter sessions by title, status, or room. Toggle the Timeline view for a time-based grid.' },
   ],
   stage: [
     { target: '#sessions-list',    text: 'Each row is a session with its next action. Select a row to see all of its controls on the right.' },
-    { target: '#sidebar',          text: 'Select a session to see its details and actions here — including the Stage Monitor for fullscreen confidence display.' },
+    { target: '#sidebar',          text: 'Select a session to see its details and actions here, including the stage monitor for fullscreen confidence display.' },
     { target: '#filter-bar',       text: 'Filter by room or status to focus on your stage.' },
   ],
   av: [
-    { target: '#sessions-list',    text: 'Monitor sessions from here. You can HOLD any session if AV needs attention — everyone sees it instantly.' },
+    { target: '#sessions-list',    text: 'Monitor sessions from here. You can HOLD any session if AV needs attention: everyone sees it instantly.' },
     { target: '#sidebar',          text: 'Select a session to see technical details and action buttons.' },
   ],
   interp: [
-    { target: '#sessions-list',    text: 'Your sessions appear here with scheduled times, rooms, and current status — keep track of upcoming interpretation slots.' },
+    { target: '#sessions-list',    text: 'Your sessions appear here with scheduled times, rooms, and current status: keep track of upcoming interpretation slots.' },
     { target: '#filter-bar',       text: 'Filter by room to see only the sessions assigned to your booth.' },
   ],
   reg: [
-    { target: '#sessions-list',    text: 'Track session status here — see which sessions are live, upcoming, or ended to guide attendees.' },
+    { target: '#sessions-list',    text: 'Track session status here: see which sessions are live, upcoming, or ended to guide attendees.' },
     { target: '#filter-bar',       text: 'Search by speaker name or title to quickly find what attendees are asking about.' },
   ],
   signage: [
@@ -9086,7 +9105,7 @@ function renderWizStep() {
         <option value="landscape">Landscape</option>
         <option value="portrait">Portrait</option>
       </select></label>
-      <div class="wiz-hint">Launch the display URL on any screen — TV, tablet, or monitor.</div>`;
+      <div class="wiz-hint">Launch the display URL on any screen: TV, tablet or monitor.</div>`;
   }
 }
 
@@ -9264,7 +9283,7 @@ CREATE TABLE leod_clock (
 
 INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         </div>`;
-      document.getElementById('event-name').textContent = 'Schema not found — see console';
+      document.getElementById('event-name').textContent = 'Schema not found: see the browser console';
       overlay.style.display = 'none';
       return;
     }
@@ -9343,7 +9362,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
         getUserId:      () => S.user?.id,
         onEscalate:     (inc) => {
           // Relay escalation as a CueDeck broadcast so all operators see it
-          pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null);
+          pushLog('ESCALATION', `${inc.system} @ ${inc.location}: escalated`, null);
         }
       });
       CueDeckReportAgent.init({
@@ -9466,7 +9485,7 @@ function ensureAgentsInited() {
     getEventId:     () => S?.event?.id || null,
     getRole:        () => S?.role || 'director',
     getUserId:      () => S?.user?.id || null,
-    onEscalate:     (inc) => { try { pushLog('ESCALATION', `${inc.system} @ ${inc.location} — escalated`, null); } catch(e){} }
+    onEscalate:     (inc) => { try { pushLog('ESCALATION', `${inc.system} @ ${inc.location}: escalated`, null); } catch(e){} }
   });
   CueDeckReportAgent.init({
     supabaseClient: typeof sb !== 'undefined' ? sb : null,
@@ -9851,7 +9870,7 @@ async function submitFeedback() {
   const { error } = await S.sb.from('leod_feedback').insert(row);
   if (error) {
     console.error('Feedback insert error:', error);
-    pushToast('Failed to send feedback — try again', 'error');
+    pushToast('Could not send feedback. Try again.', 'error');
     return;
   }
 
@@ -10010,7 +10029,7 @@ const _offlineQueue = {
 
 // Drain offline queue when coming back online
 window.addEventListener('online', () => {
-  pushToast('Back online — syncing...', 'info');
+  pushToast(t('misc.online'), 'info');
   _offlineQueue.drain();
 });
 </script>

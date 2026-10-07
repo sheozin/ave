@@ -128,7 +128,7 @@ test.describe('Session modal: structure', () => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await bypassOverlay(page);
     await page.evaluate(() => (window as any).openSessModal('add'));
-    await expect(page.locator('#sess-modal-title')).toHaveText('New Session');
+    await expect(page.locator('#sess-modal-title')).toHaveText('New session');
   });
 
 });
@@ -230,7 +230,7 @@ test.describe('Live: create and delete session', () => {
     // Open via button click (either empty state or list footer)
     await page.evaluate(() => (window as any).openSessModal('add'));
     await expect(page.locator('#sess-modal')).toBeVisible();
-    await expect(page.locator('#sess-modal-title')).toHaveText('New Session');
+    await expect(page.locator('#sess-modal-title')).toHaveText('New session');
   });
 
   test('L03 session modal saves correctly and appears in list', async ({ page }) => {
