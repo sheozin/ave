@@ -40,6 +40,7 @@ import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 import { sendConfirmEmail } from '../_shared/registration-confirm-email.ts'
 import { isWindowClosed, zonedTimeUtc } from '../_shared/checkin-policy.ts'
 import { stripe } from '../_shared/stripe.ts'
+import { isLang, type Lang } from '../_shared/email-i18n.ts'
 import { loadOrder, money, openCheckout, sessionExpiry, settleOrder } from '../_shared/checkin-tickets.ts'
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import {
@@ -234,6 +235,14 @@ Deno.serve(async (req) => {
     })
   }
 
+  // (123) The language the guest is using the page in; their emails follow it.
+  const lang: Lang | null = isLang(body.lang) ? body.lang : null
+  const rememberLang = async (email: string | null | undefined) => {
+    if (!lang || !email) return
+    const { error } = await sb.rpc('checkin_web_set_lang', { p_event_id: ent.event_id, p_email: email, p_lang: lang })
+    if (error) console.error('checkin-register: language not recorded', error.code)
+  }
+
   // Per (event, IP) budget shared by register, preview and confirm.
   const rateOk = async (): Promise<boolean | null> => {
     const ip = clientIp(req)
@@ -341,6 +350,7 @@ Deno.serve(async (req) => {
     if (status !== 'going') return json({ status, first_name: out.first_name ?? null })
     const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null }
     const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
+    await rememberLang(attendee.email)
     // Test mode never emails guests; live, the ticket goes out (again at
     // most every 10 minutes) and any new plus-ones' tickets with it.
     if (!test) {
@@ -407,6 +417,7 @@ Deno.serve(async (req) => {
     // 'already': the owner of an address already on the list gets their QR
     // again, at most every 10 minutes.
     const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
+    await rememberLang(attendee?.email)
     if (attendee && (status === 'registered' || mayResend(attendee.qr_email_sent_at, Date.now()))) {
       const brand = await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue })
       const res = await sendQrEmailsForAttendees(sb, brand, [attendee])
@@ -502,7 +513,8 @@ Deno.serve(async (req) => {
     const link = 'https://app.cuedeck.io/r/' + code + '#t=' + token
     const tokenHash = await sha256Hex(token)
     // A refused send gives the guest's budget back (103, F7).
-    const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link)
+    await rememberLang(form.email.trim())
+    const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link, lang ?? (isLang(ent.registration_language) ? ent.registration_language : 'en'))
       .then(async (sent) => {
         if (sent) return
         const { error } = await sb.rpc('checkin_web_send_failed', { p_code: code, p_token_hash: tokenHash })

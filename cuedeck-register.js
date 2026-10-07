@@ -97,7 +97,7 @@ if (!token && fromStripe) { try { token = sessionStorage.getItem(PAY_KEY) || '';
 let config = null;
 
 async function call(body) {
-  const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code }) });
+  const r = await fetch(FN, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: 'Bearer ' + KEY }, body: JSON.stringify({ ...body, code, lang: LANG }) });
   let j = null; try { j = await r.json(); } catch { /* not JSON */ }
   return { status: r.status, body: j || {} };
 }

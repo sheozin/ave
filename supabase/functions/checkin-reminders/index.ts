@@ -16,6 +16,7 @@ import { withBrand }    from '../_shared/qr-email.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
 import { reminderEmail, thankyouEmail, type ReminderEvent } from '../_shared/reminder-email.ts'
+import { langsFor, type Lang } from '../_shared/email-i18n.ts'
 
 const JOB = 'checkin-reminders'
 // Sends one at a time; this many fit comfortably in one run, and the cron
@@ -93,11 +94,16 @@ Deno.serve(async (req) => {
     const { data: due, error: dueErr } = await sb.rpc('checkin_claim_reminders', { p_limit: BATCH })
     if (dueErr) throw new Error('claim: ' + dueErr.message)
     const events = new Map<string, Promise<ReminderEvent>>()
+    // (123) Each guest's language, one lookup per event in the batch.
+    const rows = (due ?? []) as { event_id: string; email: string }[]
+    const langs = new Map<string, Map<string, Lang>>()
+    for (const ev of new Set(rows.map(r => r.event_id))) langs.set(ev, await langsFor(sb, ev, rows.filter(r => r.event_id === ev).map(r => r.email)))
     for (const d of (due ?? []) as { attendee_id: string; kind: 'reminder' | 'thankyou'; event_id: string; first_name: string; email: string; qr_token: string }[]) {
       try {
         if (!events.has(d.event_id)) events.set(d.event_id, loadEvent(sb, d.event_id))
         const ev = await events.get(d.event_id)!
-        const m = d.kind === 'reminder' ? reminderEmail(ev, d) : thankyouEmail(ev, d)
+        const lang = langs.get(d.event_id)?.get(String(d.email).toLowerCase()) ?? 'en'
+        const m = d.kind === 'reminder' ? reminderEmail(ev, d, lang) : thankyouEmail(ev, d, lang)
         const { error } = await sendEmail({ to: d.email, subject: m.subject, html: m.html, fromName: fromName(ev.name) })
         if (error) throw new Error(error)
         counts[d.kind]++

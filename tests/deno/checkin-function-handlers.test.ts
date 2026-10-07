@@ -1597,3 +1597,36 @@ Deno.test(`${IG} limits: a resend too soon is refused with a reason; the daily c
   const r2 = await call(IG, { event_id: EVENT, action: 'send' })
   assert(r2.status === 200 && r2.body.capped === true && r2.body.remaining === 0 && !(world.emails?.length), JSON.stringify(r2))
 })
+
+// ── Guest emails in the guest's language (123) ─────────────────────
+Deno.test(`${RG} confirm: the ticket email comes in the guest's language`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'registered', first_name: 'Ola',
+    attendee: { id: ATT, first_name: 'Ola', email: 'ola@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null } }
+  world.rpcResult.checkin_web_langs = [{ email: 'ola@stub.test', lang: 'pl' }]
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, first_name: 'Ola', last_name: 'N', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' }]
+  const res = await handlers[RG](new Request('http://stub.local/functions/v1/' + RG, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://app.cuedeck.io', 'cf-connecting-ip': '203.0.113.9' },
+    body: JSON.stringify({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN, lang: 'pl' }) }))
+  assert(res.status === 200, 'status ' + res.status)
+  const set = world.rpcCalls.find(c => c.name === 'checkin_web_set_lang')
+  assert(set && set.args.p_lang === 'pl' && set.args.p_email === 'ola@stub.test', 'language not recorded: ' + JSON.stringify(set))
+  const m = world.emails![0] as { subject: string; html: string }
+  assert(m.subject === 'Twój kod QR do wejścia: Stub event' && m.html.includes('lang="pl"') && m.html.includes('Cześć Ola,'), m.subject)
+})
+Deno.test(`${RM}: an Arabic guest gets the reminder in Arabic, right to left`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Sara', email: 'sara@stub.test', qr_token: 'tok1' }]
+  world.rpcResult.checkin_web_langs = [{ email: 'sara@stub.test', lang: 'ar' }]
+  const r = await call(RM, {})
+  assert(r.status === 200, JSON.stringify(r))
+  const m = world.emails![0] as { subject: string; html: string }
+  assert(m.subject.startsWith('تذكير: Stub event') && m.html.includes('dir="rtl"') && m.html.includes('نراك قريبًا'), m.subject)
+})
+Deno.test(`${RM}: a failed language lookup still sends, in English`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'thankyou', event_id: EVENT, first_name: 'Sam', email: 'sam@stub.test', qr_token: 'tok1' }]
+  const r = await call(RM, {})
+  const m = world.emails![0] as { subject: string }
+  assert(r.status === 200 && m.subject === 'Thank you for coming to Stub event', m.subject)
+})

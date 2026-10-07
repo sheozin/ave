@@ -22,6 +22,7 @@ import { withBrand, escapeHtml } from '../_shared/qr-email.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
 import { longDate } from '../_shared/reminder-email.ts'
+import { et, emailDate, dirOf, sepOf, alignOf, langsFor, type Lang } from '../_shared/email-i18n.ts'
 
 const BATCH = 80
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -33,36 +34,36 @@ async function sha256Hex(s: string): Promise<string> {
 
 type Ev = { name: string; date: string; venue: string | null; brand_color?: string | null; logo_url?: string | null; host_name?: string | null; start: string | null }
 
-export function inviteEmail(e: Ev, firstName: string, link: string): { subject: string; html: string } {
+export function inviteEmail(e: Ev, firstName: string, link: string, lang: Lang = 'en'): { subject: string; html: string } {
   const accent = /^#[0-9A-Fa-f]{6}$/.test(e.brand_color ?? '') ? e.brand_color! : '#1a1a2e'
-  const when = longDate(e.date) + (e.start ? ', ' + e.start : '') + (e.venue ? ', ' + e.venue : '')
+  const when = [lang === 'en' ? longDate(e.date) : emailDate(lang, e.date), e.start, e.venue].filter(Boolean).join(sepOf(lang))
   const brand = e.logo_url || e.host_name
-    ? `<div style="padding:16px 24px;border-bottom:1px solid #eee;">${e.logo_url ? `<img src="${escapeHtml(e.logo_url)}" alt="" width="36" height="36" style="display:inline-block;width:36px;height:36px;border-radius:8px;object-fit:contain;vertical-align:middle;">` : ''}${e.host_name ? `<span style="font-size:14px;font-weight:600;color:#374151;vertical-align:middle;margin-left:${e.logo_url ? '10px' : '0'};">${escapeHtml(e.host_name)}</span>` : ''}</div>`
+    ? `<div style="padding:16px 24px;border-bottom:1px solid #eee;">${e.logo_url ? `<img src="${escapeHtml(e.logo_url)}" alt="" width="36" height="36" style="display:inline-block;width:36px;height:36px;border-radius:8px;object-fit:contain;vertical-align:middle;">` : ''}${e.host_name ? `<span dir="auto" style="font-size:14px;font-weight:600;color:#374151;vertical-align:middle;margin-left:${e.logo_url ? '10px' : '0'};">${escapeHtml(e.host_name)}</span>` : ''}</div>`
     : ''
   const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(e.name)}</title></head>
+<html lang="${lang}" dir="${dirOf(lang)}"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(e.name)}</title></head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
   <div style="width:100%;background-color:#f4f4f5;padding:40px 20px;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);border-top:4px solid ${accent};">
       ${brand}
       <div style="padding:28px 24px 8px;">
-        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${accent};">You are invited</div>
-        <div style="font-size:24px;font-weight:700;color:#111827;margin-top:6px;line-height:1.2;">${escapeHtml(e.name)}</div>
-        <div style="font-size:14px;color:#6b7280;margin-top:6px;">${escapeHtml(when)}</div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${accent};">${escapeHtml(et(lang, 'You are invited'))}</div>
+        <div dir="auto" style="text-align:${alignOf(lang)};font-size:24px;font-weight:700;color:#111827;margin-top:6px;line-height:1.2;">${escapeHtml(e.name)}</div>
+        <div dir="auto" style="text-align:${alignOf(lang)};font-size:14px;color:#6b7280;margin-top:6px;">${escapeHtml(when)}</div>
       </div>
       <div style="padding:12px 24px 28px;color:#374151;font-size:15px;line-height:1.55;">
-        <p style="margin:0 0 18px;">Hi ${escapeHtml(firstName)}, we would love to see you there. Please let us know if you can come.</p>
-        <p style="margin:0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${accent};color:#ffffff;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px;text-decoration:none;">Reply to the invitation</a></p>
-        <p style="margin:14px 0 0;font-size:12px;color:#9ca3af;text-align:center;">This link is personal to you. Your ticket arrives by email once you say you are coming.</p>
+        <p style="margin:0 0 18px;">${escapeHtml(et(lang, 'Hi {name}, we would love to see you there. Please let us know if you can come.', { name: firstName }))}</p>
+        <p style="margin:0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${accent};color:#ffffff;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px;text-decoration:none;">${escapeHtml(et(lang, 'Reply to the invitation'))}</a></p>
+        <p style="margin:14px 0 0;font-size:12px;color:#9ca3af;text-align:center;">${escapeHtml(et(lang, 'This link is personal to you. Your ticket arrives by email once you say you are coming.'))}</p>
       </div>
       <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
-        <span style="font-size:10px;color:#b0b0b8;">Invitations powered by</span>
+        <span style="font-size:10px;color:#b0b0b8;">${escapeHtml(et(lang, 'Invitations powered by'))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
       </div>
     </div>
   </div>
 </body></html>`
-  return { subject: `You are invited: ${e.name}`, html }
+  return { subject: et(lang, 'You are invited: {event}', { event: e.name }), html }
 }
 
 Deno.serve(async (req) => {
@@ -141,7 +142,8 @@ Deno.serve(async (req) => {
     if (out.status === 'daily_cap') { capped = true; break }
     if (out.status === 'too_soon' || out.status === 'limit') { tooSoon++; continue }
     if (out.status !== 'issued') continue
-    const m = inviteEmail(e, String(out.first_name), base + '#i=' + token)
+    const langs = await langsFor(sb, event_id, [String(out.email)])
+    const m = inviteEmail(e, String(out.first_name), base + '#i=' + token, langs.get(String(out.email).toLowerCase()) ?? 'en')
     const { error: mailErr } = await sendEmail({ to: String(out.email), subject: m.subject, html: m.html, fromName })
     if (mailErr) {
       failed++
