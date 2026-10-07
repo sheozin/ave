@@ -735,6 +735,40 @@ test.describe('Display: small landscape screen', () => {
       expect(box!.y + box!.height, sel).toBeLessThanOrEqual(720);
     }
   });
+
+  test('50b the same with wide fonts (Linux, Android TV) keeps NEXT SESSION on screen', async ({ page }) => {
+    // CI Linux fonts run wider than the Mac ones and pushed .d-next-time to
+    // 739.7 px. Verdana (macOS) and DejaVu Sans (Linux) reproduce that anywhere.
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const s = document.createElement('style');
+        s.textContent = "body{font-family:Verdana,'DejaVu Sans',sans-serif !important}";
+        document.head.appendChild(s);
+      });
+    });
+    await mockSupabase(page, { feed: () => {
+      const f = feedWithPeople(BIG_PANEL);
+      (f.sessions[0] as Record<string, unknown>).title = 'Panel: the future of MICE and business events in North Africa';
+      return f;
+    } });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-list')).toBeVisible();
+    for (const sel of ['.d-timer', '.d-next-lbl', '.d-next-title', '.d-next-time']) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box, sel).not.toBeNull();
+      expect(box!.y + box!.height, sel).toBeLessThanOrEqual(720);
+    }
+    // every person either fully on screen or counted in "+N more", none cut off
+    const r = await page.evaluate(() => {
+      const main = document.querySelector('.d-sched-main') || document.querySelector('.d-people')!.parentElement!;
+      const clip = main.getBoundingClientRect().bottom;
+      const els = [...document.querySelectorAll('.d-people-person')];
+      const more = Number((document.querySelector('.d-people-more')?.textContent || '').match(/\d+/)?.[0] || 0);
+      return { shown: els.length, more, cut: els.filter(e => e.getBoundingClientRect().bottom > Math.min(clip, window.innerHeight) + 0.5).map(e => e.textContent) };
+    });
+    expect(r.cut).toEqual([]);
+    expect(r.shown + r.more).toBe(BIG_PANEL.length);
+  });
 });
 
 test.describe('Display: stage timer next line', () => {

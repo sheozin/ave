@@ -115,6 +115,12 @@ body{
   font-size:clamp(28px,6vw,80px);font-weight:700;line-height:1.1;
   letter-spacing:-.02em;margin-bottom:14px;max-width:90vw;
 }
+/* The schedule column shrinks its middle (title, people) and never the
+   timer or NEXT SESSION, whatever the font metrics; fitSchedule() then
+   shrinks the title and folds people into "+N more" until nothing is cut. */
+.d-sched{display:flex;flex-direction:column;align-items:center;min-height:0;max-width:100%}
+.d-sched>*{flex-shrink:0}
+.d-sched>.d-sched-main{flex-shrink:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center}
 .d-big-title.live{color:#fff}
 .d-big-title.standby{color:rgba(255,255,255,.5)}
 .d-speaker{font-size:clamp(14px,2.5vw,28px);color:rgba(255,255,255,.6);margin-bottom:28px;font-weight:400}
@@ -947,7 +953,7 @@ function render() {
   if (mode !== 'programme') { stopProgrammePaginate(); }
 
   switch (mode) {
-    case 'schedule':  area.innerHTML = renderSchedule(); break;
+    case 'schedule':  area.innerHTML = renderSchedule(); fitSchedule(area); break;
     case 'wayfinding':area.innerHTML = renderWayfinding(); break;
     case 'sponsors':  renderSponsors(area); break;
     case 'break':     area.innerHTML = renderBreak(); break;
@@ -958,7 +964,7 @@ function render() {
     case 'agenda':    renderAgenda(area); break;
     case 'timeline':  renderTimeline(area); break;
     case 'programme': renderProgramme(area); break;
-    default:          area.innerHTML = renderSchedule();
+    default:          area.innerHTML = renderSchedule(); fitSchedule(area);
   }
 
   // Update event name in header
@@ -1001,14 +1007,45 @@ function renderSchedule() {
        <div class="d-next-time">${(next.scheduled_start||next.planned_start||'').substring(0,5)}</div>`
     : '';
 
-  return `<div class="fade-in">
+  return `<div class="fade-in d-sched">
     <div class="sc-tag ${tagCls}"><div class="sc-tag-dot"></div>${tagLbl}</div>
+    <div class="d-sched-main">
     <div class="d-big-title ${lv?'live':''}">${esc(cur?.title || next?.title || '—')}</div>
     ${peopleOf(cur) ? peopleBlock(peopleOf(cur), 'd-people')
       : cur?.speaker ? `<div class="d-speaker">${esc(cur.speaker)}${cur.company?` · ${esc(cur.company)}`:''}</div>` : ''}
+    </div>
     ${timerHtml}
     ${nextHtml}
   </div>`;
+}
+
+// Measured, so it holds for any font: while the title and people overflow
+// their box, shrink the title (to 60%), then move people into "+N more".
+function fitSchedule(area) {
+  const main = area.querySelector('.d-sched-main');
+  if (!main) return;
+  const over = () => main.lastElementChild.getBoundingClientRect().bottom > main.getBoundingClientRect().bottom + 0.5;
+  const title = main.querySelector('.d-big-title');
+  const floor = parseFloat(getComputedStyle(title).fontSize) * 0.6;
+  while (over() && parseFloat(getComputedStyle(title).fontSize) - 4 >= floor)
+    title.style.fontSize = (parseFloat(getComputedStyle(title).fontSize) - 4) + 'px';
+  const list = main.querySelector('.d-people-list');
+  if (!list) return;
+  const persons = [...list.querySelectorAll('.d-people-person')];
+  let moreEl = list.querySelector('.d-people-more');
+  let more = moreEl ? parseInt(moreEl.textContent.replace(/\D/g, ''), 10) : 0;
+  while (over() && persons.length > 1) {
+    const p = persons.pop();
+    if (p.previousSibling?.nodeType === 3) p.previousSibling.remove();
+    p.remove();
+    more++;
+    if (!moreEl) {
+      moreEl = document.createElement('span');
+      moreEl.className = 'd-people-more';
+      list.append(' ', moreEl);
+    }
+    moreEl.textContent = `+${more} more`;
+  }
 }
 
 // ═══════════════════════════════════════════════════
