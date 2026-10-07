@@ -2114,7 +2114,7 @@
           <div id="pp-email" class="pp-email"></div>
           <span id="pp-role-badge" class="pp-role-badge"></span>
         </div>
-        <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:#94a3b8;border-radius:6px;padding:3px 8px;font-size:11px;font-family:inherit;cursor:pointer;opacity:.7;transition:opacity .12s" onmouseover="this.style.opacity='1';this.style.color='var(--text)'" onmouseout="this.style.opacity='.7';this.style.color='#94a3b8'">&#x270E; Edit</button>
+        <button id="pp-edit-btn" onclick="toggleProfileEdit()" style="position:absolute;top:10px;right:10px;background:transparent;border:1px solid var(--border);color:#94a3b8;border-radius:6px;padding:3px 8px;font-size:11px;font-family:inherit;cursor:pointer;opacity:.7;transition:opacity .12s" onmouseover="this.style.opacity='1';this.style.color='var(--text)'" onmouseout="this.style.opacity='.7';this.style.color='#94a3b8'"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-edit"/></svg> Edit</button>
       </div>
       <div id="pp-edit-section" style="display:none;padding:0 14px 10px">
         <div style="font-size:11px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Personal Details</div>
@@ -2182,7 +2182,7 @@
         <button class="pp-action pp-danger" role="menuitem" onclick="doLogout()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-logout"/></svg><span class="pp-label" data-i18n="cc.menu.signOut">Sign out</span></button>
       </div>
     </div>
-  <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
+  <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu" aria-label="Menu"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-menu"/></svg></button>
   <div id="mobile-menu">
     <!-- View as, directors only (shown by loadUserRole); the header menu is hidden on a phone -->
     <div id="mm-roles" class="mm-roles" hidden>
@@ -5059,7 +5059,7 @@ function renderSignagePanel() {
             </div>
           </div>
           <div class="sp-card-mgmt">
-            <button onclick="openDisplayModal('edit','${esc(d.id)}')">✎ Edit</button>
+            <button onclick="openDisplayModal('edit','${esc(d.id)}')">${icon('edit')} Edit</button>
             ${hasOverride ? `<button onclick="clearDisplayOverride('${esc(d.id)}')">⟳ Reset</button>` : ''}
             <button onclick="resetDisplayKey('${esc(d.id)}', this)" title="Give this display a new key. The screen will need to be paired again; its current link and QR code stop working.">Reset key</button>
           </div>
@@ -5076,7 +5076,7 @@ function renderSignagePanel() {
                 : `<img class="sp-sponsor-img" src="${esc(s.logo_url)}" alt="${esc(s.name)}">`)
             : `<div class="sp-sponsor-placeholder">no logo</div>`}
           <div class="sp-sponsor-name">${esc(s.name)}</div>
-          <button class="sp-sponsor-edit" onclick="openSponsorModal('edit','${esc(s.id)}')">✎</button>
+          <button class="sp-sponsor-edit" onclick="openSponsorModal('edit','${esc(s.id)}')" aria-label="Edit">${icon('edit')}</button>
         </div>`).join('')
     : `<div class="sp-empty">No sponsors added yet.</div>`;
 
@@ -7706,7 +7706,7 @@ function closeProfilePanel() {
   const editSec = document.getElementById('pp-edit-section');
   if (editSec) editSec.style.display = 'none';
   const editBtn = document.getElementById('pp-edit-btn');
-  if (editBtn) editBtn.textContent = '✎ Edit';
+  if (editBtn) editBtn.innerHTML = icon('edit') + ' Edit';
   document.removeEventListener('click', _closePanelOutside);
 }
 
@@ -7818,7 +7818,7 @@ function toggleProfileEdit() {
   var isOpen = section.style.display !== 'none';
   if (isOpen) {
     section.style.display = 'none';
-    btn.textContent = '✎ Edit';
+    btn.innerHTML = icon('edit') + ' Edit';
   } else {
     document.getElementById('pp-edit-name').value = S.userName || '';
     document.getElementById('pp-edit-org').value = S.userOrg || '';
@@ -7869,7 +7869,7 @@ async function saveProfileChanges() {
   }
   renderProfilePanel();
   document.getElementById('pp-edit-section').style.display = 'none';
-  document.getElementById('pp-edit-btn').textContent = '✎ Edit';
+  document.getElementById('pp-edit-btn').innerHTML = icon('edit') + ' Edit';
   statusEl.textContent = '\u2713 Saved';
   statusEl.style.color = '#34d399';
   setTimeout(function() { statusEl.textContent = ''; }, 2000);

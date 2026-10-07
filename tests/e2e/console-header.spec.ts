@@ -14,7 +14,12 @@ test('header: one 52 px bar, no diagnostics strip or role bar, top chrome at mos
   // Top chrome in stage 4 = everything above the band, banner excluded (spec: at most 100 px).
   const bandTop = (await page.locator('#band').boundingBox())!.y;
   expect(bandTop - banner).toBeLessThanOrEqual(100);   // top chrome = everything above the band
-  expect(await page.locator('#header').evaluate(el => /\p{Extended_Pictographic}/u.test(el.textContent || ''))).toBe(false);
+  // Name each emoji and its context, so a failure says what and where (CI once failed with only "true").
+  const emoji = await page.locator('#header').evaluate(el => {
+    const txt = (el.textContent || '').replace(/\s+/g, ' ');
+    return [...txt.matchAll(/\p{Extended_Pictographic}/gu)].map(m => `U+${m[0].codePointAt(0)!.toString(16)} in "${txt.slice(Math.max(0, m.index! - 30), m.index! + 10)}"`);
+  });
+  expect(emoji).toEqual([]);
   await ctx.close();
 });
 
