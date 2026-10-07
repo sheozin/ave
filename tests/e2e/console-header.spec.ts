@@ -72,6 +72,69 @@ test('header: a director switches role from View as', async ({ browser }) => {
   await ctx.close();
 });
 
+// 5.2b (1): a Displays pill left of View as, directors only; the count is displays online
+// (heartbeat within 60 s, as the signage panel counts them), and a click opens the signage panel.
+for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }]) {
+  test(`header: ${viewport.width}: a director sees Displays with the online count, and it opens the signage panel`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { viewport });
+    const btn = page.locator('#displays-btn');
+    await expect(btn).toBeVisible();
+    await expect(page.locator('#displays-count')).toHaveText('2');
+    await expect(btn).toHaveAttribute('aria-label', 'Displays, 2 online');
+    // immediately left of View as, on the same one-row header
+    const d = (await btn.boundingBox())!, v = (await page.locator('#viewas-btn').boundingBox())!;
+    expect(d.x + d.width).toBeLessThanOrEqual(v.x);
+    expect(Math.abs((d.y + d.height / 2) - (v.y + v.height / 2))).toBeLessThan(1);
+    expect(Math.round((await page.locator('#header').boundingBox())!.height)).toBe(52);
+    expect(await page.locator('#header').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    if (viewport.width === 1280) await expect(page.locator('#displays-btn .displays-lbl')).toBeHidden();
+    else await expect(page.locator('#displays-btn .displays-lbl')).toHaveText('Displays');
+    const emoji = await btn.evaluate(el => /\p{Extended_Pictographic}/u.test(el.textContent || ''));
+    expect(emoji).toBe(false);
+    await expect(btn.locator('svg use')).toHaveAttribute('href', '#i-monitor');
+    await btn.click();
+    expect(await evalPage(page, 'S.role')).toBe('signage');
+    await expect(page.locator('#sessions-list .sp-display-card')).toHaveCount(2);
+    await expect(page.locator('#viewas-lbl')).toHaveText(/signage/i);
+    await ctx.close();
+  });
+}
+
+test('header: the Displays count follows the heartbeat', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `S.displays[0].last_seen_at = new Date(Date.now() - 120_000).toISOString(); renderSessions();`);
+  await expect(page.locator('#displays-count')).toHaveText('1');
+  await ctx.close();
+});
+
+test('header: a stage operator never sees Displays', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage' });
+  await expect(page.locator('#role-lock')).toBeVisible();
+  await expect(page.locator('#displays-btn')).toBeHidden();
+  await ctx.close();
+});
+
+test('header: on a phone the director menu has Displays, which opens the signage panel', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 390, height: 844 }, touch: true });
+  await expect(page.locator('#displays-btn')).toBeHidden();
+  await page.locator('#hamburger-btn').click();
+  const item = page.locator('#mobile-menu #mm-displays');
+  await expect(item).toBeVisible();
+  await expect(item).toContainText('Displays');
+  await expect(item).toContainText('2');
+  expect(Math.round((await item.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+  await item.click();
+  expect(await evalPage(page, 'S.role')).toBe('signage');
+  await ctx.close();
+});
+
+test('header: on a phone a locked operator has no Displays item', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', viewport: { width: 390, height: 844 }, touch: true });
+  await page.locator('#hamburger-btn').click();
+  await expect(page.locator('#mobile-menu #mm-displays')).toBeHidden();
+  await ctx.close();
+});
+
 test('header: a stage operator sees their role, not the View as menu', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { role: 'stage' });
   await expect(page.locator('#viewas-btn')).toBeHidden();
