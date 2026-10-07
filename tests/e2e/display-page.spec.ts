@@ -29,8 +29,10 @@ function makeHash(opts: { id?: string | null; s?: string | null } = {}) {
   return h;
 }
 
-function makeFeed(over: { display?: Record<string, unknown>; sessions?: unknown[]; event?: unknown } = {}) {
+function makeFeed(over: { display?: Record<string, unknown>; sessions?: unknown[]; event?: unknown;
+                          stage_messages?: unknown[] } = {}) {
   return {
+    ...(over.stage_messages ? { stage_messages: over.stage_messages } : {}),
     server_time: new Date().toISOString(),
     display: {
       id: FAKE_DISP_ID, event_id: 'ev-1', name: 'Lobby TV', zone_type: 'lobby',
@@ -932,5 +934,259 @@ test.describe('Display: schedule screen counts to the real event start', () => {
     await mockSupabase(page, { feed: () => readyFeed('2026-10-12T06:05:00Z') });
     await page.goto(`${DISP_URL}${makeHash()}`);
     await expect(page.locator('#d-live-timer')).toHaveText('STARTING NOW');
+  });
+});
+
+// ── MESSAGE TO SPEAKER ──────────────────────────────────────────────────────
+// display_feed's stage_messages: [{session_id, text, sent_at}], already
+// limited by the server to uncleared messages of LIVE/OVERRUN/HOLD sessions.
+// The stage timer shows the message of the session it is displaying.
+
+const MSG_SENT = '2026-10-07T10:00:00Z';
+const MSG_60   = 'Please wrap up now, the next panel is waiting to start soon.';  // 60 chars
+const msg = (session_id: string, text: string, sent_at = MSG_SENT) => ({ session_id, text, sent_at });
+
+// two rooms live at once: s1 in Hall A (sorts first), s3 in Hall B
+function twoRoomFeed(filter_room: string | null, stage_messages: unknown[] = []) {
+  const f = makeFeed({ display: { content_mode: 'stage-timer', filter_room }, stage_messages });
+  f.sessions.push(
+    { id: 's3', sort_order: 3, title: 'Breakout: hotel tech', speaker: 'Mona Adel', company: null,
+      room: 'Hall B', status: 'LIVE', planned_start: '09:00:00', planned_end: '09:45:00',
+      scheduled_start: '09:00:00', scheduled_end: '09:45:00',
+      actual_start: new Date(Date.now() - 10 * 60_000).toISOString() },
+    { id: 's4', sort_order: 4, title: 'Breakout: venue sales', speaker: 'Ali Hassan', company: null,
+      room: 'Hall B', status: 'PLANNED', planned_start: '10:00:00', planned_end: '10:45:00',
+      scheduled_start: '10:00:00', scheduled_end: '10:45:00', actual_start: null });
+  return f;
+}
+
+// Element structure of the stage timer: tag, id and classes of every node.
+// The timer text and inline colours change each second, so they are left out.
+async function stageShape(page: Page) {
+  return page.evaluate(() => {
+    const wrap = document.querySelector('#content-area .st-wrap')!;
+    const walk = (el: Element): string => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}`
+      + [...el.classList].filter(c => c !== 'flash').map(c => '.' + c).join('')
+      + (el.children.length ? `[${[...el.children].map(walk).join(',')}]` : '');
+    return walk(wrap);
+  });
+}
+
+test.describe('Display: message to speaker', () => {
+
+  test('70 the band shows the message of the displayed session', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' },
+      stage_messages: [msg('s1', 'Please wrap up')] }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Opening keynote');
+    await expect(page.locator('.st-msg-lbl')).toHaveText('Message from the director');
+    await expect(page.locator('.st-msg-text')).toHaveText('Please wrap up');
+    await expect(page.locator('#st-timer')).toBeVisible();
+  });
+
+  test('71 a message for a session that is not displayed is not shown', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' },
+      stage_messages: [msg('s2', 'Not for you'), msg('zz', 'Nor this')] }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Opening keynote');
+    await expect(page.locator('.st-msg')).toHaveCount(0);
+  });
+
+  test('72 a room TV shows its own room and its own message only', async ({ page }) => {
+    await mockSupabase(page, { feed: () => twoRoomFeed('Hall B',
+      [msg('s1', 'Hall A message'), msg('s3', 'Hall B message')]) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Breakout: hotel tech');
+    await expect(page.locator('.st-msg-text')).toHaveText('Hall B message');
+    await expect(page.locator('.st-next')).toHaveText('NEXT: Breakout: venue sales · Ali Hassan');
+  });
+
+  test('72b another room\'s message is not shown on a room TV', async ({ page }) => {
+    await mockSupabase(page, { feed: () => twoRoomFeed('Hall B', [msg('s1', 'Hall A message')]) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Breakout: hotel tech');
+    await expect(page.locator('.st-msg')).toHaveCount(0);
+  });
+
+  test('72c without a room filter the stage timer picks as before', async ({ page }) => {
+    await mockSupabase(page, { feed: () => twoRoomFeed(null, [msg('s3', 'Hall B message')]) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-title')).toHaveText('Opening keynote');
+    await expect(page.locator('.st-next')).toHaveText('NEXT: Panel on venues · Bob Jones');
+    await expect(page.locator('.st-msg')).toHaveCount(0);
+  });
+
+  test('72d a room TV with nothing live in its room stands by for its room', async ({ page }) => {
+    const f = twoRoomFeed('Hall B');
+    (f.sessions[2] as Record<string, unknown>).status = 'ENDED';
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-standby-session')).toHaveText('Breakout: venue sales · Ali Hassan');
+    await expect(page.locator('#st-timer')).toHaveCount(0);
+  });
+
+  test('72e a room TV follows a HOLD in its room', async ({ page }) => {
+    const f = twoRoomFeed('Hall B', [msg('s3', 'Stay on stage')]);
+    (f.sessions[2] as Record<string, unknown>).status = 'HOLD';
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#st-status')).toHaveText('HOLD');
+    await expect(page.locator('.st-title')).toHaveText('Breakout: hotel tech');
+    await expect(page.locator('.st-msg-text')).toHaveText('Stay on stage');
+  });
+
+  test('73 the band goes when the feed drops the message, and comes back', async ({ page }) => {
+    let msgs: unknown[] = [msg('s1', 'Please wrap up')];
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' }, stage_messages: msgs }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-msg-text')).toHaveText('Please wrap up');
+    msgs = [];
+    await expect(page.locator('.st-msg')).toHaveCount(0, { timeout: 6000 });
+    await expect(page.locator('#st-timer')).toBeVisible();
+    msgs = [msg('s1', 'Stop now', '2026-10-07T10:05:00Z')];
+    await expect(page.locator('.st-msg-text')).toHaveText('Stop now', { timeout: 6000 });
+  });
+
+  test('74 a new message flashes once; a repaint of the same message does not', async ({ page }) => {
+    let title = 'Opening keynote';
+    let msgs: unknown[] = [msg('s1', 'Please wrap up')];
+    await mockSupabase(page, { feed: () => {
+      const f = makeFeed({ display: { content_mode: 'stage-timer' }, stage_messages: msgs });
+      (f.sessions[0] as Record<string, unknown>).title = title;
+      return f;
+    } });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-msg')).toHaveClass(/st-msg-new/);
+    title = 'Opening keynote, renamed';          // sessions change: full repaint
+    await expect(page.locator('.st-title')).toHaveText(title, { timeout: 6000 });
+    await expect(page.locator('.st-msg')).not.toHaveClass(/st-msg-new/);
+    msgs = [msg('s1', 'Take questions now', '2026-10-07T10:03:00Z')];
+    await expect(page.locator('.st-msg-text')).toHaveText('Take questions now', { timeout: 6000 });
+    await expect(page.locator('.st-msg')).toHaveClass(/st-msg-new/);
+  });
+
+  test('74b with reduced motion the band does not flash', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' },
+      stage_messages: [msg('s1', 'Please wrap up')] }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-msg-text')).toHaveText('Please wrap up');
+    expect(await page.locator('.st-msg').evaluate(e => getComputedStyle(e).animationName)).toBe('none');
+  });
+
+  test('75 no message: the stage timer has exactly the structure it had before', async ({ page }) => {
+    // recorded from cuedeck-display.html at 60cf287, before the message band existed
+    const BEFORE = 'div.st-wrap.fade-in[div#st-status.st-status.live,div#st-timer.st-timer,div#st-timer-lbl.st-timer-lbl,'
+      + 'div.st-progress-bar[div#st-progress-fill.st-progress-fill],div.st-title,div.st-speaker,div.st-next]';
+    for (const stage_messages of [undefined, [], [msg('s2', 'Other session')]]) {
+      await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' }, stage_messages }) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('#st-timer')).toBeVisible();
+      expect(await stageShape(page), JSON.stringify(stage_messages)).toBe(BEFORE);
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+    }
+  });
+
+  test('76 the message is only shown on the stage timer, not on the schedule', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ stage_messages: [msg('s1', 'Please wrap up')] }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote');
+    await expect(page.locator('.st-msg')).toHaveCount(0);
+  });
+});
+
+// The countdown, the session and NEXT must stay fully on screen and above the
+// band; the message stays inside the band in at most two lines.
+async function bandLayout(page: Page) {
+  // measure after the 0.4 s fade-in, which slides the screen by 10 px
+  await page.waitForFunction(() => document.querySelector('.st-wrap')?.getAnimations().every(a => a.playState === 'finished'));
+  return page.evaluate(() => {
+    const r = (s: string) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect() : null; };
+    const band = r('.st-msg')!, txt = document.querySelector('.st-msg-text') as HTMLElement;
+    const lh = parseFloat(getComputedStyle(txt).lineHeight);
+    return {
+      vw: window.innerWidth, vh: window.innerHeight,
+      band: { top: band.top, bottom: band.bottom, left: band.left, right: band.right, h: band.height },
+      parts: Object.fromEntries(['#st-status', '#st-timer', '#st-timer-lbl', '.st-progress-bar', '.st-title', '.st-people, .st-speaker', '.st-next']
+        .map(s => [s, r(s) && { top: r(s)!.top, bottom: r(s)!.bottom, left: r(s)!.left, right: r(s)!.right }])),
+      text: { top: txt.getBoundingClientRect().top, bottom: txt.getBoundingClientRect().bottom,
+              right: txt.getBoundingClientRect().right, left: txt.getBoundingClientRect().left,
+              lines: Math.round(txt.getBoundingClientRect().height / lh), size: parseFloat(getComputedStyle(txt).fontSize) },
+    };
+  });
+}
+
+function expectBandLayout(L: Awaited<ReturnType<typeof bandLayout>>) {
+  expect(L.band.bottom).toBeLessThanOrEqual(L.vh + 0.5);
+  expect(L.band.h / L.vh).toBeGreaterThan(0.2);
+  expect(L.band.h / L.vh).toBeLessThan(0.36);
+  for (const [sel, b] of Object.entries(L.parts)) {
+    expect(b, sel).not.toBeNull();
+    expect(b!.top, sel).toBeGreaterThanOrEqual(-0.5);
+    expect(b!.bottom, sel).toBeLessThanOrEqual(L.band.top + 0.5);
+    expect(b!.left, sel).toBeGreaterThanOrEqual(-0.5);
+    expect(b!.right, sel).toBeLessThanOrEqual(L.vw + 0.5);
+  }
+  expect(L.text.lines).toBeLessThanOrEqual(2);
+  expect(L.text.top).toBeGreaterThanOrEqual(L.band.top - 0.5);
+  expect(L.text.bottom).toBeLessThanOrEqual(L.band.bottom + 0.5);
+  expect(L.text.left).toBeGreaterThanOrEqual(-0.5);
+  expect(L.text.right).toBeLessThanOrEqual(L.vw + 0.5);
+}
+
+const WIDE_FONTS = () => {
+  document.addEventListener('DOMContentLoaded', () => {
+    const s = document.createElement('style');
+    s.textContent = "body{font-family:Verdana,'DejaVu Sans',sans-serif !important}"
+      + ".st-title,.st-msg-text{letter-spacing:.04em !important}";
+    document.head.appendChild(s);
+  });
+};
+
+function bigMsgFeed(text: string) {
+  const f = feedWithPeople(BIG_PANEL, 'stage-timer');
+  (f.sessions[0] as Record<string, unknown>).title = 'Panel: the future of MICE and business events in North Africa';
+  return { ...f, stage_messages: [msg('s1', text)] };
+}
+
+for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
+  test.describe(`Display: message band layout at ${w}x${h}`, () => {
+    test.use({ viewport: { width: w, height: h } });
+
+    test(`77 short message: countdown and NEXT stay above the band (${w}x${h})`, async ({ page }) => {
+      await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'stage-timer' },
+        stage_messages: [msg('s1', 'Please wrap up')] }) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.st-msg-text')).toHaveText('Please wrap up');
+      const L = await bandLayout(page);
+      expectBandLayout(L);
+      expect(L.text.lines).toBe(1);
+    });
+
+    test(`78 60 characters, a big panel and wide fonts still fit (${w}x${h})`, async ({ page }) => {
+      expect(MSG_60.length).toBe(60);
+      await page.addInitScript(WIDE_FONTS);
+      await mockSupabase(page, { feed: () => bigMsgFeed(MSG_60) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.st-msg-text')).toHaveText(MSG_60);
+      const L = await bandLayout(page);
+      expectBandLayout(L);
+      // shrunk to fit, never to unreadable
+      expect(L.text.size).toBeGreaterThanOrEqual(h * 0.035);
+    });
+  });
+}
+
+test.describe('Display: message band refits on resize', () => {
+  test('79 the band and countdown are refitted when the screen size changes', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const f = bigMsgFeed(MSG_60);
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.st-msg-text')).toHaveText(MSG_60);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(async () => (await bandLayout(page)).band.bottom).toBeLessThanOrEqual(720.5);
+    await page.waitForTimeout(400);
+    expectBandLayout(await bandLayout(page));
   });
 });
