@@ -157,8 +157,23 @@ test('inputs are 16px so iOS does not zoom, and the honeypot is off screen', asy
   const sizes = await page.$$eval('input[type=text]:not([name=website]),input[type=email],select', els => els.map(e => parseFloat(getComputedStyle(e).fontSize)));
   expect(Math.min(...sizes)).toBeGreaterThanOrEqual(16);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
-  const hp = await page.locator('[name=website]').boundingBox();
-  expect(hp!.x).toBeLessThan(-1000);
+  // The honeypot is invisible and unreachable for people, without an
+  // off-screen offset (which widened right-to-left pages).
+  const hp = page.locator('[name=website]');
+  expect(await hp.evaluate((e) => { const w = e.closest('.hp') as HTMLElement; const cs = getComputedStyle(w);
+    return { op: cs.opacity, clip: cs.clipPath, hidden: w.getAttribute('aria-hidden'), tab: e.getAttribute('tabindex') }; }))
+    .toEqual({ op: '0', clip: 'inset(50%)', hidden: 'true', tab: '-1' });
+});
+
+test('right-to-left (Arabic): no sideways scrolling, and organizer text keeps its punctuation', async ({ page }) => {
+  await setup(page, { config: CONFIG({ language: 'ar' }) });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(URL_);
+  await expect(page.locator('#open')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.dir)).toBe('rtl');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  await expect(page.locator('#open .card-h h2')).toHaveText('تسجيل');
+  await expect(page.locator('#about-p')).toHaveAttribute('dir', 'auto');
 });
 
 
@@ -275,4 +290,175 @@ test('test mode: a waitlisted test registration says so', async ({ page }) => {
   await fill(page);
   await page.click('#submit');
   await expect(page.locator('#done-h')).toHaveText('Added to the waitlist (test)');
+});
+
+// ── Paid tickets (109) ──
+const TICKETS = [
+  { id: 'aaaaaaaa-0000-4000-8000-000000000001', name: 'Community', description: null, price_cents: 0, currency: 'eur', price: null, left: null, sold_out: false, on_sale: true },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000002', name: 'Standard', description: 'Full access', price_cents: 4900, currency: 'eur', price: '€49.00', left: 3, sold_out: false, on_sale: true },
+  { id: 'aaaaaaaa-0000-4000-8000-000000000003', name: 'VIP', description: null, price_cents: 19900, currency: 'eur', price: '€199.00', left: null, sold_out: true, on_sale: true },
+];
+
+test('tickets: the guest must pick one; a paid pick says how payment works', async ({ page }) => {
+  const sent = await setup(page, { config: CONFIG({ tickets: TICKETS }) });
+  await page.goto(URL_);
+  await expect(page.locator('.tix-o')).toHaveCount(3);
+  await expect(page.locator('.tix-o').nth(2)).toBeDisabled();
+  await expect(page.locator('.tix-o').nth(2)).toContainText('Sold out');
+  await expect(page.locator('.tix-o').nth(1)).toContainText('Full access · 3 left');
+  await fill(page);
+  await page.click('#submit');
+  await expect(page.locator('#tix .err')).toHaveText('Choose a ticket.');
+  expect(sent).toHaveLength(0);
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await expect(page.locator('#tix-pay')).toBeVisible();
+  await page.locator('.tix-o', { hasText: 'Community' }).click();
+  await expect(page.locator('#tix-pay')).toBeHidden();
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await page.click('#submit');
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent[0]).toMatchObject({ action: 'register', ticket_type_id: 'aaaaaaaa-0000-4000-8000-000000000002' });
+});
+
+test('tickets: a paid confirm goes to Stripe, and the return shows the ticket', async ({ page }) => {
+  let paid = false;
+  const sent = await setup(page, {
+    config: CONFIG({ tickets: TICKETS }),
+    preview: () => paid
+      ? { body: { status: 'order', order_status: 'open', first_name: 'Maya', last_name: 'Lindqvist', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } }
+      : { body: { status: 'ok', first_name: 'Maya', last_name: 'Lindqvist', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } },
+    confirm: () => paid
+      ? { body: { status: 'registered', first_name: 'Maya', ticket: { first_name: 'Maya', last_name: 'Lindqvist', ticket_type: 'Standard', code: 'B4K2C7', qr_svg: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>') } } }
+      : { body: { status: 'payment', checkout_url: 'https://checkout.stripe.com/c/pay/cs_probe', first_name: 'Maya', ticket_name: 'Standard', amount: '€49.00' } },
+  });
+  await page.route('https://checkout.stripe.com/**', r => r.fulfill({ contentType: 'text/html', body: '<title>Stripe Checkout</title>' }));
+  const TOK = 'T'.repeat(43);
+  await page.goto(URL_ + '#t=' + TOK);
+  await expect(page.locator('#cf-tix')).toHaveText('Standard, €49.00');
+  await expect(page.locator('#cf-btn')).toHaveText('Confirm and pay €49.00');
+  await page.click('#cf-btn');
+  await page.waitForURL('https://checkout.stripe.com/c/pay/cs_probe');
+  // Stripe sends the guest back to /r/<code>?paid=1 with no fragment.
+  paid = true;
+  await page.goto(URL_ + '&paid=1');
+  await expect(page.locator('#ticket')).toBeVisible();
+  await expect(page.locator('#tk-type')).toHaveText('Standard');
+  expect(sent.filter(b => b.action === 'confirm').map(b => b.token)).toEqual([TOK, TOK]);
+  expect(await page.evaluate(() => sessionStorage.length)).toBe(0);
+  expect(page.url()).not.toContain('paid=1');
+});
+
+test('tickets: a cancelled payment can be retried from the same tab', async ({ page }) => {
+  await setup(page, {
+    config: CONFIG({ tickets: TICKETS }),
+    preview: () => ({ body: { status: 'order', order_status: 'open', first_name: 'Maya', last_name: 'L', company: null, ticket: { name: 'Standard', price_cents: 4900, currency: 'eur' } } }),
+  });
+  await page.goto(URL_);
+  await page.evaluate((c) => sessionStorage.setItem('cuedeck-pay:' + c, 'U'.repeat(43)), CODE);
+  await page.goto(URL_ + '&unpaid=1');
+  await expect(page.locator('#cf-h')).toHaveText('Payment not completed');
+  await expect(page.locator('#cf-btn')).toHaveText('Continue to payment');
+  await expect(page.locator('#cf-no')).toBeHidden();
+});
+
+test('tickets: paid in another browser, the return says the ticket is on its way', async ({ page }) => {
+  await setup(page, { config: CONFIG({ tickets: TICKETS }) });
+  await page.goto(URL_ + '&paid=1');
+  await expect(page.locator('#done-h')).toHaveText('Finishing your registration');
+});
+
+// ── Plus-ones (114) ──
+test('plus-ones: a guest adds up to the limit, names are checked, and their tickets show', async ({ page }) => {
+  const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>');
+  const sent = await setup(page, { config: CONFIG({ plus_ones: 2 }), confirm: () => ({ body: { status: 'registered', first_name: 'Maya',
+    ticket: { first_name: 'Maya', last_name: 'Lindqvist', ticket_type: 'Delegate', code: 'B4K2C7', qr_svg: svg },
+    plus_tickets: [{ first_name: 'Ola', last_name: 'Nowak', ticket_type: 'Delegate', code: 'Q9W8E7', qr_svg: svg }] } }) });
+  await page.goto(URL_);
+  await expect(page.locator('#plus')).toBeVisible();
+  await expect(page.locator('#plus-max')).toHaveText('(up to 2)');
+  await fill(page);
+  await page.click('#plus-add'); await page.click('#plus-add');
+  await expect(page.locator('#plus-add')).toBeHidden();
+  const rows = page.locator('#plus-rows .plus-row');
+  await rows.nth(0).locator('input').nth(0).fill('Ola'); await rows.nth(0).locator('input').nth(1).fill('Nowak');
+  await rows.nth(1).locator('input').nth(0).fill('evil.com');
+  await rows.nth(1).locator('input').nth(1).fill('X');
+  await page.click('#submit');
+  await expect(page.locator('#plus .err')).toContainText('first and last name');
+  expect(sent).toHaveLength(0);
+  await rows.nth(1).locator('.x').click();
+  await expect(page.locator('#plus-add')).toBeVisible();
+  await page.click('#submit');
+  await expect(page.locator('#done-h')).toHaveText('Check your email');
+  expect(sent[0]).toMatchObject({ action: 'register', plus_ones: [{ first_name: 'Ola', last_name: 'Nowak' }] });
+  // The confirmed ticket page shows the plus-one's ticket too.
+  await page.goto('about:blank');
+  await page.goto(URL_ + '#t=' + 'P'.repeat(43));
+  await page.click('#cf-btn');
+  await expect(page.locator('#tk-plus .ticket')).toHaveCount(1);
+  await expect(page.locator('#tk-plus')).toContainText('Ola Nowak');
+});
+
+test('plus-ones: hidden for a paid ticket', async ({ page }) => {
+  await setup(page, { config: CONFIG({ plus_ones: 2, tickets: TICKETS }) });
+  await page.goto(URL_);
+  await page.locator('.tix-o', { hasText: 'Community' }).click();
+  await expect(page.locator('#plus')).toBeVisible();
+  await page.locator('.tix-o', { hasText: 'Standard' }).click();
+  await expect(page.locator('#plus')).toBeHidden();
+});
+
+// ── Invitations (116) ──
+test('invitation: the guest says they are coming with a plus-one and sees both tickets', async ({ page }) => {
+  const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>');
+  const sent: Record<string, unknown>[] = [];
+  await fn(page, 'checkin-register', (b) => {
+    if (b.action === 'config') return { body: CONFIG({ mode: 'invite', approval: false }) };
+    sent.push(b);
+    if (b.action === 'invite') return { body: { status: 'ok', first_name: 'Gina', last_name: 'Guest', rsvp: null, plus_max: 1, plus_ones: [] } };
+    return { body: { status: 'going', first_name: 'Gina', ticket: { first_name: 'Gina', last_name: 'Guest', ticket_type: 'attendee', code: 'G1N4AA', qr_svg: svg },
+      plus_tickets: [{ first_name: 'Ola', last_name: 'Nowak', ticket_type: 'Guest', code: 'O1A2BB', qr_svg: svg }] } };
+  });
+  await page.goto(URL_ + '#i=' + 'I'.repeat(43));
+  await expect(page.locator('#iv-h')).toHaveText('You are invited, Gina');
+  await page.click('#iv-add');
+  await expect(page.locator('#iv-add')).toBeHidden();
+  const row = page.locator('#iv-rows .plus-row').first();
+  await row.locator('input').nth(0).fill('Ola'); await row.locator('input').nth(1).fill('Nowak');
+  await page.click('#iv-yes');
+  await expect(page.locator('#ticket')).toBeVisible();
+  await expect(page.locator('#tk-plus')).toContainText('Ola Nowak');
+  expect(sent.find(b => b.action === 'rsvp')).toMatchObject({ token: 'I'.repeat(43), going: true, plus_ones: [{ first_name: 'Ola', last_name: 'Nowak' }] });
+});
+
+test('invite-only: the public page explains instead of showing a form; with approval it asks for an invitation', async ({ page }) => {
+  await setup(page, { config: CONFIG({ mode: 'invite', approval: false }) });
+  await page.goto(URL_);
+  await expect(page.locator('#shut-h')).toHaveText('This event is by invitation');
+  await expect(page.locator('#open')).toBeHidden();
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await setup(page, { config: CONFIG({ mode: 'invite', approval: true }) });
+  await page.goto('about:blank'); await page.goto(URL_);
+  await expect(page.locator('#open .card-h h2')).toHaveText('Request an invitation');
+  await expect(page.locator('#submit')).toHaveText('Send my request');
+});
+
+// ── On the organizer's website (/e/) ──
+test('embedded: the form card only, sized by embed.js, and links from emails never run framed', async ({ page }) => {
+  const sent = await setup(page);
+  // A host page on another origin would be the organizer's site; here the
+  // local server plays both, which is enough for the height handshake.
+  await page.route('http://127.0.0.1:7271/host.html', r => r.fulfill({ contentType: 'text/html', body:
+    '<!doctype html><body style="margin:0"><iframe id="f" src="/cuedeck-register.html?code=' + CODE + '&embed=1#t=' + 'T'.repeat(43) + '" style="width:420px;border:0;height:150px"></iframe>'
+    + '<script src="/embed.js"></script></body>' }));
+  await page.goto('/host.html');
+  const f = page.frameLocator('#f');
+  await expect(f.locator('#open')).toBeVisible();
+  await expect(f.locator('.hero')).toBeHidden();
+  await expect(f.locator('#embed-ev')).toContainText('Northwind Summit 2026');
+  // The #t= token was ignored: no confirmation screen inside the frame.
+  await expect(f.locator('#confirm')).toBeHidden();
+  expect(sent.filter(b => b.action === 'confirm' || b.action === 'preview')).toHaveLength(0);
+  // embed.js grew the frame to the form.
+  await expect.poll(async () => (await page.locator('#f').boundingBox())!.height).toBeGreaterThan(500);
 });

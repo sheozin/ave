@@ -98,6 +98,29 @@ export function validateRegistration(
   return { errors, answers }
 }
 
+// Plus-ones (migration 114): at most `max` people, each a first and last
+// name under the same rules as the guest's own. A row left wholly empty is
+// dropped (the guest added a row and changed their mind). Codes are
+// 'plus:<index>' for the row that failed.
+export function validatePlusOnes(
+  list: unknown, max: number,
+): { errors: string[]; names: { first_name: string; last_name: string }[] } {
+  const errors: string[] = []
+  const names: { first_name: string; last_name: string }[] = []
+  const rows = Array.isArray(list) ? list : []
+  rows.forEach((r, i) => {
+    const o = r && typeof r === 'object' ? r as Record<string, unknown> : {}
+    const first = cleanText(typeof o.first_name === 'string' ? o.first_name : '')
+    const last = cleanText(typeof o.last_name === 'string' ? o.last_name : '')
+    if (!first && !last) return
+    const ok = (s: string) => s && s.length <= MAX_NAME && HAS_LETTER.test(s) && !LINKISH.test(s)
+    if (!ok(first) || !ok(last)) errors.push('plus:' + i)
+    else names.push({ first_name: first, last_name: last })
+  })
+  if (names.length > Math.max(0, max)) errors.push('plus_too_many')
+  return { errors, names }
+}
+
 // The short code shown on screen in test mode, same derivation as the kiosk.
 export function shortCode(token: string): string {
   return token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()

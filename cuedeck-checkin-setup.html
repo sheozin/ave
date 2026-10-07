@@ -6,6 +6,7 @@
 <title>Event admin</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<script src="/vendor/qrcode-generator-1.4.4.js"></script>
 <link rel="stylesheet" href="/checkin-app.css">
 <style>
 .crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
@@ -48,14 +49,19 @@
 .link-row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .brandmark{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:#fff;font-weight:700;overflow:hidden;flex:none}
 .brandmark img{width:100%;height:100%;object-fit:contain;background:#fff}
-.bp{border:1px solid var(--bd);border-radius:16px;background:#F6F5F2;overflow:hidden;position:sticky;top:76px}
+/* The preview uses the registration page's own fonts (cuedeck-register.html), so it looks like what guests see. */
+@font-face{font-family:'Geist';src:url('/fonts/geist-var.woff2') format('woff2');font-weight:100 900;font-display:swap}
+@font-face{font-family:'Instrument Serif';src:url('/fonts/instrument-serif-400.woff2') format('woff2');font-weight:400;font-display:swap}
+.bp{border:1px solid var(--bd);border-radius:16px;background:#F6F5F2;overflow:hidden;position:sticky;top:76px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
 .bp-top{display:flex;align-items:center;gap:8px;padding:12px 14px}
 .bp-mark{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:10px;overflow:hidden}
 .bp-mark img{width:100%;height:100%;object-fit:contain;background:#fff}
+.vh-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
+.rg-img.drag{outline:2px dashed var(--ac);outline-offset:-4px}
 .bp-cover{margin:0 14px;height:110px;border-radius:12px;overflow:hidden}
 .bp-cover img{width:100%;height:100%;object-fit:cover}
 .bp-body{padding:12px 14px 16px;display:grid;gap:10px}
-.bp-title{font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.05;overflow-wrap:anywhere}
+.bp-title{font-weight:700;font-size:22px;line-height:1.1;letter-spacing:-.035em;overflow-wrap:anywhere}
 .bp-card{background:#fff;border:1px solid #E6E4DD;border-radius:10px;padding:10px;font-size:12px}
 .bp-btn{height:32px;border-radius:8px;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
 .uses{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
@@ -118,9 +124,22 @@
 #page-err:empty{display:none}
 .roles{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:6px;font-size:13px;color:var(--t2)}.roles b{color:var(--t1);font-weight:600}
 @media (max-width:600px){#f-inv{grid-template-columns:1fr!important}.nav{padding:14px 16px}.crumb{display:none}}
+.bd-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:22px;align-items:start}
+@media (max-width:980px){.bd-wrap{grid-template-columns:1fr}}
+.bd-prev{position:sticky;top:76px;background:#E9E7E1;border-radius:16px;padding:18px;display:grid;gap:14px;justify-items:center;overflow:hidden}
+.bd-prev .bd-card{box-shadow:0 1px 2px rgba(0,0,0,.08),0 10px 28px rgba(0,0,0,.12);border-radius:2mm;overflow:hidden;transform-origin:top center}
+.seg{display:inline-flex;border:1px solid var(--bd2);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--t2)}
+.seg button[aria-pressed=true]{background:var(--acsf);color:var(--ac)}
+.bd-colors{display:grid;gap:8px}
+.bd-colors .row{display:flex;align-items:center;gap:10px}
+.bd-colors .row b{flex:1;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+#badge-sheet{display:none}
+@media print{body>*:not(#badge-sheet){display:none!important}#badge-sheet{display:block!important}#badge-sheet .badge{page-break-after:always}#badge-sheet .badge:last-child{page-break-after:auto}}
 </style>
 </head>
 <body>
+<div id="badge-sheet"></div>
 <nav class="nav">
   <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
   <div class="nav-r"><a class="btn btn-s" id="dash-link" href="#">Dashboard</a><a class="btn btn-s" id="desk-link" href="#">Try the desk</a></div>
@@ -135,7 +154,9 @@
     <button class="st" data-step="overview"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg></span>Overview</button>
     <button class="st" data-step="attendees"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8"/></svg></span>Guests<small id="n-att"></small></button>
     <button class="st" data-step="register"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/></svg></span>Registration<small id="n-web"></small></button>
+    <button class="st" data-step="tickets"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 0 0 6v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a3 3 0 0 0 0-6V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2zM13 5v2M13 17v2M13 11v2"/></svg></span>Tickets<small id="n-tix"></small></button>
     <button class="st" data-step="branding"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.6 1.5-1.4 0-.9-.7-1.3-.7-2.1 0-.9.7-1.5 1.6-1.5H17a4 4 0 0 0 4-4c0-5-4-9-9-9M7.5 11.5h.01M10.5 7.5h.01M15.5 7.5h.01"/></svg></span>Branding</button>
+    <button class="st" data-step="badges"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v13H4zM9 3v6h6V3M8 13h8M8 16h5"/></svg></span>Badges</button>
     <button class="st" data-step="qr"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v14H3zM3 7l9 6 9-6"/></svg></span>Emails</button>
     <button class="st" data-step="staff"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 12 0v1"/></svg></span>Team<small id="n-staff"></small></button>
     <button class="st" data-step="kiosk"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18H5zM11 18h2"/></svg></span>Devices</button>
@@ -172,11 +193,12 @@
     <div class="field"><label for="rg-addr">Venue address</label><input id="rg-addr" maxlength="200" placeholder="Street, city. Used for the Maps link" autocomplete="off"></div>
     <div class="field"><label for="rg-desc">About the event</label><textarea id="rg-desc" maxlength="2000" rows="4" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="What the day is about, who it is for, what to bring"></textarea></div>
     <div class="row2" style="gap:12px;align-items:start">
-      <div class="field"><label>Cover image</label><div class="rg-img" id="rg-cover-box"><img id="rg-cover-img" alt="Cover image preview" hidden><span id="rg-cover-none" class="small">Wide image, at least 1600 px. JPEG, PNG or WebP.</span></div>
-        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-cover-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-cover-rm" hidden>Remove</button></div></div>
-      <div class="field"><label>Logo</label><div class="rg-img rg-img-logo" id="rg-logo-box"><img id="rg-logo-img" alt="Logo preview" hidden><span id="rg-logo-none" class="small">Square works best.</span></div>
-        <div style="display:flex;gap:8px;margin-top:8px"><label class="btn btn-s" style="cursor:pointer">Upload<input type="file" id="rg-logo-file" accept="image/jpeg,image/png,image/webp" hidden></label><button class="btn btn-g" type="button" id="rg-logo-rm" hidden>Remove</button></div></div>
+      <div class="field"><label>Cover image</label><div class="rg-img" id="rg-cover-box"><img id="rg-cover-img" alt="Cover image preview" hidden><span id="rg-cover-none" class="small">Wide image, at least 1600 px. Click Upload or drop an image here.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-s" type="button" id="rg-cover-pick">Upload</button><input type="file" id="rg-cover-file" class="vh-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" tabindex="-1" aria-hidden="true"><button class="btn btn-g" type="button" id="rg-cover-rm" hidden>Remove</button></div></div>
+      <div class="field"><label>Logo</label><div class="rg-img rg-img-logo" id="rg-logo-box"><img id="rg-logo-img" alt="Logo preview" hidden><span id="rg-logo-none" class="small">Square works best. Click Upload or drop it here.</span></div>
+        <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-s" type="button" id="rg-logo-pick">Upload</button><input type="file" id="rg-logo-file" class="vh-file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" tabindex="-1" aria-hidden="true"><button class="btn btn-g" type="button" id="rg-logo-rm" hidden>Remove</button></div></div>
     </div>
+    <p class="small" id="rg-img-msg" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     <div class="toggle"><div><b>Show the programme</b><p>Guests see your sessions and times from the run of show, and they follow any delays. Only for events you run in CueDeck.</p></div><label class="sw"><input type="checkbox" id="rg-prog"><span></span></label></div>
     <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn btn-p" id="rg-save-design" type="button">Save design</button><span class="small" id="rg-design-state"></span></div>
     <div class="err" id="rg-design-err"></div><div class="ok" id="rg-design-ok"></div>
@@ -244,6 +266,12 @@
       <div><h2>Attendees</h2><p id="att-sub"></p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s" id="att-export">Export CSV</button><button class="btn btn-s" id="att-add">Add person</button><button class="btn btn-p" id="att-import">Import CSV</button></div>
     </div>
+    <div id="gi-bar" hidden style="border:1px solid var(--bd);border-radius:14px;padding:12px 14px;margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px"><b style="font-size:14px">Invitations</b><div class="small" id="gi-sum" style="margin:2px 0 0"></div></div>
+      <button class="btn btn-s" id="gi-test" type="button">Send me a test</button>
+      <button class="btn btn-p" id="gi-send" type="button"></button>
+    </div>
+    <div class="ok" id="gi-ok"></div><div class="err" id="gi-err"></div>
     <div class="tools">
       <input class="search" id="att-q" placeholder="Search name, email or company" autocomplete="off">
       <button class="chip" data-f="all" aria-pressed="true">All</button>
@@ -256,6 +284,13 @@
       <div><b>Drop a CSV to add people</b><p>You'll see who will be added, updated or skipped before anything is saved. Columns: first name, last name, email, company, ticket type.</p></div></label>
     <div class="preview" id="imp-prev" hidden></div>
     <div class="err" id="att-err"></div>
+    <div id="sp-box" hidden>
+      <h3 class="sc-h">Speakers from your run of show</h3>
+      <div class="toggle"><div><b>Tell the production console when a speaker arrives</b><p>When a guest you listed (or the desk added in person) checks in and their name matches a speaker, their session shows the speaker as arrived in the console. Names typed on the registration page or a kiosk never count. Panels count once everyone on them is in.</p></div><label class="sw"><input type="checkbox" id="sp-on"><span></span></label></div>
+      <p class="small" id="sp-sum"></p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Speaker</th><th>Session</th><th>Status</th></tr></thead><tbody id="sp-body"></tbody></table></div>
+      <div class="err" id="sp-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-register" hidden>
@@ -266,8 +301,18 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap"><input class="search" id="rg-link" readonly style="flex:1;min-width:220px"><button class="btn btn-s" id="rg-copy" type="button">Copy</button><a class="btn btn-s" id="rg-open" target="_blank" rel="noopener">Open</a></div>
       </div>
       <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600;font-size:14px">Put the form on your own website</summary>
+        <p class="small" style="margin:8px 0">Paste this where the form should appear. It fits itself to your page, and confirmation emails and payments still open on CueDeck's own page.</p>
+        <textarea id="rg-embed" readonly rows="4" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:12px;border-radius:10px;padding:10px;border:1px solid var(--bd2);background:var(--wm)"></textarea>
+        <p style="margin:8px 0 0;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s" id="rg-embed-copy" type="button">Copy code</button><a class="btn btn-s" id="rg-embed-open" target="_blank" rel="noopener">Preview</a></p>
+      </details>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
+    <h3 class="sc-h">Page language</h3>
+    <div class="toggle"><div><b>Language of the registration page</b><p>Automatic shows each guest the page in their own browser's language when it is one of these. What you write (event name, description, questions, ticket names) is shown as you wrote it.</p></div>
+      <select id="rg-lang" aria-label="Page language" style="height:40px;border-radius:10px;border:1px solid var(--bd2);padding:0 10px"><option value="auto">Automatic</option><option value="en">English</option><option value="pl">Polski</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div>
+    <h3 class="sc-h">Who can register</h3>
+    <div class="toggle"><div><b>Invited guests only</b><p>The public link takes no registrations. You invite guests from your guest list (Guests tab) and each gets a personal link to say if they are coming. With approval on, the public link takes requests for an invitation instead.</p></div><label class="sw"><input type="checkbox" id="rg-invite"><span></span></label></div>
     <h3 class="sc-h">Waitlist and approval</h3>
     <div class="toggle"><div><b>Waitlist when full</b><p>When you reach capacity, guests can join a waitlist. Offer them places from the list below and their ticket is emailed.</p></div><label class="sw"><input type="checkbox" id="rg-waitlist"><span></span></label></div>
     <div class="toggle"><div><b>Approve each registration</b><p>Registrations wait here for you. Guests get their ticket only once you approve them.</p></div><label class="sw"><input type="checkbox" id="rg-approval"><span></span></label></div>
@@ -279,6 +324,9 @@
       </div>
       <div style="overflow-x:auto"><table class="tbl" style="margin-top:8px"><thead><tr><th>Guest</th><th class="hide-sm">Company</th><th>Waiting for</th><th></th></tr></thead><tbody id="held-body"></tbody></table></div>
     </div>
+    <h3 class="sc-h">Plus-ones</h3>
+    <div class="toggle"><div><b>Guests may bring</b><p>Each plus-one gets their own QR ticket, sent to the guest who brought them, and takes a place within your capacity. Paid tickets have no plus-ones: everyone buys their own.</p></div>
+      <select id="rg-plus" aria-label="Plus-ones per guest" style="height:40px;border-radius:10px;border:1px solid var(--bd2);padding:0 10px"><option value="0">Nobody</option><option value="1">1 guest</option><option value="2">2 guests</option><option value="3">3 guests</option><option value="4">4 guests</option><option value="5">5 guests</option></select></div>
     <h3 class="sc-h">Limits</h3>
     <div class="row2" style="gap:12px">
       <div class="field"><label for="rg-cap">Capacity</label><input id="rg-cap" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
@@ -291,6 +339,66 @@
     <p style="margin:10px 0 0"><button class="btn btn-g" id="rg-addq" type="button">Add a question</button></p>
     <div style="display:flex;gap:10px;align-items:center;margin-top:18px"><button class="btn btn-p" id="rg-save" type="button">Save</button><span class="small" id="rg-count"></span></div>
     <div class="err" id="rg-err"></div><div class="ok" id="rg-ok"></div>
+  </section>
+
+  <section class="panel" id="p-badges" hidden>
+    <div class="ph"><div><h2>Badges</h2><p>What the desk and the kiosk print for each guest. The preview is the real badge, drawn at its printed size.</p></div></div>
+    <div class="bd-wrap">
+      <div style="display:grid;gap:14px">
+        <div class="field"><label for="bd-size">Badge stock</label><select id="bd-size"></select></div>
+        <div class="row2" id="bd-custom" hidden style="gap:12px">
+          <div class="field"><label for="bd-w">Width (mm)</label><input id="bd-w" type="number" min="50" max="200" inputmode="numeric"></div>
+          <div class="field"><label for="bd-h">Height (mm)</label><input id="bd-h" type="number" min="40" max="200" inputmode="numeric"></div>
+        </div>
+        <div class="field"><label>Name</label><div class="seg" id="bd-name"><button type="button" data-v="full">Full name</button><button type="button" data-v="split">First name large</button></div></div>
+        <div class="field"><label>Layout</label><div class="seg" id="bd-align"><button type="button" data-v="center">Centred</button><button type="button" data-v="left">Left</button></div></div>
+        <div class="toggle"><div><b>Colour band</b><p>A band across the top in your brand colour.</p></div><label class="sw"><input type="checkbox" id="bd-band"><span></span></label></div>
+        <div class="toggle"><div><b>Logo</b><p id="bd-logo-p">Your logo from Branding.</p></div><label class="sw"><input type="checkbox" id="bd-logo"><span></span></label></div>
+        <div class="toggle"><div><b>Company</b><p>Under the name.</p></div><label class="sw"><input type="checkbox" id="bd-company"><span></span></label></div>
+        <div class="toggle"><div><b>Ticket type</b><p>Such as VIP, Speaker or Press.</p></div><label class="sw"><input type="checkbox" id="bd-ticket"><span></span></label></div>
+        <div class="toggle"><div><b>QR code</b><p>The guest's own code, so door and session scanners can read the badge.</p></div><label class="sw"><input type="checkbox" id="bd-qr"><span></span></label></div>
+        <div id="bd-colors-box" hidden>
+          <h3 class="sc-h" style="margin-top:6px">Colours by ticket type</h3>
+          <p class="sc-p">Give a ticket type its own band colour, so staff see VIPs and speakers across the room.</p>
+          <div class="bd-colors" id="bd-colors"></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-p" id="bd-save" type="button">Save badge</button>
+          <button class="btn btn-s" id="bd-print" type="button">Print a test badge</button>
+          <button class="link" id="bd-reset" type="button">Back to the standard badge</button>
+        </div>
+        <div class="ok" id="bd-ok"></div><div class="err" id="bd-err"></div>
+      </div>
+      <div class="bd-prev" id="bd-prev" aria-label="Badge preview"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="p-tickets" hidden>
+    <div class="ph"><div><h2>Tickets</h2><p>Free and paid tickets for your registration page. Payments go straight to your own Stripe account, and guests get their QR ticket once they have paid.</p></div></div>
+    <div class="toggle"><div><b>Payouts</b><p id="tk-pay-s">Checking…</p></div><button class="btn btn-s" id="tk-connect" type="button" hidden>Connect Stripe</button></div>
+    <p class="small" id="tk-fee"></p>
+    <h3 class="sc-h">Ticket types</h3>
+    <p class="sc-p">Guests choose one when they register. With no ticket types, registration is free and nobody chooses.</p>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Ticket</th><th>Price</th><th>Sold</th><th></th></tr></thead><tbody id="tk-body"></tbody></table></div>
+    <div id="tk-form" hidden style="border:1px solid var(--bd);border-radius:14px;padding:16px;margin-top:12px;display:grid;gap:12px">
+      <div class="row2" style="gap:12px">
+        <div class="field"><label for="tk-name">Name</label><input id="tk-name" maxlength="60" placeholder="Standard"></div>
+        <div class="field"><label for="tk-desc">Description <span class="small">(optional)</span></label><input id="tk-desc" maxlength="200" placeholder="Full access, lunch included"></div>
+      </div>
+      <div class="row2" style="gap:12px">
+        <div class="field"><label for="tk-price">Price</label><div style="display:flex;gap:8px"><input id="tk-price" inputmode="decimal" placeholder="0.00 for free" style="flex:1;min-width:0"><select id="tk-cur" aria-label="Currency"></select></div></div>
+        <div class="field"><label for="tk-qty">How many</label><input id="tk-qty" type="number" min="1" max="100000" inputmode="numeric" placeholder="No limit"></div>
+      </div>
+      <p class="small" id="tk-price-note" hidden>Connect Stripe above to sell paid tickets. Free tickets work now.</p>
+      <div style="display:flex;gap:10px;align-items:center"><button class="btn btn-p" id="tk-save" type="button">Save ticket</button><button class="link" id="tk-cancel" type="button">Cancel</button></div>
+    </div>
+    <p style="margin:10px 0 0"><button class="btn btn-g" id="tk-add" type="button">Add a ticket type</button></p>
+    <div class="err" id="tk-err"></div><div class="ok" id="tk-ok"></div>
+    <div id="tk-orders" hidden>
+      <h3 class="sc-h">Orders</h3>
+      <p class="sc-p" id="tk-rev"></p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Guest</th><th>Ticket</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody id="tk-obody"></tbody></table></div>
+    </div>
   </section>
 
   <section class="panel" id="p-staff" hidden>
@@ -326,9 +434,23 @@
   </section>
 
   <section class="panel" id="p-qr" hidden>
-    <div class="ph"><div><h2>QR emails</h2><p id="qr-sub"></p></div></div>
+    <div class="ph"><div><h2>Guest emails</h2><p id="qr-sub"></p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-s" id="qr-self">Send a test to myself</button><button class="btn btn-p" id="qr-all" hidden></button></div>
     <div class="ok" id="qr-ok"></div><div class="err" id="qr-err"></div>
+    <h3 class="sc-h">Automatic emails</h3>
+    <p class="sc-p">Sent for you once the event is live. Test mode never emails guests.</p>
+    <div class="toggle"><div><b>Reminder the day before</b><p id="rm-when">Goes out from 24 hours before doors open, with each guest's QR code, the time and the venue. Guests who already checked in are skipped.</p></div><label class="sw"><input type="checkbox" id="rm-on"><span></span></label></div>
+    <div class="field"><label for="rm-msg">Note in the reminder <span class="small">(optional)</span></label><textarea id="rm-msg" maxlength="600" rows="3" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="Parking, what to bring, which entrance to use"></textarea></div>
+    <div class="toggle"><div><b>Thank-you after the event</b><p id="ty-when">Goes out 2 hours after the event ends, only to guests who checked in.</p></div><label class="sw"><input type="checkbox" id="ty-on"><span></span></label></div>
+    <div class="field"><label for="ty-msg">Note in the thank-you <span class="small">(optional)</span></label><textarea id="ty-msg" maxlength="600" rows="3" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="Thanks for coming. The slides and photos are online."></textarea></div>
+    <div class="field"><label for="ty-link">Link in the thank-you <span class="small">(optional: survey, slides, photos)</span></label><input id="ty-link" maxlength="500" placeholder="https://" autocomplete="off"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-p" id="rm-save" type="button">Save</button>
+      <button class="btn btn-s" id="rm-test" type="button">Send me the reminder</button>
+      <button class="btn btn-s" id="ty-test" type="button">Send me the thank-you</button>
+      <span class="small" id="rm-count"></span>
+    </div>
+    <div class="ok" id="rm-ok"></div><div class="err" id="rm-err"></div>
   </section>
 
   <section id="p-golive" hidden>
@@ -386,6 +508,7 @@
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
+import { BADGE_SIZES, normalizeDesign, badgeElement, pageCss } from '/checkin-badge.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -481,6 +604,7 @@ function renderChrome() {
     details: true,
     attendees: ATT.length > 0,
     register: !!ENT.registration_enabled,
+    tickets: !!(TIX && TIX.types.length),
     branding: !!(ENT.registration_brand_color || ENT.registration_logo_path || ENT.registration_cover_path || ENT.registration_host_name),
     staff: STAFF.some(s => !s.is_owner),
     kiosk: ENT.self_registration || ENT.kiosk_self_print || ENT.auto_send_qr_email,
@@ -492,9 +616,9 @@ function renderChrome() {
 
 function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
-  for (const s of ['overview', 'details', 'attendees', 'register', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
+  for (const s of ['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'badges', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ overview: renderOverview, details: renderDetails, attendees: renderAttendees, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, branding: () => { renderDesign(); renderPreview(); },
+  ({ overview: renderOverview, details: renderDetails, attendees: async () => { renderAttendees(); renderSpeakers(); await loadInvites(); renderInviteBar(); renderAttendees(); }, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
@@ -513,7 +637,7 @@ function renderOverview() {
   $('ov-meta').textContent = [fmtDate(EV.date), EV.event_start && EV.event_end ? EV.event_start.slice(0, 5) + ' to ' + EV.event_end.slice(0, 5) : '', EV.venue].filter(Boolean).join(' · ');
   $('ov-desk').href = '/checkin/desk?event=' + EVENT_ID; $('ov-desk').textContent = isLive() ? 'Open the desk' : 'Try the desk';
   $('ov-dash').href = '/checkin/dashboard?event=' + EVENT_ID;
-  const web = ATT.filter(a => a.source === 'web').length, kiosk = ATT.filter(a => a.source === 'kiosk' || a.source === 'walk_in').length;
+  const web = ATT.filter(a => a.source === 'web' || a.source === 'plus_one').length, kiosk = ATT.filter(a => a.source === 'kiosk' || a.source === 'walk_in').length;
   const withEmail = ATT.filter(a => a.email), sent = withEmail.filter(a => a.qr_email_sent_at).length;
   const team = STAFF.filter(s => !s.is_owner);
   const inNow = ATT.filter(a => a.checked_in_at && (isLive() ? !a.is_test : true)).length;
@@ -569,7 +693,7 @@ function renderReports() {
   $('rp-export').hidden = !can(ROLE, 'export');
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
-  $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
+  $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
 
@@ -716,6 +840,103 @@ function statusTag(a) {
   if (a.checked_in_at) return el('span', 'tag ' + (isLive() ? 't-in' : 't-test'), isLive() ? 'Checked in' : 'Test check-in');
   return el('span', 'em', 'Expected');
 }
+// ── speakers linked to the console (migration 112) ──
+async function renderSpeakers() {
+  const { data, error } = await sb.rpc('checkin_speaker_links', { p_event_id: EVENT_ID });
+  if (error) { $('sp-box').hidden = false; $('sp-err').textContent = error.message; return; }
+  const people = data.people || [];
+  $('sp-box').hidden = !people.length;
+  if (!people.length) return;
+  $('sp-on').checked = !!data.enabled;
+  const missing = people.filter(p => !p.on_list).length, arrived = people.filter(p => p.arrived).length;
+  $('sp-sum').textContent = people.length + (people.length === 1 ? ' speaker' : ' speakers') + ' in the run of show'
+    + (arrived ? ', ' + arrived + ' arrived' : '')
+    + (missing ? '. ' + missing + ' not on the guest list by that exact name: add them, or check the spelling, so their arrival can reach the console.' : ', all on the guest list.');
+  $('sp-body').replaceChildren(...people.map(p => {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('div', 'nm', p.name), el('div', 'em', p.role));
+    const ses = el('td'); ses.append(el('div', null, p.session), el('div', 'em', p.time || ''));
+    // A self-registered name proves nothing (113): only guests you listed, or the desk added in person, can mark a speaker arrived.
+    const st = el('td'); st.append(el('span', 'tag ' + (p.arrived ? 't-in' : p.on_list ? 't-sent' : 't-test'), p.arrived ? 'Arrived' : p.on_list ? 'On the guest list' : p.self_only ? 'Registered online only' : 'Not on the guest list'));
+    if (p.self_only && !p.arrived) st.append(el('div', 'em', 'Add them to your guest list yourself so their arrival counts.'));
+    tr.append(who, ses, st);
+    return tr;
+  }));
+}
+$('sp-on').onchange = async () => {
+  $('sp-err').textContent = '';
+  const { error } = await sb.rpc('checkin_set_speaker_link', { p_event_id: EVENT_ID, p_on: $('sp-on').checked });
+  if (error) { $('sp-err').textContent = error.message; $('sp-on').checked = !$('sp-on').checked; }
+};
+// ── invitations (migrations 116, 119) ──
+let INV = {};
+const invitable = () => ATT.filter(a => a.source === 'import' && a.email && (!a.is_test || !isLive()));
+async function loadInvites() {
+  const { data, error } = await sb.rpc('checkin_invite_status', { p_event_id: EVENT_ID });
+  INV = error ? {} : (data || {});
+  if (error) $('gi-err').textContent = error.message;
+}
+function renderInviteBar() {
+  const all = invitable(), sent = all.filter(a => INV[a.id]), notYet = all.length - sent.length;
+  const going = sent.filter(a => INV[a.id].rsvp === 'going').length, no = sent.filter(a => INV[a.id].rsvp === 'not_going').length;
+  $('gi-bar').hidden = ENT.registration_mode !== 'invite' && !sent.length;
+  $('gi-sum').textContent = sent.length + ' invited · ' + going + ' coming · ' + no + ' not coming · ' + (sent.length - going - no) + ' no answer yet'
+    + (notYet ? ' · ' + notYet + ' not invited yet' : '') + (isLive() ? '' : '. Invitations go to guests once the event is live.');
+  $('gi-send').hidden = !isLive() || !notYet;
+  $('gi-send').textContent = 'Send invitations to ' + notYet + (notYet === 1 ? ' guest' : ' guests');
+}
+function inviteCell(td, a) {
+  const iv = INV[a.id];
+  if (!iv && !(ENT.registration_mode === 'invite' && a.source === 'import' && a.email && isLive())) return;
+  const line = el('div'); line.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px';
+  if (iv) line.append(el('span', 'tag ' + (iv.rsvp === 'going' ? 't-in' : iv.rsvp === 'not_going' ? 't-test' : 't-wait'),
+    iv.rsvp === 'going' ? 'Coming' : iv.rsvp === 'not_going' ? 'Not coming' : 'Invited'));
+  if (isLive() && a.email && a.source === 'import') {
+    const again = el('button', 'link', iv ? 'Invite again' : 'Invite'); again.type = 'button';
+    again.onclick = async () => {
+      again.disabled = true;
+      const { error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'resend', attendee_ids: [a.id] } });
+      again.disabled = false;
+      if (error) { $('gi-err').textContent = await fnError(error); return; }
+      $('gi-ok').textContent = 'Invitation sent to ' + a.email + '.'; await loadInvites(); renderInviteBar(); renderAttendees();
+    };
+    line.append(again);
+  }
+  if (iv) {
+    const cancel = el('button', 'link', 'Cancel link'); cancel.type = 'button'; cancel.title = 'Stop every invitation link of this guest from working, for example if it was forwarded';
+    cancel.onclick = async () => {
+      if (cancel.dataset.armed !== '1') { cancel.dataset.armed = '1'; cancel.textContent = 'Click again'; setTimeout(() => { cancel.dataset.armed = ''; cancel.textContent = 'Cancel link'; }, 3500); return; }
+      const { error } = await sb.rpc('checkin_invite_revoke', { p_event_id: EVENT_ID, p_attendee_id: a.id });
+      if (error) { $('gi-err').textContent = error.message; return; }
+      $('gi-ok').textContent = 'Their invitation link no longer works. Use Invite again to send a new one.';
+    };
+    line.append(cancel);
+  }
+  td.append(line);
+}
+$('gi-send').onclick = async () => {
+  $('gi-ok').textContent = ''; $('gi-err').textContent = '';
+  const b = $('gi-send'); b.disabled = true;
+  let total = 0, failed = 0;
+  // In batches: the function sends up to 80 at a time and says how many remain.
+  for (;;) {
+    b.textContent = 'Sending… ' + total + ' sent';
+    const { data, error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'send' } });
+    if (error) { $('gi-err').textContent = await fnError(error); break; }
+    total += data.sent; failed += data.failed;
+    if (data.capped) { $('gi-err').textContent = 'You have sent 1,000 invitations in the last 24 hours, the most one event can send in a day. The rest can go out tomorrow.'; break; }
+    if (!data.remaining || !data.sent) break;
+  }
+  b.disabled = false;
+  if (total) $('gi-ok').textContent = total + (total === 1 ? ' invitation' : ' invitations') + ' sent.' + (failed ? ' ' + failed + ' could not be sent; try again.' : '');
+  await loadInvites(); renderInviteBar(); renderAttendees();
+};
+$('gi-test').onclick = async () => {
+  $('gi-ok').textContent = ''; $('gi-err').textContent = '';
+  const { data, error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'test' } });
+  if (error) { $('gi-err').textContent = await fnError(error); return; }
+  $('gi-ok').textContent = 'Sent to ' + data.to + '.';
+};
 function renderAttendees() {
   $('att-export').hidden = !can(ROLE, 'export');
   const q = $('att-q').value.trim().toLowerCase();
@@ -731,6 +952,7 @@ function renderAttendees() {
     const tr = el('tr');
     const n = el('td'); n.append(el('div', 'nm', a.first_name + ' ' + a.last_name), el('div', 'em', a.email || 'No email'));
     if (!a.email) n.lastChild.style.color = 'var(--rd)';
+    inviteCell(n, a);
     const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
     if (isLive() && a.email) {
       const rs = el('button', 'link', 'Resend QR'); rs.dataset.resend = a.id;
@@ -836,7 +1058,7 @@ async function previewImport(file) {
 $('att-export').onclick = () => {
   // One column per registration answer: the current questions in order,
   // then any answered question since removed, under the label it had.
-  const SOURCE = { import: 'Imported', kiosk: 'Kiosk', walk_in: 'Walk-in', web: 'Registration page' };
+  const SOURCE = { import: 'Imported', kiosk: 'Kiosk', walk_in: 'Walk-in', web: 'Registration page', plus_one: 'Plus-one' };
   const cols = (ENT.registration_questions || []).map(q => ({ id: q.id, label: q.label }));
   for (const a of ATT) for (const [id, v] of Object.entries(a.custom_fields || {})) {
     if (v && typeof v === 'object' && 'value' in v && !cols.some(c => c.id === id)) cols.push({ id, label: String(v.label || id) });
@@ -868,6 +1090,9 @@ async function loadHeld() {
 const sinceText = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
 function renderHeld() {
   $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
+  $('rg-plus').value = String(ENT.registration_plus_ones || 0);
+  $('rg-invite').checked = ENT.registration_mode === 'invite';
+  $('rg-lang').value = ENT.registration_language || 'auto';
   const wl = HELD.filter(h => h.kind === 'waitlist').length, ap = HELD.length - wl;
   $('held-box').hidden = !HELD.length;
   $('held-title').textContent = [ap ? ap + ' awaiting approval' : '', wl ? wl + ' on the waitlist' : ''].filter(Boolean).join(' · ');
@@ -912,14 +1137,273 @@ async function saveFlow() {
   ENT.registration_waitlist = data.waitlist; ENT.registration_approval = data.approval;
   $('held-ok').textContent = 'Saved.';
 }
+$('rg-embed-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('rg-embed').value); $('rg-embed-copy').textContent = 'Copied'; }
+  catch { $('rg-embed').select(); }
+  setTimeout(() => { $('rg-embed-copy').textContent = 'Copy code'; }, 1800);
+};
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-lang').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_registration_language', { p_event_id: EVENT_ID, p_language: $('rg-lang').value });
+  if (error) { $('held-err').textContent = error.message; $('rg-lang').value = ENT.registration_language || 'auto'; return; }
+  ENT.registration_language = data; $('held-ok').textContent = 'Saved.';
+};
+$('rg-invite').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const mode = $('rg-invite').checked ? 'invite' : 'open';
+  const { data, error } = await sb.rpc('checkin_set_registration_mode', { p_event_id: EVENT_ID, p_mode: mode });
+  if (error) { $('held-err').textContent = error.message; $('rg-invite').checked = !$('rg-invite').checked; return; }
+  ENT.registration_mode = data;
+  $('held-ok').textContent = data === 'invite' ? 'Saved. Invite guests from the Guests tab.' : 'Saved. Anyone with the link can register.';
+};
+$('rg-plus').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_plus_ones', { p_event_id: EVENT_ID, p_n: parseInt($('rg-plus').value, 10) });
+  if (error) { $('held-err').textContent = error.message; $('rg-plus').value = String(ENT.registration_plus_ones || 0); return; }
+  ENT.registration_plus_ones = data; $('held-ok').textContent = 'Saved.';
+};
+
+// ── badge designer (migration 111) ──
+// BD is the design being edited; the preview redraws on every change and
+// Save stores it (checkin_set_badge_design rebuilds it from known keys).
+let BD = null;
+const SAMPLE_GUESTS = [
+  { first_name: 'Alexandra', last_name: 'Kowalczyk-Lindqvist', company: 'Northwind Traders', ticket_type: 'Speaker', qr_token: 'sample-qr-1' },
+  { first_name: 'Sam', last_name: 'Lee', company: 'Contoso', ticket_type: 'Attendee', qr_token: 'sample-qr-2' },
+];
+function badgeGuests() {
+  const real = ATT.filter(a => !a.is_test || !isLive()).slice(0, 2);
+  return real.length ? real.map(a => ({ ...a, qr_token: a.qr_token || 'sample' })) : SAMPLE_GUESTS;
+}
+const badgeLogo = () => ENT.registration_logo_path ? rgPublicUrl(ENT.registration_logo_path) : null;
+function badgeTicketTypes() {
+  const names = new Set(ATT.map(a => (a.ticket_type || '').trim()).filter(Boolean));
+  if (TIX) for (const t of TIX.types) names.add(t.name);
+  for (const k of Object.keys(BD.colors)) names.add(k);
+  return [...names].filter(n => n.toLowerCase() !== 'attendee' || BD.colors[n]).slice(0, 12);
+}
+function renderBadges() {
+  BD = normalizeDesign(ENT.badge_design);
+  $('bd-size').replaceChildren(...BADGE_SIZES.map(z => { const o = el('option', null, z.label); o.value = z.id; return o; }),
+    (() => { const o = el('option', null, 'Custom size'); o.value = 'custom'; return o; })());
+  $('bd-ok').textContent = ''; $('bd-err').textContent = '';
+  if (!TIX) loadTickets().then(() => { if (!$('p-badges').hidden) drawBadgeForm(); }).catch(() => {});
+  drawBadgeForm();
+}
+function drawBadgeForm() {
+  const z = BADGE_SIZES.find(x => x.w === BD.w && x.h === BD.h);
+  $('bd-size').value = z ? z.id : 'custom';
+  $('bd-custom').hidden = !!z; $('bd-w').value = BD.w; $('bd-h').value = BD.h;
+  for (const k of ['band', 'logo', 'company', 'ticket', 'qr']) $('bd-' + k).checked = !!BD[k];
+  $('bd-logo').disabled = !ENT.registration_logo_path;
+  $('bd-logo-p').textContent = ENT.registration_logo_path ? 'Your logo from Branding.' : 'Upload a logo under Branding first.';
+  for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align']]) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v === BD[key]));
+  const types = badgeTicketTypes();
+  $('bd-colors-box').hidden = !types.length;
+  $('bd-colors').replaceChildren(...types.map(t => {
+    const row = el('div', 'row');
+    const pick = el('input'); pick.type = 'color'; pick.value = BD.colors[t] || brandColor(); pick.setAttribute('aria-label', 'Colour for ' + t);
+    pick.style.cssText = 'width:44px;height:34px;padding:2px;flex:none';
+    const clear = el('button', 'link', BD.colors[t] ? 'Clear' : 'No colour'); clear.type = 'button'; clear.disabled = !BD.colors[t];
+    pick.oninput = () => { BD.colors[t] = pick.value.toUpperCase(); clear.textContent = 'Clear'; clear.disabled = false; drawBadgePreview(); };
+    clear.onclick = () => { delete BD.colors[t]; drawBadgeForm(); };
+    row.append(pick, el('b', null, t), clear);
+    return row;
+  }));
+  drawBadgePreview();
+}
+function drawBadgePreview() {
+  const box = $('bd-prev');
+  const width = Math.max(200, box.clientWidth - 36);
+  box.replaceChildren(...badgeGuests().map(g => {
+    const card = el('div', 'bd-card');
+    const b = badgeElement(g, { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: false });
+    card.append(b);
+    // mm on screen is 96/25.4 px; scale down a badge wider than the column.
+    const px = BD.w * 96 / 25.4, k = Math.min(1, width / px);
+    card.style.width = (px * k) + 'px'; card.style.height = (BD.h * 96 / 25.4 * k) + 'px';
+    b.style.transform = 'scale(' + k + ')'; b.style.transformOrigin = 'top left';
+    return card;
+  }));
+}
+$('bd-size').onchange = () => {
+  const z = BADGE_SIZES.find(x => x.id === $('bd-size').value);
+  if (z) { BD.w = z.w; BD.h = z.h; }
+  $('bd-custom').hidden = !!z; $('bd-w').value = BD.w; $('bd-h').value = BD.h;
+  drawBadgePreview();
+};
+for (const k of ['w', 'h']) $('bd-' + k).oninput = () => {
+  const v = parseInt($('bd-' + k).value, 10), lo = k === 'w' ? 50 : 40;
+  if (v >= lo && v <= 200) { BD[k] = v; drawBadgePreview(); }
+};
+for (const k of ['band', 'logo', 'company', 'ticket', 'qr']) $('bd-' + k).onchange = () => { BD[k] = $('bd-' + k).checked; drawBadgePreview(); };
+for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align']]) for (const b of $(id).children) b.onclick = () => { BD[key] = b.dataset.v; drawBadgeForm(); };
+$('bd-save').onclick = async () => {
+  $('bd-ok').textContent = ''; $('bd-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_badge_design', { p_event_id: EVENT_ID, p_design: BD });
+  if (error) { $('bd-err').textContent = error.message; return; }
+  ENT.badge_design = data; BD = normalizeDesign(data); drawBadgeForm();
+  $('bd-ok').textContent = 'Saved. The desk and kiosks print this badge from the next guest on (reload a desk that is already open).';
+};
+$('bd-reset').onclick = async () => {
+  $('bd-ok').textContent = ''; $('bd-err').textContent = '';
+  const { error } = await sb.rpc('checkin_set_badge_design', { p_event_id: EVENT_ID, p_design: null });
+  if (error) { $('bd-err').textContent = error.message; return; }
+  ENT.badge_design = null; renderBadges();
+  $('bd-ok').textContent = 'Back to the standard badge.';
+};
+// The test badge prints from this page with the same @page size the desk uses.
+$('bd-print').onclick = () => {
+  let st = document.getElementById('badge-page');
+  if (!st) { st = document.createElement('style'); st.id = 'badge-page'; st.media = 'print'; document.head.appendChild(st); }
+  st.textContent = pageCss(BD);
+  $('badge-sheet').replaceChildren(badgeElement(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }));
+  window.print();
+};
+window.addEventListener('resize', () => { if (BD && !$('p-badges').hidden) drawBadgePreview(); });
+
+// ── tickets and payouts (migration 109) ──
+// Types and orders are RPCs; anything that talks to Stripe (payout status,
+// connecting, refunds) is the checkin-tickets Edge Function.
+let TIX = null, ORDERS = [], TK_EDIT = null;
+const TK_CURRENCIES = ['eur', 'usd', 'gbp', 'pln', 'chf', 'sek', 'nok', 'dkk', 'czk', 'aed', 'cad', 'aud'];
+const fmtMoney = (cents, cur) => { try { return new Intl.NumberFormat(navigator.language || 'en-GB', { style: 'currency', currency: String(cur).toUpperCase() }).format(cents / 100); } catch { return (cents / 100).toFixed(2) + ' ' + String(cur).toUpperCase(); } };
+async function loadTickets() {
+  const [ov, od] = await Promise.all([
+    sb.rpc('checkin_tickets_overview', { p_event_id: EVENT_ID }),
+    sb.rpc('checkin_orders_list', { p_event_id: EVENT_ID }),
+  ]);
+  if (ov.error) throw new Error(ov.error.message);
+  if (od.error) throw new Error(od.error.message);
+  TIX = ov.data; ORDERS = od.data || [];
+}
+async function openTickets() {
+  $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+  try { await loadTickets(); } catch (e) { $('tk-err').textContent = 'Could not load tickets: ' + e.message; return; }
+  renderTickets();
+  // Stripe is asked while onboarding is unfinished (also on the way back from it).
+  if (TIX.payout.connected && !TIX.payout.charges_enabled) {
+    const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'payout_status' } });
+    if (!error && data) { TIX.payout = { ...TIX.payout, ...data }; renderTickets(); }
+  }
+}
+function renderTickets() {
+  if (!TIX) return;
+  const p = TIX.payout, paidTypes = TIX.types.filter(t => t.price_cents > 0 && t.active);
+  $('tk-pay-s').textContent = p.charges_enabled ? 'Connected. Ticket payments go straight to your Stripe account.'
+    : p.connected ? (p.details_submitted ? 'Stripe is reviewing your account. Paid tickets go on sale as soon as it is approved.' : 'Stripe setup is not finished yet. Continue where you left off.')
+    : TIX.is_owner ? 'Connect your Stripe account to sell paid tickets. Free tickets work without it.' : 'The event owner connects their Stripe account to sell paid tickets.';
+  $('tk-connect').hidden = !TIX.is_owner || p.charges_enabled;
+  $('tk-connect').textContent = p.connected ? 'Continue Stripe setup' : 'Connect Stripe';
+  $('tk-fee').textContent = (TIX.fee_bps ? 'CueDeck fee: ' + (TIX.fee_bps / 100) + '% of each paid ticket. ' : 'CueDeck takes no fee on tickets. ')
+    + 'Stripe card fees are charged on your Stripe account, and refunds and disputes are handled there too.';
+  $('tk-body').replaceChildren(...(TIX.types.length ? TIX.types.map(t => {
+    const tr = el('tr');
+    const nm = el('td'); nm.append(el('div', 'nm', t.name), el('div', 'em', [t.description, t.active ? '' : 'Hidden from the page'].filter(Boolean).join(' · ')));
+    const sold = Number(t.sold) + (t.pending ? ' (+' + t.pending + ' paying)' : '');
+    const acts = el('td'); acts.style.whiteSpace = 'nowrap';
+    const ed = el('button', 'btn btn-s', 'Edit'); ed.type = 'button'; ed.onclick = () => editTicket(t);
+    const rm = el('button', 'link', t.sold > 0 || t.pending > 0 ? (t.active ? 'Hide' : 'Show') : 'Delete'); rm.type = 'button'; rm.style.marginLeft = '10px';
+    rm.onclick = () => (t.sold > 0 || t.pending > 0) ? saveTicket({ ...t, active: !t.active }) : deleteTicket(t, rm);
+    acts.append(ed, rm);
+    tr.append(nm, el('td', null, t.price_cents ? fmtMoney(t.price_cents, t.currency) : 'Free'), el('td', null, sold + (t.quantity ? ' of ' + t.quantity : '')), acts);
+    return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No ticket types yet: registration is free.'); td.colSpan = 4; tr.append(td); return tr; })()]));
+  $('n-tix').textContent = TIX.types.length ? String(TIX.types.reduce((n, t) => n + Number(t.sold), 0)) : '';
+  // Orders: paid, open (paying now) and refunded; expired ones are left out.
+  $('tk-orders').hidden = !ORDERS.length && !paidTypes.length;
+  const rev = Object.entries(TIX.revenue || {}).map(([cur, c]) => fmtMoney(c, cur)).join(' + ');
+  $('tk-rev').textContent = ORDERS.length ? ORDERS.filter(o => o.status === 'paid').length + ' paid' + (rev ? ', ' + rev + ' in ticket sales' : '') + '. Payouts arrive on your Stripe schedule.' : 'No orders yet.';
+  $('tk-obody').replaceChildren(...ORDERS.map(o => {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('div', 'nm', o.first_name + ' ' + o.last_name), el('div', 'em', o.email));
+    const st = { paid: ['Paid', 't-sent'], open: ['Paying now', 't-wait'], refunded: ['Refunded', 't-test'] }[o.status] || [o.status, 't-wait'];
+    const acts = el('td');
+    if (o.status === 'paid' && TIX.is_owner) {
+      const rf = el('button', 'link', 'Refund'); rf.type = 'button';
+      let armed = null;
+      rf.onclick = async () => {
+        if (!armed) { rf.textContent = 'Click again to refund ' + fmtMoney(o.amount_cents, o.currency); armed = setTimeout(() => { armed = null; rf.textContent = 'Refund'; }, 4000); return; }
+        clearTimeout(armed); rf.disabled = true; rf.textContent = 'Refunding…';
+        $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+        const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'refund', order_id: o.id } });
+        if (error) { $('tk-err').textContent = await fnError(error); rf.disabled = false; rf.textContent = 'Refund'; return; }
+        $('tk-ok').textContent = 'Refunded ' + fmtMoney(o.amount_cents, o.currency) + '. ' + (data.removed ? 'The guest was taken off the guest list and their QR code no longer works.' : 'They had already checked in, so they stay on the guest list.');
+        await Promise.all([loadTickets(), loadAttendees()]); renderTickets(); renderChrome();
+      };
+      acts.append(rf);
+    }
+    const tag = el('td'); tag.append(el('span', 'tag ' + st[1], st[0]));
+    tr.append(who, el('td', null, o.ticket_name), el('td', null, fmtMoney(o.amount_cents, o.currency)), tag, acts);
+    return tr;
+  }));
+}
+function editTicket(t) {
+  TK_EDIT = t || null;
+  $('tk-form').hidden = false; $('tk-add').hidden = true;
+  $('tk-name').value = t ? t.name : ''; $('tk-desc').value = t ? (t.description || '') : '';
+  $('tk-price').value = t && t.price_cents ? (t.price_cents / 100).toFixed(2) : '';
+  $('tk-qty').value = t && t.quantity ? t.quantity : '';
+  const cur = t ? t.currency : (TIX.types[0]?.currency || 'eur');
+  $('tk-cur').replaceChildren(...TK_CURRENCIES.map(c => { const o = el('option', null, c.toUpperCase()); o.value = c; o.selected = c === cur; return o; }));
+  // One currency per event: fixed once any other ticket exists.
+  $('tk-cur').disabled = TIX.types.some(x => !t || x.id !== t.id);
+  $('tk-price-note').hidden = TIX.payout.charges_enabled;
+  $('tk-name').focus();
+}
+$('tk-add').onclick = () => editTicket(null);
+$('tk-cancel').onclick = () => { $('tk-form').hidden = true; $('tk-add').hidden = false; $('tk-err').textContent = ''; };
+async function saveTicket(t) {
+  $('tk-err').textContent = ''; $('tk-ok').textContent = '';
+  const { error } = await sb.rpc('checkin_ticket_type_save', {
+    p_event_id: EVENT_ID, p_id: t.id ?? null, p_name: t.name, p_description: t.description ?? null,
+    p_price_cents: t.price_cents, p_currency: t.currency, p_quantity: t.quantity ?? null, p_active: t.active ?? true, p_sort: t.sort ?? null,
+  });
+  if (error) { $('tk-err').textContent = error.message; return false; }
+  await loadTickets(); renderTickets(); renderChrome();
+  return true;
+}
+$('tk-save').onclick = async () => {
+  const raw = $('tk-price').value.trim().replace(',', '.');
+  if (raw && !/^\d+(\.\d{1,2})?$/.test(raw)) { $('tk-err').textContent = 'Write the price as a number, like 49 or 49.50.'; return; }
+  const qty = $('tk-qty').value.trim();
+  const ok = await saveTicket({
+    id: TK_EDIT?.id, name: $('tk-name').value.trim(), description: $('tk-desc').value.trim(),
+    price_cents: raw ? Math.round(parseFloat(raw) * 100) : 0, currency: $('tk-cur').value,
+    quantity: qty ? parseInt(qty, 10) : null, active: TK_EDIT ? TK_EDIT.active : true, sort: TK_EDIT?.sort,
+  });
+  if (ok) { $('tk-form').hidden = true; $('tk-add').hidden = false; $('tk-ok').textContent = 'Saved. The registration page shows it now.'; }
+};
+async function deleteTicket(t, btn) {
+  if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Click again'; setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'Delete'; }, 3500); return; }
+  const { error } = await sb.rpc('checkin_ticket_type_delete', { p_event_id: EVENT_ID, p_id: t.id });
+  if (error) { $('tk-err').textContent = error.message; return; }
+  await loadTickets(); renderTickets(); renderChrome();
+}
+$('tk-connect').onclick = async () => {
+  const b = $('tk-connect'); b.disabled = true; b.textContent = 'Opening Stripe…'; $('tk-err').textContent = '';
+  const { data, error } = await sb.functions.invoke('checkin-tickets', { body: { event_id: EVENT_ID, action: 'payout_connect' } });
+  if (error || !/^https:\/\/connect\.stripe\.com\//.test(data?.url || '')) {
+    $('tk-err').textContent = error ? await fnError(error) : 'Stripe did not return a setup link. Please try again.';
+    b.disabled = false; renderTickets(); return;
+  }
+  location.href = data.url;
+};
 
 function renderRegister() {
   const on = !!ENT.registration_enabled;
   $('rg-on').checked = on;
   $('rg-state').textContent = on ? 'On. Anyone with the link can register.' : (ENT.registration_code ? 'Off. The link shows "not active" until you turn it back on.' : 'Off. Turn it on to get a link you can share.');
   $('rg-linkbox').hidden = !ENT.registration_code;
-  if (ENT.registration_code) { $('rg-link').value = rgUrl(ENT.registration_code); $('rg-open').href = rgUrl(ENT.registration_code); }
+  if (ENT.registration_code) {
+    $('rg-link').value = rgUrl(ENT.registration_code); $('rg-open').href = rgUrl(ENT.registration_code);
+    // The embed (vercel.json /e/): the form card in an iframe, sized by /embed.js.
+    const src = location.origin + '/e/' + ENT.registration_code;
+    const title = ('Register: ' + (EV.name || 'event')).replace(/[<>"&]/g, '');
+    $('rg-embed').value = '<iframe src="' + src + '" title="' + title + '" style="width:100%;max-width:560px;border:0;min-height:700px" loading="lazy"></iframe>\n<script src="' + location.origin + '/embed.js" async></' + 'script>';
+    $('rg-embed-open').href = src;
+  }
   $('rg-test').hidden = isLive();
   $('rg-cap').value = ENT.registration_capacity ?? '';
   $('rg-close').value = toLocalInput(ENT.registration_closes_at);
@@ -999,10 +1483,15 @@ function reencode(file, kind) {
     img.src = URL.createObjectURL(file);
   });
 }
+// Status next to the images, where the person is looking, not by Save.
+const imgMsg = (text, bad) => { const m = $('rg-img-msg'); m.textContent = text; m.style.color = bad ? '#B3261E' : ''; };
 async function uploadImg(kind, file) {
   $('rg-design-err').textContent = ''; $('rg-design-ok').textContent = '';
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { $('rg-design-err').textContent = 'Use a JPEG, PNG or WebP image.'; return; }
-  if (file.size > 25 * 1024 * 1024) { $('rg-design-err').textContent = 'That image is over 25 MB. Choose a smaller one.'; return; }
+  // HEIC (iPhone photos) is offered so the picker shows them; the browser
+  // decodes it below where it can (Safari), and says so where it cannot.
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) { imgMsg('Use a JPEG, PNG or WebP image.', true); return; }
+  if (file.size > 25 * 1024 * 1024) { imgMsg('That image is over 25 MB. Choose a smaller one.', true); return; }
+  imgMsg('Uploading ' + (kind === 'cover' ? 'cover' : 'logo') + '…');
   $('rg-design-state').textContent = 'Uploading…';
   try {
     const { blob, type, ext } = await reencode(file, kind);
@@ -1012,10 +1501,23 @@ async function uploadImg(kind, file) {
     if (error) throw new Error(error.message);
     RG_IMG[kind] = path; showImg(kind); renderPreview();
     $('rg-design-state').textContent = 'Uploaded. Save design to publish it.';
-  } catch (e) { $('rg-design-state').textContent = ''; $('rg-design-err').textContent = e.message; }
+    imgMsg((kind === 'cover' ? 'Cover' : 'Logo') + ' uploaded. Press Save design to publish it.');
+  } catch (e) {
+    $('rg-design-state').textContent = '';
+    imgMsg(/not an image we can read/.test(e.message) && /hei[cf]/i.test(file.type + file.name)
+      ? 'This browser cannot read HEIC photos. Export the photo as JPEG, or upload it from Safari or your phone.' : e.message, true);
+  }
 }
-$('rg-cover-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('cover', f); };
-$('rg-logo-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg('logo', f); };
+// A real button opening a visually hidden input: a <label> around a
+// display:none input is ignored by some mobile browsers.
+for (const kind of ['cover', 'logo']) {
+  $('rg-' + kind + '-pick').onclick = () => $('rg-' + kind + '-file').click();
+  $('rg-' + kind + '-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadImg(kind, f); };
+  const box = $('rg-' + kind + '-box');
+  box.addEventListener('dragover', (e) => { e.preventDefault(); box.classList.add('drag'); });
+  box.addEventListener('dragleave', () => box.classList.remove('drag'));
+  box.addEventListener('drop', (e) => { e.preventDefault(); box.classList.remove('drag'); const f = e.dataTransfer?.files?.[0]; if (f) uploadImg(kind, f); });
+}
 $('rg-cover-rm').onclick = () => { RG_IMG.cover = null; showImg('cover'); renderPreview(); $('rg-design-state').textContent = 'Save design to publish the change.'; };
 $('rg-logo-rm').onclick = () => { RG_IMG.logo = null; showImg('logo'); renderPreview(); $('rg-design-state').textContent = 'Save design to publish the change.'; };
 $('rg-color-pick').oninput = () => { $('rg-color').value = $('rg-color-pick').value.toUpperCase(); };
@@ -1228,7 +1730,36 @@ document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change'
 }));
 
 // ── 5. QR emails ─────────────────────────────────────────
+// ── automatic emails (migration 110) ──
+const whenText = (iso) => iso ? new Date(iso).toLocaleString(navigator.language || 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+async function renderReminders() {
+  $('rm-on').checked = !!ENT.reminder_enabled; $('ty-on').checked = !!ENT.thankyou_enabled;
+  $('rm-msg').value = ENT.reminder_message || ''; $('ty-msg').value = ENT.thankyou_message || ''; $('ty-link').value = ENT.thankyou_link || '';
+  const { data, error } = await sb.rpc('checkin_reminder_status', { p_event_id: EVENT_ID });
+  if (error) { $('rm-err').textContent = error.message; return; }
+  $('rm-when').textContent = 'Goes out from ' + (whenText(data.reminder_from) || '24 hours before doors open') + ' (your time), with each guest\'s QR code, the time and the venue. Guests who already checked in are skipped.';
+  $('ty-when').textContent = 'Goes out from ' + (whenText(data.thankyou_from) || '2 hours after the event ends') + ' (your time), only to guests who checked in.';
+  $('rm-count').textContent = isLive() ? [data.reminder_sent ? data.reminder_sent + ' reminders sent' : '', data.thankyou_sent ? data.thankyou_sent + ' thank-yous sent' : ''].filter(Boolean).join(' · ') : '';
+}
+$('rm-save').onclick = async () => {
+  $('rm-ok').textContent = ''; $('rm-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_reminders', { p_event_id: EVENT_ID, p_reminder: $('rm-on').checked, p_reminder_message: $('rm-msg').value,
+    p_thankyou: $('ty-on').checked, p_thankyou_message: $('ty-msg').value, p_thankyou_link: $('ty-link').value });
+  if (error) { $('rm-err').textContent = error.message; return; }
+  Object.assign(ENT, data);
+  $('rm-ok').textContent = 'Saved.';
+};
+for (const [btn, kind] of [['rm-test', 'reminder'], ['ty-test', 'thankyou']]) {
+  $(btn).onclick = async () => {
+    $('rm-ok').textContent = ''; $('rm-err').textContent = ''; $(btn).disabled = true;
+    const { data, error } = await sb.functions.invoke('checkin-reminders', { body: { event_id: EVENT_ID, action: 'test', kind } });
+    $(btn).disabled = false;
+    if (error) { $('rm-err').textContent = await fnError(error); return; }
+    $('rm-ok').textContent = 'Sent to ' + data.to + '. It uses your saved settings, so save first if you changed anything.';
+  };
+}
 function renderQr() {
+  renderReminders();
   const unsent = ATT.filter(a => a.email && !a.qr_email_sent_at).length;
   $('qr-sub').textContent = isLive()
     ? unsent + ' guests with an email address have not been sent their QR code yet.'
@@ -1346,7 +1877,7 @@ async function waitForLive() {
   $('layout').hidden = false; renderChrome();
   if (params.get('paid') === '1' && !isLive() && !isComp()) { await waitForLive(); return; }
   const step = params.get('step');
-  go(['overview', 'details', 'attendees', 'register', 'branding', 'staff', 'kiosk', 'qr', 'reports', 'golive'].includes(step) ? step : 'overview');
+  go(['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'badges', 'staff', 'kiosk', 'qr', 'reports', 'golive'].includes(step) ? step : 'overview');
 })();
 </script>
 </body>

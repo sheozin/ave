@@ -49,7 +49,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media (max-width:900px){.cover.none{height:64px}}
 .cover .ph{position:absolute;inset:auto 28px 24px 28px;color:rgba(255,255,255,.92);font-size:40px;line-height:1}
 @media (max-width:900px){.cover{aspect-ratio:16/9;border-radius:20px}.cover .ph{font-size:30px;inset:auto 20px 18px 20px}}
-.title{margin:22px 0 0;font-size:clamp(40px,6vw,64px);line-height:1.02;letter-spacing:-.5px;overflow-wrap:anywhere}
+.title{margin:22px 0 0;font-size:clamp(34px,5vw,52px);font-weight:700;line-height:1.08;letter-spacing:-.035em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums lining-nums}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .chip{font-size:13px;font-weight:600;padding:5px 12px;border-radius:999px;background:var(--chip);color:#3F3F3B}
 .chip.test{background:#FEF3DA;color:#7A4B00}
@@ -98,10 +98,29 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .choice{min-height:48px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:15px;font-weight:600;cursor:pointer;padding:8px 10px;overflow-wrap:anywhere}
 .choice[aria-pressed=true]{border:2px solid var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.tix{border:0;margin:0;padding:0;display:grid;gap:8px}
+.tix legend{font-size:14px;font-weight:600;padding:0;margin-bottom:8px}
+.tix-o{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;border:1px solid var(--line2);border-radius:14px;padding:12px 14px;background:#fff;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.tix-o[aria-checked=true]{border:2px solid var(--accent);background:var(--accent-soft);padding:11px 13px}
+.tix-o:disabled{opacity:.55;cursor:default}
+.tix-o .dot{width:18px;height:18px;flex:none;border-radius:999px;border:2px solid var(--line2);background:#fff}
+.tix-o[aria-checked=true] .dot{border:5px solid var(--accent)}
+.tix-o .nm{flex:1;min-width:0}
+.tix-o .nm b{display:block;font-weight:600;overflow-wrap:anywhere}
+.tix-o .nm small{display:block;font-size:13px;color:var(--t3);overflow-wrap:anywhere}
+.tix-o .pr{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tix.bad .tix-o{border-color:#B3261E}
+.plus-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start}
+.plus-row .x{height:48px;width:44px;border:1px solid var(--line2);border-radius:12px;background:#fff;cursor:pointer;font-size:18px;color:var(--t2)}
+.plus-row.bad input{border-color:#B3261E}
+@media (max-width:420px){.plus-row{grid-template-columns:1fr 1fr 44px}}
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--t2);line-height:1.45}
 .consent input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
 .consent.bad{color:#B3261E}
-.hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+/* Hidden without an offset: a far-left position widens a right-to-left page. */
+/* Organizer text keeps its own direction (punctuation in place) but lines up with the page. */
+html[dir=rtl] [dir=auto]{text-align:match-parent}
+.hp{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
 .btn{height:54px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;width:100%}
 .btn:disabled{opacity:.6;cursor:default}
 .btn2{height:46px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:14px;font-weight:600;cursor:pointer;padding:0 16px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
@@ -120,7 +139,7 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .ticket{border:1px solid var(--line);border-radius:20px;overflow:hidden;width:100%;text-align:left}
 .ticket .tt{padding:18px 18px 14px}
 .ticket .tt span{display:block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink)}
-.ticket .tt b{display:block;font-family:'Instrument Serif',Georgia,serif;font-weight:400;font-size:26px;line-height:1.05;margin-top:2px;overflow-wrap:anywhere}
+.ticket .tt b{display:block;font-weight:700;font-size:22px;line-height:1.15;letter-spacing:-.02em;margin-top:2px;overflow-wrap:anywhere}
 .tgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 18px 16px}
 .tgrid span{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t3)}
 .tgrid b{display:block;font-weight:600;overflow-wrap:anywhere}
@@ -133,6 +152,17 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .below a{color:var(--t3)}
 
 .solo{max-width:520px;margin:12vh auto 0;padding:0 20px}
+/* Embedded on the organizer's own site (/e/<code>): the form card only. */
+html.embed,body.embed{background:transparent!important}
+body.embed .top,body.embed .hero,body.embed .facts,body.embed .about,body.embed .prog{display:none!important}
+body.embed .wrap{display:flex!important;flex-direction:column;max-width:none!important;padding:0!important;margin:0!important}
+body.embed .card-area{order:-1}
+body.embed .card-area{position:static!important;margin:0!important}
+body.embed .card{box-shadow:none;border-radius:16px}
+body.embed .foot{margin:10px 2px 0;text-align:center}
+body.embed .solo{margin:16px auto}
+.embed-ev{display:none;margin:-8px 0 16px;font-size:14px;color:var(--t2)}
+body.embed .embed-ev{display:block}
 </style>
 </head>
 <body>
@@ -150,14 +180,14 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 
 <div id="page" hidden>
   <header class="top">
-    <div class="host"><div class="mark" id="mark"></div><div><b id="host-name"></b><small>Organizer</small></div></div>
+    <div class="host"><div class="mark" id="mark"></div><div><b dir="auto" id="host-name"></b><small>Organizer</small></div></div>
     <button class="pill" type="button" id="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"></path></svg><span id="share-t">Share</span></button>
   </header>
 
   <main class="wrap">
     <section class="hero">
       <div class="cover" id="cover"><img id="cover-img" alt="" hidden><span class="ph serif" id="cover-ph"></span></div>
-      <h1 class="title serif" id="ev-name"></h1>
+      <h1 class="title" dir="auto" id="ev-name"></h1>
       <div class="chips"><span class="chip test" id="test-chip" hidden>Test mode</span></div>
     </section>
 
@@ -172,11 +202,11 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
       </div>
       <div class="fact" id="fact-venue" hidden>
         <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg></div>
-        <div style="min-width:0"><b id="venue"></b><span class="sub" id="address"></span><a class="lnk" id="maps" target="_blank" rel="noopener" hidden>Open in Maps</a></div>
+        <div style="min-width:0"><b dir="auto" id="venue"></b><span class="sub" dir="auto" id="address"></span><a class="lnk" id="maps" target="_blank" rel="noopener" hidden>Open in Maps</a></div>
       </div>
     </section>
 
-    <section class="about" id="about" hidden><h2 class="h2">About</h2><p id="about-p"></p></section>
+    <section class="about" id="about" hidden><h2 class="h2">About</h2><p dir="auto" id="about-p"></p></section>
     <section class="prog" id="prog" hidden><h2 class="h2">Programme</h2><div class="plist" id="plist"></div></section>
     <p class="foot">Registration by <a href="https://cuedeck.io/solutions/check-in" target="_blank" rel="noopener">CueDeck</a> · <a href="https://cuedeck.io/privacy" target="_blank" rel="noopener">Privacy</a></p>
 
@@ -184,9 +214,16 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
       <div class="card">
         <section id="open" hidden>
           <div class="card-h"><h2>Register</h2><span class="left" id="left" hidden></span></div>
+          <p class="embed-ev" dir="auto" id="embed-ev"></p>
           <p class="hint" id="flow-note" hidden style="margin:-6px 0 14px;color:var(--t2)"></p>
           <p class="hint" id="test-note" hidden style="margin:-6px 0 16px">Test mode: registrations are for trying the page. No email is sent, and they are cleared when the event goes live.</p>
           <form id="form" novalidate>
+            <fieldset class="tix" id="tix" data-f="ticket" role="radiogroup" aria-labelledby="tix-l" hidden>
+              <legend id="tix-l">Ticket</legend>
+              <div id="tix-list" style="display:grid;gap:8px"></div>
+              <span class="hint" id="tix-pay" hidden>You pay by card after confirming your email, on a secure Stripe page.</span>
+              <span class="err"></span>
+            </fieldset>
             <div class="row">
               <label class="f" data-f="first_name">First name<input type="text" name="first_name" autocomplete="given-name" maxlength="80" required><span class="err"></span></label>
               <label class="f" data-f="last_name">Last name<input type="text" name="last_name" autocomplete="family-name" maxlength="80" required><span class="err"></span></label>
@@ -194,8 +231,15 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
             <label class="f" data-f="email">Email<input type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" required><span class="hint">Your QR ticket is sent here.</span><span class="err"></span></label>
             <label class="f" data-f="company"><span class="lt">Company <span class="opt">(optional)</span></span><input type="text" name="company" autocomplete="organization" maxlength="80"><span class="err"></span></label>
             <div id="questions" style="display:grid;gap:16px"></div>
+            <div id="plus" data-f="plus" hidden style="display:grid;gap:10px">
+              <div style="font-size:14px;font-weight:600">Bringing someone? <span class="opt" id="plus-max"></span></div>
+              <div id="plus-rows" style="display:grid;gap:10px"></div>
+              <button class="btn2" type="button" id="plus-add" style="justify-self:start">Add a guest</button>
+              <span class="hint">Each guest gets their own QR ticket, sent to you.</span>
+              <span class="err"></span>
+            </div>
             <div class="hp" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-            <label class="consent" data-f="consent"><input type="checkbox" name="consent"><span id="consent-t">I agree that the organizer of this event may use these details to manage my registration and check-in. CueDeck processes them on the organizer's behalf.</span></label>
+            <label class="consent" data-f="consent"><input type="checkbox" name="consent"><span id="consent-t">I agree that the organizer of this event may use these details, and the names of anyone I bring, to manage registration and check-in. CueDeck processes them on the organizer's behalf.</span></label>
             <div id="ts"></div>
             <button class="btn" type="submit" id="submit">Register</button>
             <p class="msg" id="msg" hidden></p>
@@ -203,17 +247,34 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
           </form>
         </section>
 
+        <section id="invite" hidden>
+          <div class="state">
+            <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9 6 9-6M4 6h16v12H4z"></path></svg></div>
+            <h2 id="iv-h">You are invited</h2>
+            <p id="iv-p">Will you come?</p>
+            <div id="iv-plus" data-f="plus" hidden style="display:grid;gap:10px;width:100%;text-align:left">
+              <div style="font-size:14px;font-weight:600">Bringing someone? <span class="opt" id="iv-plus-max"></span></div>
+              <div id="iv-rows" style="display:grid;gap:10px"></div>
+              <button class="btn2" type="button" id="iv-add" style="justify-self:start">Add a guest</button>
+              <span class="err"></span>
+            </div>
+            <button class="btn" type="button" id="iv-yes">I am coming</button>
+            <button class="link" type="button" id="iv-no">I cannot come</button>
+            <p class="msg" id="iv-msg" hidden></p>
+          </div>
+        </section>
+
         <section id="confirm" hidden>
           <div class="state">
             <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></div>
-            <h2>Confirm your registration</h2>
+            <h2 id="cf-h">Confirm your registration</h2>
             <p id="cf-meta"></p>
-            <div class="who" id="cf-who-row" hidden><span>Registering</span><b id="cf-who"></b><small>Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
+            <div class="who" id="cf-who-row" hidden><span>Registering</span><b dir="auto" id="cf-who"></b><span id="cf-tix" hidden style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--t2)"></span><small id="cf-who-s">Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
             <button class="btn" type="button" id="cf-btn">Confirm my registration</button>
             <button class="link" type="button" id="cf-no">This is not me. Delete this request.</button>
             <p class="msg" id="cf-msg" hidden></p>
           </div>
-          <span id="cf-name" hidden></span>
+          <span dir="auto" id="cf-name" hidden></span>
         </section>
 
         <section id="done" hidden>
@@ -229,16 +290,17 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
             <h2 id="tk-h">You are registered</h2>
             <p>Your ticket is also on its way by email.</p>
             <div class="ticket">
-              <div class="tt"><span id="tk-host"></span><b id="tk-event"></b></div>
+              <div class="tt"><span dir="auto" id="tk-host"></span><b dir="auto" id="tk-event"></b></div>
               <div class="tgrid">
-                <div><span>Guest</span><b id="tk-guest"></b></div>
-                <div><span>Ticket</span><b id="tk-type"></b></div>
+                <div><span>Guest</span><b dir="auto" id="tk-guest"></b></div>
+                <div><span>Ticket</span><b dir="auto" id="tk-type"></b></div>
                 <div><span>Date</span><b id="tk-date"></b></div>
-                <div><span>Venue</span><b id="tk-venue"></b></div>
+                <div><span>Venue</span><b dir="auto" id="tk-venue"></b></div>
               </div>
               <div class="perf"></div>
               <div class="qr"><img id="tk-qr" alt="Your check-in QR code"><span class="code" id="tk-code"></span><small>Show this at the entrance. The code works if the QR will not scan.</small></div>
             </div>
+            <div id="tk-plus" style="display:grid;gap:12px;width:100%"></div>
             <button class="btn2" type="button" id="tk-cal">Add to calendar</button>
           </div>
         </section>

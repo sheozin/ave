@@ -373,8 +373,30 @@ test('page design: a non-image file is refused before upload', async ({ page }) 
   await expect(page.locator('#p-branding')).toBeVisible();
   await expect(page.locator('#rg-save-design')).toBeVisible();
   await page.locator('#rg-logo-file').setInputFiles({ name: 'evil.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>') });
-  await expect(page.locator('#rg-design-err')).toHaveText('Use a JPEG, PNG or WebP image.');
+  await expect(page.locator('#rg-img-msg')).toHaveText('Use a JPEG, PNG or WebP image.');
   expect(uploaded).toBe(false);
+});
+
+test('page design: the Upload buttons open the file picker, and an image can be dropped on its box', async ({ page }) => {
+  const uploads: string[] = [];
+  await open(page, { role: 'organizer' }, 'branding', STAFF, async () => {
+    await page.route(/\/storage\/v1\/object\/checkin-public\//, async r => { uploads.push(new URL(r.request().url()).pathname); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"Key":"x"}' }); });
+  });
+  await expect(page.locator('#rg-save-design')).toBeVisible();
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR4nGP4z8DwHwyBNAMDAFGbBPzUPg4gAAAAAElFTkSuQmCC', 'base64');
+  // A real click on the visible button, as a person (or a phone) does it.
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.locator('#rg-logo-pick').click()]);
+  await chooser.setFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await expect(page.locator('#rg-img-msg')).toHaveText('Logo uploaded. Press Save design to publish it.');
+  await expect(page.locator('#rg-logo-img')).toBeVisible();
+  // Drop onto the cover box.
+  const dt = await page.evaluateHandle((b64) => {
+    const bin = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const d = new DataTransfer(); d.items.add(new File([bin], 'cover.png', { type: 'image/png' })); return d;
+  }, png.toString('base64'));
+  await page.locator('#rg-cover-box').dispatchEvent('drop', { dataTransfer: dt });
+  await expect(page.locator('#rg-img-msg')).toHaveText('Cover uploaded. Press Save design to publish it.');
+  expect(uploads.map(u => u.split('/').pop()!.replace(/-[0-9a-f]{16}/, ''))).toEqual(['logo.png', 'cover.jpg']);
 });
 
 
@@ -461,4 +483,160 @@ test('registration tab: waitlist and approval switches, and held guests are offe
   await page.locator('#held-body tr', { hasText: 'Wes' }).getByRole('button', { name: 'Click again' }).click();
   await expect(page.locator('#held-box')).toBeHidden();
   expect(removed).toBe(1);
+});
+
+test('tickets tab: the owner connects Stripe, adds a ticket, and refunds an order', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  const calls: Record<string, unknown>[] = [];
+  let types: Record<string, unknown>[] = [];
+  let orders = [{ id: 'o1', first_name: 'Pia', last_name: 'Payer', email: 'pia@example.invalid', ticket_name: 'Standard', amount_cents: 4900, currency: 'eur', fee_cents: 0, status: 'paid', created_at: FIXED_NOW.toISOString() }];
+  let charges = false;
+  await open(page, { role: 'organizer', is_owner: true }, 'tickets', STAFF, async () => {
+    await rpc(page, 'checkin_tickets_overview', () => ({ is_owner: true, fee_bps: 0, payout: { connected: charges, charges_enabled: charges, details_submitted: charges },
+      types, revenue: orders.some(o => o.status === 'paid') ? { eur: 4900 } : {} }));
+    await rpc(page, 'checkin_orders_list', () => orders);
+    await rpc(page, 'checkin_ticket_type_save', (a) => { saved.push(a); types = [{ id: 't1', name: a.p_name, description: a.p_description, price_cents: a.p_price_cents, currency: a.p_currency, quantity: a.p_quantity, sort: 1, active: true, sold: 1, pending: 0 }]; return types[0]; });
+    await fn(page, 'checkin-tickets', (b) => {
+      calls.push(b);
+      if (b.action === 'payout_connect') return { body: { url: 'https://connect.stripe.com/setup/s/probe' } };
+      if (b.action === 'refund') { orders = orders.map(o => ({ ...o, status: 'refunded' })); return { body: { ok: true, status: 'refunded', removed: true } }; }
+      return { body: { connected: charges, charges_enabled: charges } };
+    });
+    await page.route('https://connect.stripe.com/**', r => r.fulfill({ contentType: 'text/html', body: '<title>Stripe onboarding</title>' }));
+  });
+  await expect(page.locator('#p-tickets')).toBeVisible();
+  await expect(page.locator('#tk-pay-s')).toHaveText('Connect your Stripe account to sell paid tickets. Free tickets work without it.');
+  await expect(page.locator('#tk-fee')).toContainText('CueDeck takes no fee on tickets.');
+  // Not connected: the form says so before a paid price is tried.
+  await page.click('#tk-add');
+  await expect(page.locator('#tk-price-note')).toBeVisible();
+  await page.click('#tk-cancel');
+  await page.click('#tk-connect');
+  await page.waitForURL('https://connect.stripe.com/setup/s/probe');
+  expect(calls.at(-1)).toMatchObject({ event_id: EVENT_ID, action: 'payout_connect' });
+
+  // Back from Stripe, connected.
+  charges = true;
+  await page.goto('/cuedeck-checkin-setup.html?event=' + EVENT_ID + '&step=tickets&connect=done');
+  await expect(page.locator('#tk-pay-s')).toHaveText('Connected. Ticket payments go straight to your Stripe account.');
+  await expect(page.locator('#tk-connect')).toBeHidden();
+  await page.click('#tk-add');
+  await page.fill('#tk-name', 'Standard');
+  await page.fill('#tk-price', '49,50');
+  await page.fill('#tk-qty', '200');
+  await page.click('#tk-save');
+  await expect(page.locator('#tk-ok')).toHaveText('Saved. The registration page shows it now.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_id: null, p_name: 'Standard', p_price_cents: 4950, p_currency: 'eur', p_quantity: 200, p_active: true });
+  await expect(page.locator('#tk-body tr')).toHaveCount(1);
+  await expect(page.locator('#tk-body tr').first()).toContainText('1 of 200');
+
+  // Refund takes two clicks.
+  const rf = page.locator('#tk-obody tr', { hasText: 'Pia' }).getByRole('button', { name: 'Refund' });
+  await rf.click();
+  expect(calls.some(c => c.action === 'refund')).toBe(false);
+  await page.locator('#tk-obody tr', { hasText: 'Pia' }).getByRole('button', { name: /Click again to refund/ }).click();
+  await expect(page.locator('#tk-ok')).toContainText('taken off the guest list');
+  expect(calls.find(c => c.action === 'refund')).toMatchObject({ event_id: EVENT_ID, order_id: 'o1' });
+  await expect(page.locator('#tk-obody tr').first()).toContainText('Refunded');
+});
+
+test('tickets tab: an organizer sees payouts but cannot connect or refund', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'tickets', STAFF, async () => {
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 250, payout: { connected: true, charges_enabled: true, details_submitted: true }, types: [], revenue: { eur: 4900 } });
+    await rpc(page, 'checkin_orders_list', [{ id: 'o1', first_name: 'Pia', last_name: 'Payer', email: 'pia@example.invalid', ticket_name: 'Standard', amount_cents: 4900, currency: 'eur', fee_cents: 122, status: 'paid', created_at: FIXED_NOW.toISOString() }]);
+  });
+  await expect(page.locator('#tk-connect')).toBeHidden();
+  await expect(page.locator('#tk-fee')).toContainText('CueDeck fee: 2.5% of each paid ticket.');
+  await expect(page.locator('#tk-obody tr')).toHaveCount(1);
+  await expect(page.locator('#tk-obody button')).toHaveCount(0);
+});
+
+test('emails tab: automatic reminder and thank-you settings save, and a test goes to the organizer', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  const tests: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer', status: 'live' }, 'qr', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', reminder_enabled: true, thankyou_enabled: false }]);
+    await rpc(page, 'checkin_reminder_status', { reminder_from: '2026-10-17T07:00:00Z', thankyou_from: '2026-10-18T18:00:00Z', reminder_sent: 12, thankyou_sent: 0 });
+    await rpc(page, 'checkin_set_reminders', (a) => { saved.push(a); return { reminder_enabled: a.p_reminder, reminder_message: a.p_reminder_message, thankyou_enabled: a.p_thankyou, thankyou_message: a.p_thankyou_message, thankyou_link: a.p_thankyou_link }; });
+    await fn(page, 'checkin-reminders', (b) => { tests.push(b); return { body: { ok: true, to: 'probe@cuedeck-test.io' } }; });
+  });
+  await expect(page.locator('#rm-on')).toBeChecked();
+  await expect(page.locator('#ty-on')).not.toBeChecked();
+  await expect(page.locator('#rm-count')).toHaveText('12 reminders sent');
+  await expect(page.locator('#rm-when')).toContainText('Goes out from');
+  await page.fill('#rm-msg', 'Use the north entrance.');
+  await page.locator('#ty-on').evaluate((e: HTMLInputElement) => e.click());
+  await page.fill('#ty-link', 'https://example.com/survey');
+  await page.click('#rm-save');
+  await expect(page.locator('#rm-ok')).toHaveText('Saved.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_reminder: true, p_reminder_message: 'Use the north entrance.', p_thankyou: true, p_thankyou_link: 'https://example.com/survey' });
+  await page.click('#ty-test');
+  await expect(page.locator('#rm-ok')).toContainText('Sent to probe@cuedeck-test.io');
+  expect(tests[0]).toMatchObject({ event_id: EVENT_ID, action: 'test', kind: 'thankyou' });
+});
+
+test('badges tab: the designer previews at the stock size and saves the design', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [{ id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso', ticket_type: 'VIP', is_test: true, source: 'web', created_at: FIXED_NOW.toISOString() }]);
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 0, payout: { connected: false, charges_enabled: false, details_submitted: false }, types: [], revenue: {} });
+    await rpc(page, 'checkin_orders_list', []);
+    await rpc(page, 'checkin_set_badge_design', (a) => { saved.push(a); return a.p_design; });
+  });
+  await expect(page.locator('#p-badges')).toBeVisible();
+  await expect(page.locator('#bd-size')).toHaveValue('100x70');
+  const badge = page.locator('#bd-prev .badge').first();
+  await expect(badge).toContainText('Maya Lindqvist');
+  await page.selectOption('#bd-size', '148x105');
+  await expect(badge).toHaveAttribute('style', /width: 148mm; height: 105mm/);
+  await page.locator('#bd-qr').evaluate((e: HTMLInputElement) => e.click());
+  await expect(badge.locator('svg')).toHaveCount(1);
+  await page.locator('#bd-name button[data-v="split"]').click();
+  await expect(page.locator('#bd-colors .row', { hasText: 'VIP' })).toBeVisible();
+  await page.locator('#bd-colors .row', { hasText: 'VIP' }).locator('input[type=color]').fill('#c9a227');
+  await page.click('#bd-save');
+  await expect(page.locator('#bd-ok')).toContainText('Saved.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_design: { w: 148, h: 105, qr: true, name: 'split', colors: { VIP: '#C9A227' } } });
+});
+
+test('guests tab: speakers from the run of show show who is on the list and who arrived', async ({ page }) => {
+  const set: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'attendees', STAFF, async () => {
+    await rpc(page, 'checkin_speaker_links', { enabled: true, people: [
+      { name: 'Ana Kowalska', role: 'speaker', session: 'Keynote', time: '09:00', on_list: true, arrived: true },
+      { name: 'Ben Lee', role: 'moderator', session: 'Panel', time: '10:00', on_list: true, arrived: false },
+      { name: 'Cleo Park', role: 'panelist', session: 'Panel', time: '10:00', on_list: false, arrived: false } ] });
+    await rpc(page, 'checkin_set_speaker_link', (a) => { set.push(a); return a.p_on; });
+  });
+  await expect(page.locator('#sp-box')).toBeVisible();
+  await expect(page.locator('#sp-sum')).toContainText('3 speakers in the run of show, 1 arrived. 1 not on the guest list');
+  await expect(page.locator('#sp-body tr', { hasText: 'Cleo Park' })).toContainText('Not on the guest list');
+  await expect(page.locator('#sp-body tr', { hasText: 'Ana Kowalska' })).toContainText('Arrived');
+  await page.locator('#sp-on').evaluate((e: HTMLInputElement) => e.click());
+  await expect.poll(() => set.length).toBe(1);
+  expect(set[0]).toMatchObject({ p_event_id: EVENT_ID, p_on: false });
+});
+
+test('guests tab: invitations go out in batches and answers show on each guest', async ({ page }) => {
+  const calls: Record<string, unknown>[] = [];
+  const g = (id: string, first: string) => ({ id, first_name: first, last_name: 'X', email: first.toLowerCase() + '@example.invalid', company: null, ticket_type: 'attendee', source: 'import', is_test: false, created_at: FIXED_NOW.toISOString() });
+  let inv: Record<string, unknown> = { g1: { sent_at: FIXED_NOW.toISOString(), rsvp: 'going' } };
+  await open(page, { role: 'organizer', status: 'live' }, 'attendees', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_mode: 'invite' }]);
+    await table(page, 'leod_checkin_attendees', [g('g1', 'Gina'), g('g2', 'Hal'), g('g3', 'Ivy')]);
+    await rpc(page, 'checkin_invite_status', () => inv);
+    await rpc(page, 'checkin_speaker_links', { enabled: true, people: [] });
+    let round = 0;
+    await fn(page, 'checkin-invite-guests', (b) => { calls.push(b); round++;
+      if (round === 1) return { body: { ok: true, sent: 1, failed: 0, remaining: 1 } };
+      inv = { ...inv, g2: { sent_at: FIXED_NOW.toISOString(), rsvp: null }, g3: { sent_at: FIXED_NOW.toISOString(), rsvp: null } };
+      return { body: { ok: true, sent: 1, failed: 0, remaining: 0 } }; });
+  });
+  await expect(page.locator('#gi-bar')).toBeVisible();
+  await expect(page.locator('#gi-sum')).toContainText('1 invited · 1 coming');
+  await expect(page.locator('#att-body tr', { hasText: 'Gina' })).toContainText('Coming');
+  await page.click('#gi-send');
+  await expect(page.locator('#gi-ok')).toHaveText('2 invitations sent.');
+  expect(calls.filter(c => c.action === 'send')).toHaveLength(2);
+  await expect(page.locator('#gi-sum')).toContainText('3 invited');
 });

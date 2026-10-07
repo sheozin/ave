@@ -67,8 +67,31 @@ export function validateRegistration(f, questions) {
 }
 
 // The field each error code belongs to, and what to tell the guest.
+// Plus-ones (migration 114): at most `max` people, each a first and last
+// name under the same rules as the guest's own. A row left wholly empty is
+// dropped (the guest added a row and changed their mind). Codes are
+// 'plus:<index>' for the row that failed.
+export function validatePlusOnes(list, max) {
+  const errors = [];
+  const names = [];
+  const rows = Array.isArray(list) ? list : [];
+  rows.forEach((r, i) => {
+    const o = r && typeof r === 'object' ? r : {};
+    const first = cleanText(typeof o.first_name === 'string' ? o.first_name : '');
+    const last = cleanText(typeof o.last_name === 'string' ? o.last_name : '');
+    if (!first && !last) return;
+    const ok = (s) => s && s.length <= MAX_NAME && HAS_LETTER.test(s) && !LINKISH.test(s);
+    if (!ok(first) || !ok(last)) errors.push('plus:' + i);
+    else names.push({ first_name: first, last_name: last });
+  });
+  if (names.length > Math.max(0, max)) errors.push('plus_too_many');
+  return { errors, names };
+}
+
 export function fieldMessage(code) {
   if (code.startsWith('q:')) return { field: code, text: 'Please answer this question.' };
+  if (code.startsWith('plus:')) return { field: code, text: 'Please enter their first and last name in letters.' };
+  if (code === 'plus_too_many') return { field: 'plus', text: 'That is more guests than this event allows.' };
   const m = {
     first_name: ['first_name', 'Please enter your first name.'],
     first_name_too_long: ['first_name', 'That name is too long.'],

@@ -9,15 +9,15 @@ const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'B
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
   heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string;
-  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow }: Opts) {
+  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown; badgeDesign?: Record<string, unknown> };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow, badgeDesign }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
   await rpc(page, 'checkin_recent_alerts', alerts);
   if (serverNow) await rpc(page, 'checkin_server_now', serverNow);
   await rpc(page, 'checkin_my_events', [myEventsRow({ role, is_owner: isOwner, status })]);
-  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status }]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status, ...(badgeDesign ? { badge_design: badgeDesign, registration_brand_color: '#0F766E' } : {}) }]);
   await table(page, 'leod_checkin_attendees', roster);
   await fn(page, 'checkin-record-scans', (b) => ({ body: {
     ok: true, errors: [],
@@ -689,3 +689,20 @@ test('with no scan points the scanner form says where to add them', async ({ pag
   await expect(page.locator('#ks-err')).toContainText('Choose the door or room');
 });
 
+
+test('the desk prints the badge design of the event: stock size, ticket colour and QR', async ({ page }) => {
+  await page.addInitScript(() => { (window as unknown as { __prints: string[] }).__prints = []; window.print = () => {
+    (window as unknown as { __prints: string[] }).__prints.push(document.getElementById('badge-sheet')!.innerHTML); }; });
+  await open(page, { role: 'crew', roster: [ANA, { ...BEN, ticket_type: 'VIP' }],
+    badgeDesign: { w: 148, h: 105, band: true, logo: false, name: 'split', company: true, ticket: true, qr: true, align: 'center', colors: { VIP: '#C9A227' } } });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: string[] }).__prints.length)).toBe(1);
+  const html = await page.evaluate(() => (window as unknown as { __prints: string[] }).__prints[0]);
+  expect(html).toContain('width: 148mm; height: 105mm');
+  expect(html).toMatch(/background:\s*(#C9A227|rgb\(201, 162, 39\))/);
+  expect(html).toContain('<svg');
+  expect(html).toContain('>Ben<');
+  expect(await page.locator('#badge-page').textContent()).toBe('@page { size: 148mm 105mm; margin: 0; }');
+});

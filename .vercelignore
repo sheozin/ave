@@ -34,3 +34,7 @@
 !/checkin-register.js
 !/cuedeck-register.js
 !/fonts
+!/checkin-badge.js
+!/vendor
+!/embed.js
+!/checkin-register-i18n.js

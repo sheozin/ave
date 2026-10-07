@@ -36,6 +36,10 @@ type World = {
   invites?: Row[]
   links?: Row[]
   emails?: Row[]
+  // Paid tickets: what api.stripe.com was asked, and what a session says
+  stripe?: { method: string; path: string; account: string | null; body: string }[]
+  stripeSession?: Row
+  stripeSessions?: Record<string, Row>
 }
 let world: World
 
@@ -80,6 +84,18 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   if (url.host === 'api.resend.com') {
     ;(world.emails ??= []).push(JSON.parse(String(init?.body ?? '{}')))
     return reply(200, { id: 'email-stub' })
+  }
+  if (url.host === 'api.stripe.com') {
+    const body = String(init?.body ?? '')
+    ;(world.stripe ??= []).push({ method, path: url.pathname, account: headers.get('Stripe-Account'), body })
+    const p = url.pathname
+    if (method === 'POST' && p === '/v1/checkout/sessions') return reply(200, { id: 'cs_test_1', object: 'checkout.session', url: 'https://checkout.stripe.com/c/pay/cs_test_1', status: 'open', payment_status: 'unpaid' })
+    if (method === 'GET' && p.startsWith('/v1/checkout/sessions/')) return reply(200, world.stripeSessions?.[p.split('/').pop()!] ?? world.stripeSession ?? { id: p.split('/').pop(), object: 'checkout.session', status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/x', client_reference_id: ORDER })
+    if (method === 'POST' && p === '/v1/refunds') return reply(200, { id: 're_1', object: 'refund', status: 'succeeded' })
+    if (method === 'POST' && p === '/v1/accounts') return reply(200, { id: 'acct_test123456', object: 'account' })
+    if (method === 'GET' && p.startsWith('/v1/accounts/')) return reply(200, { id: p.split('/').pop(), object: 'account', charges_enabled: true, details_submitted: true, default_currency: 'eur' })
+    if (method === 'POST' && p === '/v1/account_links') return reply(200, { object: 'account_link', url: 'https://connect.stripe.com/setup/s/stub' })
+    return reply(404, { error: { message: 'stub: no stripe route ' + method + ' ' + p } })
   }
   if (url.host !== 'stub.local') return reply(599, { message: 'unexpected network call ' + url.host })
 
@@ -170,7 +186,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -222,6 +238,9 @@ const ALLOWED: Record<string, Who[]> = {
   'checkin-record-scans': ['owner', 'organizer', 'lead', 'crew'],
   'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
   'checkin-held': ['owner', 'organizer'],
+  'checkin-tickets': ['owner', 'organizer'],
+  'checkin-reminders': ['owner', 'organizer'],
+  'checkin-invite-guests': ['owner', 'organizer'],
 }
 const BODY: Record<string, Row> = {
   'checkin-create-checkout': { event_id: EVENT },
@@ -231,6 +250,9 @@ const BODY: Record<string, Row> = {
   'checkin-record-scans': { event_id: EVENT, items: [] },
   'checkin-add-walk-in': { event_id: EVENT, first_name: 'Ewa', last_name: 'Sample' },
   'checkin-held': { event_id: EVENT, action: 'fill' },
+  'checkin-tickets': { event_id: EVENT, action: 'payout_status' },
+  'checkin-reminders': { event_id: EVENT, action: 'test', kind: 'reminder' },
+  'checkin-invite-guests': { event_id: EVENT, action: 'test' },
 }
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -1151,4 +1173,484 @@ Deno.test('checkin-held: a bad held id or action is a 400', async () => {
   setup('owner', { ent: { checkin_core: true, status: 'live' } })
   assert((await call('checkin-held', { event_id: EVENT, action: 'release', held_id: 'nope' })).status === 400, 'held id')
   assert((await call('checkin-held', { event_id: EVENT, action: 'promote' })).status === 400, 'action')
+})
+
+// ── Paid tickets (109) ──────────────────────────────────────────────
+const TK = 'checkin-tickets'
+const ORDER = 'e1000000-0000-4000-8000-000000000001'
+const paidOrder = (over: Row = {}): Row => ({
+  id: ORDER, event_id: EVENT, ticket_name: 'Standard', first_name: 'Pia', last_name: 'Payer', email: 'pia@stub.test',
+  amount_cents: 4900, currency: 'eur', fee_cents: 0, stripe_account_id: 'acct_owner123', checkout_session_id: 'cs_test_1',
+  payment_intent: 'pi_1', status: 'paid', expires_at: '2099-01-01T00:00:00Z', attendee_id: null, ...over,
+})
+
+const OWNER_ALLOWED: Who[] = ['owner']
+for (const who of WHO) {
+  const allow = OWNER_ALLOWED.includes(who)
+  Deno.test(`${TK} refund: ${who} is ${allow ? 'allowed' : 'refused'}`, async () => {
+    setup(who, { ent: { checkin_core: true, status: 'live' } })
+    const r = await call(TK, { event_id: EVENT, action: 'refund', order_id: ORDER })
+    if (allow) assert(r.status === 404, `${who}: ${r.status} ${JSON.stringify(r.body)}`)  // no such order
+    else assert(r.status === 403 && r.body.code === 'not_owner', `${who}: ${r.status} ${JSON.stringify(r.body)}`)
+    assert(!(world.stripe?.length), 'stripe was called')
+  })
+  Deno.test(`${TK} payout_connect: ${who} is ${allow ? 'allowed' : 'refused'}`, async () => {
+    setup(who, { ent: { checkin_core: true, status: 'test' } })
+    const r = await call(TK, { event_id: EVENT, action: 'payout_connect' })
+    if (allow) assert(r.status === 200 && String(r.body.url).startsWith('https://connect.stripe.com/'), `${who}: ${r.status} ${JSON.stringify(r.body)}`)
+    else assert(r.status === 403 && !(world.stripe?.length), `${who}: ${r.status} ${JSON.stringify(r.body)}`)
+  })
+}
+Deno.test(`${TK} payout_connect: the account is created once and recorded for the owner`, async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'test' } })
+  const r = await call(TK, { event_id: EVENT, action: 'payout_connect' })
+  assert(r.status === 200, JSON.stringify(r))
+  const rows = world.tables.leod_checkin_payout_accounts ?? []
+  assert(rows.length === 1 && rows[0].user_id === USER && rows[0].stripe_account_id === 'acct_test123456', JSON.stringify(rows))
+  assert(world.stripe!.some(c => c.path === '/v1/accounts' && c.body.includes('type=standard')), 'not a standard account')
+  // Second time: the stored account, no new one.
+  world.stripe = []
+  const r2 = await call(TK, { event_id: EVENT, action: 'payout_connect' })
+  assert(r2.status === 200 && !world.stripe.some(c => c.path === '/v1/accounts'), JSON.stringify(world.stripe))
+})
+Deno.test(`${TK} payout_status: an unfinished account is refreshed from Stripe`, async () => {
+  setup('organizer', { ent: { checkin_core: true, status: 'test' } })
+  world.tables.leod_checkin_payout_accounts = [{ user_id: OTHER, stripe_account_id: 'acct_owner123', charges_enabled: false, details_submitted: false }]
+  const r = await call(TK, { event_id: EVENT, action: 'payout_status' })
+  assert(r.status === 200 && r.body.charges_enabled === true, JSON.stringify(r))
+  assert(world.tables.leod_checkin_payout_accounts[0].charges_enabled === true, 'not stored')
+})
+Deno.test(`${TK} refund: refunds on the owner's account, returns the fee, records it`, async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live' } })
+  world.tables.leod_checkin_web_orders = [paidOrder()]
+  world.tables.leod_checkin_payout_accounts = [{ user_id: USER, stripe_account_id: 'acct_owner123', charges_enabled: true, details_submitted: true }]
+  world.rpcResult.checkin_web_order_refunded = { status: 'refunded', removed: true }
+  const r = await call(TK, { event_id: EVENT, action: 'refund', order_id: ORDER })
+  assert(r.status === 200 && r.body.removed === true, JSON.stringify(r))
+  const c = world.stripe!.find(x => x.path === '/v1/refunds')!
+  assert(c && c.account === 'acct_owner123' && c.body.includes('refund_application_fee=true') && c.body.includes('payment_intent=pi_1'), JSON.stringify(c))
+  assert(world.rpcCalls.some(x => x.name === 'checkin_web_order_refunded'), 'not recorded')
+})
+Deno.test(`${TK} refund: an unpaid order is refused without calling Stripe`, async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live' } })
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open' })]
+  const r = await call(TK, { event_id: EVENT, action: 'refund', order_id: ORDER })
+  assert(r.status === 409 && !(world.stripe?.length), JSON.stringify(r))
+})
+Deno.test(`${TK} refund: another event's order is not found`, async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live' } })
+  world.tables.leod_checkin_web_orders = [paidOrder({ event_id: '99999999-9999-4999-8999-999999999999' })]
+  const r = await call(TK, { event_id: EVENT, action: 'refund', order_id: ORDER })
+  assert(r.status === 404 && !(world.stripe?.length), JSON.stringify(r))
+})
+
+// The sweep
+const SW = 'checkin-orders-sweep'
+Deno.test(`${SW}: refuses without the cron secret`, async () => {
+  setup('none'); world.rpcResult.checkin_orders_cron_ok = false
+  const r = await call(SW, {})
+  assert(r.status === 401 && !(world.tables.leod_checkin_job_runs?.length), JSON.stringify(r))
+})
+Deno.test(`${SW}: a paid session lists the guest and sends their QR`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [paidOrder({ status: 'open', payment_intent: null, expires_at: new Date(Date.now() + 600000).toISOString() })]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'complete', payment_status: 'paid', payment_intent: 'pi_9', metadata: { cuedeck_order_id: ORDER } }
+  world.rpcResult.checkin_web_order_paid = { status: 'paid', first: true, attendee: { id: ATT, first_name: 'Pia', email: 'pia@stub.test', qr_token: 'tok00000000000000000000000000007', qr_email_sent_at: null } }
+  const r = await call(SW, {})
+  assert(r.status === 200 && String(r.body.detail).startsWith('paid 1'), JSON.stringify(r))
+  const paid = world.rpcCalls.find(c => c.name === 'checkin_web_order_paid')!
+  assert(paid && paid.args.p_payment_intent === 'pi_9', JSON.stringify(world.rpcCalls))
+  assert(world.stripe![0].account === 'acct_owner123', 'not asked on the owner account')
+  assert(String(world.emails?.[0]?.to) === 'pia@stub.test', 'no QR email')
+  assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not closed ok')
+})
+Deno.test(`${SW}: an expired hold is ended, an early cancel keeps its place`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [
+    paidOrder({ id: ORDER, status: 'open', expires_at: new Date(Date.now() - 60000).toISOString() }),
+    paidOrder({ id: 'e1000000-0000-4000-8000-000000000002', checkout_session_id: 'cs_test_2', status: 'open', expires_at: new Date(Date.now() + 600000).toISOString() }),
+  ]
+  world.stripeSessions = {
+    cs_test_1: { id: 'cs_test_1', object: 'checkout.session', status: 'expired', payment_status: 'unpaid', metadata: { cuedeck_order_id: ORDER } },
+    cs_test_2: { id: 'cs_test_2', object: 'checkout.session', status: 'expired', payment_status: 'unpaid', metadata: { cuedeck_order_id: 'e1000000-0000-4000-8000-000000000002' } },
+  }
+  world.rpcResult.checkin_web_order_expire = 'expired'
+  const r = await call(SW, {})
+  assert(r.status === 200 && r.body.detail === 'paid 0, expired 1, open 1', JSON.stringify(r))
+  const ex = world.rpcCalls.filter(c => c.name === 'checkin_web_order_expire')
+  assert(ex.length === 1 && ex[0].args.p_order_id === ORDER, JSON.stringify(ex))
+})
+Deno.test(`${SW}: a Stripe failure on one order fails the run but not the others`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [
+    paidOrder({ status: 'open', checkout_session_id: 'cs_missing', stripe_account_id: 'acct_gone' }),
+    paidOrder({ id: 'e1000000-0000-4000-8000-000000000003', status: 'open', checkout_session_id: null, expires_at: new Date(Date.now() - 60000).toISOString() }),
+  ]
+  world.stripeSession = undefined
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('cs_missing')) return new Response(JSON.stringify({ error: { message: 'No such checkout.session' } }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    world.rpcResult.checkin_web_order_expire = 'expired'
+    const r = await call(SW, {})
+    assert(r.status === 500 && String(r.body.detail).includes('expired 1') && String(r.body.detail).includes(ORDER), JSON.stringify(r))
+    assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'failed', 'run not failed')
+  } finally { globalThis.fetch = real }
+})
+
+// The guest's link, for a paid ticket
+const RG = 'checkin-register'
+async function guest(body: Row): Promise<{ status: number; body: Row }> {
+  const res = await handlers[RG](new Request('http://stub.local/functions/v1/' + RG, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://app.cuedeck.io', 'cf-connecting-ip': '203.0.113.9' },
+    body: JSON.stringify(body),
+  }))
+  return { status: res.status, body: await res.json() }
+}
+const LINK_TOKEN = 'A'.repeat(43)
+function regSetup() {
+  setup('none', { ent: { checkin_core: true, status: 'live', registration_enabled: true, registration_code: 'VTQBZ3ENFV' } })
+  world.rpcResult.checkin_web_token_rate_check = true
+}
+Deno.test(`${RG} confirm: a paid ticket opens Checkout on the owner's account`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'payment_required', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', checkout_session_id: null, payment_intent: null, fee_cents: 122,
+    expires_at: new Date(Date.now() + 35 * 60000).toISOString() })]
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && r.body.status === 'payment' && r.body.checkout_url === 'https://checkout.stripe.com/c/pay/cs_test_1', JSON.stringify(r))
+  assert(r.body.amount === '€49.00', 'amount ' + r.body.amount)
+  const c = world.stripe!.find(x => x.path === '/v1/checkout/sessions')!
+  assert(c.account === 'acct_owner123', 'wrong account ' + c.account)
+  const b = decodeURIComponent(c.body)
+  assert(b.includes('payment_intent_data[application_fee_amount]=122') && b.includes('unit_amount]=4900') && b.includes('/r/VTQBZ3ENFV?paid=1'), b)
+  assert(b.includes('payment_method_types[0]=card'), 'not card only')
+  // The session ends a minute before the hold.
+  const exp = Number(/expires_at=(\d+)/.exec(b)![1])
+  assert(exp === Math.floor(Date.parse(String(world.tables.leod_checkin_web_orders[0].expires_at)) / 1000) - 60, 'expiry ' + exp)
+  assert(world.tables.leod_checkin_web_orders[0].checkout_session_id === 'cs_test_1', 'session not recorded')
+})
+Deno.test(`${RG} confirm: back from Stripe, a paid order shows the ticket`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'order', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', payment_intent: null, expires_at: new Date(Date.now() + 600000).toISOString() })]
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, first_name: 'Pia', last_name: 'Payer', ticket_type: 'Standard', qr_token: 'tok00000000000000000000000000007' }]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'complete', payment_status: 'paid', payment_intent: 'pi_9', metadata: { cuedeck_order_id: ORDER } }
+  world.rpcResult.checkin_web_order_paid = { status: 'paid', first: true, attendee: { id: ATT, first_name: 'Pia', email: 'pia@stub.test', qr_token: 'tok00000000000000000000000000007', qr_email_sent_at: null } }
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && r.body.status === 'registered' && (r.body.ticket as Row)?.ticket_type === 'Standard', JSON.stringify(r))
+  assert(String(world.emails?.[0]?.to) === 'pia@stub.test', 'no QR email')
+})
+Deno.test(`${RG} confirm: an expired payment starts a new hold and a new session`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'order', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', payment_intent: null, expires_at: new Date(Date.now() + 60000).toISOString() })]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'expired', payment_status: 'unpaid', metadata: { cuedeck_order_id: ORDER } }
+  world.rpcResult.checkin_web_order_expire = 'expired'
+  world.rpcResult.checkin_web_order_reopen = 'open'
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('/rpc/checkin_web_order_reopen')) world.tables.leod_checkin_web_orders[0].expires_at = new Date(Date.now() + 35 * 60000).toISOString()
+    return real(i, init)
+  }) as typeof fetch
+  let r
+  try { r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN }) } finally { globalThis.fetch = real }
+  assert(r.status === 200 && r.body.status === 'payment', JSON.stringify(r))
+  const names = world.rpcCalls.map(c => c.name)
+  assert(names.indexOf('checkin_web_order_expire') < names.indexOf('checkin_web_order_reopen'), names.join(','))
+  assert(world.stripe!.some(x => x.method === 'POST' && x.path === '/v1/checkout/sessions'), 'no new session')
+})
+Deno.test(`${RG} confirm: an expired payment with no place left says full`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'order', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'expired', checkout_session_id: null, payment_intent: null })]
+  world.rpcResult.checkin_web_order_expire = null
+  world.rpcResult.checkin_web_order_reopen = 'full'
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && r.body.status === 'full' && !(world.stripe?.length), JSON.stringify(r))
+})
+
+Deno.test(`${SW}: a paid session made for another order is never taken as payment`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [paidOrder({ status: 'open', payment_intent: null })]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'complete', payment_status: 'paid', payment_intent: 'pi_x', metadata: { cuedeck_order_id: 'e1000000-0000-4000-8000-0000000000ff' } }
+  const r = await call(SW, {})
+  assert(r.status === 500 && String(r.body.detail).includes('does not belong'), JSON.stringify(r))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_web_order_paid'), 'marked paid')
+})
+Deno.test(`${SW}: the second settle of a paid order sends no second QR email`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [paidOrder({ status: 'open', payment_intent: null })]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'complete', payment_status: 'paid', payment_intent: 'pi_9', metadata: { cuedeck_order_id: ORDER } }
+  world.rpcResult.checkin_web_order_paid = { status: 'paid', first: false, attendee: { id: ATT, first_name: 'Pia', email: 'pia@stub.test', qr_token: 'tok00000000000000000000000000007', qr_email_sent_at: null } }
+  const r = await call(SW, {})
+  assert(r.status === 200 && !(world.emails?.length), JSON.stringify(r) + ' emails ' + world.emails?.length)
+})
+
+Deno.test(`${TK} refund: a ticket paid to a previous owner's account is not refunded from here`, async () => {
+  setup('owner', { ent: { checkin_core: true, status: 'live' } })
+  world.tables.leod_checkin_web_orders = [paidOrder({ stripe_account_id: 'acct_previous1' })]
+  world.tables.leod_checkin_payout_accounts = [{ user_id: USER, stripe_account_id: 'acct_owner123', charges_enabled: true }]
+  const r = await call(TK, { event_id: EVENT, action: 'refund', order_id: ORDER })
+  assert(r.status === 409 && r.body.code === 'other_account' && !(world.stripe?.length), JSON.stringify(r))
+})
+Deno.test(`${RG} confirm: a completed but unpaid session says processing and is never reopened`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'order', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', payment_intent: null, expires_at: new Date(Date.now() - 60000).toISOString() })]
+  world.stripeSession = { id: 'cs_test_1', object: 'checkout.session', status: 'complete', payment_status: 'unpaid', metadata: { cuedeck_order_id: ORDER } }
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && r.body.status === 'processing', JSON.stringify(r))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_web_order_expire' || c.name === 'checkin_web_order_reopen'), 'expired a pending payment')
+})
+Deno.test(`${RG} confirm: too little hold left for a session starts a fresh hold first`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'order', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', checkout_session_id: null, payment_intent: null, expires_at: new Date(Date.now() + 10 * 60000).toISOString() })]
+  world.rpcResult.checkin_web_order_expire = 'expired'
+  world.rpcResult.checkin_web_order_reopen = 'open'
+  // The reopen moves the hold; the stub table plays that part.
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('/rpc/checkin_web_order_reopen')) world.tables.leod_checkin_web_orders[0].expires_at = new Date(Date.now() + 35 * 60000).toISOString()
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+    assert(r.status === 200 && r.body.status === 'payment', JSON.stringify(r))
+    assert(world.rpcCalls.some(c => c.name === 'checkin_web_order_reopen'), 'hold not refreshed')
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${SW}: an order Stripe will not answer for is released an hour after its hold`, async () => {
+  setup('none')
+  world.rpcResult.checkin_orders_cron_ok = true
+  world.rpcResult.checkin_web_orders_due = [paidOrder({ status: 'open', checkout_session_id: 'cs_missing', expires_at: new Date(Date.now() - 2 * 3600e3).toISOString() })]
+  world.rpcResult.checkin_web_order_expire = 'expired'
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('cs_missing')) return new Response(JSON.stringify({ error: { message: 'account revoked' } }), { status: 403, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(SW, {})
+    assert(String(r.body.detail).includes('expired 1'), JSON.stringify(r))
+    assert(world.rpcCalls.some(c => c.name === 'checkin_web_order_expire'), 'not released')
+  } finally { globalThis.fetch = real }
+})
+
+// ── Reminder emails (110) ───────────────────────────────────────────
+const RM = 'checkin-reminders'
+function remSetup() {
+  setup('none', { ent: { checkin_core: true, status: 'live', registration_address: 'Main St 1', reminder_message: 'Bring <b>ID</b>',
+    thankyou_message: 'Thanks!', thankyou_link: 'https://example.com/slides' } })
+  world.tables.leod_events[0].event_start = '09:00:00'
+  world.rpcResult.checkin_reminders_cron_ok = true
+}
+Deno.test(`${RM}: refuses the cron without the secret`, async () => {
+  remSetup(); world.rpcResult.checkin_reminders_cron_ok = false
+  const r = await call(RM, {})
+  assert(r.status === 401 && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test(`${RM}: sends each claimed guest their email, escaped, with the QR`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [
+    { attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Ann<i>', email: 'ann@stub.test', qr_token: 'tok00000000000000000000000000001' },
+    { attendee_id: 'b2000000-0000-4000-8000-000000000002', kind: 'thankyou', event_id: EVENT, first_name: 'Ben', email: 'ben@stub.test', qr_token: 'tok2' },
+  ]
+  const r = await call(RM, {})
+  assert(r.status === 200 && r.body.detail === 'reminders 1, thank-yous 1', JSON.stringify(r))
+  const [rem, thx] = world.emails as { to: string; subject: string; html: string }[]
+  assert(rem.to === 'ann@stub.test' && rem.subject.startsWith('Reminder: Stub event'), rem.subject)
+  assert(rem.html.includes('Ann&lt;i&gt;') && rem.html.includes('Bring &lt;b&gt;ID&lt;/b&gt;') && rem.html.includes('data:image/gif;base64') && rem.html.includes('doors open 09:00'), 'reminder body')
+  assert(rem.html.includes('query=Hall%2C%20Main%20St%201'), 'maps link')
+  assert(thx.to === 'ben@stub.test' && thx.html.includes('href="https://example.com/slides"'), 'thank-you body')
+  assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not ok')
+})
+Deno.test(`${RM}: a failed send gives the claim back and fails the run`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Ann', email: 'ann@stub.test', qr_token: 'tok1' }]
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('api.resend.com')) return new Response(JSON.stringify({ message: 'rate limited' }), { status: 429, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(RM, {})
+    assert(r.status === 500, JSON.stringify(r))
+    const un = world.rpcCalls.find(c => c.name === 'checkin_unclaim_reminder')
+    assert(un && un.args.p_attendee_id === ATT && un.args.p_kind === 'reminder', JSON.stringify(world.rpcCalls))
+    assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'failed', 'run not failed')
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${RM} test: goes only to the organizer, marked as a test`, async () => {
+  remSetup()
+  const r = await call(RM, { event_id: EVENT, action: 'test', kind: 'thankyou' })
+  assert(r.status === 403, 'none role should be refused: ' + JSON.stringify(r))
+  setup('organizer', { ent: { checkin_core: true, status: 'test', thankyou_link: 'https://example.com/x' } })
+  const r2 = await call(RM, { event_id: EVENT, action: 'test', kind: 'thankyou' })
+  assert(r2.status === 200 && r2.body.to === 'desk@stub.test', JSON.stringify(r2))
+  const m = world.emails![0] as { to: string; subject: string }
+  assert(m.to === 'desk@stub.test' && m.subject === '[Test] Thank you for coming to Stub event', m.subject)
+})
+
+// ── Plus-ones (114) ─────────────────────────────────────────────────
+Deno.test(`${RG} confirm: each plus-one's ticket is emailed to the guest who brought them`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'registered', first_name: 'Maya',
+    attendee: { id: ATT, first_name: 'Maya', email: 'maya@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null },
+    plus_ones: [{ id: 'p1000000-0000-4000-8000-000000000001', first_name: 'Ola', last_name: 'Nowak', qr_token: 'tok00000000000000000000000000002' }] }
+  world.tables.leod_checkin_attendees = [
+    { id: ATT, event_id: EVENT, first_name: 'Maya', last_name: 'L', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' },
+    { id: 'p1000000-0000-4000-8000-000000000001', event_id: EVENT, first_name: 'Ola', last_name: 'Nowak', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000002' }]
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && (r.body.plus_tickets as unknown[]).length === 1, JSON.stringify(r).slice(0, 300))
+  const mails = world.emails as { to: string; subject: string; html: string }[]
+  assert(mails.length === 2 && mails.every(m => m.to === 'maya@stub.test'), JSON.stringify(mails.map(m => [m.to, m.subject])))
+  assert(mails[1].subject === 'Ticket for Ola: Stub event' && mails[1].html.includes('coming with you'), mails[1].subject)
+})
+Deno.test('checkin-held fill: a party joins only if all of it fits', async () => {
+  setup('organizer', { ent: { checkin_core: true, status: 'live', registration_capacity: 10 } })
+  world.rpcResult.checkin_web_places_taken = 8   // 2 places free
+  world.tables.leod_checkin_held = [
+    { id: 'h1', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [{ first_name: 'A', last_name: 'B' }, { first_name: 'C', last_name: 'D' }], created_at: '1' },
+    { id: 'h2', event_id: EVENT, kind: 'waitlist', is_test: false, plus_ones: [], created_at: '2' }]
+  world.rpcResult.checkin_web_release_held = { status: 'released', is_test: false, attendee: null, plus_ones: [] }
+  const r = await call('checkin-held', { event_id: EVENT, action: 'fill' })
+  const asked = world.rpcCalls.filter(c => c.name === 'checkin_web_release_held').map(c => c.args.p_held_id)
+  // The first party needs 3 places: the queue stops there rather than jumping it.
+  assert(r.status === 200 && asked.length === 0, JSON.stringify(r) + ' ' + JSON.stringify(asked))
+})
+
+// ── Invitations (116) ───────────────────────────────────────────────
+const IG = 'checkin-invite-guests'
+function invSetup(status = 'live') {
+  setup('organizer', { ent: { checkin_core: true, status, registration_enabled: true, registration_code: 'VTQBZ3ENFV' } })
+  world.tables.leod_checkin_attendees = [
+    { id: 'i1000000-0000-4000-8000-000000000001', event_id: EVENT, source: 'import', is_test: false, email: 'gina@stub.test' },
+    { id: 'i1000000-0000-4000-8000-000000000002', event_id: EVENT, source: 'import', is_test: false, email: 'hal@stub.test' }]
+  world.tables.leod_checkin_web_invites = [{ attendee_id: 'i1000000-0000-4000-8000-000000000002', event_id: EVENT }]
+  world.rpcResult.checkin_web_invite_issue = { status: 'issued', first_name: 'Gina', email: 'gina@stub.test' }
+}
+Deno.test(`${IG} send: invites only guests not yet invited, with a personal link in the fragment`, async () => {
+  invSetup()
+  const r = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r.status === 200 && r.body.sent === 1 && r.body.remaining === 0, JSON.stringify(r))
+  const issued = world.rpcCalls.filter(c => c.name === 'checkin_web_invite_issue')
+  assert(issued.length === 1 && issued[0].args.p_attendee_id === 'i1000000-0000-4000-8000-000000000001' && /^[0-9a-f]{64}$/.test(String(issued[0].args.p_token_hash)), JSON.stringify(issued))
+  const m = world.emails![0] as { to: string; subject: string; html: string }
+  assert(m.to === 'gina@stub.test' && m.subject === 'You are invited: Stub event' && /\/r\/VTQBZ3ENFV#i=[A-Za-z0-9_-]{43}"/.test(m.html), m.subject)
+})
+Deno.test(`${IG} send: refused in test mode, before any email`, async () => {
+  invSetup('test')
+  const r = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r.status === 409 && r.body.code === 'test_mode' && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test(`${IG} send: a failed email takes the invitation back`, async () => {
+  invSetup()
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('api.resend.com')) return new Response(JSON.stringify({ message: 'down' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(IG, { event_id: EVENT, action: 'send' })
+    assert(r.body.failed === 1 && world.rpcCalls.some(c => c.name === 'checkin_web_invite_unissue'), JSON.stringify(r))
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${RG} rsvp: going emails the ticket and the plus-ones' tickets to the guest`, async () => {
+  regSetup()
+  world.tables.leod_checkin_entitlements[0].registration_plus_ones = 2
+  world.rpcResult.checkin_web_rsvp = { status: 'going', first_name: 'Gina',
+    attendee: { id: ATT, first_name: 'Gina', email: 'gina@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null },
+    plus_ones: [{ id: 'p2000000-0000-4000-8000-000000000001', first_name: 'Ola', last_name: 'N', qr_token: 'tok00000000000000000000000000002' }] }
+  world.tables.leod_checkin_attendees = [
+    { id: ATT, event_id: EVENT, first_name: 'Gina', last_name: 'G', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' },
+    { id: 'p2000000-0000-4000-8000-000000000001', event_id: EVENT, first_name: 'Ola', last_name: 'N', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000002' }]
+  const r = await guest({ action: 'rsvp', code: 'VTQBZ3ENFV', token: LINK_TOKEN, going: true, plus_ones: [{ first_name: 'Ola', last_name: 'N' }] })
+  assert(r.status === 200 && r.body.status === 'going' && (r.body.plus_tickets as unknown[]).length === 1, JSON.stringify(r).slice(0, 300))
+  assert((world.emails ?? []).length === 2, 'emails ' + world.emails?.length)
+  const call1 = world.rpcCalls.find(c => c.name === 'checkin_web_rsvp')!
+  assert(call1.args.p_going === true && JSON.stringify(call1.args.p_plus_ones) === '[{"first_name":"Ola","last_name":"N"}]', JSON.stringify(call1.args))
+})
+Deno.test(`${RG} rsvp: a plus-one with a link for a name is refused before the database`, async () => {
+  regSetup()
+  world.tables.leod_checkin_entitlements[0].registration_plus_ones = 2
+  const r = await guest({ action: 'rsvp', code: 'VTQBZ3ENFV', token: LINK_TOKEN, going: true, plus_ones: [{ first_name: 'evil.com', last_name: 'X' }] })
+  assert(r.status === 400 && !world.rpcCalls.some(c => c.name === 'checkin_web_rsvp'), JSON.stringify(r))
+})
+
+Deno.test(`${IG} limits: a resend too soon is refused with a reason; the daily cap stops a batch`, async () => {
+  invSetup()
+  world.rpcResult.checkin_web_invite_issue = { status: 'too_soon' }
+  const r = await call(IG, { event_id: EVENT, action: 'resend', attendee_ids: ['e2000000-0000-4000-8000-000000000001'] })
+  assert(r.status === 429 && r.body.code === 'too_soon' && !(world.emails?.length), JSON.stringify(r))
+  invSetup()
+  world.rpcResult.checkin_web_invite_issue = { status: 'daily_cap' }
+  const r2 = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r2.status === 200 && r2.body.capped === true && r2.body.remaining === 0 && !(world.emails?.length), JSON.stringify(r2))
+})
+
+// ── Guest emails in the guest's language (123) ─────────────────────
+Deno.test(`${RG} confirm: the ticket email comes in the guest's language`, async () => {
+  regSetup()
+  world.rpcResult.checkin_web_confirm = { status: 'registered', first_name: 'Ola',
+    attendee: { id: ATT, first_name: 'Ola', email: 'ola@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null } }
+  world.rpcResult.checkin_web_langs = [{ email: 'ola@stub.test', lang: 'pl' }]
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, first_name: 'Ola', last_name: 'N', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' }]
+  const res = await handlers[RG](new Request('http://stub.local/functions/v1/' + RG, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://app.cuedeck.io', 'cf-connecting-ip': '203.0.113.9' },
+    body: JSON.stringify({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN, lang: 'pl' }) }))
+  assert(res.status === 200, 'status ' + res.status)
+  const set = world.rpcCalls.find(c => c.name === 'checkin_web_set_lang')
+  assert(set && set.args.p_lang === 'pl' && set.args.p_email === 'ola@stub.test', 'language not recorded: ' + JSON.stringify(set))
+  const m = world.emails![0] as { subject: string; html: string }
+  assert(m.subject === 'Twój kod QR do wejścia: Stub event' && m.html.includes('lang="pl"') && m.html.includes('Cześć Ola,'), m.subject)
+})
+Deno.test(`${RM}: an Arabic guest gets the reminder in Arabic, right to left`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Sara', email: 'sara@stub.test', qr_token: 'tok1' }]
+  world.rpcResult.checkin_web_langs = [{ email: 'sara@stub.test', lang: 'ar' }]
+  const r = await call(RM, {})
+  assert(r.status === 200, JSON.stringify(r))
+  const m = world.emails![0] as { subject: string; html: string }
+  assert(m.subject.startsWith('تذكير: Stub event') && m.html.includes('dir="rtl"') && m.html.includes('نراك قريبًا'), m.subject)
+})
+Deno.test(`${RM}: a failed language lookup still sends, in English`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'thankyou', event_id: EVENT, first_name: 'Sam', email: 'sam@stub.test', qr_token: 'tok1' }]
+  const r = await call(RM, {})
+  const m = world.emails![0] as { subject: string }
+  assert(r.status === 200 && m.subject === 'Thank you for coming to Stub event', m.subject)
+})
+
+Deno.test(`${RG} register: the language of a form is not stored for an address nobody has confirmed`, async () => {
+  regSetup()
+  Deno.env.set('TURNSTILE_SECRET_KEY', 'ts-secret')
+  world.tables.leod_checkin_entitlements[0].registration_questions = []
+  world.rpcResult.checkin_web_rate_check = true
+  world.rpcResult.checkin_web_request = { status: 'pending', send: true, event_id: EVENT }
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('challenges.cloudflare.com')) return new Response(JSON.stringify({ success: true, hostname: 'app.cuedeck.io', action: 'register' }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const res = await handlers[RG](new Request('http://stub.local/functions/v1/' + RG, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://app.cuedeck.io', 'cf-connecting-ip': '203.0.113.9' },
+      body: JSON.stringify({ action: 'register', code: 'VTQBZ3ENFV', lang: 'ar', first_name: 'Vic', last_name: 'Tim', email: 'victim@stub.test',
+        company: '', answers: {}, consent: true, turnstile_token: 'tok', website: '' }) }))
+    const body = await res.json()
+    assert(res.status === 200 && body.status === 'check_email', JSON.stringify(body))
+    assert(!world.rpcCalls.some(c => c.name === 'checkin_web_set_lang'), 'stored a language for an unconfirmed address')
+    const m = (world.emails ?? [])[0] as { subject: string } | undefined
+    assert(m && m.subject === 'أكّد تسجيلك', 'the confirmation itself still in the form language: ' + m?.subject)
+  } finally { globalThis.fetch = real; Deno.env.delete('TURNSTILE_SECRET_KEY') }
 })

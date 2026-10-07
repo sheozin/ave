@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/cuedeck-auth.js"></script>
+<!-- QR codes on badges (checkin-badge.js). Local, so badges print offline. -->
+<script src="/vendor/qrcode-generator-1.4.4.js"></script>
 <style>
 /* ── DESIGN TOKENS — LIGHT ──────────────────────────
    The check-in desk lives in a bright hotel lobby, so this page is
@@ -893,7 +895,9 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
   import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
+  import { normalizeDesign, badgeElement, pageCss } from '/checkin-badge.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
+  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
 <script>
@@ -1859,7 +1863,7 @@ async function openEvent(eventId, ev, role) {
   // the entitlements row entirely when checkin_core is false.
   const { data: ent } = await sb
     .from('leod_checkin_entitlements')
-    .select('checkin_core, status')
+    .select('checkin_core, status, badge_design, registration_brand_color, registration_logo_path')
     .eq('event_id', eventId)
     .maybeSingle();
 
@@ -1876,6 +1880,7 @@ async function openEvent(eventId, ev, role) {
   S.deskLabel = null;   // a label belongs to (event, desk); the next heartbeat fills it
   renderDeskLabel();
   S.status   = ent.status === 'live' ? 'live' : 'test';
+  setBadgeDesign(ent);
   S.testUsed = ev && typeof ev.test_used === 'number' ? ev.test_used : 0;
   S.eventDate = ev ? ev.date : null;
   S.eventTz   = ev ? ev.timezone : null;
@@ -2171,7 +2176,25 @@ function badgeNamePt(name) {
   return Math.max(BADGE_NAME_MIN_PT, Math.round(BADGE_NAME_PT * BADGE_NAME_FITS / n));
 }
 
+// The event's badge design (Event admin, Badges; migration 111), drawn by
+// checkin-badge.js. The @page size follows the design: a print style added
+// after the main one, so its @page wins over the 100 x 70 default above.
+// The logo is fetched once here so the browser has it cached before the
+// first print, which may come with the venue wifi down.
+function setBadgeDesign(ent) {
+  const design = window.CK_BADGE.normalizeDesign(ent.badge_design);
+  const logoUrl = ent.registration_logo_path ? SUPABASE_URL + '/storage/v1/object/public/checkin-public/' + ent.registration_logo_path : null;
+  S.badge = { design, brand: ent.registration_brand_color || null, logoUrl };
+  let st = document.getElementById('badge-page');
+  if (!st) { st = document.createElement('style'); st.id = 'badge-page'; st.media = 'print'; document.head.appendChild(st); }
+  st.textContent = window.CK_BADGE.pageCss(design);
+  if (design.logo && logoUrl) new Image().src = logoUrl;
+}
+
 function badgeNode(attendee) {
+  if (window.CK_BADGE && S.badge) {
+    return window.CK_BADGE.badgeElement(attendee, { ...S.badge, test: S.status === 'test' });
+  }
   const badge = document.createElement('div');
   badge.className = 'badge';
 

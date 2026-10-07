@@ -9,6 +9,7 @@
 
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import { sendEmail } from './resend.ts'
+import { et, emailDate, dirOf, langsFor, type Lang } from './email-i18n.ts'
 
 export interface QrEmailAttendee {
   id: string
@@ -26,6 +27,8 @@ export interface QrEmailEvent {
   brand_color?: string | null
   logo_url?: string | null
   host_name?: string | null
+  // (123) The event, so each guest's email comes in their language.
+  event_id?: string
 }
 
 // The event's brand for guest emails, from the Branding tab (migration
@@ -36,10 +39,10 @@ export async function withBrand(
 ): Promise<QrEmailEvent> {
   const { data, error } = await sb.from('leod_checkin_entitlements')
     .select('registration_brand_color, registration_logo_path, registration_host_name').eq('event_id', eventId).maybeSingle()
-  if (error || !data) return event
+  if (error || !data) return { ...event, event_id: eventId }
   const color = /^#[0-9A-Fa-f]{6}$/.test(data.registration_brand_color ?? '') ? data.registration_brand_color : null
   const logo = data.registration_logo_path ? Deno.env.get('SUPABASE_URL') + '/storage/v1/object/public/checkin-public/' + data.registration_logo_path : null
-  return { ...event, brand_color: color, logo_url: logo, host_name: data.registration_host_name ?? null }
+  return { ...event, event_id: eventId, brand_color: color, logo_url: logo, host_name: data.registration_host_name ?? null }
 }
 
 export interface QrEmailResult {
@@ -53,33 +56,29 @@ export interface QrEmailResult {
 // registration list. None of it is escaped by default in a template
 // literal, so without this, a first_name like `<a href="...">click</a>`
 // would inject arbitrary markup/links into a genuine check-in email.
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-function formatEventDate(isoDate: string): string {
-  const d = new Date(isoDate + 'T00:00:00Z')
-  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
-}
 
-function generateQrDataUrl(token: string): string {
+export function generateQrDataUrl(token: string): string {
   const qr = qrcode(0, 'M')
   qr.addData(token)
   qr.make()
   return qr.createDataURL()
 }
 
-function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string): string {
+function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string, guestOf?: string, lang: Lang = 'en'): string {
   const safeName = escapeHtml(event.name)
   const safeFirstName = escapeHtml(attendee.first_name)
   const venueLine = event.venue ? ` &middot; ${escapeHtml(event.venue)}` : ''
   const accent = /^#[0-9A-Fa-f]{6}$/.test(event.brand_color ?? '') ? event.brand_color! : '#1a1a2e'
   const brandBar = event.logo_url || event.host_name
-    ? `<div style="padding:16px 24px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;">${event.logo_url ? `<img src="${escapeHtml(event.logo_url)}" alt="" width="36" height="36" style="display:inline-block;width:36px;height:36px;border-radius:8px;object-fit:contain;vertical-align:middle;">` : ''}${event.host_name ? `<span style="font-size:14px;font-weight:600;color:#374151;vertical-align:middle;margin-left:${event.logo_url ? '10px' : '0'};">${escapeHtml(event.host_name)}</span>` : ''}</div>`
+    ? `<div style="padding:16px 24px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;">${event.logo_url ? `<img src="${escapeHtml(event.logo_url)}" alt="" width="36" height="36" style="display:inline-block;width:36px;height:36px;border-radius:8px;object-fit:contain;vertical-align:middle;">` : ''}${event.host_name ? `<span dir="auto" style="font-size:14px;font-weight:600;color:#374151;vertical-align:middle;margin-left:${event.logo_url ? '10px' : '0'};">${escapeHtml(event.host_name)}</span>` : ''}</div>`
     : ''
   return `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="${lang}" dir="${dirOf(lang)}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -90,19 +89,22 @@ function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDat
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);border-top:4px solid ${accent};">
       ${brandBar}
       <div style="background:#fff;padding:28px 24px;text-align:center;border-bottom:1px solid #eee;">
-        <div style="font-size:22px;font-weight:700;color:${accent};">${safeName}</div>
-        <div style="color:#6b7280;font-size:12px;margin-top:6px;">${formatEventDate(event.date)}${venueLine}</div>
+        <div dir="auto" style="font-size:22px;font-weight:700;color:${accent};">${safeName}</div>
+        <div style="color:#6b7280;font-size:12px;margin-top:6px;">${emailDate(lang, event.date, true)}${venueLine}</div>
       </div>
       <div style="padding:28px 24px;color:#374151;">
-        <p style="margin:0 0 8px;font-size:15px;">Hi ${safeFirstName},</p>
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">Show this QR code at the entrance to check in — no need to print anything, your phone screen works fine.</p>
+        ${guestOf
+          ? `<p style="margin:0 0 8px;font-size:15px;">${escapeHtml(et(lang, 'Hi {name},', { name: guestOf }))}</p>
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">${escapeHtml(et(lang, 'This is the check-in QR code for {guest}, who is coming with you. Forward it to them, or show it at the entrance together.', { guest: '\u0000' })).replace('\u0000', '<b>' + safeFirstName + '</b>')}</p>`
+          : `<p style="margin:0 0 8px;font-size:15px;">${escapeHtml(et(lang, 'Hi {name},', { name: attendee.first_name }))}</p>
+        <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">${escapeHtml(et(lang, 'Show this QR code at the entrance to check in. No need to print anything: your phone screen works fine.'))}</p>`}
         <div style="text-align:center;margin:0 0 20px;">
-          <img src="${qrDataUrl}" width="160" height="160" alt="Your check-in QR code" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
+          <img src="${qrDataUrl}" width="160" height="160" alt="${escapeHtml(et(lang, 'Your check-in QR code'))}" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
         </div>
-        <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">Lost this email? Just show your name at the entrance instead.</p>
+        <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">${escapeHtml(et(lang, 'Lost this email? Just show your name at the entrance instead.'))}</p>
       </div>
       <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
-        <span style="font-size:10px;color:#b0b0b8;">Check-in powered by</span>
+        <span style="font-size:10px;color:#b0b0b8;">${escapeHtml(et(lang, 'Check-in powered by'))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
       </div>
     </div>
@@ -123,9 +125,15 @@ export async function sendQrEmailsForAttendees(
   // overrideTo: deliver to this address instead (the organizer's own
   // "send a test to myself"). recordSent false: do not stamp
   // qr_email_sent_at, because the guest has not been emailed.
-  opts: { overrideTo?: string; recordSent?: boolean } = {},
+  // guestOf: these are plus-ones (migration 114) and overrideTo is the
+  // guest who brought them; the email says whose ticket it is.
+  opts: { overrideTo?: string; recordSent?: boolean; guestOf?: string } = {},
 ): Promise<QrEmailResult[]> {
   const results: QrEmailResult[] = []
+  // (123) Each recipient's language, looked up once for the batch.
+  const langs = event.event_id
+    ? await langsFor(sb, event.event_id, attendees.map(a => (opts.overrideTo ?? a.email) ?? '').filter(Boolean))
+    : new Map<string, Lang>()
 
   for (const attendee of attendees) {
     const to = opts.overrideTo ?? attendee.email
@@ -142,11 +150,13 @@ export async function sendQrEmailsForAttendees(
     try {
       const safeFrom = event.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck'
       const qrDataUrl = generateQrDataUrl(attendee.qr_token)
-      const html = renderQrEmailHtml(event, attendee, qrDataUrl)
+      const lang = langs.get(to.toLowerCase()) ?? 'en'
+      const html = renderQrEmailHtml(event, attendee, qrDataUrl, opts.guestOf, lang)
 
       const { error } = await sendEmail({
         to,
-        subject: `Your check-in QR code — ${event.name}`,
+        subject: opts.guestOf ? et(lang, 'Ticket for {name}: {event}', { name: attendee.first_name, event: event.name })
+          : et(lang, 'Your check-in QR code: {event}', { event: event.name }),
         html,
         fromName: `${safeFrom} Check-in`,
       })
