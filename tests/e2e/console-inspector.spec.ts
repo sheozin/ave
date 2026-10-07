@@ -115,7 +115,7 @@ test('inspector: READY shows Next step with Call speaker and Go live now, one Ma
   const { ctx, page } = await openConsole(browser);
   await page.locator(`#card-${ID(5)} .sc-title`).click();
   await expect(insp(page).locator('.insp-title')).toHaveText('Duty Free Pricing After the Currency Float');
-  expect(await secLabels(page)).toEqual(['Next step', 'Timing', 'Screens', 'Session']);
+  expect(await secLabels(page)).toEqual(['Next step', 'Timing', 'Screens', 'Message to speaker · Main Stage', 'Session']);
   await expect(insp(page).locator('.insp-next > .btn')).toHaveText(['Call speaker', 'Go live now']);
   await expect(insp(page).locator('.insp-next .end-slot, .insp-next .act-gap')).toHaveCount(0);   // no empty End slot or divider
   await expect(insp(page).locator('.who-state')).toHaveText('Not arrived');
@@ -133,7 +133,7 @@ test('inspector: READY shows Next step with Call speaker and Go live now, one Ma
 
 test('inspector: LIVE shows Control with Hold and End, Timing with -1/+1 and Push following', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  expect(await secLabels(page)).toEqual(['Control', 'Timing', 'Screens', 'Session']);
+  expect(await secLabels(page)).toEqual(['Control', 'Timing', 'Screens', 'Message to speaker · Main Stage', 'Session']);
   const control = insp(page).locator('.insp-sec', { has: page.locator('.insp-primary') });
   await expect(control.locator('.lbl')).toHaveText('Control');
   await expect(control.locator('.insp-primary .hold')).toHaveText('Hold');
@@ -180,9 +180,11 @@ for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
     const keys = ['control', 'next', 'timing', 'screens', 'session'];
     const vals = await evalPage(page, `${JSON.stringify(keys)}.map(k => t('cc.insp.sec.' + k))`) as string[];
     vals.forEach((v, i) => expect(v, keys[i]).not.toBe('cc.insp.sec.' + keys[i]));
-    expect(await secLabels(page)).toEqual([vals[0], vals[2], vals[3], vals[4]]);
+    const msg = await evalPage(page, `tf('cc.msg.titleRoom', { room: 'Main Stage' })`) as string;   // Message to speaker (task MSG)
+    expect(msg).not.toBe('cc.msg.titleRoom');
+    expect(await secLabels(page)).toEqual([vals[0], vals[2], vals[3], msg, vals[4]]);
     await page.locator(`#card-${ID(5)} .sc-title`).click();
-    expect(await secLabels(page)).toEqual([vals[1], vals[2], vals[3], vals[4]]);
+    expect(await secLabels(page)).toEqual([vals[1], vals[2], vals[3], msg, vals[4]]);
     const goNow = await evalPage(page, `t('cc.insp.goLiveNow')`) as string;
     expect(goNow).not.toBe('cc.insp.goLiveNow');
     await expect(insp(page).locator('.insp-next > .btn').nth(1)).toHaveText(goNow);

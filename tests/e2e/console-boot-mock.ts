@@ -163,6 +163,7 @@ export interface Scenario {
   locale?: 'en' | 'ar' | 'pl' | 'de';
   reducedMotion?: 'reduce' | 'no-preference';
   touch?: boolean;
+  stageMessages?: unknown[];   // leod_stage_messages rows the boot read returns
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -304,6 +305,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         leod_users: [{ id: USER_ID, name: NAMES[role], email, role, organization: 'Nilegate Events', phone: null, active: true, company_name: 'Nilegate Events', vat_id: null, billing_address: null }],
         leod_config: [], leod_events: [EVENT], leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
         leod_event_log: LOG, leod_signage_displays: DISPLAYS, leod_signage_sponsors: SPONSORS,
+        leod_stage_messages: sc.stageMessages ?? [],
       };
       if (!(table in rows)) unmocked.push(table);
       const data = rows[table] ?? [];
