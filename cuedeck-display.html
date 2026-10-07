@@ -13,7 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ── RESET & BASE ── */
-:root { --brand: #3b82f6; --st-live: #EF4444; --st-ready: #34D399; --st-calling: #FACC15; --st-hold: #FB923C; --st-overrun: #E879F9; }
+:root { --brand: #3b82f6; --st-live: #EF4444; --st-ready: #34D399; --st-calling: #FACC15; --st-hold: #FB923C; --st-overrun: #E879F9; --st-msg-ink: #0A0E14; }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:#05060f}
 body{
@@ -333,6 +333,19 @@ body.is-live #display{
 .st-standby-session{font-size:clamp(16px,2.8vw,40px);color:#fff;font-weight:600;text-align:center;max-width:80%}
 .st-standby-countdown{font-size:clamp(28px,8vw,110px);font-weight:800;color:#fbbf24;font-variant-numeric:tabular-nums}
 .st-standby-lbl{font-size:clamp(11px,1.5vw,18px);letter-spacing:.2em;color:#4b5563}
+/* Message to speaker: a band over the bottom 28% of the stage timer. Without
+   a message none of these classes are used and the timer is unchanged. */
+/* the band runs edge to edge: undo #content-area's 32px padding */
+.st-wrap.has-msg{padding:0;justify-content:flex-start;flex-shrink:0;margin:-32px;width:calc(100% + 64px);height:calc(100% + 64px)}
+.st-main{flex:1 1 0;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2vw 2vw 1vw;box-sizing:border-box;overflow:hidden}
+.st-main>*{flex-shrink:0}
+.st-msg{flex:0 0 28%;width:100%;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;padding:1.8vh 2.5vw 2.2vh;background:var(--st-calling);color:var(--st-msg-ink);overflow:hidden}
+.st-msg-lbl{font-size:clamp(11px,1.9vh,24px);font-weight:800;letter-spacing:.2em;text-transform:uppercase;text-align:left;opacity:.75}
+.st-msg-box{flex:1 1 0;min-height:0;display:flex;align-items:center;justify-content:center}
+.st-msg-text{max-width:100%;font-weight:800;line-height:1.08;letter-spacing:-.01em;text-align:center;overflow-wrap:anywhere}
+.st-msg-new{animation:st-msg-in 1.2s ease-out 1}
+@keyframes st-msg-in{0%,35%{background:#fff}100%{background:var(--st-calling)}}
+@media (prefers-reduced-motion: reduce){.st-msg-new{animation:none}}
 </style>
 </head>
 <body>
@@ -403,7 +416,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 // ═══════════════════════════════════════════════════
 let sb    = null;
 var D     = null;  // display row from display_feed  (var → window.D for E2E tests)
-var S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null }; // var → window.S
+var S     = { sessions: [], event: null, clockOffset: 0, sponsors: [], broadcast: null, stageMessages: [] }; // var → window.S
 let _tick  = null;
 let _sponsorIdx  = 0;
 let _sponsorTimer = null;
@@ -733,11 +746,14 @@ function applyFeed(feed) {
   const sessionsChanged = JSON.stringify(sessions) !== JSON.stringify(S.sessions);
   const sponsorsChanged = JSON.stringify(sponsors) !== JSON.stringify(S.sponsors);
   const eventChanged    = JSON.stringify(feed.event || null) !== JSON.stringify(S.event);
+  const stageMessages   = feed.stage_messages || [];
+  const messagesChanged = JSON.stringify(stageMessages) !== JSON.stringify(S.stageMessages || []);
 
   D = feed.display;
   S.event    = feed.event || null;
   S.sessions = sessions;
   S.sponsors = sponsors;
+  S.stageMessages = stageMessages;
 
   if (S.event?.brand_color) document.documentElement.style.setProperty('--brand', S.event.brand_color);
   document.body.classList.toggle('portrait', D?.orientation === 'portrait');
@@ -755,6 +771,9 @@ function applyFeed(feed) {
     render();
   } else if (sponsorsChanged && activeMode() === 'sponsors') {
     render();
+  } else if (messagesChanged && activeMode() === 'stage-timer') {
+    // only the band changed: repaint without the fade-in of the whole screen
+    renderStageTimerArea(document.getElementById('content-area'), false);
   }
 }
 
@@ -802,6 +821,22 @@ function startSequence() {
 function liveSession() { return S.sessions.find(s => s.status === 'LIVE' || s.status === 'OVERRUN'); }
 function readySession() { return S.sessions.find(s => s.status === 'READY' || s.status === 'CALLING'); }
 
+// The stage timer honours the display's room: with filter_room set it only
+// considers that room's sessions, in the same order as before (live or
+// overrun, then hold, then ready, then the next not ended). Without a room
+// it sees every session, exactly as before. Other modes are not affected.
+function stSessions() {
+  const room = D?.filter_room;
+  return room ? S.sessions.filter(s => s.room === room) : S.sessions;
+}
+function stShown(list) {
+  return list.find(s => s.status === 'LIVE' || s.status === 'OVERRUN') || list.find(s => s.status === 'HOLD');
+}
+function stNext(list) {
+  return list.find(s => s.status === 'READY' || s.status === 'CALLING')
+    || list.find(s => !['ENDED','CANCELLED'].includes(s.status));
+}
+
 // ═══════════════════════════════════════════════════
 // TICK
 // ═══════════════════════════════════════════════════
@@ -809,8 +844,11 @@ function tick() {
   const clockEl = document.getElementById('d-clock');
   if (clockEl) clockEl.textContent = correctedHMS();
 
-  const lv = liveSession();
-  const rd = readySession();
+  // A stage-timer TV with a room follows that room's sessions (ruling 3);
+  // every other screen keeps the event-wide status, as before.
+  const roomList = activeMode() === 'stage-timer' && D?.filter_room ? stSessions() : null;
+  const lv = roomList ? roomList.find(s => s.status === 'LIVE' || s.status === 'OVERRUN') : liveSession();
+  const rd = roomList ? roomList.find(s => s.status === 'READY' || s.status === 'CALLING') : readySession();
 
   // Update header status label
   const statusEl = document.getElementById('d-status-lbl');
@@ -877,14 +915,13 @@ function updateStageTimerInPlace() {
   const stEl = document.getElementById('st-timer');
   if (!stEl) return; // not in stage-timer mode
 
-  const live2 = liveSession();
-  const held2 = S.sessions.find(s => s.status === 'HOLD');
-  const sess2 = live2 || held2;
+  const list2 = stSessions();
+  const sess2 = stShown(list2);
 
   // Standby countdown update (no LIVE/HOLD session)
   const sbCd = document.getElementById('st-standby-countdown');
   if (sbCd) {
-    const nx = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+    const nx = stNext(list2);
     if (nx) {
       const cd = standbyCountdown(nx);
       sbCd.textContent = cd.value;
@@ -1021,12 +1058,13 @@ function renderSchedule() {
 
 // A TV browser can go fullscreen or apply overscan after the first paint,
 // and render() only runs on data changes: redo the schedule fit on resize.
-// Only the schedule screen is re-rendered; other modes keep their timers.
+// Only the schedule screen and a stage timer with a message band are
+// re-rendered; other modes keep their timers.
 let _fitResizeT = null;
 window.addEventListener('resize', () => {
   clearTimeout(_fitResizeT);
   _fitResizeT = setTimeout(() => {
-    if (_booted && document.querySelector('#content-area .d-sched')) render();
+    if (_booted && document.querySelector('#content-area .d-sched, #content-area .st-wrap.has-msg')) render();
   }, 200);
 });
 
@@ -1402,14 +1440,15 @@ function renderRecall() {
 // ═══════════════════════════════════════════════════
 let _stHoldRemain = null; // frozen remaining ms captured on HOLD
 
-function renderStageTimer() {
-  const live = liveSession();
-  const held = S.sessions.find(s => s.status === 'HOLD');
-  const session = live || held;
+let _stMsgSeen = null;     // the message last shown, so a repaint does not flash it again
+
+function renderStageTimer(fade = true) {
+  const list = stSessions();
+  const session = stShown(list);
 
   if (!session) {
     _stHoldRemain = null;
-    const next = readySession() || S.sessions.find(s => !['ENDED','CANCELLED'].includes(s.status));
+    const next = stNext(list);
     if (!next) {
       return `<div class="st-standby-wrap fade-in">
         <div class="st-standby-label">STANDBY</div>
@@ -1448,10 +1487,11 @@ function renderStageTimer() {
   const stCls   = isHold ? 'hold'     : ov ? 'overrun'  : 'live';
   const lbl     = isHold ? 'PAUSED'   : ov ? 'OVERTIME' : 'REMAINING';
   const flash   = ov && !isHold ? ' flash' : '';
-  const next    = S.sessions.find(s => s.sort_order > session.sort_order
+  const next    = list.find(s => s.sort_order > session.sort_order
     && !['ENDED','CANCELLED'].includes(s.status));
+  const message = (S.stageMessages || []).find(m => m.session_id === session.id && m.text);
 
-  return `<div class="st-wrap fade-in">
+  const body = `
     <div id="st-status" class="st-status ${stCls}">${stTxt}</div>
     <div id="st-timer" class="st-timer${flash}" style="color:${color}">${fmtTimer(remain)}</div>
     <div id="st-timer-lbl" class="st-timer-lbl">${lbl}</div>
@@ -1462,20 +1502,82 @@ function renderStageTimer() {
     ${peopleOf(session) ? peopleBlock(peopleOf(session), 'st-people')
       : session.speaker ? `<div class="st-speaker">${esc(session.speaker)}</div>` : ''}
     ${next ? `<div class="st-next">NEXT: ${esc(next.title)}${peopleSummary(next) ? ` &middot; ${esc(peopleSummary(next, 3))}` : ''}</div>` : ''}
+  `;
+  const fadeCls = fade ? ' fade-in' : '';
+  if (!message) {
+    _stMsgSeen = null;
+    return `<div class="st-wrap${fadeCls}">${body}</div>`;
+  }
+  const key = `${message.session_id}|${message.sent_at}|${message.text}`;
+  const isNew = key !== _stMsgSeen;
+  _stMsgSeen = key;
+  return `<div class="st-wrap has-msg${fadeCls}">
+    <div class="st-main">${body}</div>
+    <div class="st-msg${isNew ? ' st-msg-new' : ''}" role="status">
+      <div class="st-msg-lbl">Message from the director</div>
+      <div class="st-msg-box"><div class="st-msg-text">${esc(message.text)}</div></div>
+    </div>
   </div>`;
 }
 
+// Measured, so it holds for any font. The countdown block shrinks (people,
+// title and NEXT first, the timer last) until it fits above the band; the message
+// starts large and shrinks until it is at most two lines inside the band.
+function fitStageMessage(area) {
+  const wrap = area.querySelector('.st-wrap.has-msg');
+  if (!wrap) return;
+  const main = wrap.querySelector('.st-main');
+  const over = () => {
+    const kids = main.children;
+    if (!kids.length) return false;
+    const box = main.getBoundingClientRect(), cs = getComputedStyle(main);
+    const top = kids[0].getBoundingClientRect().top;
+    const bottom = Math.max(...[...kids].map(k => k.getBoundingClientRect().bottom));
+    const right = Math.max(...[...kids].map(k => k.getBoundingClientRect().right));
+    return top < box.top + parseFloat(cs.paddingTop) - 0.5
+      || bottom > box.bottom - parseFloat(cs.paddingBottom) + 0.5
+      || right > box.right + 0.5;
+  };
+  for (const [sel, floor] of [['.st-people', 0.7], ['.st-speaker', 0.7], ['.st-title', 0.6], ['.st-next', 0.8], ['#st-timer', 0.3]]) {
+    const el = main.querySelector(sel);
+    if (!el) continue;
+    const start = parseFloat(getComputedStyle(el).fontSize);
+    let size = start;
+    while (over() && size * 0.94 >= start * floor) {
+      size *= 0.94;
+      el.style.fontSize = size + 'px';
+      if (sel === '.st-people') el.querySelectorAll('*').forEach(c => { c.style.fontSize = size + 'px'; });
+    }
+  }
+
+  const box = wrap.querySelector('.st-msg-box');
+  const text = wrap.querySelector('.st-msg-text');
+  const boxH = box.clientHeight, boxW = box.clientWidth;
+  let size = Math.max(10, boxH * 0.56);
+  text.style.fontSize = size + 'px';
+  const tooBig = () => {
+    const r = text.getBoundingClientRect();
+    return r.height > boxH + 0.5 || text.scrollWidth > boxW + 0.5
+      || Math.round(r.height / (size * 1.08)) > 2;
+  };
+  while (tooBig() && size * 0.94 >= 10) {
+    size *= 0.94;
+    text.style.fontSize = size + 'px';
+  }
+}
+
 // Wrapper so render() calls renderStageTimerArea(area) like renderAgenda/renderTimeline
-function renderStageTimerArea(area) {
+function renderStageTimerArea(area, fade = true) {
   // Only reset the HOLD freeze when transitioning away from HOLD (not on every render)
-  const isCurrentlyHeld = S.sessions.some(s => s.status === 'HOLD');
+  const isCurrentlyHeld = stSessions().some(s => s.status === 'HOLD');
   if (!isCurrentlyHeld) _stHoldRemain = null;
-  const html = renderStageTimer();
+  const html = renderStageTimer(fade);
   area.textContent = '';
   const range = document.createRange();
   range.selectNodeContents(area);
   range.deleteContents();
   area.insertAdjacentHTML('beforeend', html);
+  fitStageMessage(area);
 }
 
 // ═══════════════════════════════════════════════════
