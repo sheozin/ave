@@ -21,9 +21,9 @@ describe('display page status colours', () => {
     expect(SRC).toContain('.st-status.overrun{color:var(--st-overrun)}');
   });
   it('the stage timer uses the overrun and hold status colours; the presenter timer keeps its own', () => {
-    expect(SRC).toContain("const col2 = ov2 ? '#E879F9'");
-    expect(SRC).toContain("const color   = ov ? '#E879F9'");
-    expect(SRC.match(/isHold2? +\? '#FB923C'/g)).toHaveLength(2);
+    expect(SRC).toContain("const col2 = ov2 ? 'var(--st-overrun)'");
+    expect(SRC).toContain("const color   = ov ? 'var(--st-overrun)'");
+    expect(SRC.match(/isHold2? +\? 'var\(--st-hold\)'/g)).toHaveLength(2);
     expect(SRC).not.toMatch(/isHold2? +\? '#f97316'/);
     // presenter timer (remaining-time colours, not statuses): unchanged
     expect(SRC).toContain("const tc = ov ? '#ef4444'");

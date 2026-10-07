@@ -903,8 +903,8 @@ function updateStageTimerInPlace() {
 
   const rem2 = isHold2 ? _stHoldRemain : liveR2;
   const ov2  = rem2 < 0;
-  const col2 = ov2 ? '#E879F9'
-    : isHold2          ? '#FB923C'
+  const col2 = ov2 ? 'var(--st-overrun)'
+    : isHold2          ? 'var(--st-hold)'
     : rem2 < 120_000   ? '#ef4444'
     : rem2 < 300_000   ? '#f59e0b'
     : '#22c55e';
@@ -1390,8 +1390,8 @@ function renderStageTimer() {
 
   const remain  = isHold ? _stHoldRemain : liveR;
   const ov      = remain < 0;
-  const color   = ov ? '#E879F9'
-    : isHold    ? '#FB923C'
+  const color   = ov ? 'var(--st-overrun)'
+    : isHold    ? 'var(--st-hold)'
     : remain < 120_000 ? '#ef4444'
     : remain < 300_000 ? '#f59e0b'
     : '#22c55e';

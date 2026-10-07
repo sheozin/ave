@@ -683,7 +683,6 @@
     .btn-red:hover { background: rgba(239,68,68,.20); }
     .abtn.confirm-pending, .ctx-btn.confirm-pending { background: rgba(239,68,68,.25); border-color: var(--st-live); color: var(--red-lt); animation: pulse-confirm .5s ease-in-out infinite alternate; }
     @keyframes pulse-confirm { from { opacity:.85; } to { opacity:1; } }
-    @keyframes pulse-red { from { opacity:.85; } to { opacity:1; } }
     .delay-grp  { margin-left: auto; display: flex; gap: 3px; align-items: center; }
     .delay-grp .dl { font-size: var(--fs-11); color: var(--dim); }
 
@@ -820,7 +819,7 @@
 
     /* ── WRAP-UP WARNING STATES ── */
     .sc.warn-amber { border-left-color: var(--amber) !important; box-shadow: 0 0 0 1px rgba(245,158,11,.2), 0 2px 16px rgba(245,158,11,.08); }
-    .sc.warn-red   { border-left-color: var(--red)   !important; box-shadow: 0 0 0 1px rgba(239,68,68,.35), 0 2px 20px rgba(239,68,68,.14); animation: pulse-red 1.2s ease-in-out infinite; }
+    .sc.warn-red   { border-left-color: var(--red)   !important; box-shadow: 0 0 0 1px rgba(239,68,68,.35), 0 2px 20px rgba(239,68,68,.14); }
     .lt-remain.warn-amber { color: var(--amber) !important; }
     .lt-remain.warn-red   { color: var(--red)   !important; font-weight: 700; }
 
@@ -912,8 +911,6 @@
       background: var(--blue) !important;
       color: #fff !important;
     }
-    /* Legacy pulse-red alias (used by wrap-up warning) */
-    @keyframes pulse-red          { 0%,100% { box-shadow: 0 2px 24px rgba(239,68,68,.12), 0 0 0 1px rgba(239,68,68,.15); } 50% { box-shadow: 0 2px 30px rgba(239,68,68,.28), 0 0 0 1px rgba(239,68,68,.28); } }
     @keyframes pulse-amber        { 0%,100% { opacity:1; } 50% { opacity:.6; } }
     @keyframes pulse-magenta      { 0%,100% { box-shadow: 0 2px 24px rgba(255,0,168,.12), 0 0 0 1px rgba(255,0,168,.15); } 50% { box-shadow: 0 2px 30px rgba(255,0,168,.28), 0 0 0 1px rgba(255,0,168,.28); } }
 
@@ -1401,7 +1398,9 @@
     .tl-now-line   { stroke: var(--amber); stroke-width: 1.5; stroke-dasharray: 4,3; }
     .tl-bar        { rx: 4; cursor: pointer; opacity: .85; transition: opacity .15s; }
     .tl-bar:hover  { opacity: 1; }
-    .tl-bar-label  { font-size: var(--fs-11); fill: #fff; pointer-events: none; font-family: inherit; font-weight: 600; }
+    /* Labels sit on a solid status fill: dark text, except on the grey ENDED and CANCELLED bars */
+    .tl-bar-label  { font-size: var(--fs-11); fill: var(--on-solid); pointer-events: none; font-family: inherit; font-weight: 600; }
+    .tl-bar-label.on-grey { fill: var(--on-accent); }
 
     /* ── Toast notification system ─────────────────────────────────────────── */
     #toast-container {
@@ -3802,13 +3801,13 @@ function renderTimeline() {
       const bw  = Math.max(4, xPos(eMin) - bx);
       const by  = rowY + BAR_PAD;
       const col = statusColor(sess.status);
-      rowsSvg += `<rect class="tl-bar" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" fill="${col}" fill-opacity=".75" rx="4"
+      rowsSvg += `<rect class="tl-bar" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" fill="${col}" rx="4"
         onclick="document.getElementById('card-${sess.id}')?.scrollIntoView({behavior:'smooth',block:'nearest'})" >
         <title>${esc(sess.title)} · ${(sess.scheduled_start||'').substring(0,5)}–${(sess.scheduled_end||'').substring(0,5)} · ${sess.status}</title>
       </rect>`;
       if (bw > 28) {
         rowsSvg += `<clipPath id="tlc-${sess.id}"><rect x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" rx="4"/></clipPath>
-          <text class="tl-bar-label" x="${bx + 5}" y="${by + BAR_H/2 + 4}" data-room="${bw - 10}"
+          <text class="tl-bar-label${sess.status === 'ENDED' || sess.status === 'CANCELLED' ? ' on-grey' : ''}" x="${bx + 5}" y="${by + BAR_H/2 + 4}" data-room="${bw - 10}"
           clip-path="url(#tlc-${sess.id})">${esc(sess.title)}</text>`;
       }
     }
