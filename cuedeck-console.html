@@ -3802,14 +3802,14 @@ function renderTimeline() {
       const bw  = Math.max(4, xPos(eMin) - bx);
       const by  = rowY + BAR_PAD;
       const col = statusColor(sess.status);
-      const lbl = sess.title.length > 20 ? sess.title.substring(0, 18) + '…' : sess.title;
       rowsSvg += `<rect class="tl-bar" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" fill="${col}" fill-opacity=".75" rx="4"
         onclick="document.getElementById('card-${sess.id}')?.scrollIntoView({behavior:'smooth',block:'nearest'})" >
         <title>${esc(sess.title)} · ${(sess.scheduled_start||'').substring(0,5)}–${(sess.scheduled_end||'').substring(0,5)} · ${sess.status}</title>
       </rect>`;
       if (bw > 28) {
-        rowsSvg += `<text class="tl-bar-label" x="${bx + 5}" y="${by + BAR_H/2 + 4}"
-          style="clip-path:inset(0 0 0 0 round 4px)">${esc(lbl)}</text>`;
+        rowsSvg += `<clipPath id="tlc-${sess.id}"><rect x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" rx="4"/></clipPath>
+          <text class="tl-bar-label" x="${bx + 5}" y="${by + BAR_H/2 + 4}" data-room="${bw - 10}"
+          clip-path="url(#tlc-${sess.id})">${esc(sess.title)}</text>`;
       }
     }
   });
@@ -3830,6 +3830,16 @@ function renderTimeline() {
       ${nowLineSvg}
     </svg>
   </div>`;
+
+  // Cut each label to the width of its own bar, measured at the real font size
+  list.querySelectorAll('text.tl-bar-label').forEach(t => {
+    const room = +t.dataset.room;
+    let txt = t.textContent;
+    while (txt.length > 1 && t.getComputedTextLength() > room) {
+      txt = txt.slice(0, -1);
+      t.textContent = txt.trimEnd() + '…';
+    }
+  });
 
   buildCtxPanel();
 }

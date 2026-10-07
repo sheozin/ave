@@ -84,3 +84,41 @@ test('type: no visible console text is smaller than 11 px', async ({ browser }) 
   expect(tooSmall).toEqual([]);
   await ctx.close();
 });
+
+test('type: every timeline bar label stays inside its own bar', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `setViewMode('timeline');`);
+  const bad = await page.evaluate(() => {
+    const bars = [...document.querySelectorAll('#timeline-wrap rect.tl-bar')].map(r => r.getBoundingClientRect());
+    const labels = [...document.querySelectorAll('#timeline-wrap text.tl-bar-label')] as SVGTextElement[];
+    const out: string[] = [];
+    const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    for (const t of labels) {
+      const r = t.getBoundingClientRect();
+      // The bar a label belongs to is the one that starts 5 px before it, in its row
+      const own = bars.findIndex(b => Math.abs(r.left - (b.left + 5)) < 1.5 && r.top >= b.top - 0.5 && r.bottom <= b.bottom + 0.5);
+      if (own < 0) { out.push(`no bar: ${t.textContent}`); continue; }
+      if (r.right > bars[own].right + 0.5) out.push(`overflow: ${t.textContent}`);
+      bars.forEach((b, i) => { if (i !== own && hit(r, b)) out.push(`overlaps another bar: ${t.textContent}`); });
+    }
+    if (labels.length < 4) out.push(`only ${labels.length} labels drawn`);
+    return out;
+  });
+  expect(bad).toEqual([]);
+  await ctx.close();
+});
+
+test('type: the broadcast priority select fits its longest option', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  // The three options are literal markup, not i18n keys, so every language shares one width.
+  const fits = await page.evaluate(() => {
+    const sel = document.getElementById('bc-pri') as HTMLSelectElement;
+    const cs = getComputedStyle(sel);
+    const c = document.createElement('canvas').getContext('2d')!;
+    c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const longest = Math.max(...[...sel.options].map(o => c.measureText(o.text).width));
+    return { longest, inner: sel.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) };
+  });
+  expect(fits.inner).toBeGreaterThanOrEqual(fits.longest);
+  await ctx.close();
+});
