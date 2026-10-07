@@ -86,10 +86,9 @@ test('components: every icon reference resolves to a sprite symbol', async ({ br
 
 test('components: HOLD sits left of END, END is outlined and separated', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  const html = await evalPage(page, `buildButtons(S.sessions.find(x => x.id === '${PANEL_ID}'))`);
-  const order = await page.evaluate((h) => { const d = document.createElement('div'); d.innerHTML = h as string;
-    return [...d.querySelectorAll('button, .act-gap')].map(b => b.classList.contains('act-gap') ? 'gap' : (b.classList.contains('hold') ? 'hold' : b.classList.contains('danger') ? 'end' : 'other')); }, html);
-  expect(order.slice(0, 3)).toEqual(['hold', 'gap', 'end']);
+  const order = await page.locator('#ctx-wrap .insp-primary').evaluate(el => [...el.children].map(c =>
+    c.classList.contains('act-gap') ? 'gap' : c.classList.contains('hold') ? 'hold' : c.classList.contains('danger') ? 'end' : 'other'));
+  expect(order).toEqual(['hold', 'gap', 'end']);
   await ctx.close();
 });
 
@@ -105,28 +104,27 @@ async function armedHoverCheck(page: Page, sel: string) {
 
 test('components: an armed END or CANCEL stays solid red under hover', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  // Stage 3: a session's full controls sit in its row drawer, opened by selecting it.
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
-  await page.locator(`#card-${PANEL_ID} .sc-actions button[onclick^="confirmEnd"]`).click();
-  const end = await armedHoverCheck(page, `#card-${PANEL_ID} .sc-actions button.confirm-pending`);
+  // Stage 4: a session's full controls sit in the inspector (Cancel in its More menu).
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; renderSessions();`);
+  await page.locator('#ctx-wrap .insp-primary button[onclick*="confirmEnd"]').click();
+  const end = await armedHoverCheck(page, '#ctx-wrap .insp-primary button.confirm-pending');
   expect(end.bg).toBe('rgb(239, 68, 68)');
   expect(end.contrast).toBeGreaterThanOrEqual(4.5);
   await evalPage(page, `S.selectedId = '${ID(5)}'; renderSessions();`);
-  const cancelBtn = page.locator('.sc-actions button[onclick^="confirmCancel"]').first();
+  const cancelBtn = page.locator('#insp-more button[onclick*="confirmCancel"]');
   await expect(cancelBtn).toHaveCount(1);
-  const cardId = await cancelBtn.evaluate(b => b.closest('.sc')!.id);
   await cancelBtn.click();
-  const cancel = await armedHoverCheck(page, `#${cardId} .sc-actions button.confirm-pending[onclick^="confirmCancel"]`);
+  const cancel = await armedHoverCheck(page, '#insp-more button.confirm-pending[onclick*="confirmCancel"]');
   expect(cancel.bg).toBe('rgb(239, 68, 68)');
   expect(cancel.contrast).toBeGreaterThanOrEqual(4.5);
   await ctx.close();
-  // Inspector END (ctx-btn) too, in a fresh page: a second press on the same
-  // session would confirm the END armed on the card above.
+  // The band END too, in a fresh page: a second press on the same session
+  // would confirm the END armed in the inspector above.
   const fresh = await openConsole(browser);
-  await fresh.page.locator('#ctx-actions .ctx-btn[onclick^="confirmEnd"]').click();
-  const ctxEnd = await armedHoverCheck(fresh.page, '#ctx-actions .ctx-btn.confirm-pending');
-  expect(ctxEnd.bg).toBe('rgb(239, 68, 68)');
-  expect(ctxEnd.contrast).toBeGreaterThanOrEqual(4.5);
+  await fresh.page.locator('#band .lane[data-room="Main Stage"] .lane-now .btn.danger').click();
+  const bandEnd = await armedHoverCheck(fresh.page, '#band .lane[data-room="Main Stage"] .lane-now .btn.confirm-pending');
+  expect(bandEnd.bg).toBe('rgb(239, 68, 68)');
+  expect(bandEnd.contrast).toBeGreaterThanOrEqual(4.5);
   await fresh.ctx.close();
 });
 
@@ -154,13 +152,13 @@ test('components: armed batch END and CANCEL stay solid red under hover; SET REA
 
 test('components: every visible button is at least 44 px on touch', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { touch: true, viewport: { width: 1280, height: 800 } });
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);   // the row drawer holds the full controls
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; renderSessions();`);   // the inspector holds the full controls
   const small = await page.evaluate(() => [...document.querySelectorAll('.btn, .abtn')]
     .map(b => ({ b, r: b.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && r.height > 0)
     .filter(({ r }) => r.height < 44)
     .map(({ b, r }) => `${b.className}:${(b.textContent || '').trim().slice(0, 20)}:${Math.round(r.height)}`));
-  const total = await page.locator('.sc-actions .btn').count();
+  const total = await page.locator('#ctx-actions .btn').count();
   expect(total).toBeGreaterThan(0);
   expect(small).toEqual([]);
   await ctx.close();
@@ -168,8 +166,8 @@ test('components: every visible button is at least 44 px on touch', async ({ bro
 
 test('components: Hold looks the same for the AV role as for the director', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { role: 'av' });
-  const hold = page.locator('#ctx-actions .ctx-btn', { hasText: 'HOLD SESSION' });
+  const hold = page.locator('#ctx-wrap .insp-primary .btn', { hasText: 'Hold' });
   await expect(hold).toHaveClass(/\bhold\b/);
-  expect((await box(page, '#ctx-actions .ctx-btn.hold')).bg).toBe('rgb(251, 146, 60)');
+  expect((await box(page, '#ctx-wrap .insp-primary .btn.hold')).bg).toBe('rgb(251, 146, 60)');
   await ctx.close();
 });

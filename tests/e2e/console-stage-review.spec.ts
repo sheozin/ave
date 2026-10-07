@@ -24,22 +24,20 @@ test('review: Escape closes an open popover and keeps the filters; a second Esca
   await ctx.close();
 });
 
-test('review: backward moves are never green in the drawer or the sidebar', async ({ browser }) => {
+test('review: backward moves are never green in the inspector', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  // CALLING #4: "Pull back" (CALLING to READY) is secondary; "Confirm on stage" stays green.
-  await evalPage(page, `S.selectedId = '${ID(4)}'; renderSessions();`);
-  const drawer = `#card-${ID(4)} .sc-drawer .sc-actions`;
+  // CALLING #4: "Back to ready" (CALLING to READY) is secondary; "On stage" stays green.
+  // Stage 4: every control of the selected session sits in the inspector (More open).
+  await evalPage(page, `S.selectedId = '${ID(4)}'; S.inspMoreOpen = true; renderSessions();`);
+  const drawer = '#ctx-wrap #ctx-actions';
   expect(await bg(page, `${drawer} button[onclick*="'READY'"]`)).not.toBe(GREEN);
   expect(await bg(page, `${drawer} button[onclick*="'LIVE'"]`)).toBe(GREEN);
-  // Sidebar quick actions on the CALLING session.
-  await evalPage(page, `S.sessions = S.sessions.filter(s => !['LIVE', 'OVERRUN', 'HOLD'].includes(s.status)); renderSessions(); buildCtxPanel();`);
-  expect(await bg(page, `#ctx-actions .ctx-btn[onclick*="'READY'"]`)).not.toBe(GREEN);
   await ctx.close();
 
-  // HOLD #2: "Set ready" (HOLD to READY) is secondary; "Resume" stays green.
+  // HOLD #2: "Back to ready" (HOLD to READY) is secondary; "Resume" stays green.
   const b = await openConsole(browser);
-  await evalPage(b.page, `S.selectedId = '${ID(2)}'; renderSessions();`);
-  const d2 = `#card-${ID(2)} .sc-drawer .sc-actions`;
+  await evalPage(b.page, `S.selectedId = '${ID(2)}'; S.inspMoreOpen = true; renderSessions();`);
+  const d2 = '#ctx-wrap #ctx-actions';
   expect(await bg(b.page, `${d2} button[onclick*="'READY'"]`)).not.toBe(GREEN);
   expect(await bg(b.page, `${d2} button[onclick*="'LIVE'"]`)).toBe(GREEN);
   await b.ctx.close();
@@ -86,7 +84,9 @@ test('review: in Arabic the live wash starts at the inline start and the action 
   const { ctx, page } = await openConsole(browser, { locale: 'ar' });
   expect(await page.evaluate(() => document.documentElement.dir)).toBe('rtl');
   expect(await page.locator(`#card-${PANEL_ID}`).evaluate(el => getComputedStyle(el).backgroundImage)).toContain('to left');
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
-  expect(await page.locator(`#card-${PANEL_ID} .act-gap`).evaluate(el => [getComputedStyle(el).marginRight, getComputedStyle(el).marginLeft])).toEqual(['12px', '0px']);
+  // Stage 4: the drawer is gone; the band's gap carries the same rule, and the inspector puts End at the inline end.
+  expect(await page.locator('#band .lane[data-room="Main Stage"] .lane-now .act-gap').evaluate(el => [getComputedStyle(el).marginRight, getComputedStyle(el).marginLeft])).toEqual(['12px', '0px']);
+  const hold = (await page.locator('#ctx-wrap .insp-primary .hold').boundingBox())!, end = (await page.locator('#ctx-wrap .insp-primary .btn.danger').boundingBox())!;
+  expect(end.x + end.width).toBeLessThan(hold.x);
   await ctx.close();
 });

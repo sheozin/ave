@@ -25,8 +25,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720
       const h = await page.locator('#log-panel').evaluate(e => e.getBoundingClientRect().height);
       expect(h).toBeGreaterThanOrEqual(200);
       // Loaded rows keep their own time, shown in the event's zone (Cairo, UTC+3).
-      const row = page.locator('#log-feed .le', { hasText: 'BROADCAST' }).first();
-      await expect(row).toContainText('14:32:00');
+      const row = page.locator('#log-feed .lg.lg-broadcast').first();
+      await expect(row.locator('.lg-when')).toHaveText('14:32');   // its own time, event zone (Cairo), HH:MM
       await expect(row).toContainText('Hall B on hold: projector signal lost');
     } finally { await ctx.close(); }
   });

@@ -349,12 +349,12 @@ for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
     }
   });
 
-  test(`list row and drawer (${locale}): arming End moves neither Hold nor End`, async ({ browser }) => {
+  test(`list row and inspector (${locale}): arming End moves neither Hold nor End`, async ({ browser }) => {
     const { ctx, page } = await openConsole(browser, { locale });
     await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
     const row = `#card-${PANEL_ID} .sc-act .btn.danger`;
-    const dEnd = `#card-${PANEL_ID} .sc-drawer button[onclick*="confirmEnd"]`;
-    const dHold = `#card-${PANEL_ID} .sc-drawer button[onclick*="'HOLD'"]`;
+    const dEnd = `#ctx-wrap .insp-primary button[onclick*="confirmEnd"]`;   // stage 4: the inspector replaces the drawer
+    const dHold = `#ctx-wrap .insp-primary button[onclick*="'HOLD'"]`;
     const r0 = await box(page, row), e0 = await box(page, dEnd), h0 = await box(page, dHold);
     await page.locator(row).click();
     await page.clock.runFor(1100);

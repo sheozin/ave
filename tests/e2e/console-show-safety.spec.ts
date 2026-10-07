@@ -43,15 +43,14 @@ async function setup(page: Page, sessions: Sess[], opts: { role?: string; event?
 }
 const calls = (page: Page) => page.evaluate(() => (window as any).__calls);
 const live = (o: Sess = {}) => sess('live1', 1, { status: 'LIVE', actual_start: iso(-5), title: 'Opening', ...o });
-// Where a session's controls sit. Stage 3: the selected row's drawer
-// (buildButtons). Task 4.2 points this at the inspector; the assertions that
-// use it do not change.
+// Where a session's controls sit. Stage 4: the inspector shows the selected
+// session with every control (More menu open). The assertions do not change.
 async function controls(page: Page, id: string) {
-  await page.evaluate((sid) => { (0, eval)('S').selectedId = sid; (window as any).renderSessions(); }, id);
-  return page.locator(`#card-${id} .sc-drawer .sc-actions`);
+  await page.evaluate((sid) => { const St = (0, eval)('S'); St.selectedId = sid; St.inspMoreOpen = true; (window as any).renderSessions(); }, id);
+  return page.locator('#ctx-wrap #ctx-actions');
 }
-// Labels as those controls render them (updated by Tasks 4.2 and 5.2).
-const L = { end: 'END SESSION', armedEnd: 'CONFIRM END', cancel: 'CANCEL', armedCancel: 'CONFIRM CANCEL', hold: 'HOLD', endAll: 'END ALL' };
+// Labels as those controls render them (cc.act.* and the new confirm.* values).
+const L = { end: 'End…', armedEnd: 'Press again to end', cancel: 'Cancel session', armedCancel: 'Press again to cancel', hold: 'Hold', endAll: 'END ALL' };
 
 // ── 1. END / CANCEL confirm survives the 1 s re-render ────────────────────
 test.describe('END and CANCEL confirm', () => {
@@ -146,12 +145,12 @@ test.describe('END and CANCEL confirm', () => {
     expect(await calls(page)).toEqual([['ready1', 'CANCELLED']]);
   });
 
-  test('the sidebar quick-action END stays armed through several ticks', async ({ page }) => {
+  test('the band End stays armed through several ticks', async ({ page }) => {
     await setup(page, [live()]);
-    await page.locator('#ctx-actions .ctx-btn', { hasText: 'END SESSION' }).click();
+    await page.locator('#band .lane-now .btn.danger').click();
     await page.clock.runFor(1500);
-    const armed = page.locator('#ctx-actions .ctx-btn.confirm-pending');
-    await expect(armed).toHaveText('CONFIRM END');
+    const armed = page.locator('#band .lane-now .btn.confirm-pending');
+    await expect(armed).toHaveText(L.armedEnd);
     await armed.click();
     expect(await calls(page)).toEqual([['live1', 'ENDED']]);
   });
@@ -221,27 +220,27 @@ test.describe('batch actions', () => {
 
 // ── 2. HOLD before END in LIVE and OVERRUN ────────────────────────────────
 for (const status of ['LIVE', 'OVERRUN']) {
-  test(`${status}: HOLD comes before END in the session's controls and in the sidebar quick actions`, async ({ page }) => {
+  test(`${status}: HOLD comes before END in the band and in the inspector`, async ({ page }) => {
     await setup(page, [live({ status })]);
-    const card = await (await controls(page, 'live1')).locator(':scope > button').allTextContents();
-    expect(card.slice(0, 2)).toEqual([L.hold, L.end]);
-    const ctx = await page.locator('#ctx-actions .ctx-btn').allTextContents();
-    expect(ctx.slice(0, 2).map(s => s.trim())).toEqual(['HOLD', 'END SESSION']);
+    const order = (sel: string) => page.locator(sel).evaluate(el => [...el.children].map(c =>
+      c.classList.contains('act-gap') ? 'gap' : (c.textContent || '').trim()));
+    expect(await order('#band .lane .lane-now .lane-ctrl')).toEqual([L.hold, 'gap', L.end]);
+    expect(await order('#ctx-wrap .insp-primary')).toEqual([L.hold, 'gap', L.end]);
   });
 }
 
-// ── Sidebar "Active session": urgency order, quick actions act on it ──────
+// ── Inspector "most urgent session": urgency order, controls act on it ──
 test.describe('sidebar active session', () => {
-  test('the only active session is on HOLD: the panel shows it and RESUME/END target it', async ({ page }) => {
+  test('the only active session is on HOLD: the panel shows it and Resume/End target it', async ({ page }) => {
     await setup(page, [
       sess('done', 1, { status: 'ENDED', title: 'Keynote', actual_start: iso(-60), actual_end: iso(-20) }),
       sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
       sess('later', 3, { status: 'PLANNED', title: 'Case study' }),
     ]);
-    await expect(page.locator('#ctx-title')).toHaveText('Workshop');
-    await page.locator('#ctx-actions .ctx-btn', { hasText: 'RESUME' }).click();
-    await page.locator('#ctx-actions .ctx-btn', { hasText: 'END SESSION' }).click();
-    await page.locator('#ctx-actions .ctx-btn.confirm-pending').click();
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Workshop');
+    await page.locator('#ctx-wrap .insp-primary button', { hasText: 'Resume' }).click();
+    await page.locator('#ctx-wrap .insp-primary .btn.danger').click();
+    await page.locator('#ctx-wrap .insp-primary .btn.confirm-pending').click();
     expect(await calls(page)).toEqual([['held', 'LIVE'], ['held', 'ENDED']]);
   });
 
@@ -250,8 +249,8 @@ test.describe('sidebar active session', () => {
       sess('ready', 1, { status: 'READY', title: 'Pricing talk' }),
       sess('held', 2, { status: 'HOLD', title: 'Workshop', actual_start: iso(-10) }),
     ]);
-    await expect(page.locator('#ctx-title')).toHaveText('Workshop');
-    await expect(page.locator('#ctx-actions .ctx-btn').first()).toHaveText('RESUME');
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Workshop');
+    await expect(page.locator('#ctx-wrap .insp-primary button').first()).toHaveText('Resume');
   });
 
   test('OVERRUN outranks LIVE, which outranks HOLD', async ({ page }) => {
@@ -260,7 +259,7 @@ test.describe('sidebar active session', () => {
       live({ title: 'Live' }),
       sess('over', 3, { status: 'OVERRUN', title: 'Over', actual_start: iso(-40) }),
     ]);
-    await expect(page.locator('#ctx-title')).toHaveText('Over');
+    await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Over');
   });
 });
 
@@ -357,11 +356,11 @@ test('loaded log rows keep their own time; a broadcast row shows its message', a
     w.pushLogFromRow({ action: 'SESSION_STATUS_CHANGE', from_status: 'CALLING', to_status: 'LIVE', session_id: 'live1', ts: '2026-10-06T09:05:07Z' });
     w.pushLogFromRow({ action: 'BROADCAST', payload: { message: 'Hall B on hold: projector signal lost' }, ts: '2026-10-06T09:06:00Z' });
   });
-  const rows = await page.locator('#log-feed .le').allTextContents();
-  expect(rows[0]).toContain('09:06:00');
+  const rows = await page.locator('#log-feed .lg').allTextContents();
+  const whens = await page.locator('#log-feed .lg .lg-when').allTextContents();
+  expect(whens.slice(0, 2)).toEqual(['09:06', '09:05']);   // each row its own time (HH:MM, spec 4)
   expect(rows[0]).toContain('Hall B on hold: projector signal lost');
   expect(rows[0]).not.toContain('{');
-  expect(rows[1]).toContain('09:05:07');
 });
 
 // ── 7. Time zone: browser in UTC, event in Cairo (UTC+3 on 6 Oct 2026) ────
@@ -403,8 +402,7 @@ test.describe('event time zone', () => {
 
   test('STARTED shows the actual start in Cairo time', async ({ page }) => {
     await setup(page, [live({ actual_start: '2026-10-06T11:31:00Z' })], { event: cairo });
-    await controls(page, 'live1');
-    await expect(page.locator('#card-live1 .sc-drawer-times')).toHaveText(/14:31$/);
+    await expect(page.locator('#ctx-wrap .insp-times')).toContainText('14:31');
   });
 });
 

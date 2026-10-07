@@ -131,6 +131,7 @@ test('list: click, Enter and arrow keys select a row', async ({ browser }) => {
   await page.keyboard.press('ArrowUp');
   await page.keyboard.press('Enter');
   expect(await evalPage(page, 'S.selectedId')).toBe(ID(4));
+  await expect(page.locator('#ctx-wrap .insp-title')).toHaveText('Case Study: Rebuilding the Hurghada Arrivals Store');
   await ctx.close();
 });
 
@@ -184,11 +185,11 @@ async function settleBootResync(page: import('@playwright/test').Page) {
   await evalPage(page, 'S.clockOffset = 0; renderSessions();');
 }
 
-test('list: keyboard focus stays on the drawer END through the 1 s re-render; Enter twice ends', async ({ browser }) => {
+test('list: keyboard focus stays on the inspector END through the 1 s re-render; Enter twice ends', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await settleBootResync(page);
   await evalPage(page, `window.__calls = []; window.transition = (id, to) => { window.__calls.push([id, to]); }; S.selectedId = '${PANEL_ID}'; renderSessions();`);
-  const endSel = `#card-${PANEL_ID} .sc-drawer .sc-actions button[onclick^="confirmEnd"]`;
+  const endSel = `#ctx-wrap .insp-primary button[onclick*="confirmEnd"]`;
   await page.locator(endSel).focus();
   await page.keyboard.press('Enter');                                                                // arms
   await expect(page.locator(endSel)).toHaveClass(/confirm-pending/);
@@ -199,10 +200,10 @@ test('list: keyboard focus stays on the drawer END through the 1 s re-render; En
   await ctx.close();
 });
 
-test('list: every interactive element the list re-renders carries a stable focus key', async ({ browser }) => {
+test('list: every interactive element the list and the inspector re-render carries a stable focus key', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.foldOpen = { ENDED: true, CANCELLED: true }; renderSessions();`);
-  const missing = await page.evaluate(() => [...document.querySelectorAll('#sessions-list button, #sessions-list input, #sessions-list [tabindex="0"]')]
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; S.foldOpen = { ENDED: true, CANCELLED: true }; renderSessions();`);
+  const missing = await page.evaluate(() => [...document.querySelectorAll('#sessions-list button, #sessions-list input, #sessions-list [tabindex="0"], #ctx-wrap button, #ctx-wrap summary')]
     .filter(el => !el.hasAttribute('data-fk')).map(el => el.outerHTML.slice(0, 80)));
   expect(missing).toEqual([]);
   await ctx.close();

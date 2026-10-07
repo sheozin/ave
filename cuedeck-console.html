@@ -496,11 +496,6 @@
     .badge-CANCELLED { background: transparent; color: var(--st-cancelled-fg); border-color: var(--st-cancelled-line); text-decoration: line-through; }
     @keyframes badge-ring { 0% { box-shadow: 0 0 0 0 var(--st-calling-line); } 100% { box-shadow: 0 0 0 6px transparent; } }
 
-    /* Action buttons (legacy markup; new markup uses .btn) */
-    .sc-actions { padding: 8px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .delay-grp  { margin-left: auto; display: flex; gap: 4px; align-items: center; }
-    .delay-grp .dl { font-size: var(--fs-11); font-weight: 700; letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary); }
-
     /* ── SIDEBAR ACTION BUTTONS (AI Agents, Stage Monitor, etc.) ── */
     .sb-action-btn {
       width: 100%; height: 38px;
@@ -560,33 +555,6 @@
     .ck-val     { color: var(--text-primary); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: var(--fs-11); }
     .ck-val.drifted { color: var(--amber); }
 
-    /* Log */
-    /* Never collapses under the fixed-height sections above it: the sidebar
-       scrolls instead, and the feed scrolls inside its own minimum height. */
-    #log-panel { flex: 1 0 220px; min-height: 220px; display: flex; flex-direction: column; overflow: hidden; }
-    #log-panel .sb-title { padding: 10px 14px 5px; margin: 0; }
-    #log-feed   { flex: 1; min-height: 0; overflow-y: auto; padding: 0 6px 10px; }
-    .le {
-      padding: 5px 10px; margin-bottom: 2px;
-      background: rgba(255,255,255,0.02);
-      border-radius: 0 4px 4px 0;
-      border-left: 2px solid var(--border-section);
-      font-size: var(--fs-11);
-    }
-    .le.le-state     { border-left-color: var(--st-ready); }
-    .le.le-system    { border-left-color: var(--accent); }
-    .le.le-error     { border-left-color: var(--st-live); }
-    .le.le-broadcast { border-left-color: var(--st-hold); }
-    .le.le-delay     { border-left-color: var(--st-overrun); }
-    /* Action text colour matches border per entry type */
-    .le.le-state     .le-act { color: var(--st-ready-fg); }
-    .le.le-system    .le-act { color: var(--accent-fg); }
-    .le.le-error     .le-act { color: var(--st-live-fg); }
-    .le.le-broadcast .le-act { color: var(--st-hold-fg); }
-    .le.le-delay     .le-act { color: var(--st-overrun-fg); }
-    .le-ts  { color: var(--text-muted); font-family: 'SF Mono','Fira Code','Monaco',monospace; font-variant-numeric: tabular-nums; }
-    .le-act { color: var(--text-secondary); font-weight: 700; letter-spacing: .04em; }
-    .le-det { color: var(--text-primary); margin-top: 2px; font-size: var(--fs-11); }
 
     /* ── BROADCAST BAR ── */
     #bc-bar {
@@ -638,13 +606,6 @@
     .import-btn:hover { background: rgba(99,102,241,.16); }
 
 
-    /* ── LOG EXPORT ── */
-    .log-export-btn {
-      font-size: var(--fs-11); background: none; border: 1px solid var(--border);
-      color: var(--dim); border-radius: 4px; padding: 2px 7px;
-      cursor: pointer; font-family: inherit; transition: all .12s;
-    }
-    .log-export-btn:hover { border-color: var(--blue); color: var(--blue-lt); }
 
     /* ── RECONNECT OVERLAY ── */
     #rc-overlay {
@@ -1040,25 +1001,7 @@
     #fb-count.filtered { color:var(--blue); }
 
     /* ── CONTEXT PANEL ── */
-    #ctx-wrap { background: var(--surface2); }
-    .ctx-title { font-size: var(--fs-13); font-weight: 600; line-height: 1.3; letter-spacing: -.01em; }
-    .ctx-title.ctx-empty { font-size: var(--fs-11); color: var(--dim); font-weight: 400; }
-    .ctx-sub { font-size: var(--fs-11); color: var(--dim); margin-top: 4px; font-family: 'SF Mono','Fira Code','Monaco',monospace; }
-    .ctx-sub-live, .ctx-sub-overrun { color: var(--red-lt); }
-    .ctx-sub-ready, .ctx-sub-calling, .ctx-sub-hold { color: var(--amber); }
-    #ctx-actions {
-      padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;
-      border-bottom: 1px solid var(--border); flex-shrink: 0;
-    }
     .ctx-section-lbl { font-size: var(--fs-11); font-weight: 600; letter-spacing: .12em; color: var(--dim); text-transform: uppercase; padding: 4px 2px 2px; }
-    .ctx-btn {
-      width: 100%; padding: 6px 12px; border-radius: 6px; border: 1px solid;
-      font-size: var(--fs-11); font-family: inherit; font-weight: 600;
-      cursor: pointer; transition: filter .12s; text-align: left;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .ctx-btn:hover { filter: brightness(1.2); }
-    .ctx-btn:disabled { opacity: .3; cursor: not-allowed; }
     .ctx-booth { font-size: var(--fs-11); font-weight: 600; padding: 6px 4px; color: var(--dim); letter-spacing: .05em; }
     .ctx-booth.ctx-booth-live { color: var(--red-lt); }
     .ctx-lang-chip {
@@ -1386,7 +1329,7 @@
       border-color: var(--border-control) !important;
     }
     input:focus, select:focus, textarea:focus { border-color: var(--accent) !important; }
-    .btn-grey, #help-btn, .log-export-btn, .bc-preset-btn, .fb-view-pill, #fb-clear, .smv-btn, .inv-btn,
+    .btn-grey, #help-btn, .bc-preset-btn, .fb-view-pill, #fb-clear, .smv-btn, .inv-btn,
     .sp-card-mgmt button, .sp-disp-actions button, .sp-override-btn,
     .ev-modal-actions button:not(.primary):not(.danger) { border-color: var(--border-control); }
     ::placeholder { color: var(--text-tertiary); opacity: 1; }
@@ -1400,7 +1343,7 @@
       *, *::before, *::after, .rbtn-pulse { animation: none !important; transition: none !important; }
     }
     body { font-family: var(--font-sans); }
-    .le-ts, .ck-val, #hdr-clock { font-variant-numeric: tabular-nums; }
+    .ck-val, #hdr-clock { font-variant-numeric: tabular-nums; }
     /* ═══ Command center components (stage 2) ═══ */
     .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
     .btn, .abtn {
@@ -1615,14 +1558,10 @@
     .sc-time.warn-red   { color: var(--st-live-fg); }
     .sc.warn-amber { box-shadow: inset 0 0 0 1px var(--st-hold-line); }
     .sc.warn-red   { box-shadow: inset 0 0 0 1px var(--st-live); }
-    .sc-drawer-times { font-size: var(--fs-12); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
     .sc-delay { font-size: var(--fs-12); color: var(--st-hold-fg); font-variant-numeric: tabular-nums; }
     .sc-act { justify-self: end; display: flex; gap: 6px; }
     .sc-tools { display: none; gap: 2px; align-items: center; flex: none; }
     .sc:hover .sc-tools, .sc:focus-within .sc-tools, body.edit-mode .sc-tools { display: inline-flex; }
-    .sc-drawer { grid-column: 1 / -1; border-top: 1px solid var(--border-divider); margin-top: 6px; padding-top: 8px; display: grid; gap: 8px; cursor: default; }
-    .sc-drawer .sc-actions { padding: 0; }
-    .sc-notes-full { white-space: pre-wrap; color: var(--text-secondary); font-size: var(--fs-12); }
     .sc-fold { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 12px; border: 1px dashed var(--border-section); border-radius: var(--r-ctl); background: transparent; color: var(--text-tertiary); font: 500 var(--fs-12) var(--font-sans); text-align: start; cursor: pointer; }
     .sc-fold[aria-expanded="true"] .ico { transform: rotate(90deg); }
     .sc-fold-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1661,6 +1600,11 @@
        show" is its icon (name in aria-label and title), and the row wraps rather than clip */
     #filter-bar { flex-wrap: wrap; height: auto; min-height: 48px; padding-block: 6px; row-gap: 6px; }
     @media (min-width: 768px) and (max-width: 1599px) { #edit-mode-btn .fb-lbl { display: none; } #fb-search { flex: 1 1 160px; } }
+    /* 1280 to 1439: the filter row stays on one line so the list keeps six rows under the band */
+    @media (min-width: 1280px) and (max-width: 1439px) {
+      .delay-stops { display: none; } #fb-search { flex-basis: 120px; }
+      #filter-bar { min-height: 44px; padding-block: 4px; } #sessions-col { padding-top: 4px; }   /* six rows under the band at 1280x720 */
+    }
     .lane { display: grid; grid-template-columns: 110px minmax(0, 1fr); border-bottom: 1px solid var(--border-divider); }
     .lane:last-child { border-bottom: 0; }
     .lane-room { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-inline-end: 1px solid var(--border-divider); font: 700 var(--fs-13)/1.25 var(--font-sans); text-transform: uppercase; color: var(--text-primary); min-width: 0; }
@@ -1679,24 +1623,29 @@
     .lane-big { font: 700 var(--fs-28)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
     .lane-unit { font: 700 var(--fs-11)/1.2 var(--font-sans); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary); }
     .lane-ctrl { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-    /* Demo-sized controls (md, natural width: Hold about 75, End… 62). Each slot's min-width is
-       the longest label it can show in the page language, so Hold and End line up in every
-       lane; the armed End grows to the left from the same right edge and is never clipped. */
-    /* HOLD and END never move (spec 2.3): every End button reserves the width of its armed
-       label in the page language ("CONFIRM END", measured at md; whichever End label is longest), so arming changes neither
-       End's edges nor anything beside it. */
-    /* Defaults (measured in Inter, plus 8 px for a fallback font); measureSlots() replaces both
+    /* Demo-sized controls (md, natural width: Hold about 75, End… 62). Each slot is as wide as
+       the longest label it can show in the page language, so Hold and End line up in every lane. */
+    /* HOLD and END never move (spec 2.3): every End button has a fixed width, the longest of
+       its labels in the page language: "End…" and the armed "Press again to end". At 1440 the
+       armed label takes one line when it fits in 150 px (md) or 168 px (lg, the inspector), below
+       1440 in 120 px (md), else it wraps to two balanced lines in a slot as wide as the longer
+       line. Arming therefore changes neither End's edges nor anything beside it. */
+    /* Defaults (measured in Inter, plus 8 px for a fallback font); measureSlots() replaces them
        with the widths of the labels in the font the page actually renders. */
-    html { --end-armed-w: 127px; --lane-lead-w: 86px; }
-    html:lang(ar) { --end-armed-w: 102px; --lane-lead-w: 94px; }   /* the drawer's "End session" (93 px) is longer than the armed label here */
-    html:lang(pl) { --end-armed-w: 210px; --lane-lead-w: 119px; }
-    html:lang(de) { --end-armed-w: 181px; --lane-lead-w: 119px; }
+    html { --end-w-wide: 150px; --end-w-tight: 107px; --insp-end-w: 167px; --lane-lead-w: 86px; }
+    html:lang(ar) { --end-w-wide: 158px; --end-w-tight: 101px; --insp-end-w: 176px; --lane-lead-w: 94px; }
+    html:lang(pl) { --end-w-wide: 153px; --end-w-tight: 153px; --insp-end-w: 170px; --lane-lead-w: 119px; }
+    html:lang(de) { --end-w-wide: 130px; --end-w-tight: 130px; --insp-end-w: 145px; --lane-lead-w: 119px; }
+    html { --end-armed-w: var(--end-w-wide); }
+    @media (max-width: 1439px) { html { --end-armed-w: var(--end-w-tight); } }   /* 1280: the band's now title keeps 200 px */
     @media (min-width: 768px) { .sc { grid-template-columns: 100px 28px minmax(0, 1fr) 110px 120px 44px max(150px, var(--end-armed-w)); } }
-    .sc-act .btn.danger, .sc-drawer [data-fk^="drw-ENDED-"] { min-width: var(--end-armed-w); }
+    .sc-act .btn.danger { width: var(--end-armed-w); }
     .lane-now { --lane-end-w: var(--end-armed-w); }
     .lane-lead { display: inline-flex; flex: none; min-width: var(--lane-lead-w); justify-content: flex-end; }
     .lane-lead .btn { width: 100%; }
-    .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { flex: none; min-width: var(--lane-end-w); white-space: nowrap; }
+    .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { flex: none; width: var(--lane-end-w); min-width: var(--lane-end-w); }
+    /* A long armed label wraps inside its fixed slot instead of widening it */
+    .sc-act .btn.danger, .lane-ctrl .btn.danger, .insp-primary .btn.danger { white-space: normal; text-wrap: balance; text-align: center; line-height: 1.1; }
     .end-slot { display: inline-block; height: 1px; }
     .lane-next-what { display: flex; min-width: 0; white-space: nowrap; }
     .lane-next-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); font-weight: 600; }
@@ -1754,6 +1703,86 @@
       .lane-lead, .lane-now .lane-ctrl .btn.danger, .lane-now .lane-ctrl .end-slot { width: auto; flex: 1; }
       .lane-big { font-size: var(--fs-28); }
     }
+    /* ═══ Command center inspector and log (stage 4) ═══ */
+    #sidebar { display: flex; flex-direction: column; overflow-y: auto; background: var(--panel); border-inline-start: 1px solid var(--border-section); }
+    .insp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; padding: 14px 16px; border-bottom: 1px solid var(--border-section); overflow-y: auto; max-height: calc(100% - 240px); flex: 0 1 auto; }
+    .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .insp-title { font-size: var(--fs-16); font-weight: 700; line-height: 1.3; color: var(--text-primary); }
+    .insp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); }
+    .insp-flags { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--text-secondary); }
+    .insp-flags.is-prominent { color: var(--text-primary); font-size: var(--fs-13); font-weight: 600; }
+    /* Names run inline, so the arrival toggle sits at the end of the last line (demo: "… · arrived") */
+    .insp-speakers { font-size: var(--fs-12); line-height: 1.6; color: var(--text-secondary); }
+    .insp-speakers > .btn, .insp-speakers > .sc-flag { margin-inline-start: 8px; vertical-align: middle; }
+    .insp-arrived { color: var(--st-ready-fg); padding-inline: 6px; }
+    .insp-times { gap: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+    .insp-count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .insp-big { font: 700 var(--fs-insp-countdown)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
+    .insp-count.is-over .insp-big { color: var(--st-overrun-fg); }
+    .insp-count.is-held .insp-big { color: var(--st-hold-count); }
+    .insp-count.warn-amber .insp-big { color: var(--st-hold-fg); }   /* wrap-up warnings, as in the list and band */
+    .insp-count.warn-red   .insp-big { color: var(--st-live-fg); }
+    .insp-unit { font-size: var(--fs-12); color: var(--text-tertiary); font-variant-numeric: tabular-nums; text-align: end; }
+    .prog { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
+    .prog i { display: block; height: 100%; background: var(--st-live); }
+    .prog.is-over i { background: var(--st-overrun); }
+    .insp-notes { display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-12); color: var(--text-secondary); white-space: pre-wrap; }
+    .insp-controls { display: grid; gap: 10px; }
+    /* Primary row: [forward or Hold] | gap | [End], End at the end edge in a slot of fixed width
+       (measureSlots), so arming it moves nothing. A row without End keeps an empty slot that may
+       shrink, since nothing arms there. */
+    .insp-primary { flex-wrap: nowrap; gap: 4px; --insp-slot: var(--insp-end-w); }
+    .insp-primary .act-gap { margin-inline-start: 0; }
+    /* Hold (or the forward action) takes the rest of the row, as large as in the approved demo;
+       End's slot is fixed, so arming changes neither. */
+    .insp-primary > .btn:not(.danger) { flex: 1 1 auto; }
+    /* flex-basis, not content, sizes End (min-width 0): at rest and armed it is the same width,
+       and a pixel short of room it gives way rather than push the row past the rail */
+    .insp-primary .btn.danger { margin-inline-start: auto; flex: 0 1 var(--insp-slot); min-width: 0; }
+    .insp-primary .end-slot { margin-inline-start: auto; flex: 0 1 var(--insp-slot); min-width: 0; }
+    .insp-time { gap: 6px 12px; }
+    .insp-grp { display: inline-flex; align-items: center; gap: 6px; }
+    .insp-more { display: contents; }
+    .insp-more > summary { list-style: none; width: max-content; }
+    .insp-more > summary::-webkit-details-marker { display: none; }
+    .insp-more[open] > summary .ico { transform: rotate(180deg); }
+    .insp-more-list { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+    .insp-empty { margin: 0; color: var(--text-tertiary); font-size: var(--fs-13); }
+    .ctx-title { font-size: var(--fs-14); font-weight: 600; } .ctx-title.ctx-empty { color: var(--text-tertiary); font-weight: 400; }
+    .ctx-sub { font-size: var(--fs-12); color: var(--text-tertiary); }
+    .ctx-btn { width: 100%; justify-content: flex-start; }
+    #log-panel { flex: 1 0 240px; min-height: 240px; display: flex; flex-direction: column; overflow: hidden; }
+    .log-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px 6px; }
+    .log-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 8px; }
+    .log-chip { height: 24px; padding: 0 10px; border-radius: var(--r-pill); border: 1px solid var(--border-divider); background: transparent; color: var(--text-secondary); font: 600 var(--fs-12) var(--font-sans); cursor: pointer; }
+    .log-chip:hover { background: var(--raised); color: var(--text-primary); }
+    .log-chip[aria-pressed="true"] { background: var(--raised); border-color: var(--border-control); color: var(--text-primary); }
+    #log-feed { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 12px; }
+    /* Log rows are scoped to the feed: a bare .lg is also the large button size */
+    #log-feed .lg { display: grid; grid-template-columns: 44px 76px minmax(0, 1fr); gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border-divider); font-size: var(--fs-12); color: var(--text-secondary); }
+    #log-feed .lg-when { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+    #log-feed .lg-kind { font-weight: 700; font-size: var(--fs-11); letter-spacing: var(--ls-badge); text-transform: uppercase; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #log-feed .lg-error .lg-kind { color: var(--st-live-fg); } #log-feed .lg-broadcast .lg-kind { color: var(--st-hold-fg); }
+    #log-feed .lg-state .lg-kind, #log-feed .lg-arrival .lg-kind { color: var(--st-ready-fg); } #log-feed .lg-delay .lg-kind { color: var(--st-overrun-fg); }
+    #log-feed .lg-what { overflow-wrap: anywhere; }
+    #log-feed .lg-empty { color: var(--text-tertiary); font-size: var(--fs-12); padding: 4px 0; }
+    @media (max-width: 1439px) {
+      .insp { max-height: calc(100% - 200px); gap: 6px; padding: 12px; }
+      .insp-controls { gap: 6px; }
+      .insp-monitor > button .ico { display: none; }   /* Stage monitor, Stage timer and More on one line in the 320 px rail */
+      /* 720 px tall: title and speakers take one line each (full text in their tooltips), so every
+         control row fits above the 200 px log without scrolling */
+      .insp-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .insp-speakers { display: flex; align-items: center; min-width: 0; }
+      .insp-names { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .insp-speakers > .btn, .insp-speakers > .sc-flag { flex: none; }
+      .insp-notes span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+      #log-panel { flex-basis: 200px; min-height: 200px; }
+      /* 320 px rail (295 px inside): the primary row drops to md, and End to the md slot the band uses */
+      .insp-primary { --insp-slot: var(--end-armed-w); }
+      .insp-primary .btn { padding: 0 12px; font-size: var(--fs-13); }
+    }
+    @media (max-width: 1439px) and (pointer: fine) { .insp-primary .btn { height: var(--btn-md); } }
 </style>
 </head>
 <body>
@@ -2194,14 +2223,6 @@
   </div>
 
   <div id="sidebar">
-    <!-- Context Panel -->
-    <div class="sb-section" id="ctx-wrap">
-      <div class="sb-title">ACTIVE SESSION</div>
-      <div id="ctx-title" class="ctx-title ctx-empty">No active session</div>
-      <div id="ctx-sub" class="ctx-sub"></div>
-    </div>
-    <div id="ctx-actions"></div>
-
     <!-- ONBOARDING CHECKLIST (director only, shown on first use) -->
     <div class="sb-section" id="checklist-wrap" style="display:none">
       <div class="sb-title">GETTING STARTED</div>
@@ -2216,15 +2237,21 @@
       <div class="ck-progress"><div class="ck-bar" id="ck-bar"></div></div>
     </div>
 
+    <section id="ctx-wrap" class="insp" aria-labelledby="insp-title"></section>
+
     <!-- Log -->
-    <div id="log-panel">
-      <div class="sb-title" style="padding:10px 13px 5px;display:flex;align-items:center;justify-content:space-between;">
-        EVENT LOG
-        <button class="log-export-btn" onclick="exportLog()" title="Download log as CSV">⬇ CSV</button>
+    <div id="log-panel" aria-labelledby="log-title">
+      <div class="log-head">
+        <span class="lbl" id="log-title" data-i18n="cc.log.title">Event log</span>
+        <button type="button" class="btn sm ghost" onclick="exportLog()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-download"/></svg><span data-i18n="cc.log.export">Export CSV</span></button>
       </div>
-      <div id="log-feed">
-        <div style="color:var(--dim);font-size:11px;padding:4px 0">Waiting…</div>
+      <div class="log-filters" role="group" aria-labelledby="log-title">
+        <button type="button" class="log-chip" data-f="all" aria-pressed="true" onclick="setLogFilter('all')" data-i18n="cc.log.all">All</button>
+        <button type="button" class="log-chip" data-f="status" aria-pressed="false" onclick="setLogFilter('status')" data-i18n="cc.log.status">Status</button>
+        <button type="button" class="log-chip" data-f="broadcast" aria-pressed="false" onclick="setLogFilter('broadcast')" data-i18n="cc.log.broadcast">Broadcast</button>
+        <button type="button" class="log-chip" data-f="errors" aria-pressed="false" onclick="setLogFilter('errors')" data-i18n="cc.log.errors">Errors</button>
       </div>
+      <div id="log-feed" role="log"></div>
     </div>
   </div>
 </div>
@@ -2712,7 +2739,11 @@ const S = {
   lastSyncAt:      0,      // PR-016: ms timestamp of last successful loadSnapshot()
   presence:        {},     // PR-009: role → count of connected operators
   viewMode:        'list', // PR-020: 'list' | 'timeline'
-  selectedId:      null,   // session shown in the row drawer (stage 3) / inspector (stage 4)
+  selectedId:      null,   // session the user selected; the inspector shows it (stage 4)
+  inspectedId:     null,   // session the inspector shows this render (selection or most urgent)
+  urgentKey:       '',     // "id:status" of the most urgent session; a change clears the selection
+  inspMoreOpen:    false,  // the inspector's More menu stays open across re-renders
+  logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
   foldOpen:        { ENDED: false, CANCELLED: false },
   laneOpen:        {},
   editMode:        false,  // "Edit run of show": editing tools on every row
@@ -2766,38 +2797,6 @@ const EF_MAP = {
   HOLD:'hold-stage', CALLING:'call-speaker',
   CANCELLED:'cancel-session', PLANNED:'reinstate',
 };
-
-// Button config
-function getBtnCfg() {
-  return {
-    LIVE:      { label: t('btn.goLive'),      cls: 'fwd fwd-go' },
-    READY:     { label: t('btn.setReady'),    cls: 'fwd fwd-ready' },
-    CALLING:   { label: t('btn.callSpeaker'), cls: 'fwd fwd-calling' },
-    HOLD:      { label: t('btn.hold'),        cls: 'hold' },
-    ENDED:     { label: t('btn.endSession'),  cls: 'danger' },
-    PLANNED:   { label: t('btn.deArm'),       cls: '' },
-    CANCELLED: { label: t('btn.cancel'),      cls: 'danger' },
-  };
-}
-// Drawer and sidebar colour by the MOVE, as the list rows do (FWD_CLASS): forward
-// moves keep their forward colour, HOLD is amber, END and CANCEL red outline, and
-// backward or sideways moves (Pull back, HOLD to READY, Back to planned) are secondary.
-function moveCls(from, to) {
-  if (to === 'HOLD') return 'hold';
-  if (to === 'ENDED' || to === 'CANCELLED') return 'danger';
-  return FWD_CLASS[from + '>' + to] || '';
-}
-function getBtnOverride() {
-  return {
-    'HOLD→LIVE':         t('btn.resume'),
-    'CANCELLED→PLANNED': t('btn.reinstate'),
-    'CALLING→READY':     t('btn.pullBack'),
-    'CALLING→LIVE':      t('btn.confirmOnStage'),
-  };
-}
-// Keep backward compat for any code referencing the old consts
-const BTN_CFG = getBtnCfg();
-const BTN_LABEL_OVERRIDE = getBtnOverride();
 
 // ═══════════════════════════════════════════════════
 // CLOCK
@@ -3059,8 +3058,8 @@ function onSessionChange(payload) {
 // First click → button turns red + shows "CONFIRM CANCEL", starts 2s timer.
 // Second click within 2s → proceeds with transition.
 // Timer expiry → reverts to original label.
-// The armed state lives in _cancelPending / _endPending and buildButtons /
-// buildCtxPanel render from it, so the 1 s re-render of a LIVE event keeps
+// The armed state lives in _cancelPending / _endPending and the band, rows and
+// inspector render from it, so the 1 s re-render of a LIVE event keeps
 // the confirm label instead of wiping it.
 // An arm holds for the status it was armed in: if the session changes status
 // meanwhile (another operator, realtime), the arm is dropped. For END, LIVE
@@ -3958,7 +3957,7 @@ function subLine(s, showNote) {
 
 function rowHTML(s, nowMs, ctx) {
   const isDirector = S.role === 'director' || S.userRole === 'director';
-  const sel = S.selectedId === s.id;
+  const sel = S.inspectedId === s.id;
   const cd = countdownLabel(s, nowMs);
   const delayed = (s.cumulative_delay || 0) > 0;
   const running = s.status === 'LIVE' || s.status === 'OVERRUN';
@@ -3972,10 +3971,6 @@ function rowHTML(s, nowMs, ctx) {
       <button type="button" class="btn ghost sm icon-only" data-fk="edit-${s.id}" title="${esc(t('cc.list.edit'))}" aria-label="${esc(t('cc.list.edit'))}" onclick="openSessModal('edit','${s.id}')">${icon('edit')}</button>
     </span>` : '';
   const showNote = ctx.liveIds.has(s.id) || ctx.nextIds.has(s.id);
-  // The drawer keeps every control and the actual start (event time) until the inspector takes over in 4.2.
-  const drawer = sel
-    ? `<div class="sc-drawer" onclick="event.stopPropagation()">${s.actual_start ? `<div class="sc-drawer-times">${esc(t('time.started'))} ${tsHM(s.actual_start)}</div>` : ''}${buildButtons(s)}${s.notes && s.notes.trim() ? `<div class="sc-notes-full">${esc(s.notes)}</div>` : ''}</div>`
-    : '';
   return `<div class="sc status-${s.status}${warnCls(cd)}${sel ? ' is-selected' : ''}" id="card-${s.id}" tabindex="0" data-fk="row-${s.id}"
       aria-label="${esc(s.title)}, ${esc(t('status.' + s.status))}"${sel ? ' aria-current="true"' : ''}
       onclick="selectSession('${s.id}')" onkeydown="handleCardKey(event,'${s.id}')">
@@ -3989,7 +3984,6 @@ function rowHTML(s, nowMs, ctx) {
     ${timeCell}
     <span class="sc-delay">${delayed ? '+' + s.cumulative_delay : ''}</span>
     <span class="sc-act">${primaryButtonHTML(s, 'md', 'rowact')}</span>
-    ${drawer}
   </div>`;
 }
 
@@ -4010,7 +4004,7 @@ function foldRowHTML(kind, list, open) {
 function toggleFold(kind) { S.foldOpen[kind] = !S.foldOpen[kind]; renderSessions(); }
 
 function selectSession(id) {
-  S.selectedId = S.selectedId === id ? null : id;   // stage 3: second click closes the drawer
+  S.selectedId = id;
   renderSessions();
 }
 function toggleEditMode() {
@@ -4069,9 +4063,13 @@ function bandLanes() { return roomsInOrder().map(laneFor).filter(l => l.now || l
 function minsUntil(s) { return Math.ceil(toMins(s.scheduled_start) - eventNowMinutes()); }
 function untilText(s) { const m = minsUntil(s); return m <= 0 ? t('cc.band.now') : tf('cc.band.inMin', { n: m }); }
 
-// HOLD and END never move: every End reserves the width of its longest label (armed, at
-// rest, the drawer's) and the lead slot the longest of Hold, Resume and On stage, measured
-// in the font the page renders, plus 8 px. Re-measured when a web font finishes loading.
+// HOLD and END never move: every End has a fixed width, the longest of its labels at rest
+// and armed, and the lead slot the longest of Hold, Resume and On stage, measured in the
+// font the page renders, plus 8 px. The armed label keeps one line up to `cap`; longer (Polish,
+// German, and English below 1440) it wraps to two lines and the slot is as wide as the longer
+// of the best two. md for the band and the rows (and the inspector below 1440), lg for the
+// inspector at 1440; CSS picks the wide or tight md slot by viewport.
+// Re-measured when a web font finishes loading.
 let _slotKey = null, _fontEpoch = 0;
 function measureSlots(force) {
   const key = (document.documentElement.lang || '') + '|' + _fontEpoch;
@@ -4080,12 +4078,25 @@ function measureSlots(force) {
   const probe = document.createElement('div');
   probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;display:flex;';
   document.body.appendChild(probe);
-  const w = (cls, html) => { const b = document.createElement('button'); b.className = 'btn md ' + cls; b.innerHTML = html; probe.appendChild(b); return b.getBoundingClientRect().width; };
-  const ended = getBtnOverride()['LIVE→ENDED'] || getBtnCfg().ENDED?.label || '';
-  const endW = Math.max(w('danger', esc(t('cc.act.end'))), w('danger confirm-pending', esc(t('confirm.confirmEnd'))), w('danger', esc(ended)));
-  const leadW = Math.max(w('hold', icon('pause') + esc(t('cc.act.hold'))), w('fwd fwd-go', esc(t('cc.act.resume'))), w('fwd fwd-go', esc(t('cc.act.onStage'))));
+  const w = (cls, html) => { const b = document.createElement('button'); b.className = 'btn ' + cls; b.innerHTML = html; probe.appendChild(b); return b.getBoundingClientRect().width; };
+  const endSlot = (size, cap) => {
+    const cls = size + ' danger confirm-pending', armed = t('confirm.confirmEnd');
+    let armedW = w(cls, esc(armed));
+    const words = armed.split(' ');
+    if (armedW > cap) {
+      for (let i = 1; i < words.length; i++) {
+        armedW = Math.min(armedW, Math.max(w(cls, esc(words.slice(0, i).join(' '))), w(cls, esc(words.slice(i).join(' ')))));
+      }
+    }
+    return Math.max(w(size + ' danger', esc(t('cc.act.end'))), armedW);
+  };
+  const wideW = endSlot('md', 150), tightW = endSlot('md', 120);
+  const inspEndW = endSlot('lg', 168);
+  const leadW = Math.max(w('md hold', icon('pause') + esc(t('cc.act.hold'))), w('md fwd fwd-go', esc(t('cc.act.resume'))), w('md fwd fwd-go', esc(t('cc.act.onStage'))));
   probe.remove();
-  if (endW > 0) document.documentElement.style.setProperty('--end-armed-w', Math.ceil(endW) + 8 + 'px');
+  if (wideW > 0) document.documentElement.style.setProperty('--end-w-wide', Math.ceil(wideW) + 8 + 'px');
+  if (tightW > 0) document.documentElement.style.setProperty('--end-w-tight', Math.ceil(tightW) + 8 + 'px');
+  if (inspEndW > 0) document.documentElement.style.setProperty('--insp-end-w', Math.ceil(inspEndW) + 8 + 'px');
   if (leadW > 0) document.documentElement.style.setProperty('--lane-lead-w', Math.ceil(leadW) + 2 + 'px');
 }
 document.fonts?.addEventListener?.('loadingdone', () => { _fontEpoch++; renderSessions(); });
@@ -4177,6 +4188,168 @@ function laneChipHTML(l) {
 function toggleLane(room) { S.laneOpen[room] = !S.laneOpen[room]; renderSessions(); }
 
 // ═══════════════════════════════════════════════════
+// COMMAND CENTER: inspector and log (stage 4)
+// ═══════════════════════════════════════════════════
+const INSPECTOR_ROLES = ['director', 'stage', 'av'];
+// OVERRUN > LIVE > HOLD > CALLING > the next READY (spec 2.3). NOW_RANK (4.1)
+// is the one urgency order; ties go to run-of-show order, as on main.
+function mostUrgentSession() {
+  const ranked = S.sessions.filter(s => s.status in NOW_RANK)
+    .sort((a, b) => NOW_RANK[a.status] - NOW_RANK[b.status] || a.sort_order - b.sort_order);
+  if (ranked.length) return ranked[0];
+  return S.sessions.filter(s => s.status === 'READY').sort((a, b) => a.sort_order - b.sort_order)[0] || null;
+}
+// Follows the user's selection; when the most urgent session changes (another
+// session or a new status) it returns there, unless the selected session has an
+// armed End or Cancel, so a second press never lands on a different session.
+function inspectorSession() {
+  const urgent = mostUrgentSession();
+  const key = urgent ? `${urgent.id}:${urgent.status}` : '';
+  if (key !== S.urgentKey) {
+    S.urgentKey = key;
+    const sel = S.selectedId && S.sessions.find(s => s.id === S.selectedId);
+    const armed = !!sel && (isArmed(_endPending, sel) || isArmed(_cancelPending, sel));
+    if (!armed) S.selectedId = null;
+  }
+  return (S.selectedId && S.sessions.find(s => s.id === S.selectedId)) || urgent;
+}
+
+function monitorRowHTML(more = '') {
+  const timer = S.role !== 'av'
+    ? `<button type="button" class="btn sm" data-fk="insp-timer" onclick="openStageTimerDisplay()">${icon('timer')}${esc(t('cc.insp.stageTimer'))}</button>` : '';
+  return `<div class="insp-row insp-monitor"><button type="button" class="btn sm" data-fk="insp-monitor" onclick="openStageMonitor()">${icon('monitor')}${esc(t('cc.insp.stageMonitor'))}</button>${timer}${more}</div>`;
+}
+
+function inspectorHTML(s, nowMs) {
+  const live = s.status === 'LIVE' || s.status === 'OVERRUN';
+  const tm = live ? liveTiming(s, nowMs) : null;
+  const over = s.status === 'OVERRUN' || !!(tm && tm.overrun);
+  const cd = countdownLabel(s, nowMs);
+  const ppl = people(s);
+  const speakers = ppl.length ? ppl : (s.speaker ? [{ name: s.speaker, role: '' }] : []);
+  const canArrive = (S.role === 'director' || S.role === 'stage') && speakers.length > 0 && !FINISHED.includes(s.status);
+  const names = speakers.map(p => p.name + (p.role === 'moderator' ? ` (${t('cc.list.moderator')})` : '')).join(', ');
+  const speakerRow = speakers.length ? `<div class="insp-speakers"><span class="insp-names" dir="auto" title="${esc(names)}">${esc(names)}</span>
+      ${canArrive
+        ? `<button type="button" class="btn sm${s.speaker_arrived ? ' ghost insp-arrived' : ' primary'}" data-fk="insp-arrive" aria-pressed="${!!s.speaker_arrived}" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${s.speaker_arrived ? icon('check') + esc(t('cc.list.arrived')) : esc(t('cc.insp.markArrived'))}</button>`
+        : (s.speaker_arrived ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : '')}</div>` : '';
+  const plannedDiffers = s.planned_start !== s.scheduled_start || s.planned_end !== s.scheduled_end;
+  const times = `<div class="insp-row insp-times"><span>${esc(t('cc.insp.scheduled'))} ${sessionSpan(s)}</span>`
+    + (plannedDiffers ? `<span>${esc(t('cc.insp.planned'))} ${hm(s.planned_start)}–${hm(s.planned_end)}</span>` : '')
+    + (s.actual_start ? `<span>${esc(t('cc.insp.started'))} ${tsHM(s.actual_start)}</span>` : '') + `</div>`;
+  // "left · 10:03 elapsed" and "over · planned 11:30–12:00", as in the approved demo
+  const unit = !cd ? '' : tm && !over ? `${cd.unit} · ${tf('cc.insp.elapsed', { time: fmtDur(tm.elapsed) })}`
+    : over ? `${cd.unit} · ${tf('cc.insp.plannedSpan', { span: `${hm(s.planned_start)}–${hm(s.planned_end)}` })}` : cd.unit;
+  const countdown = cd ? `<div class="insp-count${over ? ' is-over' : s.status === 'HOLD' ? ' is-held' : ''}${warnCls(cd)}" data-timer>
+      <span class="insp-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span>
+      <span class="insp-unit">${esc(unit)}</span></div>
+      ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}` : '';
+  const notes = s.notes && s.notes.trim() ? `<div class="insp-notes">${icon('note')}<span>${esc(s.notes)}</span></div>` : '';
+  // Primary row with fixed slots: [forward] [Hold] | gap | [End or empty slot]
+  const fwd = live ? '' : primaryButtonHTML(s, 'lg', 'insp');
+  const hold = s.status !== 'HOLD' && canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp') : '';
+  const end = endButtonHTML(s, 'lg', 'insp') || '<span class="end-slot" aria-hidden="true"></span>';
+  const primaryRow = `<div class="insp-row insp-primary">${fwd}${hold}<span class="act-gap" aria-hidden="true"></span>${end}</div>`;
+  // Time row: this session only, visibly apart from pushing every later session
+  const canNudge = live && (S.role === 'director' || S.role === 'stage');
+  const canPush = !!ROLE_DELAY[S.role] && ['LIVE', 'OVERRUN', 'HOLD', 'READY', 'CALLING'].includes(s.status);
+  const timeRow = (canNudge || canPush) ? `<div class="insp-row insp-time">`
+    + (canNudge ? `<span class="insp-grp"><span class="lbl">${esc(t('cc.insp.thisSession'))}</span>
+        <button type="button" class="btn sm" data-fk="insp-nudge-m" onclick="nudgeSession('${s.id}',-1)">${esc(t('cc.insp.minus1'))}</button>
+        <button type="button" class="btn sm" data-fk="insp-nudge-p" onclick="nudgeSession('${s.id}',1)">${esc(t('cc.insp.plus1'))}</button></span>` : '')
+    + (canPush ? `<span class="insp-grp"><span class="lbl">${esc(t('cc.insp.pushFollowing'))}</span>`
+        + [5, 10, 15].map(n => `<button type="button" class="btn sm" data-fk="insp-push-${n}" onclick="applyDelay('${s.id}',${n})">+${n}</button>`).join('') + `</span>` : '')
+    + `</div>` : '';
+  // More: every other legal action
+  const isDirector = S.role === 'director' || S.userRole === 'director';
+  const others = (ALLOWED[s.status] || []).filter(to => !['ENDED', 'CANCELLED', 'HOLD'].includes(to) && to !== primaryTransition(s) && canDo(s, to));
+  const moreItems = [
+    ...others.map(to => transitionButtonHTML(s, to, 'sm', 'more')),
+    canRestartSession(s) ? `<button type="button" class="btn sm" data-restart="${esc(s.id)}" data-fk="more-restart" onclick="openRestartModal('${esc(s.id)}')">${icon('refresh')}${esc(t('cc.insp.restart'))}</button>` : '',
+    canArrive ? `<button type="button" class="btn sm" data-fk="more-arrive" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${icon('check')}${esc(s.speaker_arrived ? t('cc.insp.clearArrived') : t('cc.insp.markArrived'))}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm" data-fk="more-edit" onclick="openSessModal('edit','${s.id}')">${icon('edit')}${esc(t('cc.list.edit'))}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm" data-fk="more-up" onclick="reorderSession('${s.id}','up')">${icon('arrow-up')}${esc(t('cc.list.moveUp'))}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm" data-fk="more-down" onclick="reorderSession('${s.id}','down')">${icon('arrow-down')}${esc(t('cc.list.moveDown'))}</button>` : '',
+    cancelButtonHTML(s, 'sm', 'more'),
+  ].filter(Boolean).join('');
+  // More sits in the monitor row, as in the approved demo; its list opens on the line below.
+  const more = moreItems ? `<details class="insp-more" id="insp-more"${S.inspMoreOpen ? ' open' : ''} ontoggle="S.inspMoreOpen = this.open">
+      <summary class="btn sm ghost" data-fk="insp-more">${esc(t('cc.insp.more'))}${icon('chev-down')}</summary>
+      <div class="insp-more-list">${moreItems}</div></details>` : '';
+  const typeLabel = s.type ? (t('type.' + s.type) !== 'type.' + s.type ? t('type.' + s.type) : s.type) : '';
+  return `<div class="insp-head"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))} · #${s.sort_order}</span>${statusBadge(s.status)}</div>
+    <div class="insp-title" dir="auto" title="${esc(s.title)}">${esc(s.title)}</div>
+    <div class="insp-row insp-chips">${s.room ? chipHTML('room', s.room) : ''}${typeLabel ? chipHTML('type', typeLabel) : ''}<span class="insp-flags${S.role === 'av' ? ' is-prominent' : ''}">${flagsHTML(s)}</span></div>
+    ${speakerRow}${times}${countdown}${notes}
+    <div id="ctx-actions" class="insp-controls">${primaryRow}${timeRow}${monitorRowHTML(more)}</div>`;
+}
+
+function renderInspector() {
+  const wrap = document.getElementById('ctx-wrap');
+  if (!wrap) return;
+  const fk = focusKey();
+  if (!INSPECTOR_ROLES.includes(S.role)) {
+    // interp, reg, signage keep their own panels (spec 2.8), restyled by tokens
+    wrap.innerHTML = `<span class="lbl" id="insp-title">${esc(t('role.' + S.role))}</span>
+      <div id="ctx-title" class="ctx-title ctx-empty"></div><div id="ctx-sub" class="ctx-sub"></div><div id="ctx-actions" class="insp-controls"></div>`;
+    buildRoleCtxPanel();
+  } else {
+    const s = inspectorSession();
+    wrap.innerHTML = s ? inspectorHTML(s, correctedNow())
+      : `<div class="insp-head"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))}</span></div>
+         <p class="insp-empty">${esc(t('cc.insp.empty'))}</p><div id="ctx-actions" class="insp-controls">${monitorRowHTML()}</div>`;
+  }
+  restoreFocus(fk);
+}
+// Every existing caller (nudge, timeline, role switch) keeps calling this name.
+function buildCtxPanel() { renderInspector(); }
+
+// ── Event log: filter chips, each row with its own time, in plain words (spec 2.3) ──
+function logKind(action) {
+  const a = String(action || '').toUpperCase();
+  if (['ESCALATION', 'ERROR', 'FAIL'].some(k => a.includes(k))) return 'error';
+  if (a.includes('BROADCAST')) return 'broadcast';
+  if (a.includes('DELAY') || a.includes('NUDGE')) return 'delay';
+  if (a.includes('ARRIVED')) return 'arrival';
+  if (['SESSION_STATUS_CHANGE', 'GO_LIVE', 'END_SESSION', 'SET_READY', 'HOLD_STAGE', 'CALL_SPEAKER', 'CANCEL_SESSION', 'REINSTATE', 'STATUS', 'UNDO', 'RESTART', 'AUTO-START', 'EF'].some(k => a.includes(k))) return 'state';
+  if (['BOOT', 'SYSTEM', 'CLOCK', 'DB', 'SIGNAGE'].some(k => a.includes(k))) return 'system';
+  return 'other';
+}
+const LOG_FILTER = { all: () => true, status: k => k === 'state' || k === 'delay' || k === 'arrival', broadcast: k => k === 'broadcast', errors: k => k === 'error' };
+function setLogFilter(f) {
+  S.logFilter = f;
+  document.querySelectorAll('#log-panel .log-chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === f)));
+  renderLog();
+}
+const LOG_STATUS_RE = /\b(PLANNED|READY|CALLING|LIVE|OVERRUN|HOLD|ENDED|CANCELLED)\b/g;
+// "#2 Workshop live to hold" (approved demo): the session once, by number and the title up to
+// its colon, statuses as words, no transport details (the endpoint and its tick).
+function logDetail(e) {
+  const sess = e.sessionId ? S.sessions.find(x => x.id === e.sessionId) : null;
+  const head = sess ? String(sess.title || '').split(':')[0] : '';
+  const who = sess ? `#${sess.sort_order} ${trunc(head, 32)} ` : '';
+  let d = String(e.detail || '').replace(/\s+via (\/[\w-]+|direct write) ✓$/, '');
+  if (sess) d = d.replace(/^[^:]*: (?=[A-Z]+ → [A-Z]+$)/, '');
+  if (logKind(e.action) === 'state') d = d.replace(LOG_STATUS_RE, st => t('status.' + st).toLocaleLowerCase(CueDeckI18n.getLocale()));
+  return who + d.replace(/\s*→\s*/g, ` ${t('cc.log.to')} `);
+}
+function renderLog() {
+  const feed = document.getElementById('log-feed');
+  if (!feed) return;
+  const keep = LOG_FILTER[S.logFilter] || LOG_FILTER.all;
+  const rows = S.log.filter(e => keep(logKind(e.action)));
+  if (!rows.length) { feed.innerHTML = `<div class="lg-empty">${esc(t('cc.log.empty'))}</div>`; return; }
+  feed.innerHTML = rows.slice(0, 60).map(e => {
+    const k = logKind(e.action);
+    // An action the log does not classify, or one that is not an action name at all, shows its own
+    // name (escaped), so no event is reduced to "Event" and nothing odd hides behind a kind label.
+    const named = /^[A-Z][A-Z_-]*$/.test(String(e.action || ''));
+    const kind = k === 'other' || !named ? trunc(String(e.action || ''), 24) : t('cc.log.k.' + k);
+    return `<div class="lg lg-${k}"><span class="lg-when">${esc(tsHM(e.ts))}</span><span class="lg-kind">${esc(kind)}</span><span class="lg-what">${esc(logDetail(e))}</span></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════════════════
 function renderSessions() {
@@ -4185,6 +4358,7 @@ function renderSessions() {
   // The band shows in list and timeline views alike (spec 2.5).
   const fkTop = focusKey();
   renderBand();
+  S.inspectedId = INSPECTOR_ROLES.includes(S.role) ? (inspectorSession()?.id || null) : null;
   restoreFocus(fkTop);
   renderBCSend();
   // Signage role gets its own dedicated management panel
@@ -4479,10 +4653,12 @@ function updateDelayStrip() {
   const maxDelay = Math.max(...delayed.map(s => s.cumulative_delay));
   const last = delayed.reduce((a, b) => (a.sort_order > b.sort_order ? a : b));
   const anchor = S.sessions.filter(s => s.is_anchor && s.sort_order > last.sort_order).sort((a, b) => a.sort_order - b.sort_order)[0];
-  const text = tf('cc.delay.chip', { n: maxDelay, k: delayed.length }) + (anchor ? ' · ' + tf('cc.delay.stopsAt', { n: anchor.sort_order }) : '');
+  const text = tf('cc.delay.chip', { n: maxDelay, k: delayed.length });
+  const stops = anchor ? ' · ' + tf('cc.delay.stopsAt', { n: anchor.sort_order }) : '';
   const isDirector = S.role === 'director' || S.userRole === 'director';
   strip.hidden = false;
-  const html = `<span class="delay-chip">${icon('clock')}${esc(text)}</span>`
+  // At 1280 the "stops at" part hides (the list's anchor row says it), so the filter row keeps one line.
+  const html = `<span class="delay-chip" title="${esc(text + stops)}">${icon('clock')}<span>${esc(text)}${stops ? `<span class="delay-stops">${esc(stops)}</span>` : ''}</span></span>`
     + (isDirector ? `<button type="button" class="btn sm" id="ds-reset-btn" onclick="resetAllDelays()">${esc(t('cc.delay.reset'))}</button>` : '');
   // Rewritten only on change: the 1 s re-render must not drop an armed "Reset delays".
   if (strip.dataset.html !== html) { strip.innerHTML = html; strip.dataset.html = html; }
@@ -4616,74 +4792,11 @@ function handleCardKey(event, sessionId) {
   document.getElementById(next.id)?.focus();
 }
 
-function buildButtons(s) {
-  const allowed  = ALLOWED[s.status] || [];
-  const canWrite = ROLE_WRITE[S.role] || [];
-  const possible = allowed.filter(t => canWrite.includes(t));
-
-  const canDelay = ROLE_DELAY[S.role] && ['LIVE','OVERRUN','HOLD','READY','CALLING'].includes(s.status);
-  const canArrive = (S.role === 'director' || S.role === 'stage') && s.speaker && !['ENDED','CANCELLED'].includes(s.status);
-  const canRestart = canRestartSession(s);
-
-  if (!possible.length && !canDelay && !canArrive && !canRestart) return '';
-
-  const _btnCfg = getBtnCfg();
-  const _btnOvr = getBtnOverride();
-  const btnHtml = possible.map(to => {
-    const cfg   = _btnCfg[to] || { label: to, cls: '' };
-    const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
-    cfg.cls = moveCls(s.status, to);
-    // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
-    if (to === 'CANCELLED') {
-      const armed = isArmed(_cancelPending, s);
-      return `<button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" data-fk="drw-CANCELLED-${s.id}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
-    }
-    // END SESSION uses two-step confirmation to prevent accidental ending
-    if (to === 'ENDED') {
-      const armed = isArmed(_endPending, s);
-      return `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" data-fk="drw-ENDED-${s.id}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
-    }
-    return `<button class="btn md ${cfg.cls}" data-fk="drw-${to}-${s.id}" onclick="transition('${s.id}','${to}')">${label}</button>`;
-  }).join('');
-
-  const arriveHtml = canArrive
-    ? `<button class="btn sm" data-fk="drw-arrive-${s.id}"
-         onclick="markArrived('${s.id}', ${!s.speaker_arrived})"
-         title="Toggle speaker arrival">${s.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED'}</button>`
-    : '';
-
-  const delayHtml = canDelay
-    ? `<div class="delay-grp">
-         <span class="dl">+MIN</span>
-         <button class="btn sm" data-fk="drw-delay5-${s.id}" onclick="applyDelay('${s.id}',5)">5</button>
-         <button class="btn sm" data-fk="drw-delay10-${s.id}" onclick="applyDelay('${s.id}',10)">10</button>
-         <button class="btn sm" data-fk="drw-delay15-${s.id}" onclick="applyDelay('${s.id}',15)">15</button>
-       </div>`
-    : '';
-
-  // Nudge buttons: ±1min on THIS session's end only (no cascade)
-  const isLiveNow = s.status === 'LIVE' || s.status === 'OVERRUN';
-  const canNudge  = isLiveNow && (S.role === 'director' || S.role === 'stage');
-  const nudgeHtml = canNudge
-    ? `<div class="delay-grp">
-         <span class="dl">NUDGE</span>
-         <button class="btn sm" data-fk="drw-nudge-dn-${s.id}" onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
-         <button class="btn sm" data-fk="drw-nudge-up-${s.id}" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
-       </div>`
-    : '';
-
-  const restartHtml = canRestart
-    ? `<button class="btn sm" data-fk="drw-restart-${esc(s.id)}" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
-    : '';
-
-  return `<div class="sc-actions">${btnHtml}${arriveHtml}${restartHtml}${delayHtml}${nudgeHtml}</div>`;
-}
-
 // ═══════════════════════════════════════════════════
 // CONTEXT PANEL + STAGE MONITOR
 // ═══════════════════════════════════════════════════
 
-function buildCtxPanel() {
+function buildRoleCtxPanel() {
   const titleEl   = document.getElementById('ctx-title');
   const subEl     = document.getElementById('ctx-sub');
   const actionsEl = document.getElementById('ctx-actions');
@@ -4713,45 +4826,7 @@ function buildCtxPanel() {
     `<button class="btn md ctx-btn ${cls}" onclick="${action}">${ico ? icon(ico) : ''}${label}</button>`;
   const sectionLbl = v => `<div class="ctx-section-lbl">${v}</div>`;
 
-  if (role === 'director' || role === 'stage') {
-    if (tgt) {
-      html += sectionLbl('QUICK ACTIONS');
-      const _btnCfg2 = getBtnCfg();
-      const _btnOvr2 = getBtnOverride();
-      const possible = (ALLOWED[tgt.status] || []).filter(st => (ROLE_WRITE[role] || []).includes(st));
-      possible.forEach(to => {
-        const cfg   = { ...(_btnCfg2[to] || { label: to }), cls: moveCls(tgt.status, to) };
-        const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
-        if (to === 'CANCELLED') {
-          const armed = isArmed(_cancelPending, tgt);
-          html += cbtn(armed ? t('confirm.confirmCancel') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
-                       `confirmCancel('${esc(tgt.id)}',this)`);
-        } else if (to === 'ENDED') {
-          const armed = isArmed(_endPending, tgt);
-          html += cbtn(armed ? t('confirm.confirmEnd') : label, cfg.cls + (armed ? ' confirm-pending' : ''),
-                       `confirmEnd('${esc(tgt.id)}',this)`);
-        } else {
-          html += cbtn(label, cfg.cls, `transition('${esc(tgt.id)}','${to}')`);
-        }
-      });
-      if (role === 'stage' && tgt.speaker && !['ENDED','CANCELLED'].includes(tgt.status))
-        html += cbtn(tgt.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED',
-                     tgt.speaker_arrived ? 'btn-grey' : 'btn-blue',
-                     `markArrived('${esc(tgt.id)}', ${!tgt.speaker_arrived})`);
-    }
-    html += sectionLbl('MONITOR');
-    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', 'monitor');
-    html += cbtn('STAGE TIMER', 'btn-blue', 'openStageTimerDisplay()', 'timer');
-
-  } else if (role === 'av') {
-    if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
-      html += sectionLbl('AV CONTROL');
-      html += cbtn('HOLD SESSION', 'hold', `transition('${esc(tgt.id)}','HOLD')`, 'pause');
-    }
-    html += sectionLbl('MONITOR');
-    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', 'monitor');
-
-  } else if (role === 'signage') {
+  if (role === 'signage') {
     const dispCount = S.displays.length;
     const onlineCount = S.displays.filter(d => {
       const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
@@ -6029,34 +6104,10 @@ function pushLogFromRow(row) {
   const detail = row.from_status
     ? `${row.from_status} → ${row.to_status}`
     : msg !== null ? trunc(msg, 120)
+    : typeof row.payload?.minutes === 'number' ? `${row.payload.minutes > 0 ? '+' : ''}${row.payload.minutes} min`
     : String(JSON.stringify(row.payload || '')).substring(0, 45);
   const ts = row.ts ? new Date(row.ts).getTime() : undefined;
   pushLog(row.action, detail, row.session_id, Number.isFinite(ts) ? ts : undefined);
-}
-
-function renderLog() {
-  const feed = document.getElementById('log-feed');
-  if (!S.log.length) {
-    feed.innerHTML = '<div style="color:var(--text-muted);font-size:11px;padding:4px 0">No events yet…</div>';
-    return;
-  }
-  // Colour-code log entries by action type (spec §10.1)
-  function leClass(action) {
-    if (!action) return '';
-    const a = action.toUpperCase();
-    if (['SESSION_STATUS_CHANGE','GO_LIVE','END_SESSION','SET_READY','HOLD_STAGE','CALL_SPEAKER','CANCEL_SESSION','REINSTATE'].some(k=>a.includes(k))) return 'le-state';
-    if (['BOOT','SYSTEM','CLOCK'].some(k=>a.includes(k))) return 'le-system';
-    if (['ESCALATION','ERROR','FAIL'].some(k=>a.includes(k))) return 'le-error';
-    if (a.includes('BROADCAST')) return 'le-broadcast';
-    if (a.includes('DELAY')) return 'le-delay';
-    return '';
-  }
-  feed.innerHTML = S.log.slice(0, 25).map(e => `
-    <div class="le ${leClass(e.action)}">
-      <span class="le-ts">${fmtTS(e.ts)}</span>
-      <span class="le-act"> ${esc(e.action)}</span>
-      ${e.detail ? `<div class="le-det">${esc(e.detail)}</div>` : ''}
-    </div>`).join('');
 }
 
 // The sender's first name from data the console already holds; never invented.
@@ -6967,7 +7018,7 @@ function checkOverrunSessions() {
 
 // A press whose mousedown and mouseup straddle a re-render loses its click (the button
 // under the pointer is replaced). While a pointer is down on the band, the list, the
-// drawer or the rail, renderSessions() waits (the 1 s tick, and also a snapshot reload or
+// inspector or the log, renderSessions() waits (the 1 s tick, and also a snapshot reload or
 // realtime update landing mid-press); it runs right after release (after the click), or
 // after 1.5 s if no release ever comes. Running countdowns keep counting in place
 // meanwhile (the 200 ms updater). A press anywhere else defers nothing.
@@ -6980,7 +7031,7 @@ function releasePointer() {
   if (_renderDeferred) { _renderDeferred = false; setTimeout(renderSessions, 0); }   // after the click event
 }
 document.addEventListener('pointerdown', e => {
-  if (!e.target.closest?.('#band, #sessions-list, .sc-drawer, #sidebar')) return;
+  if (!e.target.closest?.('#band, #sessions-list, #sidebar')) return;
   _ptrHeld = true;
   clearTimeout(_ptrTimer);
   _ptrTimer = setTimeout(releasePointer, 1500);
@@ -8492,7 +8543,7 @@ const ROLE_TIPS = {
     { target: '#filter-bar',       text: 'Filter sessions by title, status, or room. Toggle the Timeline view for a time-based grid.' },
   ],
   stage: [
-    { target: '#sessions-list',    text: 'Each card shows a session. Use the action buttons in the sidebar to ARM, CALL, and GO LIVE.' },
+    { target: '#sessions-list',    text: 'Each row is a session with its next action. Select a row to see all of its controls on the right.' },
     { target: '#sidebar',          text: 'Select a session to see its details and actions here — including the Stage Monitor for fullscreen confidence display.' },
     { target: '#filter-bar',       text: 'Filter by room or status to focus on your stage.' },
   ],

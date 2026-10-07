@@ -61,10 +61,10 @@ async function setup(page: Page, role = 'director') {
   return calls;
 }
 
-const restartBtn = (page: Page, id: string) => page.locator(`#card-${id} [data-restart]`);
-// Restart sits with the selected session's controls (stage 3: the row drawer).
+// Restart sits in the inspector's More menu for the selected session (stage 4).
+const restartBtn = (page: Page, _id: string) => page.locator('#ctx-wrap [data-restart]');
 async function openControls(page: Page, id: string) {
-  await page.evaluate((sid) => (0, eval)(`S.foldOpen = { ENDED: true, CANCELLED: true }; S.selectedId = '${sid}'; renderSessions();`), id);
+  await page.evaluate((sid) => (0, eval)(`S.inspMoreOpen = true; S.selectedId = '${sid}'; renderSessions();`), id);
 }
 
 test('the Restart button shows on started sessions and not on a planned one', async ({ page }) => {

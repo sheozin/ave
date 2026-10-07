@@ -402,7 +402,8 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await sessionCard.waitFor({ timeout: 5000 });
     // Click GO LIVE
     await sessionCard.click();
-    await page.locator(`#card-${process.env.TEST_SESSION_ID} .sc-drawer button.fwd-go`).first().click();
+    await page.locator('#ctx-wrap #insp-more summary').click();
+    await page.locator(`#ctx-wrap button[onclick*="'LIVE')"]`).first().click();
     await page.waitForTimeout(1500);
     expect(errors).toHaveLength(0);
   });

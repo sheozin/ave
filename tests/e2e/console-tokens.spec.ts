@@ -17,8 +17,8 @@ test('tokens: section dividers are at least 1.78:1 and control boundaries at lea
 
 // Every selector must exist: a missing element (-1) fails instead of being
 // skipped. Tasks that remove one of these elements replace its selector with
-// its successor in the same task (3.1: '#bc-bar .lbl', 4.2: '#ctx-sub').
-const META_TEXT = [`#card-${PANEL_ID} .sc-num`, '#ctx-sub', '#fb-count', '#bc-bar .lbl'];
+// its successor in the same task (3.1: '#bc-bar .lbl', 4.2: '#ctx-wrap .insp-times' for '#ctx-sub').
+const META_TEXT = [`#card-${PANEL_ID} .sc-num`, '#ctx-wrap .insp-times', '#fb-count', '#bc-bar .lbl'];
 test('tokens: meta and label text is at least 4.5:1', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   for (const sel of META_TEXT) {
