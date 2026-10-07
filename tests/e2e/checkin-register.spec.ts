@@ -157,8 +157,23 @@ test('inputs are 16px so iOS does not zoom, and the honeypot is off screen', asy
   const sizes = await page.$$eval('input[type=text]:not([name=website]),input[type=email],select', els => els.map(e => parseFloat(getComputedStyle(e).fontSize)));
   expect(Math.min(...sizes)).toBeGreaterThanOrEqual(16);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
-  const hp = await page.locator('[name=website]').boundingBox();
-  expect(hp!.x).toBeLessThan(-1000);
+  // The honeypot is invisible and unreachable for people, without an
+  // off-screen offset (which widened right-to-left pages).
+  const hp = page.locator('[name=website]');
+  expect(await hp.evaluate((e) => { const w = e.closest('.hp') as HTMLElement; const cs = getComputedStyle(w);
+    return { op: cs.opacity, clip: cs.clipPath, hidden: w.getAttribute('aria-hidden'), tab: e.getAttribute('tabindex') }; }))
+    .toEqual({ op: '0', clip: 'inset(50%)', hidden: 'true', tab: '-1' });
+});
+
+test('right-to-left (Arabic): no sideways scrolling, and organizer text keeps its punctuation', async ({ page }) => {
+  await setup(page, { config: CONFIG({ language: 'ar' }) });
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(URL_);
+  await expect(page.locator('#open')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.dir)).toBe('rtl');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBe(0);
+  await expect(page.locator('#open .card-h h2')).toHaveText('تسجيل');
+  await expect(page.locator('#about-p')).toHaveAttribute('dir', 'auto');
 });
 
 

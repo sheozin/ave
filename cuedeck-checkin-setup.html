@@ -308,6 +308,9 @@
       </details>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
+    <h3 class="sc-h">Page language</h3>
+    <div class="toggle"><div><b>Language of the registration page</b><p>Automatic shows each guest the page in their own browser's language when it is one of these. What you write (event name, description, questions, ticket names) is shown as you wrote it.</p></div>
+      <select id="rg-lang" aria-label="Page language" style="height:40px;border-radius:10px;border:1px solid var(--bd2);padding:0 10px"><option value="auto">Automatic</option><option value="en">English</option><option value="pl">Polski</option><option value="de">Deutsch</option><option value="ar">العربية</option></select></div>
     <h3 class="sc-h">Who can register</h3>
     <div class="toggle"><div><b>Invited guests only</b><p>The public link takes no registrations. You invite guests from your guest list (Guests tab) and each gets a personal link to say if they are coming. With approval on, the public link takes requests for an invitation instead.</p></div><label class="sw"><input type="checkbox" id="rg-invite"><span></span></label></div>
     <h3 class="sc-h">Waitlist and approval</h3>
@@ -1089,6 +1092,7 @@ function renderHeld() {
   $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
   $('rg-plus').value = String(ENT.registration_plus_ones || 0);
   $('rg-invite').checked = ENT.registration_mode === 'invite';
+  $('rg-lang').value = ENT.registration_language || 'auto';
   const wl = HELD.filter(h => h.kind === 'waitlist').length, ap = HELD.length - wl;
   $('held-box').hidden = !HELD.length;
   $('held-title').textContent = [ap ? ap + ' awaiting approval' : '', wl ? wl + ' on the waitlist' : ''].filter(Boolean).join(' · ');
@@ -1139,6 +1143,12 @@ $('rg-embed-copy').onclick = async () => {
   setTimeout(() => { $('rg-embed-copy').textContent = 'Copy code'; }, 1800);
 };
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-lang').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_registration_language', { p_event_id: EVENT_ID, p_language: $('rg-lang').value });
+  if (error) { $('held-err').textContent = error.message; $('rg-lang').value = ENT.registration_language || 'auto'; return; }
+  ENT.registration_language = data; $('held-ok').textContent = 'Saved.';
+};
 $('rg-invite').onchange = async () => {
   $('held-err').textContent = ''; $('held-ok').textContent = '';
   const mode = $('rg-invite').checked ? 'invite' : 'open';

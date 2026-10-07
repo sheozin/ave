@@ -117,7 +117,10 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
 .consent{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--t2);line-height:1.45}
 .consent input{width:20px;height:20px;margin:1px 0 0;flex:none;accent-color:var(--accent)}
 .consent.bad{color:#B3261E}
-.hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+/* Hidden without an offset: a far-left position widens a right-to-left page. */
+/* Organizer text keeps its own direction (punctuation in place) but lines up with the page. */
+html[dir=rtl] [dir=auto]{text-align:match-parent}
+.hp{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none}
 .btn{height:54px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;width:100%}
 .btn:disabled{opacity:.6;cursor:default}
 .btn2{height:46px;border-radius:12px;border:1px solid var(--line2);background:#fff;font-size:14px;font-weight:600;cursor:pointer;padding:0 16px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:8px}
@@ -177,14 +180,14 @@ body.embed .embed-ev{display:block}
 
 <div id="page" hidden>
   <header class="top">
-    <div class="host"><div class="mark" id="mark"></div><div><b id="host-name"></b><small>Organizer</small></div></div>
+    <div class="host"><div class="mark" id="mark"></div><div><b dir="auto" id="host-name"></b><small>Organizer</small></div></div>
     <button class="pill" type="button" id="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"></path></svg><span id="share-t">Share</span></button>
   </header>
 
   <main class="wrap">
     <section class="hero">
       <div class="cover" id="cover"><img id="cover-img" alt="" hidden><span class="ph serif" id="cover-ph"></span></div>
-      <h1 class="title" id="ev-name"></h1>
+      <h1 class="title" dir="auto" id="ev-name"></h1>
       <div class="chips"><span class="chip test" id="test-chip" hidden>Test mode</span></div>
     </section>
 
@@ -199,11 +202,11 @@ body.embed .embed-ev{display:block}
       </div>
       <div class="fact" id="fact-venue" hidden>
         <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"></path><circle cx="12" cy="9.5" r="2.5"></circle></svg></div>
-        <div style="min-width:0"><b id="venue"></b><span class="sub" id="address"></span><a class="lnk" id="maps" target="_blank" rel="noopener" hidden>Open in Maps</a></div>
+        <div style="min-width:0"><b dir="auto" id="venue"></b><span class="sub" dir="auto" id="address"></span><a class="lnk" id="maps" target="_blank" rel="noopener" hidden>Open in Maps</a></div>
       </div>
     </section>
 
-    <section class="about" id="about" hidden><h2 class="h2">About</h2><p id="about-p"></p></section>
+    <section class="about" id="about" hidden><h2 class="h2">About</h2><p dir="auto" id="about-p"></p></section>
     <section class="prog" id="prog" hidden><h2 class="h2">Programme</h2><div class="plist" id="plist"></div></section>
     <p class="foot">Registration by <a href="https://cuedeck.io/solutions/check-in" target="_blank" rel="noopener">CueDeck</a> · <a href="https://cuedeck.io/privacy" target="_blank" rel="noopener">Privacy</a></p>
 
@@ -211,7 +214,7 @@ body.embed .embed-ev{display:block}
       <div class="card">
         <section id="open" hidden>
           <div class="card-h"><h2>Register</h2><span class="left" id="left" hidden></span></div>
-          <p class="embed-ev" id="embed-ev"></p>
+          <p class="embed-ev" dir="auto" id="embed-ev"></p>
           <p class="hint" id="flow-note" hidden style="margin:-6px 0 14px;color:var(--t2)"></p>
           <p class="hint" id="test-note" hidden style="margin:-6px 0 16px">Test mode: registrations are for trying the page. No email is sent, and they are cleared when the event goes live.</p>
           <form id="form" novalidate>
@@ -266,12 +269,12 @@ body.embed .embed-ev{display:block}
             <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></div>
             <h2 id="cf-h">Confirm your registration</h2>
             <p id="cf-meta"></p>
-            <div class="who" id="cf-who-row" hidden><span>Registering</span><b id="cf-who"></b><span id="cf-tix" hidden style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--t2)"></span><small id="cf-who-s">Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
+            <div class="who" id="cf-who-row" hidden><span>Registering</span><b dir="auto" id="cf-who"></b><span id="cf-tix" hidden style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--t2)"></span><small id="cf-who-s">Not you, or details wrong? Do not confirm. Delete the request below and register again.</small></div>
             <button class="btn" type="button" id="cf-btn">Confirm my registration</button>
             <button class="link" type="button" id="cf-no">This is not me. Delete this request.</button>
             <p class="msg" id="cf-msg" hidden></p>
           </div>
-          <span id="cf-name" hidden></span>
+          <span dir="auto" id="cf-name" hidden></span>
         </section>
 
         <section id="done" hidden>
@@ -287,12 +290,12 @@ body.embed .embed-ev{display:block}
             <h2 id="tk-h">You are registered</h2>
             <p>Your ticket is also on its way by email.</p>
             <div class="ticket">
-              <div class="tt"><span id="tk-host"></span><b id="tk-event"></b></div>
+              <div class="tt"><span dir="auto" id="tk-host"></span><b dir="auto" id="tk-event"></b></div>
               <div class="tgrid">
-                <div><span>Guest</span><b id="tk-guest"></b></div>
-                <div><span>Ticket</span><b id="tk-type"></b></div>
+                <div><span>Guest</span><b dir="auto" id="tk-guest"></b></div>
+                <div><span>Ticket</span><b dir="auto" id="tk-type"></b></div>
                 <div><span>Date</span><b id="tk-date"></b></div>
-                <div><span>Venue</span><b id="tk-venue"></b></div>
+                <div><span>Venue</span><b dir="auto" id="tk-venue"></b></div>
               </div>
               <div class="perf"></div>
               <div class="qr"><img id="tk-qr" alt="Your check-in QR code"><span class="code" id="tk-code"></span><small>Show this at the entrance. The code works if the QR will not scan.</small></div>

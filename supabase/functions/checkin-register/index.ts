@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_mode, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_mode, registration_language, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -214,6 +214,8 @@ Deno.serve(async (req) => {
       plus_ones: ent.registration_plus_ones ?? 0,
       // (116) 'invite': the form takes requests only with approval on.
       mode: ent.registration_mode ?? 'open',
+      // (122) 'auto' or a fixed language for CueDeck's own wording.
+      language: ent.registration_language ?? 'auto',
       event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
