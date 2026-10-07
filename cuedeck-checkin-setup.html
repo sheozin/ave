@@ -315,6 +315,7 @@
     <div class="toggle"><div><b>Invited guests only</b><p>The public link takes no registrations. You invite guests from your guest list (Guests tab) and each gets a personal link to say if they are coming. With approval on, the public link takes requests for an invitation instead.</p></div><label class="sw"><input type="checkbox" id="rg-invite"><span></span></label></div>
     <h3 class="sc-h">Waitlist and approval</h3>
     <div class="toggle"><div><b>Waitlist when full</b><p>When you reach capacity, guests can join a waitlist. Offer them places from the list below and their ticket is emailed.</p></div><label class="sw"><input type="checkbox" id="rg-waitlist"><span></span></label></div>
+    <div class="toggle" id="rg-wlauto-row"><div><b>Move people up automatically</b><p>When a place opens up (someone removed, a ticket refunded, capacity raised), the next people on the waitlist get it in order and their ticket is emailed. Checked every 5 minutes. A group moves up only when all of it fits, and nobody jumps the queue.</p></div><label class="sw"><input type="checkbox" id="rg-wlauto"><span></span></label></div>
     <div class="toggle"><div><b>Approve each registration</b><p>Registrations wait here for you. Guests get their ticket only once you approve them.</p></div><label class="sw"><input type="checkbox" id="rg-approval"><span></span></label></div>
     <div class="err" id="held-err"></div><div class="ok" id="held-ok"></div>
     <div id="held-box" hidden>
@@ -1090,6 +1091,7 @@ async function loadHeld() {
 const sinceText = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
 function renderHeld() {
   $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
+  $('rg-wlauto').checked = !!ENT.waitlist_auto; $('rg-wlauto-row').hidden = !ENT.registration_waitlist;
   $('rg-plus').value = String(ENT.registration_plus_ones || 0);
   $('rg-invite').checked = ENT.registration_mode === 'invite';
   $('rg-lang').value = ENT.registration_language || 'auto';
@@ -1135,6 +1137,7 @@ async function saveFlow() {
   const { data, error } = await sb.rpc('checkin_set_registration_flow', { p_event_id: EVENT_ID, p_waitlist: $('rg-waitlist').checked, p_approval: $('rg-approval').checked });
   if (error) { $('held-err').textContent = error.message; renderHeld(); return; }
   ENT.registration_waitlist = data.waitlist; ENT.registration_approval = data.approval;
+  $('rg-wlauto-row').hidden = !data.waitlist;
   $('held-ok').textContent = 'Saved.';
 }
 $('rg-embed-copy').onclick = async () => {
@@ -1143,6 +1146,13 @@ $('rg-embed-copy').onclick = async () => {
   setTimeout(() => { $('rg-embed-copy').textContent = 'Copy code'; }, 1800);
 };
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-wlauto').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_waitlist_auto', { p_event_id: EVENT_ID, p_on: $('rg-wlauto').checked });
+  if (error) { $('held-err').textContent = error.message; $('rg-wlauto').checked = !$('rg-wlauto').checked; return; }
+  ENT.waitlist_auto = data;
+  $('held-ok').textContent = data ? 'Saved. The waitlist moves up by itself when places open.' : 'Saved. Use "Offer free places to the waitlist" to move people up.';
+};
 $('rg-lang').onchange = async () => {
   $('held-err').textContent = ''; $('held-ok').textContent = '';
   const { data, error } = await sb.rpc('checkin_set_registration_language', { p_event_id: EVENT_ID, p_language: $('rg-lang').value });
