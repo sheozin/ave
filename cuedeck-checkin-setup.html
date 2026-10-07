@@ -271,6 +271,26 @@
       <div class="err" id="ot-err"></div>
     </div>
     <div class="ok" id="ot-ok"></div>
+    <div id="wh-box">
+      <h3 class="sc-h">Integrations</h3>
+      <p class="sc-p">Send guests, check-ins and ticket sales to your own tools as they happen: Zapier, Make, your CRM or your own server. CueDeck calls your address (a webhook) for the events you choose. Only live events send.</p>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Address</th><th>Sends</th><th>Last delivery</th><th></th></tr></thead><tbody id="wh-body"></tbody></table></div>
+      <div style="border:1px solid var(--bd);border-radius:14px;padding:14px;margin-top:12px;display:grid;gap:10px">
+        <div class="field"><label for="wh-url">Webhook address</label><input id="wh-url" placeholder="https://hooks.zapier.com/..." maxlength="500" autocomplete="off"></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:14px">
+          <label><input type="checkbox" value="guest.created" class="wh-t" checked> New guest</label>
+          <label><input type="checkbox" value="guest.checked_in" class="wh-t" checked> Check-in</label>
+          <label><input type="checkbox" value="order.paid" class="wh-t"> Ticket paid</label>
+          <label><input type="checkbox" value="invitation.answered" class="wh-t"> Invitation answered</label>
+        </div>
+        <p style="margin:0"><button class="btn btn-p" id="wh-add" type="button">Add webhook</button></p>
+        <div id="wh-secret" hidden style="background:var(--amsf);border-radius:10px;padding:10px 12px;font-size:13px"></div>
+      </div>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:14px;font-weight:600">Checking that a call came from CueDeck</summary>
+        <p class="small" style="margin:8px 0">Each call carries <code>X-CueDeck-Signature: t=&lt;time&gt;,v1=&lt;signature&gt;</code>. The signature is HMAC-SHA256 of <code>&lt;time&gt;.&lt;body&gt;</code> with your signing secret, in hex. Compare it, and refuse calls older than five minutes. Calls that fail are retried after 1, 5, 30, 120 and 360 minutes.</p>
+      </details>
+      <div class="ok" id="wh-ok"></div><div class="err" id="wh-err"></div>
+    </div>
   </section>
 
   <section class="panel" id="p-attendees" hidden>
@@ -796,7 +816,49 @@ for (const id of ['rg-host', 'rg-color', 'rg-color-pick']) $(id).addEventListene
 $('banner-go').onclick = () => go('golive');
 
 // ── 1. details ───────────────────────────────────────────
+// ── webhooks (migration 126) ──
+const WH_NAMES = { 'guest.created': 'New guest', 'guest.checked_in': 'Check-in', 'order.paid': 'Ticket paid', 'invitation.answered': 'Invitation answered' };
+async function renderWebhooks() {
+  const { data, error } = await sb.rpc('checkin_webhooks_list', { p_event_id: EVENT_ID });
+  if (error) { $('wh-err').textContent = error.message; return; }
+  $('wh-body').replaceChildren(...(data.length ? data.map(w => {
+    const tr = el('tr');
+    const a = el('td'); a.append(el('div', 'nm', w.url.replace(/^https:\/\//, '')));
+    const last = el('td'); last.append(el('span', 'tag ' + (!w.last_status ? 't-wait' : w.last_status === 'ok' ? 't-in' : 't-test'), !w.last_status ? 'None yet' : w.last_status === 'ok' ? 'Delivered' : 'Failing'));
+    if (w.last_status && w.last_status !== 'ok') last.append(el('div', 'em', w.last_status));
+    if (w.failed) last.append(el('div', 'em', w.failed + ' gave up after retries'));
+    const acts = el('td'); acts.style.whiteSpace = 'nowrap';
+    const test = el('button', 'btn btn-s', 'Send test'); test.type = 'button';
+    test.onclick = async () => {
+      const { error: e } = await sb.rpc('checkin_webhook_test', { p_event_id: EVENT_ID, p_id: w.id });
+      if (e) { $('wh-err').textContent = e.message; return; }
+      $('wh-ok').textContent = 'Test queued. It arrives within a minute.';
+    };
+    const del = el('button', 'link', 'Remove'); del.type = 'button'; del.style.marginLeft = '10px';
+    del.onclick = async () => {
+      if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = 'Click again'; setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Remove'; }, 3500); return; }
+      const { error: e } = await sb.rpc('checkin_webhook_delete', { p_event_id: EVENT_ID, p_id: w.id });
+      if (e) { $('wh-err').textContent = e.message; return; }
+      renderWebhooks();
+    };
+    acts.append(test, del);
+    tr.append(a, el('td', null, w.topics.map(t => WH_NAMES[t] || t).join(', ')), last, acts);
+    return tr;
+  }) : [(() => { const tr = el('tr'); const td = el('td', 'em', 'No webhooks yet.'); td.colSpan = 4; tr.append(td); return tr; })()]));
+}
+$('wh-add').onclick = async () => {
+  $('wh-ok').textContent = ''; $('wh-err').textContent = ''; $('wh-secret').hidden = true;
+  const topics = [...document.querySelectorAll('.wh-t:checked')].map(x => x.value);
+  const { data, error } = await sb.rpc('checkin_webhook_add', { p_event_id: EVENT_ID, p_url: $('wh-url').value.trim(), p_topics: topics });
+  if (error) { $('wh-err').textContent = error.message; return; }
+  $('wh-url').value = '';
+  // The secret is shown once, here, and never again.
+  $('wh-secret').replaceChildren(el('b', null, 'Signing secret (shown once, copy it now): '), el('code', null, data.secret));
+  $('wh-secret').hidden = false;
+  renderWebhooks();
+};
 function renderDetails() {
+  renderWebhooks();
   $('d-name').value = EV.name; $('d-date').value = EV.date; $('d-venue').value = EV.venue || '';
   $('d-start').value = (EV.event_start || '09:00').slice(0, 5); $('d-end').value = (EV.event_end || '18:00').slice(0, 5);
   const sel = $('d-tz'); sel.replaceChildren();

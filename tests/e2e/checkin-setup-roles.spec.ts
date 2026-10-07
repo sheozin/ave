@@ -677,3 +677,24 @@ test('reports tab: registration analytics show visitors, conversion, sources and
   await expect(page.locator('#an-chart rect')).toHaveCount(4);
   await page.locator('#an-box').screenshot({ path: '/private/tmp/claude-501/-Users-sheriff/c9550fac-82d8-442e-9240-0a373142a028/scratchpad/tix/analytics.png' });
 });
+
+test('settings tab: a webhook is added, its secret shown once, and tested', async ({ page }) => {
+  const added: Record<string, unknown>[] = [];
+  let hooks: Record<string, unknown>[] = [];
+  let tested = 0;
+  await open(page, { role: 'organizer' }, 'details', STAFF, async () => {
+    await rpc(page, 'checkin_webhooks_list', () => hooks);
+    await rpc(page, 'checkin_webhook_add', (a) => { added.push(a); hooks = [{ id: 'w1', url: a.p_url, topics: a.p_topics, active: true, last_status: null, failed: 0 }]; return { id: 'w1', secret: 'whsec_' + 'a'.repeat(48) }; });
+    await rpc(page, 'checkin_webhook_test', () => { tested++; return true; });
+  });
+  await expect(page.locator('#wh-body')).toContainText('No webhooks yet.');
+  await page.fill('#wh-url', 'https://hooks.zapier.com/hooks/catch/1/abc');
+  await page.locator('.wh-t[value="order.paid"]').check();
+  await page.click('#wh-add');
+  await expect(page.locator('#wh-secret')).toContainText('whsec_' + 'a'.repeat(48));
+  expect(added[0]).toMatchObject({ p_event_id: EVENT_ID, p_url: 'https://hooks.zapier.com/hooks/catch/1/abc', p_topics: ['guest.created', 'guest.checked_in', 'order.paid'] });
+  await expect(page.locator('#wh-body tr').first()).toContainText('New guest, Check-in, Ticket paid');
+  await page.locator('#wh-body').getByRole('button', { name: 'Send test' }).click();
+  await expect(page.locator('#wh-ok')).toContainText('Test queued');
+  expect(tested).toBe(1);
+});
