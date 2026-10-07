@@ -61,10 +61,10 @@ async function setup(page: Page, role = 'director') {
   return calls;
 }
 
-// Restart sits in the inspector's More menu for the selected session (stage 4).
+// Restart sits in the inspector's Session section for the selected session (5.2b).
 const restartBtn = (page: Page, _id: string) => page.locator('#ctx-wrap [data-restart]');
 async function openControls(page: Page, id: string) {
-  await page.evaluate((sid) => (0, eval)(`S.inspMoreOpen = true; S.selectedId = '${sid}'; renderSessions();`), id);
+  await page.evaluate((sid) => (0, eval)(`S.selectedId = '${sid}'; renderSessions();`), id);
 }
 
 test('the Restart button shows on started sessions and not on a planned one', async ({ page }) => {

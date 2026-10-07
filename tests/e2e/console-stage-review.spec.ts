@@ -27,8 +27,8 @@ test('review: Escape closes an open popover and keeps the filters; a second Esca
 test('review: backward moves are never green in the inspector', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   // CALLING #4: "Back to ready" (CALLING to READY) is secondary; "On stage" stays green.
-  // Stage 4: every control of the selected session sits in the inspector (More open).
-  await evalPage(page, `S.selectedId = '${ID(4)}'; S.inspMoreOpen = true; renderSessions();`);
+  // Stage 4: every control of the selected session sits in the inspector (5.2b: all sections shown).
+  await evalPage(page, `S.selectedId = '${ID(4)}'; renderSessions();`);
   const drawer = '#ctx-wrap #ctx-actions';
   expect(await bg(page, `${drawer} button[onclick*="'READY'"]`)).not.toBe(GREEN);
   expect(await bg(page, `${drawer} button[onclick*="'LIVE'"]`)).toBe(GREEN);
@@ -36,7 +36,7 @@ test('review: backward moves are never green in the inspector', async ({ browser
 
   // HOLD #2: "Back to ready" (HOLD to READY) is secondary; "Resume" stays green.
   const b = await openConsole(browser);
-  await evalPage(b.page, `S.selectedId = '${ID(2)}'; S.inspMoreOpen = true; renderSessions();`);
+  await evalPage(b.page, `S.selectedId = '${ID(2)}'; renderSessions();`);
   const d2 = '#ctx-wrap #ctx-actions';
   expect(await bg(b.page, `${d2} button[onclick*="'READY'"]`)).not.toBe(GREEN);
   expect(await bg(b.page, `${d2} button[onclick*="'LIVE'"]`)).toBe(GREEN);

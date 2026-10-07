@@ -2,8 +2,7 @@
 // Supabase Realtime never applies a filter to DELETE ("Delete events are not
 // filterable"), and with replica identity default old = { id } only. A session
 // deleted on one console must still leave every other console; a DELETE for a
-// row of another event (unknown id) must change nothing. Plus the More menu
-// closes whenever the inspector picks a session by itself.
+// row of another event (unknown id) must change nothing.
 import { test, expect } from '@playwright/test';
 import { openConsole, evalPage, rtPush, afterBootReread, ID, PANEL_ID, demoSessions } from './console-boot-mock';
 // Each push waits for the boot re-read first (see afterBootReread), or the re-read could restore what the push removed.
@@ -15,8 +14,6 @@ test('realtime: an unfiltered DELETE with old = { id } removes the selected sess
   const { ctx, page } = await openConsole(browser);
   await evalPage(page, `selectSession('${ID(5)}')`);
   await expect(page.locator('#ctx-wrap .insp-title')).toHaveText(TITLE5);
-  await page.locator('#insp-more > summary').click();
-  await expect.poll(() => evalPage(page, 'S.inspMoreOpen')).toBe(true);
   await expect(page.locator('#band')).toContainText(TITLE5);
 
   await afterBootReread(page);
@@ -27,7 +24,6 @@ test('realtime: an unfiltered DELETE with old = { id } removes the selected sess
   await expect(page.locator('#band')).not.toContainText(TITLE5);
   await expect(page.locator('#ctx-wrap .insp-title')).toHaveText(PANEL);   // nothing selected any more: most urgent
   expect(await evalPage(page, 'S.selectedId')).toBeNull();
-  expect(await evalPage(page, 'S.inspMoreOpen')).toBe(false);
   expect(await evalPage(page, 'S.sessions.length')).toBe(demoSessions().length - 1);
   await ctx.close();
 });
@@ -58,23 +54,6 @@ test('realtime: a DELETE delivered twice (unfiltered and filtered) is processed 
   expect(await evalPage(page, 'S.sessions.length')).toBe(demoSessions().length - 1);
   await expect(page.locator(`#card-${ID(7)}`)).toHaveCount(0);
   expect(errors).toEqual([]);
-  await ctx.close();
-});
-
-test('inspector: More closes when the inspector auto-picks a different session, and stays open while it does not', async ({ browser }) => {
-  const { ctx, page } = await openConsole(browser);
-  await expect(page.locator('#ctx-wrap .insp-title')).toHaveText(PANEL);   // nothing selected: auto-picked
-  await page.locator('#insp-more > summary').click();
-  await expect.poll(() => evalPage(page, 'S.inspMoreOpen')).toBe(true);
-  await page.clock.runFor(2500);                                            // two ticks, same auto-pick
-  expect(await evalPage(page, 'S.inspMoreOpen')).toBe(true);
-  // The panel ends on another console; the inspector auto-picks the next most urgent session.
-  const panel = demoSessions().find(s => s.id === PANEL_ID)!;
-  await afterBootReread(page);
-  await rtPush(page, 'leod_sessions', 'UPDATE', { ...panel, status: 'ENDED', version: 10, actual_end: new Date().toISOString() }, { id: PANEL_ID });
-  await page.clock.runFor(300);
-  await expect(page.locator('#ctx-wrap .insp-title')).not.toHaveText(PANEL);
-  expect(await evalPage(page, 'S.inspMoreOpen')).toBe(false);
   await ctx.close();
 });
 

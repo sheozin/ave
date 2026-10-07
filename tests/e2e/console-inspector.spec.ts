@@ -1,7 +1,7 @@
 // tests/e2e/console-inspector.spec.ts
 // Spec 2.3: inspector defaults to the most urgent session and follows the
 // selection; fixed control slots; two-press End that survives re-renders and
-// is announced; time row; More menu; log with filters always visible.
+// is announced; time row; organised sections (5.2b); log with filters always visible.
 import { test, expect } from '@playwright/test';
 import { openConsole, evalPage, ID, PANEL_ID } from './console-boot-mock';
 
@@ -57,15 +57,6 @@ test('inspector: with nothing selected it follows the most urgent session', asyn
   await ctx.close();
 });
 
-test('inspector: More closes when the operator selects another session', async ({ browser }) => {
-  const { ctx, page } = await openConsole(browser);
-  await insp(page).locator('#insp-more summary').click();
-  await expect(insp(page).locator('#insp-more')).toHaveAttribute('open', '');
-  await page.locator(`#card-${ID(6)} .sc-title`).click();
-  await expect(insp(page).locator('#insp-more')).not.toHaveAttribute('open', '');
-  await ctx.close();
-});
-
 test('log: kinds match whole action names, not fragments of other words', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   expect(await evalPage(page, `[logKind('DEFAULT'), logKind('FEEDBACK'), logKind('EF'), logKind('DB'), logKind('SESSION_STATUS_CHANGE'), logKind('BOOT')]`))
@@ -115,17 +106,124 @@ test('inspector: the time row separates this session from every later session', 
   await ctx.close();
 });
 
-test('inspector: More holds restart, arrival, edit, move and a two-press cancel', async ({ browser }) => {
+// 5.2b (2), owner-approved mock 7 Oct: the organised inspector replaces the More disclosure.
+// Sections in a fixed order, each with a .lbl, only the actions the status allows.
+const secLabels = (page: import('@playwright/test').Page) =>
+  page.locator('#ctx-wrap .insp-sec > .lbl').allTextContents();
+
+test('inspector: READY shows Next step with Call speaker and Go live now, one Mark arrived, no More', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  await insp(page).locator('#insp-more summary').click();
-  for (const sel of ['[data-restart]', '[data-fk="more-arrive"]', '[data-fk="more-edit"]', '[data-fk="more-up"]', '[data-fk="more-down"]']) {
-    await expect(insp(page).locator(sel)).toBeVisible();
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  await expect(insp(page).locator('.insp-title')).toHaveText('Duty Free Pricing After the Currency Float');
+  expect(await secLabels(page)).toEqual(['Next step', 'Timing', 'Screens', 'Session']);
+  await expect(insp(page).locator('.insp-next > .btn')).toHaveText(['Call speaker', 'Go live now']);
+  await expect(insp(page).locator('.insp-next .end-slot, .insp-next .act-gap')).toHaveCount(0);   // no empty End slot or divider
+  await expect(insp(page).locator('.who-state')).toHaveText('Not arrived');
+  await expect(insp(page).locator('button', { hasText: /Mark arrived|Mark not arrived/ })).toHaveCount(1);
+  await expect(insp(page).locator('[data-fk="insp-arrive"]')).toHaveText('Mark arrived');
+  await expect(insp(page).locator('#insp-more, details, summary')).toHaveCount(0);
+  await expect(insp(page).getByText('More', { exact: true })).toHaveCount(0);
+  expect(await evalPage(page, `'inspMoreOpen' in S`)).toBe(false);
+  // Session: edit, move and back to planned; Cancel on its own line at the end edge
+  for (const label of ['Edit', 'Move up', 'Move down', 'Back to planned']) {
+    await expect(insp(page).locator('.insp-session .btn', { hasText: label })).toHaveCount(1);
   }
-  await page.locator(`#card-${ID(6)} .sc-title`).click();
-  await insp(page).locator('#insp-more summary').click();   // More closes on a new selection (fix round 1)
-  const cancel = insp(page).locator('#insp-more .btn.danger');
+  await ctx.close();
+});
+
+test('inspector: LIVE shows Control with Hold and End, Timing with -1/+1 and Push following', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  expect(await secLabels(page)).toEqual(['Control', 'Timing', 'Screens', 'Session']);
+  const control = insp(page).locator('.insp-sec', { has: page.locator('.insp-primary') });
+  await expect(control.locator('.lbl')).toHaveText('Control');
+  await expect(control.locator('.insp-primary .hold')).toHaveText('Hold');
+  await expect(control.locator('.insp-primary .btn.danger')).toHaveText('End…');
+  const timing = insp(page).locator('.insp-time');
+  await expect(timing).toContainText('This session');
+  await expect(timing.locator('button')).toHaveText(['−1 min', '+1 min', '+5', '+10', '+15']);
+  await expect(timing).toContainText('Push following');
+  await expect(insp(page).locator('.insp-monitor .btn')).toHaveText(['Stage monitor', 'Stage timer']);
+  await expect(insp(page).locator('.insp-session .btn', { hasText: 'Restart' })).toHaveCount(1);
+  await expect(insp(page).locator('.who-state')).toHaveText('Arrived');
+  await ctx.close();
+});
+
+test('inspector: Cancel session sits alone at the end edge and needs two presses', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const calls: string[] = [];
+  page.on('request', r => { if (r.url().includes('/functions/v1/')) calls.push(new URL(r.url()).pathname.split('/').pop()!); });
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  const cancel = insp(page).locator('.insp-cancel .btn.danger');
+  await expect(cancel).toHaveText('Cancel session');
+  const geo = await insp(page).locator('.insp-session').evaluate(el => {
+    const c = el.querySelector('.insp-cancel .btn')!.getBoundingClientRect();
+    const others = [...el.querySelectorAll('.btn')].filter(b => !b.closest('.insp-cancel')).map(b => b.getBoundingClientRect());
+    return { right: c.right, top: c.top, rowRight: el.getBoundingClientRect().right, othersBottom: Math.max(...others.map(r => r.bottom)) };
+  });
+  expect(Math.abs(geo.right - geo.rowRight)).toBeLessThanOrEqual(1);
+  expect(geo.top).toBeGreaterThan(geo.othersBottom + 4);              // its own line, with space above
   await cancel.click();
-  await expect(insp(page).locator('#insp-more .btn.danger')).toHaveClass(/confirm-pending/);
+  await expect(insp(page).locator('.insp-cancel .btn.danger')).toHaveClass(/confirm-pending/);
+  await expect(insp(page).locator('.insp-cancel .btn.danger')).toHaveText('Press again to cancel');
+  await page.clock.runFor(1100);
+  expect(calls.filter(c => c === 'cancel-session')).toEqual([]);
+  await expect(insp(page).locator('.insp-cancel .btn.danger')).toHaveClass(/confirm-pending/);
+  const sent = page.waitForRequest(r => r.url().includes('/functions/v1/cancel-session'));
+  await insp(page).locator('.insp-cancel .btn.danger').click();
+  await sent;
+  await ctx.close();
+});
+
+for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
+  test(`inspector: ${locale}: every section label is translated`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { locale });
+    const keys = ['control', 'next', 'timing', 'screens', 'session'];
+    const vals = await evalPage(page, `${JSON.stringify(keys)}.map(k => t('cc.insp.sec.' + k))`) as string[];
+    vals.forEach((v, i) => expect(v, keys[i]).not.toBe('cc.insp.sec.' + keys[i]));
+    expect(await secLabels(page)).toEqual([vals[0], vals[2], vals[3], vals[4]]);
+    await page.locator(`#card-${ID(5)} .sc-title`).click();
+    expect(await secLabels(page)).toEqual([vals[1], vals[2], vals[3], vals[4]]);
+    const goNow = await evalPage(page, `t('cc.insp.goLiveNow')`) as string;
+    expect(goNow).not.toBe('cc.insp.goLiveNow');
+    await expect(insp(page).locator('.insp-next > .btn').nth(1)).toHaveText(goNow);
+    await ctx.close();
+  });
+}
+
+test('inspector: within LIVE, Hold and End never move when arrival toggles', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const pos = async () => {
+    const out: number[] = [];
+    for (const sel of ['.insp-primary .hold', '.insp-primary .btn.danger']) {
+      const b = (await insp(page).locator(sel).boundingBox())!;
+      out.push(Math.round(b.x * 10) / 10, Math.round(b.y * 10) / 10);
+    }
+    return out;
+  };
+  const before = await pos();
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').speaker_arrived = false; renderSessions();`);
+  await expect(insp(page).locator('.who-state')).toHaveText('Not arrived');
+  expect(await pos()).toEqual(before);
+  await evalPage(page, `S.sessions.find(x => x.id === '${PANEL_ID}').speaker_arrived = true; renderSessions();`);
+  expect(await pos()).toEqual(before);
+  await ctx.close();
+});
+
+test('inspector: at 1280x720 Control and Next step are visible without scrolling, and a re-render keeps the scroll', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 1280, height: 720 } });
+  const visible = (sel: string) => page.evaluate(q => {
+    const w = document.getElementById('ctx-wrap')!; const r = w.getBoundingClientRect();
+    const b = w.querySelector(q)!.getBoundingClientRect();
+    return w.scrollTop === 0 && b.top >= r.top && b.bottom <= r.bottom;
+  }, sel);
+  expect(await visible('.insp-primary')).toBe(true);
+  expect((await page.locator('#log-panel').boundingBox())!.height).toBeGreaterThanOrEqual(200);
+  await page.locator(`#card-${ID(5)} .sc-title`).click();
+  expect(await visible('.insp-next')).toBe(true);
+  // The inspector never jumps: a scrolled inspector keeps its place through the 1 s re-render.
+  const top = await page.locator('#ctx-wrap').evaluate(el => { el.scrollTop = el.scrollHeight; return el.scrollTop; });
+  await page.clock.runFor(2100);
+  expect(await page.locator('#ctx-wrap').evaluate(el => el.scrollTop)).toBe(top);
   await ctx.close();
 });
 

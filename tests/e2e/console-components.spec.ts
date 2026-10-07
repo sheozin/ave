@@ -104,17 +104,17 @@ async function armedHoverCheck(page: Page, sel: string) {
 
 test('components: an armed END or CANCEL stays solid red under hover', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  // Stage 4: a session's full controls sit in the inspector (Cancel in its More menu).
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; renderSessions();`);
+  // Stage 4: a session's full controls sit in the inspector (5.2b: Cancel in its Session section).
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);
   await page.locator('#ctx-wrap .insp-primary button[onclick*="confirmEnd"]').click();
   const end = await armedHoverCheck(page, '#ctx-wrap .insp-primary button.confirm-pending');
   expect(end.bg).toBe('rgb(239, 68, 68)');
   expect(end.contrast).toBeGreaterThanOrEqual(4.5);
   await evalPage(page, `S.selectedId = '${ID(5)}'; renderSessions();`);
-  const cancelBtn = page.locator('#insp-more button[onclick*="confirmCancel"]');
+  const cancelBtn = page.locator('#ctx-wrap .insp-cancel button[onclick*="confirmCancel"]');
   await expect(cancelBtn).toHaveCount(1);
   await cancelBtn.click();
-  const cancel = await armedHoverCheck(page, '#insp-more button.confirm-pending[onclick*="confirmCancel"]');
+  const cancel = await armedHoverCheck(page, '#ctx-wrap .insp-cancel button.confirm-pending[onclick*="confirmCancel"]');
   expect(cancel.bg).toBe('rgb(239, 68, 68)');
   expect(cancel.contrast).toBeGreaterThanOrEqual(4.5);
   await ctx.close();
@@ -152,7 +152,7 @@ test('components: armed batch END and CANCEL stay solid red under hover; SET REA
 
 test('components: every visible button is at least 44 px on touch', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { touch: true, viewport: { width: 1280, height: 800 } });
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; renderSessions();`);   // the inspector holds the full controls
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; renderSessions();`);   // the inspector holds the full controls
   const small = await page.evaluate(() => [...document.querySelectorAll('.btn, .abtn')]
     .map(b => ({ b, r: b.getBoundingClientRect() }))
     .filter(({ r }) => r.width > 0 && r.height > 0)

@@ -1696,7 +1696,9 @@
     }
     /* ═══ Command center inspector and log (stage 4) ═══ */
     #sidebar { display: flex; flex-direction: column; overflow-y: auto; background: var(--panel); border-inline-start: 1px solid var(--border-section); }
-    .insp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; padding: 14px 16px; border-bottom: 1px solid var(--border-section); overflow-y: auto; max-height: calc(100% - 240px); flex: 0 1 auto; }
+    /* overflow-anchor: none: the 1 s re-render replaces every node, and scroll anchoring then
+       pulled a scrolled inspector up a little on each tick (5.2b, spec 10: it never jumps) */
+    .insp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-content: start; padding: 14px 16px; border-bottom: 1px solid var(--border-section); overflow-y: auto; max-height: calc(100% - 240px); flex: 0 1 auto; overflow-anchor: none; }
     .insp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .insp-head-l { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
     /* Text-sized so it never changes the header's height or anything below it */
@@ -1706,11 +1708,20 @@
     .insp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--text-secondary); }
     .insp-flags { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--text-secondary); }
     .insp-flags.is-prominent { color: var(--text-primary); font-size: var(--fs-13); font-weight: 600; }
-    /* Names run inline, so the arrival toggle sits at the end of the last line (demo: "… · arrived") */
-    .insp-speakers { font-size: var(--fs-12); line-height: 1.6; color: var(--text-secondary); }
-    .insp-speakers > .btn, .insp-speakers > .sc-flag { margin-inline-start: 8px; vertical-align: middle; }
-    .insp-arrived { color: var(--st-ready-fg); padding-inline: 6px; }
-    .insp-times { gap: 12px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+    /* Speaker box (5.2b mock): names and the arrival state on two fixed lines, one toggle at the end */
+    .who { display: flex; align-items: center; gap: 10px; min-height: 54px; padding: 8px 12px; border: 1px solid var(--border-divider); border-radius: var(--r-ctl); background: var(--bg); }
+    .who-txt { display: grid; gap: 2px; flex: 1 1 auto; min-width: 0; }
+    .insp-names { font-size: var(--fs-13); color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .who-state { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-12); font-weight: 600; }
+    .who-state .ico { width: 14px; height: 14px; }
+    .who-state.is-arrived { color: var(--st-ready-fg); }
+    .who-state.is-not { color: var(--danger-fg); }
+    .who > .btn { flex: none; }
+    .insp-arrived { color: var(--st-ready-fg); padding-inline: 6px; }   /* the phone's arrived toggle */
+    .insp-times { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+    /* Chips, times and each flag wrap one by one, so the line stays as short as the rail allows */
+    .insp-chips { column-gap: 8px; row-gap: 4px; }
+    .insp-chips .insp-flags { display: contents; }
     .insp-count { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .insp-big { font: 700 var(--fs-insp-countdown)/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: var(--ls-big); color: var(--text-primary); }
     .insp-count.is-over .insp-big { color: var(--st-overrun-fg); }
@@ -1721,8 +1732,15 @@
     .prog { height: 4px; border-radius: 2px; background: var(--raised); overflow: hidden; }
     .prog i { display: block; height: 100%; background: var(--st-live); }
     .prog.is-over i { background: var(--st-overrun); }
-    .insp-notes { display: flex; gap: 6px; align-items: flex-start; font-size: var(--fs-12); color: var(--text-secondary); white-space: pre-wrap; }
+    /* Note strip: yellow start edge, full text */
+    .insp-notes { padding: 8px 12px; border-inline-start: 3px solid var(--st-calling); border-radius: 4px; background: var(--st-calling-wash); font-size: var(--fs-13); color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
     .insp-controls { display: grid; gap: 10px; }
+    .insp-controls.insp-secs { gap: 0; }   /* sections carry their own spacing and divider */
+    /* Sections (5.2b): a label, then the rows; a divider line between sections */
+    .insp-sec { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border-divider); }
+    .insp-sec:last-child { padding-bottom: 0; }
+    .insp-next { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .insp-next > .btn { width: 100%; min-width: 0; }
     /* Primary row: [forward or Hold] | gap | [End], End at the end edge in a slot of fixed width
        (measureSlots), so arming it moves nothing. A row without End keeps an empty slot that may
        shrink, since nothing arms there. */
@@ -1735,13 +1753,14 @@
        and a pixel short of room it gives way rather than push the row past the rail */
     .insp-primary .btn.danger { margin-inline-start: auto; flex: 0 1 var(--insp-slot); min-width: 0; }
     .insp-primary .end-slot { margin-inline-start: auto; flex: 0 1 var(--insp-slot); min-width: 0; }
-    .insp-time { gap: 6px 12px; }
-    .insp-grp { display: inline-flex; align-items: center; gap: 6px; }
-    .insp-more { display: contents; }
-    .insp-more > summary { list-style: none; width: max-content; }
-    .insp-more > summary::-webkit-details-marker { display: none; }
-    .insp-more[open] > summary .ico { transform: rotate(180deg); }
-    .insp-more-list { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+    .insp-time { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 16px; }
+    .insp-tlbl { font-size: var(--fs-13); color: var(--text-secondary); }
+    .insp-grp { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .insp-monitor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .insp-monitor > .btn { width: 100%; min-width: 0; }
+    .insp-sbtns { gap: 6px; }
+    /* Cancel: alone at the end edge, apart from the others */
+    .insp-cancel { display: flex; justify-content: flex-end; padding-top: 6px; }
     .insp-empty { margin: 0; color: var(--text-tertiary); font-size: var(--fs-13); }
     .ctx-title { font-size: var(--fs-14); font-weight: 600; } .ctx-title.ctx-empty { color: var(--text-tertiary); font-weight: 400; }
     .ctx-sub { font-size: var(--fs-12); color: var(--text-tertiary); }
@@ -1764,14 +1783,15 @@
     @media (max-width: 1439px) {
       .insp { max-height: calc(100% - 200px); gap: 6px; padding: 12px; }
       .insp-controls { gap: 6px; }
-      .insp-monitor > button .ico { display: none; }   /* Stage monitor, Stage timer and More on one line in the 320 px rail */
+      .insp-controls.insp-secs { gap: 0; }
+      .insp-sec { gap: 6px; padding: 8px 0; }
       /* 720 px tall: title and speakers take one line each (full text in their tooltips), so every
          control row fits above the 200 px log without scrolling */
       .insp-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .insp-speakers { display: flex; align-items: center; min-width: 0; }
-      .insp-names { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .insp-speakers > .btn, .insp-speakers > .sc-flag { flex: none; }
-      .insp-notes span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+      .who { min-height: 48px; padding: 6px 10px; }
+      /* The text clamps, not the strip: an overflow-hidden grid item could be squashed to nothing */
+      .insp-notes { padding: 4px 10px; }
+      .insp-notes > span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
       #log-panel { flex-basis: 200px; min-height: 200px; }
       /* 320 px rail (295 px inside): the primary row drops to md, and End to the md slot the band uses */
       .insp-primary { --insp-slot: var(--end-armed-w); }
@@ -2848,7 +2868,6 @@ const S = {
   selectedId:      null,   // session the user selected; the inspector shows it (stage 4)
   inspectedId:     null,   // session the inspector shows this render (selection or most urgent)
   tlFit: false,
-  inspMoreOpen:    false,  // the inspector's More menu stays open across re-renders
   logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
   foldOpen:        { ENDED: false, CANCELLED: false },
   laneOpen:        {},
@@ -4029,11 +4048,11 @@ function pressOk(ev, el) {
   const r = _slots.get(el?.dataset?.slot);
   return !r || performance.now() - r.at >= SLOT_GUARD_MS;
 }
-function transitionButtonHTML(s, to, size, fk, slot) {
+function transitionButtonHTML(s, to, size, fk, slot, label) {
   if (to === 'ENDED') return endButtonHTML(s, size, fk, slot);
   if (to === 'CANCELLED') return cancelButtonHTML(s, size, fk, slot);
   const cls = to === 'HOLD' ? 'hold' : (FWD_CLASS[s.status + '>' + to] || '');
-  return `<button type="button" class="btn ${size} ${cls}" data-fk="${fk}-${to}-${s.id}"${slotAttr(slot || `${fk}-${to}-${s.id}`, s.id + '>' + to)} onclick="event.stopPropagation();if(pressOk(event,this))transition('${s.id}','${to}')">${to === 'HOLD' ? icon('pause') : ''}${esc(actionLabel(s.status, to))}</button>`;
+  return `<button type="button" class="btn ${size} ${cls}" data-fk="${fk}-${to}-${s.id}"${slotAttr(slot || `${fk}-${to}-${s.id}`, s.id + '>' + to)} onclick="event.stopPropagation();if(pressOk(event,this))transition('${s.id}','${to}')">${to === 'HOLD' ? icon('pause') : ''}${esc(label || actionLabel(s.status, to))}</button>`;
 }
 function primaryButtonHTML(s, size, fk, slot) {
   const to = primaryTransition(s);
@@ -4203,7 +4222,6 @@ function foldRowHTML(kind, list, open) {
 function toggleFold(kind) { S.foldOpen[kind] = !S.foldOpen[kind]; renderSessions(); }
 
 function selectSession(id) {
-  if (S.selectedId !== id) S.inspMoreOpen = false;   // More belongs to the session it was opened on
   S.selectedId = id;
   renderSessions();
 }
@@ -4560,10 +4578,7 @@ function mostUrgentSession() {
 function inspectorSession() {
   const sel = S.selectedId ? S.sessions.find(s => s.id === S.selectedId) : null;
   if (S.selectedId && !sel) S.selectedId = null;
-  const s = sel || mostUrgentSession();
-  // More belongs to the session it was opened on: an auto-pick of another session closes it.
-  if (!sel && s?.id !== S.inspectedId) S.inspMoreOpen = false;
-  return s;
+  return sel || mostUrgentSession();
 }
 // "Show #3 (overrun)": only while the operator holds a selection and a session ranks
 // above it. Text-sized, in the header row, so it never shifts or replaces a control.
@@ -4574,14 +4589,23 @@ function urgentLinkHTML(s) {
   return `<button type="button" class="insp-urgent" data-fk="insp-urgent" onclick="selectSession('${u.id}')">${esc(tf('cc.insp.showUrgent', { n: u.sort_order, status: t('status.' + u.status).toLocaleLowerCase(CueDeckI18n.getLocale()) }))}</button>`;
 }
 
-function monitorRowHTML(more = '') {
+function monitorRowHTML() {
   const timer = S.role !== 'av'
-    ? `<button type="button" class="btn sm" data-fk="insp-timer" onclick="openStageTimerDisplay()">${icon('timer')}${esc(t('cc.insp.stageTimer'))}</button>` : '';
-  return `<div class="insp-row insp-monitor"><button type="button" class="btn sm" data-fk="insp-monitor" onclick="openStageMonitor()">${icon('monitor')}${esc(t('cc.insp.stageMonitor'))}</button>${timer}${more}</div>`;
+    ? `<button type="button" class="btn sm" data-fk="insp-timer" onclick="openStageTimerDisplay()">${esc(t('cc.insp.stageTimer'))}</button>` : '';
+  return `<div class="insp-row insp-monitor"><button type="button" class="btn sm" data-fk="insp-monitor" onclick="openStageMonitor()">${esc(t('cc.insp.stageMonitor'))}</button>${timer}</div>`;
+}
+// One section of the organised inspector (5.2b, owner-approved mock 7 Oct): a .lbl and its rows.
+function inspSecHTML(key, cls, body) {
+  return body ? `<section class="insp-sec ${cls}"><div class="lbl">${esc(t('cc.insp.sec.' + key))}</div>${body}</section>` : '';
 }
 
+// The organised inspector (5.2b), always in this order and with only what the status allows:
+// head, title, chips and times; countdown (as in the approved mock, right under the title);
+// speaker box with its one arrival toggle; note; Control (LIVE, OVERRUN, HOLD) or Next step
+// (every other status); Timing; Screens; Session.
 function inspectorHTML(s, nowMs) {
   const live = s.status === 'LIVE' || s.status === 'OVERRUN';
+  const running = live || s.status === 'HOLD';
   const tm = live ? liveTiming(s, nowMs) : null;
   const over = s.status === 'OVERRUN' || !!(tm && tm.overrun);
   const cd = countdownLabel(s, nowMs);
@@ -4589,14 +4613,18 @@ function inspectorHTML(s, nowMs) {
   const speakers = ppl.length ? ppl : (s.speaker ? [{ name: s.speaker, role: '' }] : []);
   const canArrive = (S.role === 'director' || S.role === 'stage') && speakers.length > 0 && !FINISHED.includes(s.status);
   const names = speakers.map(p => p.name + (p.role === 'moderator' ? ` (${t('cc.list.moderator')})` : '')).join(', ');
-  const speakerRow = speakers.length ? `<div class="insp-speakers"><span class="insp-names" dir="auto" title="${esc(names)}">${esc(names)}</span>
-      ${canArrive
-        ? `<button type="button" class="btn sm${s.speaker_arrived ? ' ghost insp-arrived' : ' primary'}" data-fk="insp-arrive" aria-pressed="${!!s.speaker_arrived}" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${s.speaker_arrived ? icon('check') + esc(t('cc.list.arrived')) : esc(t('cc.insp.markArrived'))}</button>`
-        : (s.speaker_arrived ? `<span class="sc-flag sc-arrived">${icon('check')}${esc(t('cc.list.arrived'))}</span>` : '')}</div>` : '';
+  // Speaker box: names, the arrival state, and the one toggle. Always two text lines, so a
+  // toggle never changes its height and nothing below it moves.
+  const arrivedState = s.speaker_arrived
+    ? `<span class="who-state is-arrived">${icon('check')}${esc(t('cc.insp.arrived'))}</span>`
+    : `<span class="who-state is-not">${esc(t('cc.insp.notArrived'))}</span>`;
+  const who = speakers.length ? `<div class="who insp-who"><div class="who-txt"><span class="insp-names" dir="auto" title="${esc(names)}">${esc(names)}</span>${arrivedState}</div>`
+    + (canArrive ? `<button type="button" class="btn sm" data-fk="insp-arrive" aria-pressed="${!!s.speaker_arrived}" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${esc(s.speaker_arrived ? t('cc.insp.clearArrived') : t('cc.insp.markArrived'))}</button>` : '')
+    + `</div>` : '';
   const plannedDiffers = s.planned_start !== s.scheduled_start || s.planned_end !== s.scheduled_end;
-  const times = `<div class="insp-row insp-times"><span>${esc(t('cc.insp.scheduled'))} ${sessionSpan(s)}</span>`
-    + (plannedDiffers ? `<span>${esc(t('cc.insp.planned'))} ${hm(s.planned_start)}–${hm(s.planned_end)}</span>` : '')
-    + (s.actual_start ? `<span>${esc(t('cc.insp.started'))} ${tsHM(s.actual_start)}</span>` : '') + `</div>`;
+  const times = `<span class="insp-times">${[sessionSpan(s),
+    plannedDiffers ? `${t('cc.insp.planned')} ${hm(s.planned_start)}–${hm(s.planned_end)}` : '',
+    s.actual_start ? `${t('cc.insp.started')} ${tsHM(s.actual_start)}` : ''].filter(Boolean).map(esc).join(' · ')}</span>`;
   // "left · 10:03 elapsed" and "over · planned 11:30–12:00", as in the approved demo
   const unit = !cd ? '' : tm && !over ? `${cd.unit} · ${tf('cc.insp.elapsed', { time: fmtDur(tm.elapsed) })}`
     : over ? `${cd.unit} · ${tf('cc.insp.plannedSpan', { span: `${hm(s.planned_start)}–${hm(s.planned_end)}` })}` : cd.unit;
@@ -4604,50 +4632,57 @@ function inspectorHTML(s, nowMs) {
       <span class="insp-big"${live ? ` data-cd-sid="${s.id}" data-cd-fmt="big"` : ''}>${esc(cd.big)}</span>
       <span class="insp-unit">${esc(unit)}</span></div>
       ${tm ? `<div class="prog${over ? ' is-over' : ''}"><i style="width:${over ? 100 : tm.pct.toFixed(1)}%"></i></div>` : ''}` : '';
-  const notes = s.notes && s.notes.trim() ? `<div class="insp-notes">${icon('note')}<span>${esc(s.notes)}</span></div>` : '';
-  // Primary row with fixed slots: [forward] [Hold] | gap | [End or empty slot]
+  const notes = s.notes && s.notes.trim() ? `<div class="insp-notes" dir="auto"><span>${esc(s.notes)}</span></div>` : '';
   // Slots are positions: when Hold takes the place a forward action had, that slot changed.
   // An operator's own selection gets its own slots (choosing a session is not a change
   // under the pointer); the auto-picked inspector shares one set, so an auto-pick swap is.
   const ns = S.selectedId === s.id ? 'insp:' + s.id : 'insp:auto';
   const fwdTo = live ? null : primaryTransition(s);
-  const holdOk = s.status !== 'HOLD' && canDo(s, 'HOLD');
   const fwd = fwdTo ? transitionButtonHTML(s, fwdTo, 'lg', 'insp', ns + ':p1') : '';
-  const hold = holdOk ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp', ns + (fwdTo ? ':p2' : ':p1')) : '';
-  const end = endButtonHTML(s, 'lg', 'insp', ns + ':end') || '<span class="end-slot" aria-hidden="true"></span>';
-  const primaryRow = `<div class="insp-row insp-primary">${fwd}${hold}<span class="act-gap" aria-hidden="true"></span>${end}</div>`;
-  // Time row: this session only, visibly apart from pushing every later session
-  const canNudge = live && (S.role === 'director' || S.role === 'stage');
+  let primary = '';
+  if (running) {
+    // Control: [Hold or Resume] | gap | [End or an empty slot], End in its measured slot.
+    const hold = s.status !== 'HOLD' && canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp', ns + ':p1') : '';
+    const endBtn = endButtonHTML(s, 'lg', 'insp', ns + ':end');
+    const end = endBtn || '<span class="end-slot" aria-hidden="true"></span>';
+    if (fwd || hold || endBtn) primary = inspSecHTML('control', 'insp-control', `<div class="insp-row insp-primary">${fwd}${hold}<span class="act-gap" aria-hidden="true"></span>${end}</div>`);
+  } else {
+    // Next step: the forward action, and beside it "Go live now" (READY) or Hold (CALLING).
+    const second = s.status === 'READY' && fwdTo !== 'LIVE' && canDo(s, 'LIVE') ? transitionButtonHTML(s, 'LIVE', 'lg', 'insp', ns + ':p2', t('cc.insp.goLiveNow'))
+      : s.status === 'CALLING' && canDo(s, 'HOLD') ? transitionButtonHTML(s, 'HOLD', 'lg', 'insp', ns + ':p2') : '';
+    if (fwd || second) primary = inspSecHTML('next', 'insp-nextstep', `<div class="insp-row insp-primary insp-next">${fwd}${second}</div>`);
+  }
+  // Timing: this session only while it runs, visibly apart from pushing every later session
+  const canNudge = running && (S.role === 'director' || S.role === 'stage');
   const canPush = !!ROLE_DELAY[S.role] && ['LIVE', 'OVERRUN', 'HOLD', 'READY', 'CALLING'].includes(s.status);
-  const timeRow = (canNudge || canPush) ? `<div class="insp-row insp-time">`
-    + (canNudge ? `<span class="insp-grp"><span class="lbl">${esc(t('cc.insp.thisSession'))}</span>
+  const timing = inspSecHTML('timing', 'insp-timing', (canNudge || canPush) ? `<div class="insp-time">`
+    + (canNudge ? `<span class="insp-tlbl">${esc(t('cc.insp.thisSession'))}</span><span class="insp-grp">
         <button type="button" class="btn sm" data-fk="insp-nudge-m" onclick="nudgeSession('${s.id}',-1)">${esc(t('cc.insp.minus1'))}</button>
         <button type="button" class="btn sm" data-fk="insp-nudge-p" onclick="nudgeSession('${s.id}',1)">${esc(t('cc.insp.plus1'))}</button></span>` : '')
-    + (canPush ? `<span class="insp-grp"><span class="lbl">${esc(t('cc.insp.pushFollowing'))}</span>`
+    + (canPush ? `<span class="insp-tlbl">${esc(t('cc.insp.pushFollowing'))}</span><span class="insp-grp">`
         + [5, 10, 15].map(n => `<button type="button" class="btn sm" data-fk="insp-push-${n}" onclick="applyDelay('${s.id}',${n})">+${n}</button>`).join('') + `</span>` : '')
-    + `</div>` : '';
-  // More: every other legal action
+    + `</div>` : '');
+  // Session: edit, move, every other legal move (backward ones, Call speaker from HOLD), Restart;
+  // then Cancel alone at the end edge.
   const isDirector = S.role === 'director' || S.userRole === 'director';
-  const others = (ALLOWED[s.status] || []).filter(to => !['ENDED', 'CANCELLED', 'HOLD'].includes(to) && to !== primaryTransition(s) && canDo(s, to));
-  const moreItems = [
-    ...others.map(to => transitionButtonHTML(s, to, 'sm', 'more')),
-    canRestartSession(s) ? `<button type="button" class="btn sm" data-restart="${esc(s.id)}" data-fk="more-restart" onclick="openRestartModal('${esc(s.id)}')">${icon('refresh')}${esc(t('cc.insp.restart'))}</button>` : '',
-    canArrive ? `<button type="button" class="btn sm" data-fk="more-arrive" onclick="markArrived('${s.id}', ${!s.speaker_arrived})">${icon('check')}${esc(s.speaker_arrived ? t('cc.insp.clearArrived') : t('cc.insp.markArrived'))}</button>` : '',
-    isDirector ? `<button type="button" class="btn sm" data-fk="more-edit" onclick="openSessModal('edit','${s.id}')">${icon('edit')}${esc(t('cc.list.edit'))}</button>` : '',
-    isDirector ? `<button type="button" class="btn sm" data-fk="more-up" onclick="reorderSession('${s.id}','up')">${icon('arrow-up')}${esc(t('cc.list.moveUp'))}</button>` : '',
-    isDirector ? `<button type="button" class="btn sm" data-fk="more-down" onclick="reorderSession('${s.id}','down')">${icon('arrow-down')}${esc(t('cc.list.moveDown'))}</button>` : '',
-    cancelButtonHTML(s, 'sm', 'more'),
+  const shown = new Set([fwdTo, 'HOLD', 'ENDED', 'CANCELLED', s.status === 'READY' ? 'LIVE' : null]);
+  const others = (ALLOWED[s.status] || []).filter(to => !shown.has(to) && canDo(s, to));
+  const sessionBtns = [
+    isDirector ? `<button type="button" class="btn sm" data-fk="insp-edit" onclick="openSessModal('edit','${s.id}')">${esc(t('cc.insp.edit'))}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm" data-fk="insp-up" onclick="reorderSession('${s.id}','up')">${esc(t('cc.list.moveUp'))}</button>` : '',
+    isDirector ? `<button type="button" class="btn sm" data-fk="insp-down" onclick="reorderSession('${s.id}','down')">${esc(t('cc.list.moveDown'))}</button>` : '',
+    ...others.map(to => transitionButtonHTML(s, to, 'sm', 'insp-s')),
+    canRestartSession(s) ? `<button type="button" class="btn sm" data-restart="${esc(s.id)}" data-fk="insp-restart" onclick="openRestartModal('${esc(s.id)}')">${esc(t('cc.insp.restart'))}</button>` : '',
   ].filter(Boolean).join('');
-  // More sits in the monitor row, as in the approved demo; its list opens on the line below.
-  const more = moreItems ? `<details class="insp-more" id="insp-more"${S.inspMoreOpen ? ' open' : ''} ontoggle="S.inspMoreOpen = this.open">
-      <summary class="btn sm ghost" data-fk="insp-more">${esc(t('cc.insp.more'))}${icon('chev-down')}</summary>
-      <div class="insp-more-list">${moreItems}</div></details>` : '';
+  const cancel = cancelButtonHTML(s, 'sm', 'insp');
+  const session = inspSecHTML('session', 'insp-session', (sessionBtns ? `<div class="insp-row insp-sbtns">${sessionBtns}</div>` : '')
+    + (cancel ? `<div class="insp-cancel">${cancel}</div>` : ''));
   const typeLabel = s.type ? (t('type.' + s.type) !== 'type.' + s.type ? t('type.' + s.type) : s.type) : '';
   return `<div class="insp-head"><span class="insp-head-l"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))} · #${s.sort_order}</span>${urgentLinkHTML(s)}</span>${statusBadge(s.status)}</div>
     <div class="insp-title" dir="auto" title="${esc(s.title)}">${esc(s.title)}</div>
-    <div class="insp-row insp-chips">${s.room ? chipHTML('room', s.room) : ''}${typeLabel ? chipHTML('type', typeLabel) : ''}<span class="insp-flags${S.role === 'av' ? ' is-prominent' : ''}">${flagsHTML(s)}</span></div>
-    ${speakerRow}${times}${countdown}${notes}
-    <div id="ctx-actions" class="insp-controls">${primaryRow}${timeRow}${monitorRowHTML(more)}</div>`;
+    <div class="insp-row insp-chips">${typeLabel ? chipHTML('type', typeLabel) : ''}${s.room ? chipHTML('room', s.room) : ''}${times}<span class="insp-flags${S.role === 'av' ? ' is-prominent' : ''}">${flagsHTML(s)}</span></div>
+    ${countdown}${who}${notes}
+    <div id="ctx-actions" class="insp-controls insp-secs">${primary}${timing}${inspSecHTML('screens', 'insp-screens', monitorRowHTML())}${session}</div>`;
 }
 
 function renderInspector() {
@@ -5135,7 +5170,7 @@ async function batchTransition(toStatus) {
 // Rows: click, Enter or Space select; ArrowUp/ArrowDown move the selection (spec 2.2).
 function handleCardKey(event, sessionId) {
   if (event.target !== event.currentTarget) return;   // keys inside a row's buttons
-  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (S.selectedId !== sessionId) S.inspMoreOpen = false; S.selectedId = sessionId; renderSessions(); document.getElementById('card-' + sessionId)?.focus(); return; }
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); S.selectedId = sessionId; renderSessions(); document.getElementById('card-' + sessionId)?.focus(); return; }
   if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
   event.preventDefault();
   const rows = [...document.querySelectorAll('#sessions-list .sc[tabindex="0"]')];
@@ -5143,7 +5178,6 @@ function handleCardKey(event, sessionId) {
   const next = event.key === 'ArrowDown' ? rows[idx + 1] : rows[idx - 1];
   if (!next) return;
   S.selectedId = next.id.slice(5);
-  S.inspMoreOpen = false;
   renderSessions();
   document.getElementById(next.id)?.focus();
 }
@@ -6698,7 +6732,7 @@ async function switchEvent(eventId) {
   disarmAllBatch();
   F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch
   // The list of the new event opens at its first unfinished row, nothing selected or unfolded.
-  S.listOpened = false; S.selectedId = null; S.inspMoreOpen = false; S.foldOpen = { ENDED: false, CANCELLED: false };
+  S.listOpened = false; S.selectedId = null; S.foldOpen = { ENDED: false, CANCELLED: false };
   await loadSnapshot(eventId);
   await loadBroadcast(eventId).catch(() => {});
   await loadLog(eventId).catch(() => {});

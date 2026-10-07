@@ -202,7 +202,7 @@ test('list: keyboard focus stays on the inspector END through the 1 s re-render;
 
 test('list: every interactive element the list and the inspector re-render carries a stable focus key', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
-  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.inspMoreOpen = true; S.foldOpen = { ENDED: true, CANCELLED: true }; renderSessions();`);
+  await evalPage(page, `S.selectedId = '${PANEL_ID}'; S.foldOpen = { ENDED: true, CANCELLED: true }; renderSessions();`);
   const missing = await page.evaluate(() => [...document.querySelectorAll('#sessions-list button, #sessions-list input, #sessions-list [tabindex="0"], #ctx-wrap button, #ctx-wrap summary')]
     .filter(el => !el.hasAttribute('data-fk')).map(el => el.outerHTML.slice(0, 80)));
   expect(missing).toEqual([]);

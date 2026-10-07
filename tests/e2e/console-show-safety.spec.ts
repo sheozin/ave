@@ -44,9 +44,9 @@ async function setup(page: Page, sessions: Sess[], opts: { role?: string; event?
 const calls = (page: Page) => page.evaluate(() => (window as any).__calls);
 const live = (o: Sess = {}) => sess('live1', 1, { status: 'LIVE', actual_start: iso(-5), title: 'Opening', ...o });
 // Where a session's controls sit. Stage 4: the inspector shows the selected
-// session with every control (More menu open). The assertions do not change.
+// session with every control (5.2b: every section, no More menu). The assertions do not change.
 async function controls(page: Page, id: string) {
-  await page.evaluate((sid) => { const St = (0, eval)('S'); St.selectedId = sid; St.inspMoreOpen = true; (window as any).renderSessions(); }, id);
+  await page.evaluate((sid) => { const St = (0, eval)('S'); St.selectedId = sid; (window as any).renderSessions(); }, id);
   return page.locator('#ctx-wrap #ctx-actions');
 }
 // Labels as those controls render them (cc.act.* and the new confirm.* values).
