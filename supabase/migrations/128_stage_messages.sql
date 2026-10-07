@@ -10,7 +10,8 @@
 --   * keyed by session, one active message per session;
 --   * "until the session ends" is decided at read time: display_feed only
 --     returns uncleared messages whose session is LIVE, OVERRUN or HOLD.
---     No cron, so nothing can go dead;
+--     No cron, so nothing can go dead. A trigger also clears the message
+--     when the session stops running, so a restart cannot revive it;
 --   * clear = set cleared_at, never DELETE (realtime does not deliver
 --     DELETE to filtered listeners);
 --   * send/clear: cuedeck_event_role(event_id) IN ('director','stage');
@@ -148,6 +149,37 @@ $$;
 
 REVOKE ALL ON FUNCTION public.stage_message_clear(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.stage_message_clear(uuid, uuid) TO authenticated, service_role;
+
+-- ── A session that stops running clears its message ─────────
+-- Leaving LIVE/OVERRUN/HOLD for anything else (ENDED, CANCELLED, or a
+-- restart back to READY/PLANNED) clears the active message, so a restarted
+-- session never shows an old message again. cleared_by stays NULL: cleared
+-- by the system. Nothing is logged, so the event log is not spammed.
+-- A message queued while READY or CALLING is untouched: it shows once the
+-- session goes live (operators may queue "Please wrap up" ahead of time).
+-- UPDATE OF status only: the nightly cleanup's archive upsert (another
+-- table) and its DELETE of ENDED sessions do not fire it.
+CREATE OR REPLACE FUNCTION public.stage_messages_clear_on_session_stop()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE leod_stage_messages
+     SET cleared_at = now()
+   WHERE session_id = NEW.id AND cleared_at IS NULL;
+  RETURN NULL;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.stage_messages_clear_on_session_stop() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_stage_messages_clear_on_session_stop ON leod_sessions;
+CREATE TRIGGER trg_stage_messages_clear_on_session_stop
+  AFTER UPDATE OF status ON leod_sessions
+  FOR EACH ROW
+  WHEN (OLD.status IN ('LIVE', 'OVERRUN', 'HOLD') AND NEW.status NOT IN ('LIVE', 'OVERRUN', 'HOLD'))
+  EXECUTE FUNCTION public.stage_messages_clear_on_session_stop();
 
 -- ── display_feed: live body + 'stage_messages' ──────────────
 CREATE OR REPLACE FUNCTION public.display_feed(p_display_id uuid, p_secret text)

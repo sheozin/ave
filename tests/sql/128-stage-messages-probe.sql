@@ -234,8 +234,14 @@ BEGIN
       RAISE EXCEPTION 'PROBE FAIL 6: status % gave % messages, expected %: %', v_r.st, v_n, v_r.expect, v_feed->'stage_messages';
     END IF;
   END LOOP;
+  -- HOLD -> ENDED above cleared the message (the stop trigger); send it again
   -- v_sid2 (60 x) is PLANNED: not in the feed; keys are exactly as before plus stage_messages
   UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_stage, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  PERFORM stage_message_send(v_ev, v_sid, '5 minutes left');
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
   SET LOCAL ROLE anon;
   v_feed := display_feed(v_disp, v_secret);
   RESET ROLE;
@@ -317,12 +323,80 @@ BEGIN
   END IF;
   v_checks := v_checks + 1;
 
-  -- 9. guards
+  -- 9. a session leaving LIVE/OVERRUN/HOLD clears its message (by the system:
+  --    cleared_by NULL, nothing logged); HOLD keeps it; a queued message on a
+  --    READY session survives until it goes live; a restart does not bring an
+  --    old message back
+  SELECT count(*) INTO v_n FROM leod_event_log WHERE event_id = v_ev;
+  UPDATE leod_sessions SET status = 'HOLD' WHERE id = v_sid;
+  UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid;
+  IF NOT EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND cleared_at IS NULL AND text = 'Take questions now') THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: LIVE -> HOLD -> LIVE cleared the message';
+  END IF;
+  UPDATE leod_sessions SET status = 'ENDED' WHERE id = v_sid;
+  IF EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND cleared_at IS NULL)
+     OR NOT EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND text = 'Take questions now'
+                       AND cleared_at IS NOT NULL AND cleared_by IS NULL) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: LIVE -> ENDED did not clear the message as the system';
+  END IF;
+  -- restart: back to LIVE, a fresh message, then LIVE -> READY clears it
+  UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_stage, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  PERFORM stage_message_send(v_ev, v_sid, 'Stop now');
+  RESET ROLE;
+  UPDATE leod_sessions SET status = 'READY' WHERE id = v_sid;
+  IF EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND cleared_at IS NULL) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: LIVE -> READY (restart) did not clear the message';
+  END IF;
+  UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid;
+  SET LOCAL ROLE anon;
+  v_feed := display_feed(v_disp, v_secret);
+  RESET ROLE;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_feed->'stage_messages') m WHERE m->>'session_id' = v_sid::text) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: a restarted session shows an old message again';
+  END IF;
+  -- OVERRUN -> CANCELLED clears too
+  SET LOCAL ROLE authenticated;
+  PERFORM stage_message_send(v_ev, v_sid, 'Please wrap up');
+  RESET ROLE;
+  UPDATE leod_sessions SET status = 'OVERRUN' WHERE id = v_sid;
+  UPDATE leod_sessions SET status = 'CANCELLED' WHERE id = v_sid;
+  IF EXISTS (SELECT 1 FROM leod_stage_messages WHERE session_id = v_sid AND cleared_at IS NULL) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: OVERRUN -> CANCELLED did not clear the message';
+  END IF;
+  -- queued: v_sid2's 60-character message was sent while PLANNED (check 4)
+  UPDATE leod_sessions SET status = 'READY' WHERE id = v_sid2;
+  UPDATE leod_sessions SET status = 'CALLING' WHERE id = v_sid2;
+  UPDATE leod_sessions SET status = 'LIVE' WHERE id = v_sid2;
+  SET LOCAL ROLE anon;
+  v_feed := display_feed(v_disp, v_secret);
+  RESET ROLE;
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_feed->'stage_messages') m
+                  WHERE m->>'session_id' = v_sid2::text AND char_length(m->>'text') = 60) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: a message queued before LIVE did not show once LIVE';
+  END IF;
+  -- the system clears logged nothing (only the 2 sends above did)
+  IF (SELECT count(*) FROM leod_event_log WHERE event_id = v_ev) <> v_n + 2
+     OR EXISTS (SELECT 1 FROM leod_event_log WHERE event_id = v_ev AND action = 'STAGE_MESSAGE_CLEARED' AND operator_id IS NULL) THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: status-change clears wrote % log rows', (SELECT count(*) FROM leod_event_log WHERE event_id = v_ev) - v_n - 2;
+  END IF;
+  -- deleting a session (the nightly cleanup) still works with the trigger in place
+  DELETE FROM leod_sessions WHERE id = v_sid;
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'stage_messages_clear_on_session_stop' AND prosecdef
+                    AND 'search_path=public' = ANY (proconfig))
+     OR has_function_privilege('authenticated', 'public.stage_messages_clear_on_session_stop()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.stage_messages_clear_on_session_stop()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE FAIL 9: trigger function not SECURITY DEFINER with search_path, or callable by clients';
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 10. guards (security_definer_search_path also covers the trigger function)
   SELECT count(*) INTO v_n FROM checkin_guard_results()
    WHERE guard IN ('public_tables_rls_on', 'leod_writes_not_unconditional',
                    'security_definer_search_path', 'checkin_rpcs_refuse_strangers') AND ok;
   IF v_n <> 4 THEN
-    RAISE EXCEPTION 'PROBE FAIL 9: guards %', (SELECT string_agg(guard || '=' || ok || ' ' || detail, '; ')
+    RAISE EXCEPTION 'PROBE FAIL 10: guards %', (SELECT string_agg(guard || '=' || ok || ' ' || detail, '; ')
                                                  FROM checkin_guard_results()
                                                 WHERE guard IN ('public_tables_rls_on', 'leod_writes_not_unconditional',
                                                                 'security_definer_search_path', 'checkin_rpcs_refuse_strangers'));
