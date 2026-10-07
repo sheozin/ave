@@ -739,10 +739,13 @@ test.describe('Display: small landscape screen', () => {
   test('50b the same with wide fonts (Linux, Android TV) keeps NEXT SESSION on screen', async ({ page }) => {
     // CI Linux fonts run wider than the Mac ones and pushed .d-next-time to
     // 739.7 px. Verdana (macOS) and DejaVu Sans (Linux) reproduce that anywhere.
+    // The letter-spacing makes the title overflow even where neither font is
+    // installed, so this test cannot pass on fallback fonts without the fix.
     await page.addInitScript(() => {
       document.addEventListener('DOMContentLoaded', () => {
         const s = document.createElement('style');
-        s.textContent = "body{font-family:Verdana,'DejaVu Sans',sans-serif !important}";
+        s.textContent = "body{font-family:Verdana,'DejaVu Sans',sans-serif !important}"
+          + ".d-big-title{letter-spacing:.04em !important}";
         document.head.appendChild(s);
       });
     });
@@ -753,6 +756,18 @@ test.describe('Display: small landscape screen', () => {
     } });
     await page.goto(`${DISP_URL}${makeHash()}`);
     await expect(page.locator('.d-people-list')).toBeVisible();
+    // precondition: at its CSS size the title really wraps to 3+ lines here,
+    // which is what overflowed the unfixed layout
+    const naturalLines = await page.evaluate(() => {
+      const t = document.querySelector('.d-big-title') as HTMLElement;
+      const inline = t.style.fontSize;
+      t.style.fontSize = '';
+      const cs = getComputedStyle(t);
+      const lines = Math.round(t.getBoundingClientRect().height / parseFloat(cs.lineHeight));
+      t.style.fontSize = inline;
+      return lines;
+    });
+    expect(naturalLines).toBeGreaterThanOrEqual(3);
     for (const sel of ['.d-timer', '.d-next-lbl', '.d-next-title', '.d-next-time']) {
       const box = await page.locator(sel).boundingBox();
       expect(box, sel).not.toBeNull();
@@ -768,6 +783,39 @@ test.describe('Display: small landscape screen', () => {
     });
     expect(r.cut).toEqual([]);
     expect(r.shown + r.more).toBe(BIG_PANEL.length);
+  });
+
+  test('50c the fit is redone when the screen size changes', async ({ page }) => {
+    // a TV browser can go fullscreen or apply overscan after the first paint
+    // one frozen feed: polls then never re-render, so only the resize can re-fit
+    await page.setViewportSize({ width: 1280, height: 520 });
+    const f = feedWithPeople(BIG_PANEL);
+    (f.sessions[0] as Record<string, unknown>).title = 'Panel: the future of MICE and business events in North Africa';
+    await mockSupabase(page, { feed: () => f });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-people-list')).toBeAttached();
+    const state = () => page.evaluate(() => ({
+      title: getComputedStyle(document.querySelector('.d-big-title')!).fontSize,
+      shown: document.querySelectorAll('.d-people-person').length,
+      more: document.querySelector('.d-people-more')?.textContent || '',
+      nextBottom: document.querySelector('.d-next-time')!.getBoundingClientRect().bottom,
+    }));
+    const small = await state();
+    expect(small.title).not.toBe('80px');          // shrunk to fit 520 px
+    expect(small.shown).toBeLessThan(BIG_PANEL.length - 1);  // people folded
+    expect(small.nextBottom).toBeLessThanOrEqual(520);
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    // back to full size: 80px title, every person up to PEOPLE_CAP (6 + moderator)
+    await expect.poll(async () => (await state()).title).toBe('80px');
+    const big = await state();
+    expect(big.shown).toBe(7);
+    expect(big.more).toBe('+1 more');
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(async () => (await state()).nextBottom).toBeLessThanOrEqual(720);
+    await page.waitForTimeout(400);
+    expect((await state()).nextBottom).toBeLessThanOrEqual(720);
   });
 });
 

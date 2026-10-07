@@ -1019,6 +1019,17 @@ function renderSchedule() {
   </div>`;
 }
 
+// A TV browser can go fullscreen or apply overscan after the first paint,
+// and render() only runs on data changes: redo the schedule fit on resize.
+// Only the schedule screen is re-rendered; other modes keep their timers.
+let _fitResizeT = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_fitResizeT);
+  _fitResizeT = setTimeout(() => {
+    if (_booted && document.querySelector('#content-area .d-sched')) render();
+  }, 200);
+});
+
 // Measured, so it holds for any font: while the title and people overflow
 // their box, shrink the title (to 60%), then move people into "+N more".
 function fitSchedule(area) {
