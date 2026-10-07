@@ -1070,17 +1070,28 @@
 
     /* ── Operator presence indicator (PR-009) ──────────────────────────────── */
 
-    /* ── Timeline view (PR-020) ────────────────────────────────────────────── */
-    #timeline-wrap { padding: 12px 8px; overflow-x: auto; }
-    #timeline-wrap svg { display: block; }
-    .tl-room-label { font-size: var(--fs-11); fill: var(--dim); font-family: inherit; }
-    .tl-time-label { font-size: var(--fs-11); fill: var(--dim); font-family: 'SF Mono','Fira Code',monospace; }
-    .tl-now-line   { stroke: var(--amber); stroke-width: 1.5; stroke-dasharray: 4,3; }
-    .tl-bar        { rx: 4; cursor: pointer; opacity: .85; transition: opacity .15s; }
-    .tl-bar:hover  { opacity: 1; }
+    /* ── Timeline view (spec 2.5) ─────────────────────────────────────────── */
+    #timeline-wrap { padding: 8px 0; overflow-x: auto; }
+    .tl-bar-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; }
+    /* Time runs left to right in every language; the svg keeps LTR geometry under dir="rtl". */
+    .tl-svg { display: block; overflow: visible; direction: ltr; }
+    .tl-tick { stroke: var(--border-divider); stroke-width: 1; }
+    .tl-stripe { fill: var(--card); opacity: .5; }
+    .tl-room-label { font: 600 var(--fs-12) var(--font-sans); fill: var(--text-secondary); }
+    .tl-time-label { font: 500 var(--fs-11) var(--font-sans); fill: var(--text-tertiary); }
+    .tl-planned { fill: none; stroke: var(--border-control); stroke-width: 1; stroke-dasharray: 3 3; }
+    .tl-item { cursor: pointer; }
+    .tl-item:focus { outline: none; }
+    .tl-bar.is-selected, .tl-item:focus-visible .tl-bar { stroke: var(--focus); stroke-width: 2; }
     /* Labels sit on a solid status fill: dark text, except on the grey ENDED and CANCELLED bars */
-    .tl-bar-label  { font-size: var(--fs-11); fill: var(--on-solid); pointer-events: none; font-family: inherit; font-weight: 600; }
-    .tl-bar-label.on-grey { fill: var(--on-accent); }
+    .tl-bar-label { font: 600 var(--fs-11) var(--font-sans); fill: var(--on-solid); pointer-events: none; }
+    .tl-item[data-st="ENDED"] .tl-bar-label, .tl-item[data-st="CANCELLED"] .tl-bar-label { fill: var(--on-accent); }
+    .tl-hatch-bg { fill: var(--st-overrun); }
+    .tl-hatch-line { stroke: var(--on-solid); stroke-width: 2; opacity: .45; }
+    .tl-now-line { stroke: var(--focus); stroke-width: 2; }
+    .tl-now-label { font: 700 var(--fs-11) var(--font-sans); fill: var(--focus); }
+    .tl-empty { color: var(--text-tertiary); padding: 24px; text-align: center; }
+    #timeline-wrap .btn[aria-pressed="true"] { background: var(--raised); color: var(--text-primary); }
 
     /* ── Toast notification system ─────────────────────────────────────────── */
     #toast-container {
@@ -2745,6 +2756,7 @@ const S = {
   viewMode:        'list', // PR-020: 'list' | 'timeline'
   selectedId:      null,   // session the user selected; the inspector shows it (stage 4)
   inspectedId:     null,   // session the inspector shows this render (selection or most urgent)
+  tlFit: false,
   inspMoreOpen:    false,  // the inspector's More menu stays open across re-renders
   logFilter:       'all',  // event log filter chip: all | status | broadcast | errors
   foldOpen:        { ENDED: false, CANCELLED: false },
@@ -4528,137 +4540,97 @@ function statusColor(status) {
       || css.getPropertyValue('--st-planned').trim();
 }
 
-// PR-020: Render sessions as a horizontal SVG timeline
-// Rows = rooms (or single row if no rooms assigned).
-// X axis = time, marked every 30 minutes.
-// A vertical 'now' line shows the current corrected time.
+// Spec 2.5: rooms as 40 px lanes; NOW -1 h to +3 h (or the whole day with
+// Fit day); planned time as an outline, scheduled as the fill with dark text;
+// LIVE and OVERRUN grow to NOW with the overrun part hatched; NOW in event time.
 function renderTimeline() {
   const list = document.getElementById('sessions-list');
-
-  const visible = applyFilters();
+  const fk = focusKey();
+  const visible = applyFilters().filter(s => s.scheduled_start && s.scheduled_end);
+  const nowMin = eventNowMinutes();
+  const head = `<div class="tl-bar-head"><span class="lbl">${esc(t('filter.timeline'))}</span>
+    <button type="button" class="btn sm ghost" data-fk="tl-fit" aria-pressed="${!!S.tlFit}" onclick="toggleTlFit()">${esc(t('cc.tl.fitDay'))}</button></div>`;
   if (!visible.length) {
-    list.innerHTML = `<div id="timeline-wrap"><p style="color:var(--dim);padding:24px;text-align:center">No sessions to display in timeline.</p></div>`;
+    list.innerHTML = `<div id="timeline-wrap">${head}<p class="tl-empty">No sessions to display in timeline.</p></div>`;
+    restoreFocus(fk);
     buildCtxPanel();
     return;
   }
-
-  // ── Time bounds ──
-  function toMinsFromMidnight(timeStr) {
-    if (!timeStr) return null;
-    const [h, m] = timeStr.split(':').map(Number);
-    return h * 60 + m;
+  const starts = visible.map(s => toMins(s.scheduled_start));
+  const ends = visible.map(s => toMins(s.scheduled_end));
+  const minMins = S.tlFit ? Math.max(0, Math.min(...starts) - 15) : Math.max(0, Math.floor(nowMin) - 60);
+  const maxMins = S.tlFit ? Math.min(1440, Math.max(...ends) + 15) : Math.min(1440, Math.floor(nowMin) + 180);
+  const spanMins = Math.max(30, maxMins - minMins);
+  const ROW_H = 40, BAR_H = 28, LABEL_W = 110, PAD_TOP = 24;
+  const SVG_W = Math.max(600, (document.getElementById('sessions-col')?.clientWidth || 900) - 32);
+  const CHART_W = SVG_W - LABEL_W;
+  const x = m => LABEL_W + ((m - minMins) / spanMins) * CHART_W;
+  const rooms = roomsInOrder().filter(r => visible.some(s => roomOf(s) === r));
+  const SVG_H = PAD_TOP + rooms.length * ROW_H + 20;
+  const step = spanMins <= 120 ? 15 : spanMins <= 360 ? 30 : 60;
+  let ticks = '';
+  for (let m = Math.ceil(minMins / step) * step; m <= maxMins; m += step) {
+    ticks += `<line class="tl-tick" x1="${x(m)}" y1="${PAD_TOP - 4}" x2="${x(m)}" y2="${SVG_H - 10}"/>`
+           + `<text class="tl-time-label" x="${x(m)}" y="${PAD_TOP - 8}" text-anchor="middle">${addMinutes('00:00', m)}</text>`;
   }
-  const startTimes = visible.map(s => toMinsFromMidnight(s.scheduled_start)).filter(v => v != null);
-  const endTimes   = visible.map(s => toMinsFromMidnight(s.scheduled_end)).filter(v => v != null);
-  if (!startTimes.length) {
-    list.innerHTML = `<div id="timeline-wrap"><p style="color:var(--dim);padding:24px;text-align:center">Sessions have no time data.</p></div>`;
-    buildCtxPanel();
-    return;
-  }
-
-  const minMins  = Math.max(0, Math.min(...startTimes) - 15);
-  const maxMins  = Math.min(1440, Math.max(...endTimes) + 15);
-  const spanMins = maxMins - minMins;
-
-  // ── Layout constants ──
-  const ROW_H    = 44;
-  const LABEL_W  = 90;
-  const PAD_TOP  = 24; // space for time labels
-  const BAR_H    = 26;
-  const BAR_PAD  = (ROW_H - BAR_H) / 2;
-  const SVG_W    = Math.max(600, Math.min(1200, window.innerWidth - 60));
-  const CHART_W  = SVG_W - LABEL_W;
-
-  function xPos(mins) {
-    return LABEL_W + ((mins - minMins) / spanMins) * CHART_W;
-  }
-
-  // ── Group sessions by room ──
-  const roomSet  = new Set(visible.map(s => s.room || '').filter(Boolean));
-  const rooms    = roomSet.size ? [...roomSet].sort() : [''];
-  const SVG_H    = PAD_TOP + rooms.length * ROW_H + 20;
-
-  // ── Time tick marks ──
-  const tickStep = spanMins <= 120 ? 15 : spanMins <= 360 ? 30 : 60;
-  const firstTick = Math.ceil(minMins / tickStep) * tickStep;
-  let ticksSvg = '';
-  for (let t = firstTick; t <= maxMins; t += tickStep) {
-    const x = xPos(t);
-    const h = String(Math.floor(t / 60)).padStart(2, '0');
-    const m = String(t % 60).padStart(2, '0');
-    ticksSvg += `<line x1="${x}" y1="${PAD_TOP - 4}" x2="${x}" y2="${SVG_H - 10}" stroke="var(--border)" stroke-width="1"/>`;
-    ticksSvg += `<text class="tl-time-label" x="${x}" y="${PAD_TOP - 7}" text-anchor="middle">${h}:${m}</text>`;
-  }
-
-  // ── Row labels + session bars ──
-  let rowsSvg = '';
-  rooms.forEach((room, rowIdx) => {
-    const rowY = PAD_TOP + rowIdx * ROW_H;
-    // Row label
-    if (room) {
-      rowsSvg += `<text class="tl-room-label" x="${LABEL_W - 6}" y="${rowY + ROW_H/2 + 4}" text-anchor="end">${esc(room)}</text>`;
-    }
-    // Row background alternate
-    if (rowIdx % 2 === 0) {
-      rowsSvg += `<rect x="${LABEL_W}" y="${rowY}" width="${CHART_W}" height="${ROW_H}" fill="rgba(255,255,255,.015)"/>`;
-    }
-    // Sessions in this room
-    const roomSessions = visible.filter(s => (s.room || '') === room);
-    for (const sess of roomSessions) {
-      const sMin = toMinsFromMidnight(sess.scheduled_start);
-      const eMin = toMinsFromMidnight(sess.scheduled_end);
-      if (sMin == null || eMin == null) continue;
-      const bx  = xPos(sMin);
-      const bw  = Math.max(4, xPos(eMin) - bx);
-      const by  = rowY + BAR_PAD;
-      const col = statusColor(sess.status);
-      rowsSvg += `<rect class="tl-bar" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" fill="${col}" rx="4"
-        onclick="document.getElementById('card-${sess.id}')?.scrollIntoView({behavior:'smooth',block:'nearest'})" >
-        <title>${esc(sess.title)} · ${(sess.scheduled_start||'').substring(0,5)}–${(sess.scheduled_end||'').substring(0,5)} · ${sess.status}</title>
-      </rect>`;
-      if (bw > 28) {
-        rowsSvg += `<clipPath id="tlc-${sess.id}"><rect x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" rx="4"/></clipPath>
-          <text class="tl-bar-label${sess.status === 'ENDED' || sess.status === 'CANCELLED' ? ' on-grey' : ''}" x="${bx + 5}" y="${by + BAR_H/2 + 4}" data-room="${bw - 10}"
-          clip-path="url(#tlc-${sess.id})">${esc(sess.title)}</text>`;
+  let rows = '';
+  rooms.forEach((room, i) => {
+    const y = PAD_TOP + i * ROW_H;
+    const by = y + (ROW_H - BAR_H) / 2;
+    if (i % 2 === 0) rows += `<rect class="tl-stripe" x="${LABEL_W}" y="${y}" width="${CHART_W}" height="${ROW_H}"/>`;
+    rows += `<text class="tl-room-label" x="${LABEL_W - 8}" y="${y + ROW_H / 2 + 4}" text-anchor="end">${esc(room === ROOM_NONE ? t('cc.band.noRoom') : room)}</text>`;
+    for (const s of visible.filter(v => roomOf(v) === room)) {
+      const ss = toMins(s.scheduled_start), se = toMins(s.scheduled_end);
+      const ps = toMins(s.planned_start), pe = toMins(s.planned_end);
+      const running = (s.status === 'LIVE' || s.status === 'OVERRUN') && !!s.actual_start;
+      const endMin = running && nowMin > se ? nowMin : se;
+      if (endMin < minMins || ss > maxMins) continue;
+      const bx = x(Math.max(ss, minMins));
+      const bw = Math.max(4, x(Math.min(endMin, maxMins)) - bx);
+      const label = `${hm(s.scheduled_start)} ${s.title}`;
+      let g = `<g class="tl-item" data-sid="${s.id}" data-st="${s.status}" data-fk="tl-${s.id}" tabindex="0" role="button" aria-label="${esc(label)}"
+          onclick="selectSession('${s.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectSession('${s.id}')}">
+        <title>${esc(s.title)} · ${sessionSpan(s)} · ${esc(t('status.' + s.status))}</title>`;
+      if (s.planned_start && s.planned_end && (ps !== ss || pe !== se)) g += `<rect class="tl-planned" x="${x(ps)}" y="${by - 3}" width="${Math.max(4, x(pe) - x(ps))}" height="${BAR_H + 6}" rx="6"/>`;
+      g += `<rect class="tl-bar${S.inspectedId === s.id ? ' is-selected' : ''}" x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" rx="6" fill="${statusColor(s.status)}"/>`;
+      if (running && nowMin > se) {
+        const ox = x(Math.max(se, minMins));
+        g += `<rect class="tl-over" x="${ox}" y="${by}" width="${Math.max(2, x(Math.min(endMin, maxMins)) - ox)}" height="${BAR_H}" fill="url(#tl-hatch)"/>`;
       }
+      if (bw > 40) g += `<svg x="${bx}" y="${by}" width="${bw}" height="${BAR_H}" overflow="hidden"><text class="tl-bar-label" x="6" y="${BAR_H / 2 + 4}" data-room="${bw - 12}">${esc(label)}</text></svg>`;
+      rows += g + '</g>';
     }
   });
-
-  // ── Now line ──
-  const nowMins = eventNowMinutes();
-  let nowLineSvg = '';
-  if (nowMins >= minMins && nowMins <= maxMins) {
-    const nx = xPos(nowMins);
-    nowLineSvg = `<line class="tl-now-line" x1="${nx}" y1="${PAD_TOP - 4}" x2="${nx}" y2="${SVG_H - 10}"/>
-      <text class="tl-time-label" x="${nx}" y="${SVG_H - 2}" text-anchor="middle" fill="var(--amber)">NOW</text>`;
-  }
-
-  list.innerHTML = `<div id="timeline-wrap">
-    <svg width="${SVG_W}" height="${SVG_H}" style="overflow:visible">
-      ${ticksSvg}
-      ${rowsSvg}
-      ${nowLineSvg}
-    </svg>
-  </div>`;
+  const nowLine = nowMin >= minMins && nowMin <= maxMins
+    ? `<line class="tl-now-line" x1="${x(nowMin)}" y1="${PAD_TOP - 4}" x2="${x(nowMin)}" y2="${SVG_H - 10}"/>`
+      + `<text class="tl-now-label" x="${x(nowMin)}" y="${SVG_H - 1}" text-anchor="middle">${esc(t('cc.tl.now'))}</text>`
+    : '';
+  list.innerHTML = `<div id="timeline-wrap">${head}
+    <svg class="tl-svg" width="${SVG_W}" height="${SVG_H}" role="img" aria-label="${esc(t('filter.timeline'))}">
+      <defs><pattern id="tl-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect class="tl-hatch-bg" width="6" height="6"/><line class="tl-hatch-line" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>
+      ${ticks}${rows}${nowLine}
+    </svg></div>`;
 
   // Cut each label to the width of its own bar, measured at the real font size.
   // Binary search over code points: this runs every second while a session is
   // live, so a few measurements per label, and never split a surrogate pair.
-  list.querySelectorAll('text.tl-bar-label').forEach(t => {
-    const room = +t.dataset.room;
-    if (t.getComputedTextLength() <= room) return;
-    const chars = Array.from(t.textContent);
+  list.querySelectorAll('text.tl-bar-label').forEach(el => {
+    const room = +el.dataset.room;
+    if (el.getComputedTextLength() <= room) return;
+    const chars = Array.from(el.textContent);
     let lo = 1, hi = chars.length - 1; // longest prefix that fits, with the ellipsis
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
-      t.textContent = chars.slice(0, mid).join('').trimEnd() + '…';
-      if (t.getComputedTextLength() <= room) lo = mid; else hi = mid - 1;
+      el.textContent = chars.slice(0, mid).join('').trimEnd() + '…';
+      if (el.getComputedTextLength() <= room) lo = mid; else hi = mid - 1;
     }
-    t.textContent = chars.slice(0, lo).join('').trimEnd() + '…';
+    el.textContent = chars.slice(0, lo).join('').trimEnd() + '…';
   });
 
+  restoreFocus(fk);
   buildCtxPanel();
 }
+function toggleTlFit() { S.tlFit = !S.tlFit; renderTimeline(); }
 
 // Delay summary as a chip in the filter row (spec 2.2): "Running +5 min · 2 affected · stops at #7".
 function updateDelayStrip() {

@@ -376,11 +376,11 @@ test.describe('event time zone', () => {
     const pos = await page.evaluate(() => {
       const line = document.querySelector('.tl-now-line');
       const tick = (txt: string) => [...document.querySelectorAll('.tl-time-label')].find(e => e.textContent === txt);
-      return line ? { x: Number(line.getAttribute('x1')), t1430: Number(tick('14:30')!.getAttribute('x')), t1445: Number(tick('14:45')!.getAttribute('x')) } : null;
+      return line ? { x: Number(line.getAttribute('x1')), t1430: Number(tick('14:30')!.getAttribute('x')), t1500: Number(tick('15:00')!.getAttribute('x')) } : null;
     });
     expect(pos).not.toBeNull();
-    // 14:40 Cairo sits two thirds of the way from 14:30 to 14:45.
-    expect(pos!.x).toBeCloseTo(pos!.t1430 + (pos!.t1445 - pos!.t1430) * (10 / 15), 0);
+    // 14:40 Cairo sits one third of the way from 14:30 to 15:00 (30-minute ticks since stage 4).
+    expect(pos!.x).toBeCloseTo(pos!.t1430 + (pos!.t1500 - pos!.t1430) * (10 / 30), 0);
   });
 
   test('auto-start fires at the planned start in Cairo time', async ({ page }) => {

@@ -16,6 +16,7 @@ const CASES: Case[] = [
   { name: 'no-live-1440', sc: { sessions: noLiveSessions(), broadcast: null } },
   { name: 'empty-1440', sc: { sessions: [], broadcast: null } },
   { name: 'timeline-1440', prep: `setViewMode('timeline')` },
+  { name: 'timeline-overrun-1440', sc: { sessions: overrunSessions() }, prep: `setViewMode('timeline')` },
   { name: 'armed-end-1440', prep: `document.querySelector('[onclick*="confirmEnd(\\'${PANEL_ID}\\'"]').click()` },
   { name: 'signage-1440', prep: `setRole('signage')` },
   { name: 'browser-cairo-1440', sc: { timezoneId: 'Africa/Cairo' } },
