@@ -32,6 +32,7 @@
       --border-divider: rgba(203,213,225,.14);  /* inside cards: 1.34 to 1.41:1 */
       --border-section: rgba(203,213,225,.24);  /* bars, columns, card outline: 1.79 to 1.87:1 */
       --border-control: rgba(203,213,225,.44);  /* inputs, selects, secondary buttons: 3.0 to 3.33:1 */
+      --border-control-raised: rgba(203,213,225,.6);  /* fields on overlay and raised surfaces (modals, menus): 3.65:1 or more */
 
       /* ── Text ── */
       --text-primary:   #E6E9EF;
@@ -506,7 +507,7 @@
     /* ── AI key styles removed (proxy handles auth server-side) ── */
     .ai-key-input {
       flex: 1; min-width: 0;
-      background: var(--input-bg); border: 1px solid var(--border);
+      background: var(--input-bg); border: 1px solid var(--border-control);
       border-radius: 5px; color: var(--text-primary);
       font-size: var(--fs-11); padding: 5px 8px; outline: none;
       font-family: 'SF Mono','Fira Code','Monaco',monospace;
@@ -799,7 +800,7 @@
     .wiz-body input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
     .wiz-body select,
     #login-form input, #register-form input, #reset-form input {
-      height: 32px; background: var(--input-bg); border: 1px solid var(--border-control); border-radius: var(--r-ctl);
+      height: 32px; background: var(--input-bg); border: 1px solid var(--border-control-raised); border-radius: var(--r-ctl);
       padding: 0 10px; color: var(--text-primary); font-size: var(--fs-13); font-family: inherit;
     }
     .ev-modal-card input:focus,.ev-modal-card select:focus,.ev-modal-card textarea:focus,
@@ -847,7 +848,7 @@
     #sess-modal .smv-chip input:focus-visible + span { box-shadow:0 0 0 3px rgba(37,99,235,.25); }
     #sess-modal .smv-mics { flex-direction:row;align-items:center;gap:8px;margin-left:auto;text-transform:none;letter-spacing:0;font-size: var(--fs-12); }
     #sess-modal .smv-mics input { width:64px; }
-    #sess-modal textarea { resize:vertical;min-height:60px;width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);border-radius:var(--r-ctl);padding:8px 10px;font-size: var(--fs-12);font-family:inherit;outline:none; }
+    #sess-modal textarea { resize:vertical;min-height:60px;width:100%;box-sizing:border-box;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);border-radius:var(--r-ctl);padding:8px 10px;font-size: var(--fs-12);font-family:inherit;outline:none; }
     #sess-modal .smv-foot { padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--surface); }
     #sess-modal .smv-foot .ev-modal-actions { margin:0 0 0 auto; }
     #sess-modal .smv-error { color:var(--red);font-size: var(--fs-11);flex:1;min-width:0; }
@@ -1562,6 +1563,10 @@
     .btn.armed-fwd { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .mm-lang { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--text-secondary); font-size: var(--fs-13); }
     .mm-lang select { margin-inline-start: auto; }
+    /* Language selects keep the browser select but carry the control boundary;
+       the profile panel is an overlay surface, so its select takes the raised token */
+    #mm-lang { border: 1px solid var(--border-control); }
+    #lang-switcher { border: 1px solid var(--border-control-raised); }
     /* Filter row controls at the demo's 32 px */
     #fb-search { flex: 0 1 260px; min-width: 120px; height: 32px; max-width: 260px; padding: 0 10px; font-size: var(--fs-13); border-radius: var(--r-ctl); }
     #fb-status, #fb-room { height: 32px; padding: 0 8px; font-size: var(--fs-13); border-radius: var(--r-ctl); }
@@ -2098,30 +2103,30 @@
         <div style="font-size:11px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Personal Details</div>
         <div style="margin-bottom:6px">
           <div style="font-size:11px;color:var(--dim);margin-bottom:2px">Name</div>
-          <input id="pp-edit-name" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+          <input id="pp-edit-name" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
         </div>
         <div style="margin-bottom:6px">
           <div style="font-size:11px;color:var(--dim);margin-bottom:2px">Organization</div>
-          <input id="pp-edit-org" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+          <input id="pp-edit-org" type="text" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
         </div>
         <div style="margin-bottom:6px">
           <div style="font-size:11px;color:var(--dim);margin-bottom:2px">Phone</div>
-          <input id="pp-edit-phone" type="text" placeholder="+41 79 123 4567" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+          <input id="pp-edit-phone" type="text" placeholder="+41 79 123 4567" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
         </div>
         <div id="pp-billing-section" style="display:none">
           <div style="border-top:1px solid var(--border-section);margin:10px 0"></div>
           <div style="font-size:11px;color:var(--blue);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;font-weight:700">Billing Details <span style="display:inline-block;font-size:11px;background:rgba(59,130,246,.15);color:var(--blue);padding:1px 5px;border-radius:3px;margin-left:4px">Director</span></div>
           <div style="margin-bottom:6px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:2px">Company Name</div>
-            <input id="pp-edit-company" type="text" placeholder="Company Ltd." style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+            <input id="pp-edit-company" type="text" placeholder="Company Ltd." style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
           </div>
           <div style="margin-bottom:6px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:2px">VAT / Tax ID</div>
-            <input id="pp-edit-vat" type="text" placeholder="CHE-123.456.789" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+            <input id="pp-edit-vat" type="text" placeholder="CHE-123.456.789" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit">
           </div>
           <div style="margin-bottom:6px">
             <div style="font-size:11px;color:var(--dim);margin-bottom:2px">Billing Address</div>
-            <textarea id="pp-edit-address" rows="2" placeholder="Street, City, Country" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;resize:none"></textarea>
+            <textarea id="pp-edit-address" rows="2" placeholder="Street, City, Country" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:inherit;resize:none"></textarea>
           </div>
         </div>
         <button onclick="saveProfileChanges()" style="width:100%;margin-top:8px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:8px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer">Save Changes</button>
@@ -2387,9 +2392,9 @@
     <div id="invite-section" style="border-bottom:1px solid var(--border-section);padding-bottom:12px">
       <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Invite New Operator</div>
       <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-        <input id="inv-email" type="email" placeholder="Email address" style="flex:1;min-width:140px;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-        <input id="inv-name" type="text" placeholder="Name (optional)" style="width:120px;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-        <select id="inv-role" style="background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+        <input id="inv-email" type="email" placeholder="Email address" style="flex:1;min-width:140px;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+        <input id="inv-name" type="text" placeholder="Name (optional)" style="width:120px;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
+        <select id="inv-role" style="background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
           <option value="stage">Stage</option>
           <option value="av">AV</option>
           <option value="interp">Interp</option>
@@ -2402,7 +2407,7 @@
       <div id="inv-status" style="font-size:11px;min-height:16px;margin-top:4px"></div>
     </div>
     <div style="padding:8px 0">
-      <input id="um-search" type="text" placeholder="Search operators" oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit">
+      <input id="um-search" type="text" placeholder="Search operators" oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit">
     </div>
     <div id="users-modal-body">
       <div class="um-empty">Loading…</div>
@@ -2483,7 +2488,7 @@
     <div style="border-top:1px solid var(--border-section);margin:12px 0 0;padding-top:12px">
       <div style="font-size:11px;color:var(--dim);margin-bottom:8px">Have a promo or gift code?</div>
       <div style="display:flex;gap:8px">
-        <input id="bm-promo-code" type="text" placeholder="Enter code (e.g. LAUNCH20)" style="flex:1;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:1px">
+        <input id="bm-promo-code" type="text" placeholder="Enter code (e.g. LAUNCH20)" style="flex:1;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:1px">
         <button onclick="redeemPromoCode('bm')" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:7px 14px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">Apply</button>
       </div>
       <div id="bm-promo-status" style="font-size:11px;min-height:14px;margin-top:4px"></div>
@@ -3612,35 +3617,54 @@ document.addEventListener('visibilitychange', async () => {
 // One modal manager for every .ev-modal-backdrop: modals keep their inline
 // style.display (the Escape handler and boot checks read it); this watches
 // that attribute, moves focus in, keeps Tab inside, and returns focus.
-const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+// a[href], not [href]: the sprite's <use href> is not a control.
+const FOCUSABLE = 'button, a[href], input:not([type="hidden"]), select, textarea, [tabindex]';
+const isModalOpen = m => m.style.display === 'flex';
+const openModalEl = () => [...document.querySelectorAll('.ev-modal-backdrop')].find(isModalOpen) || null;
+// Only controls a person can reach: rendered, enabled, not opted out, not inside an icon.
+function modalFocusables(m) {
+  return [...m.querySelectorAll(FOCUSABLE)].filter(el => !el.closest('svg') && !el.disabled
+    && el.getAttribute('tabindex') !== '-1' && el.getClientRects().length > 0);
+}
+function focusIntoModal(m) {
+  const auto = m.querySelector('[autofocus]');
+  const target = (auto && auto.getClientRects().length ? auto : null) || modalFocusables(m)[0];
+  if (target) { target.focus(); return; }
+  // Nothing to focus: the dialog itself takes focus, so keys stay inside it.
+  const card = m.querySelector('[role="dialog"]') || m;
+  if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex', '-1');
+  card.focus();
+}
 function initModalManager() {
   const returnTo = new Map();
-  const isOpen = m => m.style.display === 'flex';
   const obs = new MutationObserver(muts => {
     for (const mu of muts) {
       const m = mu.target;
-      if (isOpen(m) && !returnTo.has(m)) {
+      if (isModalOpen(m) && !returnTo.has(m)) {
         returnTo.set(m, document.activeElement);
         // Synchronous: the observer runs after the display change, and a frame
         // callback would never fire under a paused clock (tests) or a hidden tab.
-        (m.querySelector('[autofocus]') || m.querySelector(FOCUSABLE))?.focus();
-      } else if (!isOpen(m) && returnTo.has(m)) {
+        focusIntoModal(m);
+      } else if (!isModalOpen(m) && returnTo.has(m)) {
         const back = returnTo.get(m); returnTo.delete(m);
         if (back && back.isConnected) back.focus();
       }
     }
   });
-  document.querySelectorAll('.ev-modal-backdrop').forEach(m => {
-    obs.observe(m, { attributes: true, attributeFilter: ['style'] });
-    m.addEventListener('keydown', e => {
-      if (e.key !== 'Tab') return;
-      const f = [...m.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
-      if (!f.length) return;
-      const first = f[0], last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    });
-  });
+  document.querySelectorAll('.ev-modal-backdrop').forEach(m => obs.observe(m, { attributes: true, attributeFilter: ['style'] }));
+  // Tab is handled on the document, so it is caught even when focus has left the dialog.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const m = openModalEl();
+    if (!m) return;
+    const f = modalFocusables(m);
+    const inside = m.contains(document.activeElement);
+    if (!f.length) { e.preventDefault(); focusIntoModal(m); return; }
+    const first = f[0], last = f[f.length - 1];
+    if (!inside) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }, true);
 }
 // The help modals sit after this script, so wait for the whole document.
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initModalManager);
@@ -3651,11 +3675,12 @@ else initModalManager();
 document.addEventListener('keydown', e => {
   const tag  = document.activeElement?.tagName?.toLowerCase();
   const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
-  const inModal = !!document.activeElement?.closest('.ev-modal-backdrop');
+  // Any open modal counts, wherever focus is: shortcuts never act behind a dialog.
+  const inModal = !!document.activeElement?.closest('.ev-modal-backdrop') || !!openModalEl();
 
   // ── Universal shortcuts (all roles) ────────────────
   // Cmd/Ctrl+K → command palette (always, even in input)
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k' && !inModal) {
     e.preventDefault();
     const pal = document.getElementById('cmd-palette');
     if (pal.style.display === 'flex') closeCmdPalette(); else openCmdPalette();
@@ -3692,7 +3717,7 @@ document.addEventListener('keydown', e => {
   }
 
   // ? → shortcuts modal (when not typing)
-  if (e.key === '?' && !inInput) {
+  if (e.key === '?' && !inInput && !inModal) {
     e.preventDefault();
     openShortcutsModal();
     return;
@@ -4982,13 +5007,13 @@ function renderSeqList() {
   el.innerHTML = _seqSlides.map((s, i) => `
     <div style="display:grid;grid-template-columns:1fr 72px 28px;gap:6px;align-items:center">
       <select onchange="_seqSlides[${i}].mode=this.value"
-        style="background:var(--surface2);color:var(--fg);border:1px solid var(--border-control);border-radius:4px;padding:4px 6px;font-size:12px">
+        style="background:var(--surface2);color:var(--fg);border:1px solid var(--border-control-raised);border-radius:4px;padding:4px 6px;font-size:12px">
         ${SEQ_MODES.map(m => `<option value="${m}"${s.mode === m ? ' selected' : ''}>${m}</option>`).join('')}
       </select>
       <div style="display:flex;align-items:center;gap:3px">
         <input type="number" value="${s.duration}" min="5" max="300" step="5"
           onchange="_seqSlides[${i}].duration=+this.value"
-          style="width:42px;background:var(--surface2);color:var(--fg);border:1px solid var(--border-control);border-radius:4px;padding:3px 5px;font-size:12px">
+          style="width:42px;background:var(--surface2);color:var(--fg);border:1px solid var(--border-control-raised);border-radius:4px;padding:3px 5px;font-size:12px">
         <span style="font-size:11px;color:var(--dim)">s</span>
       </div>
       <button onclick="removeSeqSlide(${i})"
@@ -7592,7 +7617,7 @@ function showWelcomeModal(role) {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
         <div style="width:38px;height:38px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${icon('sparkle')}</div>
         <div>
-          <div style="font-size:15px;font-weight:700;color:#f1f5f9">Welcome, ${esc(firstName)}</div>
+          <div id="welcome-modal-title" style="font-size:15px;font-weight:700;color:#f1f5f9">Welcome, ${esc(firstName)}</div>
           <div style="font-size:11px;color:var(--dim);margin-top:2px">You're set up as Director</div>
         </div>
       </div>
@@ -9660,7 +9685,7 @@ async function submitFeedback() {
     </label>
     <label>Message
       <textarea id="fb-msg" rows="4" maxlength="1000" placeholder="Tell us what's on your mind…"
-        style="width:100%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical;transition:border-color .15s"
+        style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical;transition:border-color .15s"
         oninput="document.getElementById('fb-chars').textContent=this.value.length+'/1000'"></textarea>
       <div id="fb-chars" style="font-size:11px;color:var(--dim);text-align:right;margin-top:-4px">0/1000</div>
     </label>
