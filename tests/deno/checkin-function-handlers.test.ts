@@ -186,7 +186,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -240,6 +240,7 @@ const ALLOWED: Record<string, Who[]> = {
   'checkin-held': ['owner', 'organizer'],
   'checkin-tickets': ['owner', 'organizer'],
   'checkin-reminders': ['owner', 'organizer'],
+  'checkin-invite-guests': ['owner', 'organizer'],
 }
 const BODY: Record<string, Row> = {
   'checkin-create-checkout': { event_id: EVENT },
@@ -251,6 +252,7 @@ const BODY: Record<string, Row> = {
   'checkin-held': { event_id: EVENT, action: 'fill' },
   'checkin-tickets': { event_id: EVENT, action: 'payout_status' },
   'checkin-reminders': { event_id: EVENT, action: 'test', kind: 'reminder' },
+  'checkin-invite-guests': { event_id: EVENT, action: 'test' },
 }
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -1525,4 +1527,62 @@ Deno.test('checkin-held fill: a party joins only if all of it fits', async () =>
   const asked = world.rpcCalls.filter(c => c.name === 'checkin_web_release_held').map(c => c.args.p_held_id)
   // The first party needs 3 places: the queue stops there rather than jumping it.
   assert(r.status === 200 && asked.length === 0, JSON.stringify(r) + ' ' + JSON.stringify(asked))
+})
+
+// ── Invitations (116) ───────────────────────────────────────────────
+const IG = 'checkin-invite-guests'
+function invSetup(status = 'live') {
+  setup('organizer', { ent: { checkin_core: true, status, registration_enabled: true, registration_code: 'VTQBZ3ENFV' } })
+  world.tables.leod_checkin_attendees = [
+    { id: 'i1000000-0000-4000-8000-000000000001', event_id: EVENT, source: 'import', is_test: false, email: 'gina@stub.test' },
+    { id: 'i1000000-0000-4000-8000-000000000002', event_id: EVENT, source: 'import', is_test: false, email: 'hal@stub.test' }]
+  world.tables.leod_checkin_web_invites = [{ attendee_id: 'i1000000-0000-4000-8000-000000000002', event_id: EVENT }]
+  world.rpcResult.checkin_web_invite_issue = { status: 'issued', first_name: 'Gina', email: 'gina@stub.test' }
+}
+Deno.test(`${IG} send: invites only guests not yet invited, with a personal link in the fragment`, async () => {
+  invSetup()
+  const r = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r.status === 200 && r.body.sent === 1 && r.body.remaining === 0, JSON.stringify(r))
+  const issued = world.rpcCalls.filter(c => c.name === 'checkin_web_invite_issue')
+  assert(issued.length === 1 && issued[0].args.p_attendee_id === 'i1000000-0000-4000-8000-000000000001' && /^[0-9a-f]{64}$/.test(String(issued[0].args.p_token_hash)), JSON.stringify(issued))
+  const m = world.emails![0] as { to: string; subject: string; html: string }
+  assert(m.to === 'gina@stub.test' && m.subject === 'You are invited: Stub event' && /\/r\/VTQBZ3ENFV#i=[A-Za-z0-9_-]{43}"/.test(m.html), m.subject)
+})
+Deno.test(`${IG} send: refused in test mode, before any email`, async () => {
+  invSetup('test')
+  const r = await call(IG, { event_id: EVENT, action: 'send' })
+  assert(r.status === 409 && r.body.code === 'test_mode' && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test(`${IG} send: a failed email takes the invitation back`, async () => {
+  invSetup()
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('api.resend.com')) return new Response(JSON.stringify({ message: 'down' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(IG, { event_id: EVENT, action: 'send' })
+    assert(r.body.failed === 1 && world.rpcCalls.some(c => c.name === 'checkin_web_invite_unissue'), JSON.stringify(r))
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${RG} rsvp: going emails the ticket and the plus-ones' tickets to the guest`, async () => {
+  regSetup()
+  world.tables.leod_checkin_entitlements[0].registration_plus_ones = 2
+  world.rpcResult.checkin_web_rsvp = { status: 'going', first_name: 'Gina',
+    attendee: { id: ATT, first_name: 'Gina', email: 'gina@stub.test', qr_token: 'tok00000000000000000000000000001', qr_email_sent_at: null },
+    plus_ones: [{ id: 'p2000000-0000-4000-8000-000000000001', first_name: 'Ola', last_name: 'N', qr_token: 'tok00000000000000000000000000002' }] }
+  world.tables.leod_checkin_attendees = [
+    { id: ATT, event_id: EVENT, first_name: 'Gina', last_name: 'G', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000001' },
+    { id: 'p2000000-0000-4000-8000-000000000001', event_id: EVENT, first_name: 'Ola', last_name: 'N', ticket_type: 'attendee', qr_token: 'tok00000000000000000000000000002' }]
+  const r = await guest({ action: 'rsvp', code: 'VTQBZ3ENFV', token: LINK_TOKEN, going: true, plus_ones: [{ first_name: 'Ola', last_name: 'N' }] })
+  assert(r.status === 200 && r.body.status === 'going' && (r.body.plus_tickets as unknown[]).length === 1, JSON.stringify(r).slice(0, 300))
+  assert((world.emails ?? []).length === 2, 'emails ' + world.emails?.length)
+  const call1 = world.rpcCalls.find(c => c.name === 'checkin_web_rsvp')!
+  assert(call1.args.p_going === true && JSON.stringify(call1.args.p_plus_ones) === '[{"first_name":"Ola","last_name":"N"}]', JSON.stringify(call1.args))
+})
+Deno.test(`${RG} rsvp: a plus-one with a link for a name is refused before the database`, async () => {
+  regSetup()
+  world.tables.leod_checkin_entitlements[0].registration_plus_ones = 2
+  const r = await guest({ action: 'rsvp', code: 'VTQBZ3ENFV', token: LINK_TOKEN, going: true, plus_ones: [{ first_name: 'evil.com', last_name: 'X' }] })
+  assert(r.status === 400 && !world.rpcCalls.some(c => c.name === 'checkin_web_rsvp'), JSON.stringify(r))
 })

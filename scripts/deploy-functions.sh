@@ -5,7 +5,7 @@
 set -euo pipefail
 
 PROJ=$(cd "$(dirname "$0")/.." && pwd)
-ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun restart-session invite-operator manage-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair checkin-invite-staff checkin-price checkin-create-checkout checkin-add-walk-in checkin-post-event-report checkin-scanner checkin-tickets checkin-orders-sweep checkin-reminders)
+ALL_FUNCTIONS=(go-live end-session set-ready hold-stage call-speaker cancel-session reinstate apply-delay set-overrun restart-session invite-operator manage-operator create-checkout-session stripe-webhook customer-portal checkin-enable-event checkin-import-attendees checkin-send-qr-emails checkin-record-scans checkin-self-register checkin-kiosk-pair checkin-invite-staff checkin-price checkin-create-checkout checkin-add-walk-in checkin-post-event-report checkin-scanner checkin-tickets checkin-orders-sweep checkin-reminders checkin-invite-guests)
 FAIL=0
 
 green() { echo "  OK  $1"; }

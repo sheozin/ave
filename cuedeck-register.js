@@ -20,6 +20,8 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 const code = (location.pathname.match(/^\/r\/([^/]+)\/?$/) || [])[1] || new URLSearchParams(location.search).get('code') || '';
 // The emailed link carries its token in the fragment (#t=), which browsers never send to a server.
 let token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
+// (116) A personal invitation link: /r/<code>#i=<token>.
+const inviteToken = new URLSearchParams(location.hash.slice(1)).get('i') || '';
 // Back from Stripe Checkout (paid tickets): the link's token was kept in
 // this tab while the guest paid, so the page can finish the order.
 const back = new URLSearchParams(location.search);
@@ -49,7 +51,7 @@ function solo(h, p) {
   $('loading').hidden = true; $('page').hidden = true; $('closed').hidden = false;
 }
 function card(id) {
-  for (const s of ['open', 'confirm', 'done', 'ticket', 'shut']) $(s).hidden = s !== id;
+  for (const s of ['open', 'invite', 'confirm', 'done', 'ticket', 'shut']) $(s).hidden = s !== id;
   if (window.matchMedia('(max-width: 900px)').matches && id !== 'open') $('card-area').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function closed(h, p) {
@@ -132,11 +134,14 @@ function renderEvent() {
 
   // (108) Full with a waitlist: the same form, joining the waitlist.
   const wl = config.state === 'waitlist';
-  document.querySelector('#open .card-h h2').textContent = wl ? 'Join the waitlist' : 'Register';
-  $('submit').textContent = wl ? 'Join the waitlist' : 'Register';
+  // (116) Invite-only with approval: the form asks for an invitation.
+  const ask = config.mode === 'invite';
+  document.querySelector('#open .card-h h2').textContent = ask ? 'Request an invitation' : wl ? 'Join the waitlist' : 'Register';
+  $('submit').textContent = submitLabel();
   $('flow-note').hidden = !(wl || config.approval);
-  $('flow-note').textContent = wl
-    ? 'This event is full. Join the waitlist and your ticket is emailed to you if a place opens up.'
+  $('flow-note').textContent = ask
+    ? 'This event is by invitation. Send a request and the organizer will reply. Your ticket is emailed to you if they invite you.'
+    : wl ? 'This event is full. Join the waitlist and your ticket is emailed to you if a place opens up.'
     : 'The organizer reviews each registration. Your ticket is emailed to you once it is approved.';
   $('left').hidden = config.places_left == null || wl;
   $('left').textContent = config.places_left == null ? '' : config.places_left + (config.places_left === 1 ? ' place left' : ' places left');
@@ -236,6 +241,8 @@ function loadTurnstile(siteKey) {
     document.head.append(s);
   });
 }
+
+const submitLabel = () => config.mode === 'invite' ? 'Send my request' : config.state === 'waitlist' ? 'Join the waitlist' : 'Register';
 
 // ── plus-ones (migration 114) ──
 // Hidden for a paid ticket: each person buys their own.
@@ -376,6 +383,7 @@ $('form').addEventListener('submit', async (ev) => {
     if (b.status === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
     if (b.status === 'test_cap') return message('This test page has used its 25 test registrations.');
     if (b.status === 'sold_out') return message('That ticket has just sold out. Please choose another.');
+    if (b.status === 'invite_only') return closed('This event is by invitation', 'If you were invited, use the link in your invitation email.');
     if (b.status === 'bad_ticket') return message('That ticket is no longer available. Reload the page and choose another.');
     if (r.status === 404) return closed(...NOT_ACTIVE);
     if (r.status === 400 && Array.isArray(b.fields)) {
@@ -387,7 +395,7 @@ $('form').addEventListener('submit', async (ev) => {
   } catch {
     message('Could not reach the server. Check your connection and try again.');
   } finally {
-    btn.disabled = false; btn.textContent = config.state === 'waitlist' ? 'Join the waitlist' : 'Register';
+    btn.disabled = false; btn.textContent = submitLabel();
     tsToken = '';
     if (tsWidget != null && window.turnstile) window.turnstile.reset(tsWidget);
   }
@@ -497,6 +505,68 @@ $('cf-no').addEventListener('click', async () => {
   } finally { $('cf-no').disabled = false; }
 });
 
+// ── a personal invitation (migration 116) ──
+let IV = null;
+function ivRow(first = '', last = '') {
+  const i = $('iv-rows').children.length;
+  const row = el('div', { class: 'plus-row', 'data-f': 'plus:' + i });
+  const f = el('input', { type: 'text', maxlength: '80', autocomplete: 'off', placeholder: 'First name', 'aria-label': 'Guest ' + (i + 1) + ' first name' }); f.value = first;
+  const l = el('input', { type: 'text', maxlength: '80', autocomplete: 'off', placeholder: 'Last name', 'aria-label': 'Guest ' + (i + 1) + ' last name' }); l.value = last;
+  const x = el('button', { type: 'button', class: 'x', 'aria-label': 'Remove guest ' + (i + 1) }, '×');
+  x.addEventListener('click', () => { row.remove(); [...$('iv-rows').children].forEach((r, k) => r.setAttribute('data-f', 'plus:' + k)); ivPlusState(); });
+  row.append(f, l, x);
+  $('iv-rows').append(row);
+  ivPlusState();
+}
+function ivPlusState() { $('iv-add').hidden = $('iv-rows').children.length >= (IV?.plus_max || 0); }
+$('iv-add').addEventListener('click', () => ivRow());
+async function openInvite() {
+  const r = await call({ action: 'invite', token: inviteToken }).catch(() => null);
+  if (!r || r.status !== 200) return closed('Something went wrong', 'Please open the link from your invitation again.');
+  if (r.body.status !== 'ok') return closed('This invitation link is no longer valid', 'Ask the organizer to send it again.');
+  IV = r.body;
+  $('iv-h').textContent = 'You are invited, ' + IV.first_name;
+  $('iv-p').textContent = IV.rsvp === 'going' ? 'You said you are coming. You can change your answer or your guests below.'
+    : IV.rsvp === 'not_going' ? 'You said you cannot come. Changed your mind? Let us know below.'
+    : [formatEventDate(config.event?.date), config.event?.venue].filter(Boolean).join(' · ') || 'Will you come?';
+  $('iv-plus').hidden = !IV.plus_max;
+  $('iv-plus-max').textContent = '(up to ' + IV.plus_max + ')';
+  $('iv-rows').replaceChildren();
+  for (const p of IV.plus_ones || []) ivRow(p.first_name, p.last_name);
+  ivPlusState();
+  card('invite');
+}
+async function answerInvite(going) {
+  $('iv-msg').hidden = true;
+  const plus = going ? [...$('iv-rows').children].map(r => { const [f, l] = r.querySelectorAll('input'); return { first_name: f.value, last_name: l.value }; }) : [];
+  const v = validatePlusOnes(plus, IV.plus_max || 0);
+  if (v.errors.length) { markErrors(v.errors); $('iv-plus').querySelector('.err').textContent = 'Please enter each guest\'s first and last name in letters.'; return; }
+  const btn = going ? $('iv-yes') : $('iv-no'); btn.disabled = true;
+  try {
+    const r = await call({ action: 'rsvp', token: inviteToken, going, plus_ones: v.names });
+    const b = r.body;
+    if (r.status === 200 && b.status === 'going') {
+      if (b.ticket && b.ticket.qr_svg) return showTicket(b.first_name, b.ticket, b.plus_tickets);
+      $('done-h').textContent = 'See you there, ' + (b.first_name || '');
+      $('done-p').textContent = 'Your QR ticket is on its way by email.';
+      return card('done');
+    }
+    if (r.status === 200 && b.status === 'not_going') {
+      $('done-h').textContent = 'Thanks for letting us know';
+      $('done-p').textContent = 'We will miss you. If your plans change, open your invitation link again.';
+      return card('done');
+    }
+    if (b.status === 'no_room_for_plus_ones') { $('iv-msg').textContent = 'You are on the list, but there is no room for that many guests. Try fewer, or ask the organizer.'; $('iv-msg').hidden = false; return; }
+    if (b.status === 'closed') return closed('Replies have closed', 'Contact the organizer if you still need to change your answer.');
+    if (b.status === 'invalid') return closed('This invitation link is no longer valid', 'Ask the organizer to send it again.');
+    $('iv-msg').textContent = b.error || 'Something went wrong. Please try again.'; $('iv-msg').hidden = false;
+  } catch {
+    $('iv-msg').textContent = 'Could not reach the server. Check your connection and try again.'; $('iv-msg').hidden = false;
+  } finally { btn.disabled = false; }
+}
+$('iv-yes').addEventListener('click', () => answerInvite(true));
+$('iv-no').addEventListener('click', () => answerInvite(false));
+
 // ── start ──
 (async () => {
   if (!isRegistrationCode(code)) return solo(...NOT_ACTIVE);
@@ -510,6 +580,7 @@ $('cf-no').addEventListener('click', async () => {
   config.page = config.page || {};
   renderEvent();
 
+  if (inviteToken) return openInvite();
   if (token) {
     $('cf-name').textContent = config.event?.name || 'Event';
     $('cf-meta').textContent = [formatEventDate(config.event?.date), config.event?.venue].filter(Boolean).join(' · ');
@@ -549,6 +620,8 @@ $('cf-no').addEventListener('click', async () => {
     $('done-p').textContent = 'If your payment went through, your QR ticket arrives by email within a few minutes. The link in your confirmation email also shows it.';
     return card('done');
   }
+  // (116) Invite-only: without approval the page explains instead of offering a form.
+  if (config.mode === 'invite' && !config.approval) return closed('This event is by invitation', 'If you were invited, use the link in your invitation email.');
   if (config.state === 'closed') return closed('Registration has closed', 'Contact the organizer if you still need to attend.');
   // 'waitlist' falls through to the form: the guest joins the waitlist.
   if (config.state === 'full') return closed('Registration is full', 'This event has reached its capacity. Contact the organizer if you need a place.');

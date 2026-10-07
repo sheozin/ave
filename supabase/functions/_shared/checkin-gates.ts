@@ -21,6 +21,8 @@ export const FUNCTION_GATES = {
   // Paid tickets (109): organizers see payout status; connecting the
   // payout account and refunding move the owner's money, so owner only.
   // Reminder emails (110): a test email of the automatic guest emails.
+  // Invitations (116): emails to guests on the list.
+  'checkin-invite-guests': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   'checkin-reminders': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   'checkin-tickets': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   'checkin-tickets-owner': { perm: 'go_live', forbidden: { error: 'Only the event owner can connect payouts or refund a ticket', code: 'not_owner' } },

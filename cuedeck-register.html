@@ -232,6 +232,23 @@ input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 
           </form>
         </section>
 
+        <section id="invite" hidden>
+          <div class="state">
+            <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9 6 9-6M4 6h16v12H4z"></path></svg></div>
+            <h2 id="iv-h">You are invited</h2>
+            <p id="iv-p">Will you come?</p>
+            <div id="iv-plus" data-f="plus" hidden style="display:grid;gap:10px;width:100%;text-align:left">
+              <div style="font-size:14px;font-weight:600">Bringing someone? <span class="opt" id="iv-plus-max"></span></div>
+              <div id="iv-rows" style="display:grid;gap:10px"></div>
+              <button class="btn2" type="button" id="iv-add" style="justify-self:start">Add a guest</button>
+              <span class="err"></span>
+            </div>
+            <button class="btn" type="button" id="iv-yes">I am coming</button>
+            <button class="link" type="button" id="iv-no">I cannot come</button>
+            <p class="msg" id="iv-msg" hidden></p>
+          </div>
+        </section>
+
         <section id="confirm" hidden>
           <div class="state">
             <div class="badge"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></div>

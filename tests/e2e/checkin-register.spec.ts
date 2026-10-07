@@ -392,3 +392,38 @@ test('plus-ones: hidden for a paid ticket', async ({ page }) => {
   await page.locator('.tix-o', { hasText: 'Standard' }).click();
   await expect(page.locator('#plus')).toBeHidden();
 });
+
+// ── Invitations (116) ──
+test('invitation: the guest says they are coming with a plus-one and sees both tickets', async ({ page }) => {
+  const svg = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"></svg>');
+  const sent: Record<string, unknown>[] = [];
+  await fn(page, 'checkin-register', (b) => {
+    if (b.action === 'config') return { body: CONFIG({ mode: 'invite', approval: false }) };
+    sent.push(b);
+    if (b.action === 'invite') return { body: { status: 'ok', first_name: 'Gina', last_name: 'Guest', rsvp: null, plus_max: 1, plus_ones: [] } };
+    return { body: { status: 'going', first_name: 'Gina', ticket: { first_name: 'Gina', last_name: 'Guest', ticket_type: 'attendee', code: 'G1N4AA', qr_svg: svg },
+      plus_tickets: [{ first_name: 'Ola', last_name: 'Nowak', ticket_type: 'Guest', code: 'O1A2BB', qr_svg: svg }] } };
+  });
+  await page.goto(URL_ + '#i=' + 'I'.repeat(43));
+  await expect(page.locator('#iv-h')).toHaveText('You are invited, Gina');
+  await page.click('#iv-add');
+  await expect(page.locator('#iv-add')).toBeHidden();
+  const row = page.locator('#iv-rows .plus-row').first();
+  await row.locator('input').nth(0).fill('Ola'); await row.locator('input').nth(1).fill('Nowak');
+  await page.click('#iv-yes');
+  await expect(page.locator('#ticket')).toBeVisible();
+  await expect(page.locator('#tk-plus')).toContainText('Ola Nowak');
+  expect(sent.find(b => b.action === 'rsvp')).toMatchObject({ token: 'I'.repeat(43), going: true, plus_ones: [{ first_name: 'Ola', last_name: 'Nowak' }] });
+});
+
+test('invite-only: the public page explains instead of showing a form; with approval it asks for an invitation', async ({ page }) => {
+  await setup(page, { config: CONFIG({ mode: 'invite', approval: false }) });
+  await page.goto(URL_);
+  await expect(page.locator('#shut-h')).toHaveText('This event is by invitation');
+  await expect(page.locator('#open')).toBeHidden();
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await setup(page, { config: CONFIG({ mode: 'invite', approval: true }) });
+  await page.goto('about:blank'); await page.goto(URL_);
+  await expect(page.locator('#open .card-h h2')).toHaveText('Request an invitation');
+  await expect(page.locator('#submit')).toHaveText('Send my request');
+});

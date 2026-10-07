@@ -616,3 +616,27 @@ test('guests tab: speakers from the run of show show who is on the list and who 
   await expect.poll(() => set.length).toBe(1);
   expect(set[0]).toMatchObject({ p_event_id: EVENT_ID, p_on: false });
 });
+
+test('guests tab: invitations go out in batches and answers show on each guest', async ({ page }) => {
+  const calls: Record<string, unknown>[] = [];
+  const g = (id: string, first: string) => ({ id, first_name: first, last_name: 'X', email: first.toLowerCase() + '@example.invalid', company: null, ticket_type: 'attendee', source: 'import', is_test: false, created_at: FIXED_NOW.toISOString() });
+  let inv: Record<string, unknown> = { g1: { sent_at: FIXED_NOW.toISOString(), rsvp: 'going' } };
+  await open(page, { role: 'organizer', status: 'live' }, 'attendees', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_mode: 'invite' }]);
+    await table(page, 'leod_checkin_attendees', [g('g1', 'Gina'), g('g2', 'Hal'), g('g3', 'Ivy')]);
+    await rpc(page, 'checkin_invite_status', () => inv);
+    await rpc(page, 'checkin_speaker_links', { enabled: true, people: [] });
+    let round = 0;
+    await fn(page, 'checkin-invite-guests', (b) => { calls.push(b); round++;
+      if (round === 1) return { body: { ok: true, sent: 1, failed: 0, remaining: 1 } };
+      inv = { ...inv, g2: { sent_at: FIXED_NOW.toISOString(), rsvp: null }, g3: { sent_at: FIXED_NOW.toISOString(), rsvp: null } };
+      return { body: { ok: true, sent: 1, failed: 0, remaining: 0 } }; });
+  });
+  await expect(page.locator('#gi-bar')).toBeVisible();
+  await expect(page.locator('#gi-sum')).toContainText('1 invited · 1 coming');
+  await expect(page.locator('#att-body tr', { hasText: 'Gina' })).toContainText('Coming');
+  await page.click('#gi-send');
+  await expect(page.locator('#gi-ok')).toHaveText('2 invitations sent.');
+  expect(calls.filter(c => c.action === 'send')).toHaveLength(2);
+  await expect(page.locator('#gi-sum')).toContainText('3 invited');
+});

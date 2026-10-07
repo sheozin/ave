@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_mode, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -212,6 +212,8 @@ Deno.serve(async (req) => {
     return json({
       state, test, places_left: placesLeft, approval: !!ent.registration_approval, tickets,
       plus_ones: ent.registration_plus_ones ?? 0,
+      // (116) 'invite': the form takes requests only with approval on.
+      mode: ent.registration_mode ?? 'open',
       event: { name: event.name, date: event.date, venue: event.venue, timezone: event.timezone,
                start: hhmm(event.event_start), end: hhmm(event.event_end),
                start_utc: start?.toISOString() ?? null, end_utc: end?.toISOString() ?? null },
@@ -313,6 +315,47 @@ Deno.serve(async (req) => {
     const { data, error } = await sb.rpc('checkin_web_pending_preview', { p_code: code, p_token_hash: await sha256Hex(token) })
     if (error || !data) { console.error('checkin-register: preview failed', error?.code); return json({ status: 'invalid' }) }
     return json(data)
+  }
+
+  // ── invitations (116): the guest's personal link, #i=<token> ─────
+  if (body.action === 'invite') {
+    const token = typeof body.token === 'string' ? body.token : ''
+    if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const { data, error } = await sb.rpc('checkin_web_invite_view', { p_code: code, p_token_hash: await sha256Hex(token) })
+    if (error || !data) { console.error('checkin-register: invite view failed', error?.code); return json({ error: 'Something went wrong. Please try again.' }, 500) }
+    return json(data)
+  }
+  if (body.action === 'rsvp') {
+    const token = typeof body.token === 'string' ? body.token : ''
+    if (!TOKEN_SHAPE.test(token)) return json({ status: 'invalid' })
+    const ok = await tokenRateOk(); if (ok === null) return json({ error: 'Registration is not available right now' }, 503); if (!ok) return tooMany()
+    const going = body.going === true
+    const plus = validatePlusOnes(going ? body.plus_ones : [], ent.registration_plus_ones ?? 0)
+    if (plus.errors.length) return json({ error: 'Invalid submission', fields: plus.errors }, 400)
+    const { data: out, error } = await sb.rpc('checkin_web_rsvp', { p_code: code, p_token_hash: await sha256Hex(token), p_going: going, p_plus_ones: plus.names })
+    if (error || !out) { console.error('checkin-register: rsvp failed', error?.code); return json({ error: 'Something went wrong. Please try again.' }, 500) }
+    const status = String(out.status)
+    if (status !== 'going') return json({ status, first_name: out.first_name ?? null })
+    const attendee = out.attendee as { id: string; first_name: string; email: string; qr_token: string; qr_email_sent_at: string | null }
+    const plusOnes = (Array.isArray(out.plus_ones) ? out.plus_ones : []) as { id: string; first_name: string; qr_token: string }[]
+    // Test mode never emails guests; live, the ticket goes out (again at
+    // most every 10 minutes) and any new plus-ones' tickets with it.
+    if (!test) {
+      const brand = await withBrand(sb, ent.event_id, { name: event.name, date: event.date, venue: event.venue })
+      if (mayResend(attendee.qr_email_sent_at, Date.now())) {
+        const res = await sendQrEmailsForAttendees(sb, brand, [attendee])
+        if (res.some(r => r.status === 'error')) console.error('checkin-register: QR email failed, attendee', attendee.id)
+      }
+      if (plusOnes.length && attendee.email) {
+        const pr = await sendQrEmailsForAttendees(sb, brand, plusOnes.map(p => ({ ...p, email: null })), { overrideTo: attendee.email, guestOf: attendee.first_name })
+        if (pr.some(r => r.status === 'error')) console.error('checkin-register: plus-one QR email failed, guest', attendee.id)
+      }
+    }
+    console.log('checkin-register: rsvp going, event', ent.event_id)
+    const plusTickets = []
+    for (const p of plusOnes) { const t = await ticketFor(p.id); if (t) plusTickets.push(t) }
+    return json({ status: 'going', first_name: attendee.first_name, ticket: await ticketFor(attendee.id), plus_tickets: plusTickets })
   }
 
   // ── decline: "This is not me" ───────────────────────────────────
@@ -438,7 +481,7 @@ Deno.serve(async (req) => {
   }
 
   const status = String(out.status)
-  if (status === 'full' || status === 'closed' || status === 'test_cap' || status === 'sold_out' || status === 'bad_ticket') return json({ status })
+  if (status === 'full' || status === 'closed' || status === 'test_cap' || status === 'sold_out' || status === 'bad_ticket' || status === 'invite_only') return json({ status })
   if (status === 'not_found') return json({ error: 'not_found' }, 404)
 
   if (test) {

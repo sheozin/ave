@@ -74,6 +74,7 @@ const ALLOWED: Record<GatedFunction, Who[]> = {
   'checkin-held': ['owner', 'organizer'],
   'checkin-tickets': ['owner', 'organizer'],
   'checkin-reminders': ['owner', 'organizer'],
+  'checkin-invite-guests': ['owner', 'organizer'],
   'checkin-tickets-owner': ['owner'],
 };
 

@@ -266,6 +266,12 @@
       <div><h2>Attendees</h2><p id="att-sub"></p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-s" id="att-export">Export CSV</button><button class="btn btn-s" id="att-add">Add person</button><button class="btn btn-p" id="att-import">Import CSV</button></div>
     </div>
+    <div id="gi-bar" hidden style="border:1px solid var(--bd);border-radius:14px;padding:12px 14px;margin:0 0 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px"><b style="font-size:14px">Invitations</b><div class="small" id="gi-sum" style="margin:2px 0 0"></div></div>
+      <button class="btn btn-s" id="gi-test" type="button">Send me a test</button>
+      <button class="btn btn-p" id="gi-send" type="button"></button>
+    </div>
+    <div class="ok" id="gi-ok"></div><div class="err" id="gi-err"></div>
     <div class="tools">
       <input class="search" id="att-q" placeholder="Search name, email or company" autocomplete="off">
       <button class="chip" data-f="all" aria-pressed="true">All</button>
@@ -297,6 +303,8 @@
       <p class="small" style="margin:8px 0 0"><button class="link" id="rg-new" type="button">Replace the link</button> <span id="rg-new-note">if it was shared somewhere it should not be. The old link stops working at once.</span></p>
       <p class="small" id="rg-test" hidden>Test mode: the page works for up to 25 test registrations, sends no email and shows the guest's code on screen. They are cleared when you go live.</p>
     </div>
+    <h3 class="sc-h">Who can register</h3>
+    <div class="toggle"><div><b>Invited guests only</b><p>The public link takes no registrations. You invite guests from your guest list (Guests tab) and each gets a personal link to say if they are coming. With approval on, the public link takes requests for an invitation instead.</p></div><label class="sw"><input type="checkbox" id="rg-invite"><span></span></label></div>
     <h3 class="sc-h">Waitlist and approval</h3>
     <div class="toggle"><div><b>Waitlist when full</b><p>When you reach capacity, guests can join a waitlist. Offer them places from the list below and their ticket is emailed.</p></div><label class="sw"><input type="checkbox" id="rg-waitlist"><span></span></label></div>
     <div class="toggle"><div><b>Approve each registration</b><p>Registrations wait here for you. Guests get their ticket only once you approve them.</p></div><label class="sw"><input type="checkbox" id="rg-approval"><span></span></label></div>
@@ -602,7 +610,7 @@ function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'badges', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
-  ({ overview: renderOverview, details: renderDetails, attendees: () => { renderAttendees(); renderSpeakers(); }, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
+  ({ overview: renderOverview, details: renderDetails, attendees: async () => { renderAttendees(); renderSpeakers(); await loadInvites(); renderInviteBar(); renderAttendees(); }, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
 }
@@ -852,6 +860,74 @@ $('sp-on').onchange = async () => {
   const { error } = await sb.rpc('checkin_set_speaker_link', { p_event_id: EVENT_ID, p_on: $('sp-on').checked });
   if (error) { $('sp-err').textContent = error.message; $('sp-on').checked = !$('sp-on').checked; }
 };
+// ── invitations (migrations 116, 119) ──
+let INV = {};
+const invitable = () => ATT.filter(a => a.source === 'import' && a.email && (!a.is_test || !isLive()));
+async function loadInvites() {
+  const { data, error } = await sb.rpc('checkin_invite_status', { p_event_id: EVENT_ID });
+  INV = error ? {} : (data || {});
+  if (error) $('gi-err').textContent = error.message;
+}
+function renderInviteBar() {
+  const all = invitable(), sent = all.filter(a => INV[a.id]), notYet = all.length - sent.length;
+  const going = sent.filter(a => INV[a.id].rsvp === 'going').length, no = sent.filter(a => INV[a.id].rsvp === 'not_going').length;
+  $('gi-bar').hidden = ENT.registration_mode !== 'invite' && !sent.length;
+  $('gi-sum').textContent = sent.length + ' invited · ' + going + ' coming · ' + no + ' not coming · ' + (sent.length - going - no) + ' no answer yet'
+    + (notYet ? ' · ' + notYet + ' not invited yet' : '') + (isLive() ? '' : '. Invitations go to guests once the event is live.');
+  $('gi-send').hidden = !isLive() || !notYet;
+  $('gi-send').textContent = 'Send invitations to ' + notYet + (notYet === 1 ? ' guest' : ' guests');
+}
+function inviteCell(td, a) {
+  const iv = INV[a.id];
+  if (!iv && !(ENT.registration_mode === 'invite' && a.source === 'import' && a.email && isLive())) return;
+  const line = el('div'); line.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px';
+  if (iv) line.append(el('span', 'tag ' + (iv.rsvp === 'going' ? 't-in' : iv.rsvp === 'not_going' ? 't-test' : 't-wait'),
+    iv.rsvp === 'going' ? 'Coming' : iv.rsvp === 'not_going' ? 'Not coming' : 'Invited'));
+  if (isLive() && a.email && a.source === 'import') {
+    const again = el('button', 'link', iv ? 'Invite again' : 'Invite'); again.type = 'button';
+    again.onclick = async () => {
+      again.disabled = true;
+      const { error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'resend', attendee_ids: [a.id] } });
+      again.disabled = false;
+      if (error) { $('gi-err').textContent = await fnError(error); return; }
+      $('gi-ok').textContent = 'Invitation sent to ' + a.email + '.'; await loadInvites(); renderInviteBar(); renderAttendees();
+    };
+    line.append(again);
+  }
+  if (iv) {
+    const cancel = el('button', 'link', 'Cancel link'); cancel.type = 'button'; cancel.title = 'Stop every invitation link of this guest from working, for example if it was forwarded';
+    cancel.onclick = async () => {
+      if (cancel.dataset.armed !== '1') { cancel.dataset.armed = '1'; cancel.textContent = 'Click again'; setTimeout(() => { cancel.dataset.armed = ''; cancel.textContent = 'Cancel link'; }, 3500); return; }
+      const { error } = await sb.rpc('checkin_invite_revoke', { p_event_id: EVENT_ID, p_attendee_id: a.id });
+      if (error) { $('gi-err').textContent = error.message; return; }
+      $('gi-ok').textContent = 'Their invitation link no longer works. Use Invite again to send a new one.';
+    };
+    line.append(cancel);
+  }
+  td.append(line);
+}
+$('gi-send').onclick = async () => {
+  $('gi-ok').textContent = ''; $('gi-err').textContent = '';
+  const b = $('gi-send'); b.disabled = true;
+  let total = 0, failed = 0;
+  // In batches: the function sends up to 80 at a time and says how many remain.
+  for (;;) {
+    b.textContent = 'Sending… ' + total + ' sent';
+    const { data, error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'send' } });
+    if (error) { $('gi-err').textContent = await fnError(error); break; }
+    total += data.sent; failed += data.failed;
+    if (!data.remaining || !data.sent) break;
+  }
+  b.disabled = false;
+  if (total) $('gi-ok').textContent = total + (total === 1 ? ' invitation' : ' invitations') + ' sent.' + (failed ? ' ' + failed + ' could not be sent; try again.' : '');
+  await loadInvites(); renderInviteBar(); renderAttendees();
+};
+$('gi-test').onclick = async () => {
+  $('gi-ok').textContent = ''; $('gi-err').textContent = '';
+  const { data, error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'test' } });
+  if (error) { $('gi-err').textContent = await fnError(error); return; }
+  $('gi-ok').textContent = 'Sent to ' + data.to + '.';
+};
 function renderAttendees() {
   $('att-export').hidden = !can(ROLE, 'export');
   const q = $('att-q').value.trim().toLowerCase();
@@ -867,6 +943,7 @@ function renderAttendees() {
     const tr = el('tr');
     const n = el('td'); n.append(el('div', 'nm', a.first_name + ' ' + a.last_name), el('div', 'em', a.email || 'No email'));
     if (!a.email) n.lastChild.style.color = 'var(--rd)';
+    inviteCell(n, a);
     const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
     if (isLive() && a.email) {
       const rs = el('button', 'link', 'Resend QR'); rs.dataset.resend = a.id;
@@ -1005,6 +1082,7 @@ const sinceText = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date
 function renderHeld() {
   $('rg-waitlist').checked = !!ENT.registration_waitlist; $('rg-approval').checked = !!ENT.registration_approval;
   $('rg-plus').value = String(ENT.registration_plus_ones || 0);
+  $('rg-invite').checked = ENT.registration_mode === 'invite';
   const wl = HELD.filter(h => h.kind === 'waitlist').length, ap = HELD.length - wl;
   $('held-box').hidden = !HELD.length;
   $('held-title').textContent = [ap ? ap + ' awaiting approval' : '', wl ? wl + ' on the waitlist' : ''].filter(Boolean).join(' · ');
@@ -1050,6 +1128,14 @@ async function saveFlow() {
   $('held-ok').textContent = 'Saved.';
 }
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-invite').onchange = async () => {
+  $('held-err').textContent = ''; $('held-ok').textContent = '';
+  const mode = $('rg-invite').checked ? 'invite' : 'open';
+  const { data, error } = await sb.rpc('checkin_set_registration_mode', { p_event_id: EVENT_ID, p_mode: mode });
+  if (error) { $('held-err').textContent = error.message; $('rg-invite').checked = !$('rg-invite').checked; return; }
+  ENT.registration_mode = data;
+  $('held-ok').textContent = data === 'invite' ? 'Saved. Invite guests from the Guests tab.' : 'Saved. Anyone with the link can register.';
+};
 $('rg-plus').onchange = async () => {
   $('held-err').textContent = ''; $('held-ok').textContent = '';
   const { data, error } = await sb.rpc('checkin_set_plus_ones', { p_event_id: EVENT_ID, p_n: parseInt($('rg-plus').value, 10) });
