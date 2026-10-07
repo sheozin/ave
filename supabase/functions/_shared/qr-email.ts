@@ -53,7 +53,7 @@ export interface QrEmailResult {
 // registration list. None of it is escaped by default in a template
 // literal, so without this, a first_name like `<a href="...">click</a>`
 // would inject arbitrary markup/links into a genuine check-in email.
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
@@ -62,7 +62,7 @@ function formatEventDate(isoDate: string): string {
   return d.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 }
 
-function generateQrDataUrl(token: string): string {
+export function generateQrDataUrl(token: string): string {
   const qr = qrcode(0, 'M')
   qr.addData(token)
   qr.make()

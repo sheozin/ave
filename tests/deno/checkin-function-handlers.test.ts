@@ -186,7 +186,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -239,6 +239,7 @@ const ALLOWED: Record<string, Who[]> = {
   'checkin-add-walk-in': ['owner', 'organizer', 'lead'],
   'checkin-held': ['owner', 'organizer'],
   'checkin-tickets': ['owner', 'organizer'],
+  'checkin-reminders': ['owner', 'organizer'],
 }
 const BODY: Record<string, Row> = {
   'checkin-create-checkout': { event_id: EVENT },
@@ -249,6 +250,7 @@ const BODY: Record<string, Row> = {
   'checkin-add-walk-in': { event_id: EVENT, first_name: 'Ewa', last_name: 'Sample' },
   'checkin-held': { event_id: EVENT, action: 'fill' },
   'checkin-tickets': { event_id: EVENT, action: 'payout_status' },
+  'checkin-reminders': { event_id: EVENT, action: 'test', kind: 'reminder' },
 }
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -1440,4 +1442,59 @@ Deno.test(`${SW}: an order Stripe will not answer for is released an hour after 
     assert(String(r.body.detail).includes('expired 1'), JSON.stringify(r))
     assert(world.rpcCalls.some(c => c.name === 'checkin_web_order_expire'), 'not released')
   } finally { globalThis.fetch = real }
+})
+
+// ── Reminder emails (110) ───────────────────────────────────────────
+const RM = 'checkin-reminders'
+function remSetup() {
+  setup('none', { ent: { checkin_core: true, status: 'live', registration_address: 'Main St 1', reminder_message: 'Bring <b>ID</b>',
+    thankyou_message: 'Thanks!', thankyou_link: 'https://example.com/slides' } })
+  world.tables.leod_events[0].event_start = '09:00:00'
+  world.rpcResult.checkin_reminders_cron_ok = true
+}
+Deno.test(`${RM}: refuses the cron without the secret`, async () => {
+  remSetup(); world.rpcResult.checkin_reminders_cron_ok = false
+  const r = await call(RM, {})
+  assert(r.status === 401 && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test(`${RM}: sends each claimed guest their email, escaped, with the QR`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [
+    { attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Ann<i>', email: 'ann@stub.test', qr_token: 'tok00000000000000000000000000001' },
+    { attendee_id: 'b2000000-0000-4000-8000-000000000002', kind: 'thankyou', event_id: EVENT, first_name: 'Ben', email: 'ben@stub.test', qr_token: 'tok2' },
+  ]
+  const r = await call(RM, {})
+  assert(r.status === 200 && r.body.detail === 'reminders 1, thank-yous 1', JSON.stringify(r))
+  const [rem, thx] = world.emails as { to: string; subject: string; html: string }[]
+  assert(rem.to === 'ann@stub.test' && rem.subject.startsWith('Reminder: Stub event'), rem.subject)
+  assert(rem.html.includes('Ann&lt;i&gt;') && rem.html.includes('Bring &lt;b&gt;ID&lt;/b&gt;') && rem.html.includes('data:image/gif;base64') && rem.html.includes('doors open 09:00'), 'reminder body')
+  assert(rem.html.includes('query=Hall%2C%20Main%20St%201'), 'maps link')
+  assert(thx.to === 'ben@stub.test' && thx.html.includes('href="https://example.com/slides"'), 'thank-you body')
+  assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not ok')
+})
+Deno.test(`${RM}: a failed send gives the claim back and fails the run`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'reminder', event_id: EVENT, first_name: 'Ann', email: 'ann@stub.test', qr_token: 'tok1' }]
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    if (String(i instanceof Request ? i.url : i).includes('api.resend.com')) return new Response(JSON.stringify({ message: 'rate limited' }), { status: 429, headers: { 'Content-Type': 'application/json' } })
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    const r = await call(RM, {})
+    assert(r.status === 500, JSON.stringify(r))
+    const un = world.rpcCalls.find(c => c.name === 'checkin_unclaim_reminder')
+    assert(un && un.args.p_attendee_id === ATT && un.args.p_kind === 'reminder', JSON.stringify(world.rpcCalls))
+    assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'failed', 'run not failed')
+  } finally { globalThis.fetch = real }
+})
+Deno.test(`${RM} test: goes only to the organizer, marked as a test`, async () => {
+  remSetup()
+  const r = await call(RM, { event_id: EVENT, action: 'test', kind: 'thankyou' })
+  assert(r.status === 403, 'none role should be refused: ' + JSON.stringify(r))
+  setup('organizer', { ent: { checkin_core: true, status: 'test', thankyou_link: 'https://example.com/x' } })
+  const r2 = await call(RM, { event_id: EVENT, action: 'test', kind: 'thankyou' })
+  assert(r2.status === 200 && r2.body.to === 'desk@stub.test', JSON.stringify(r2))
+  const m = world.emails![0] as { to: string; subject: string }
+  assert(m.to === 'desk@stub.test' && m.subject === '[Test] Thank you for coming to Stub event', m.subject)
 })

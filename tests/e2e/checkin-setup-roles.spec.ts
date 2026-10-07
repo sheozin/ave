@@ -550,3 +550,27 @@ test('tickets tab: an organizer sees payouts but cannot connect or refund', asyn
   await expect(page.locator('#tk-obody tr')).toHaveCount(1);
   await expect(page.locator('#tk-obody button')).toHaveCount(0);
 });
+
+test('emails tab: automatic reminder and thank-you settings save, and a test goes to the organizer', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  const tests: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer', status: 'live' }, 'qr', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', reminder_enabled: true, thankyou_enabled: false }]);
+    await rpc(page, 'checkin_reminder_status', { reminder_from: '2026-10-17T07:00:00Z', thankyou_from: '2026-10-18T18:00:00Z', reminder_sent: 12, thankyou_sent: 0 });
+    await rpc(page, 'checkin_set_reminders', (a) => { saved.push(a); return { reminder_enabled: a.p_reminder, reminder_message: a.p_reminder_message, thankyou_enabled: a.p_thankyou, thankyou_message: a.p_thankyou_message, thankyou_link: a.p_thankyou_link }; });
+    await fn(page, 'checkin-reminders', (b) => { tests.push(b); return { body: { ok: true, to: 'probe@cuedeck-test.io' } }; });
+  });
+  await expect(page.locator('#rm-on')).toBeChecked();
+  await expect(page.locator('#ty-on')).not.toBeChecked();
+  await expect(page.locator('#rm-count')).toHaveText('12 reminders sent');
+  await expect(page.locator('#rm-when')).toContainText('Goes out from');
+  await page.fill('#rm-msg', 'Use the north entrance.');
+  await page.locator('#ty-on').evaluate((e: HTMLInputElement) => e.click());
+  await page.fill('#ty-link', 'https://example.com/survey');
+  await page.click('#rm-save');
+  await expect(page.locator('#rm-ok')).toHaveText('Saved.');
+  expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_reminder: true, p_reminder_message: 'Use the north entrance.', p_thankyou: true, p_thankyou_link: 'https://example.com/survey' });
+  await page.click('#ty-test');
+  await expect(page.locator('#rm-ok')).toContainText('Sent to probe@cuedeck-test.io');
+  expect(tests[0]).toMatchObject({ event_id: EVENT_ID, action: 'test', kind: 'thankyou' });
+});

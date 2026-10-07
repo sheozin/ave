@@ -361,9 +361,23 @@
   </section>
 
   <section class="panel" id="p-qr" hidden>
-    <div class="ph"><div><h2>QR emails</h2><p id="qr-sub"></p></div></div>
+    <div class="ph"><div><h2>Guest emails</h2><p id="qr-sub"></p></div></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-s" id="qr-self">Send a test to myself</button><button class="btn btn-p" id="qr-all" hidden></button></div>
     <div class="ok" id="qr-ok"></div><div class="err" id="qr-err"></div>
+    <h3 class="sc-h">Automatic emails</h3>
+    <p class="sc-p">Sent for you once the event is live. Test mode never emails guests.</p>
+    <div class="toggle"><div><b>Reminder the day before</b><p id="rm-when">Goes out from 24 hours before doors open, with each guest's QR code, the time and the venue. Guests who already checked in are skipped.</p></div><label class="sw"><input type="checkbox" id="rm-on"><span></span></label></div>
+    <div class="field"><label for="rm-msg">Note in the reminder <span class="small">(optional)</span></label><textarea id="rm-msg" maxlength="600" rows="3" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="Parking, what to bring, which entrance to use"></textarea></div>
+    <div class="toggle"><div><b>Thank-you after the event</b><p id="ty-when">Goes out 2 hours after the event ends, only to guests who checked in.</p></div><label class="sw"><input type="checkbox" id="ty-on"><span></span></label></div>
+    <div class="field"><label for="ty-msg">Note in the thank-you <span class="small">(optional)</span></label><textarea id="ty-msg" maxlength="600" rows="3" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="Thanks for coming. The slides and photos are online."></textarea></div>
+    <div class="field"><label for="ty-link">Link in the thank-you <span class="small">(optional: survey, slides, photos)</span></label><input id="ty-link" maxlength="500" placeholder="https://" autocomplete="off"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+      <button class="btn btn-p" id="rm-save" type="button">Save</button>
+      <button class="btn btn-s" id="rm-test" type="button">Send me the reminder</button>
+      <button class="btn btn-s" id="ty-test" type="button">Send me the thank-you</button>
+      <span class="small" id="rm-count"></span>
+    </div>
+    <div class="ok" id="rm-ok"></div><div class="err" id="rm-err"></div>
   </section>
 
   <section id="p-golive" hidden>
@@ -1410,7 +1424,36 @@ document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change'
 }));
 
 // ── 5. QR emails ─────────────────────────────────────────
+// ── automatic emails (migration 110) ──
+const whenText = (iso) => iso ? new Date(iso).toLocaleString(navigator.language || 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+async function renderReminders() {
+  $('rm-on').checked = !!ENT.reminder_enabled; $('ty-on').checked = !!ENT.thankyou_enabled;
+  $('rm-msg').value = ENT.reminder_message || ''; $('ty-msg').value = ENT.thankyou_message || ''; $('ty-link').value = ENT.thankyou_link || '';
+  const { data, error } = await sb.rpc('checkin_reminder_status', { p_event_id: EVENT_ID });
+  if (error) { $('rm-err').textContent = error.message; return; }
+  $('rm-when').textContent = 'Goes out from ' + (whenText(data.reminder_from) || '24 hours before doors open') + ' (your time), with each guest\'s QR code, the time and the venue. Guests who already checked in are skipped.';
+  $('ty-when').textContent = 'Goes out from ' + (whenText(data.thankyou_from) || '2 hours after the event ends') + ' (your time), only to guests who checked in.';
+  $('rm-count').textContent = isLive() ? [data.reminder_sent ? data.reminder_sent + ' reminders sent' : '', data.thankyou_sent ? data.thankyou_sent + ' thank-yous sent' : ''].filter(Boolean).join(' · ') : '';
+}
+$('rm-save').onclick = async () => {
+  $('rm-ok').textContent = ''; $('rm-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_reminders', { p_event_id: EVENT_ID, p_reminder: $('rm-on').checked, p_reminder_message: $('rm-msg').value,
+    p_thankyou: $('ty-on').checked, p_thankyou_message: $('ty-msg').value, p_thankyou_link: $('ty-link').value });
+  if (error) { $('rm-err').textContent = error.message; return; }
+  Object.assign(ENT, data);
+  $('rm-ok').textContent = 'Saved.';
+};
+for (const [btn, kind] of [['rm-test', 'reminder'], ['ty-test', 'thankyou']]) {
+  $(btn).onclick = async () => {
+    $('rm-ok').textContent = ''; $('rm-err').textContent = ''; $(btn).disabled = true;
+    const { data, error } = await sb.functions.invoke('checkin-reminders', { body: { event_id: EVENT_ID, action: 'test', kind } });
+    $(btn).disabled = false;
+    if (error) { $('rm-err').textContent = await fnError(error); return; }
+    $('rm-ok').textContent = 'Sent to ' + data.to + '. It uses your saved settings, so save first if you changed anything.';
+  };
+}
 function renderQr() {
+  renderReminders();
   const unsent = ATT.filter(a => a.email && !a.qr_email_sent_at).length;
   $('qr-sub').textContent = isLive()
     ? unsent + ' guests with an email address have not been sent their QR code yet.'
