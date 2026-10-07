@@ -374,6 +374,8 @@ const CueDeckI18n = (() => {
       'cc.bc.pressAgain': 'Press again to send',
       'cc.bc.show': 'Show broadcast',
       'cc.bc.dismiss': 'Dismiss',
+      'cc.hdr.viewAsTitle': 'View as',
+      'cc.bc.sender': 'Operator',
     },
 
     ar: {
@@ -709,6 +711,8 @@ const CueDeckI18n = (() => {
       'cc.bc.pressAgain': 'اضغط مرة أخرى للإرسال',
       'cc.bc.show': 'عرض الرسالة',
       'cc.bc.dismiss': 'إخفاء',
+      'cc.hdr.viewAsTitle': 'العرض كـ',
+      'cc.bc.sender': 'مشغّل',
     },
 
     pl: {
@@ -883,6 +887,8 @@ const CueDeckI18n = (() => {
       'cc.bc.pressAgain': 'Naciśnij ponownie, aby wysłać',
       'cc.bc.show': 'Pokaż komunikat',
       'cc.bc.dismiss': 'Ukryj',
+      'cc.hdr.viewAsTitle': 'Widok',
+      'cc.bc.sender': 'Operator',
     },
 
     de: {
@@ -1057,6 +1063,8 @@ const CueDeckI18n = (() => {
       'cc.bc.pressAgain': 'Zum Senden erneut drücken',
       'cc.bc.show': 'Durchsage anzeigen',
       'cc.bc.dismiss': 'Ausblenden',
+      'cc.hdr.viewAsTitle': 'Ansicht',
+      'cc.bc.sender': 'Operator',
     },
   };
 
@@ -1192,10 +1200,6 @@ const CueDeckI18n = (() => {
     // Undo bar
     const undoBtn = document.getElementById('undo-btn');
     if (undoBtn) undoBtn.textContent = t('undo.undo');
-
-    // Logout button title
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.title = t('profile.signOut');
 
     // Broadcast preset buttons at far right
     document.querySelectorAll('[onclick*="insertPreset"]').forEach(btn => {

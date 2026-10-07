@@ -1707,6 +1707,11 @@
     .bc-presets-menu > summary::-webkit-details-marker { display: none; }
     .bc-presets-list { bottom: calc(100% + 6px); top: auto; inset-inline-start: 0; inset-inline-end: auto; }
     .bc-presets-menu:not([open]) .bc-presets-list { display: none; }
+    #mm-roles[hidden] { display: none; }
+    #mobile-menu button .ico { margin-inline-end: 8px; }
+    .mm-roles { display: grid; }
+    .mm-roles-lbl { padding: 6px 14px 2px; }
+    #mobile-menu .mm-role.active { color: var(--text-primary); background: var(--raised); }
     /* Phone: logo, event name, clock, status dot and the menu button fit in 390 px;
        crew, View as and AVE Brain stay on desktop and tablet (the role shows in the menu). */
     @media screen and (max-width: 767px) {
@@ -2103,6 +2108,17 @@
     </div>
   <button id="hamburger-btn" onclick="toggleHamburger()" title="Menu">&#9776;</button>
   <div id="mobile-menu">
+    <!-- View as, directors only (shown by loadUserRole); the header menu is hidden on a phone -->
+    <div id="mm-roles" class="mm-roles" hidden>
+      <div class="lbl mm-roles-lbl" data-i18n="cc.hdr.viewAsTitle">View as</div>
+      <button type="button" class="mm-role active" data-role="director" aria-pressed="true" onclick="setRole('director');toggleHamburger()" data-i18n="role.director">Director</button>
+      <button type="button" class="mm-role" data-role="stage" aria-pressed="false" onclick="setRole('stage');toggleHamburger()" data-i18n="role.stage">Stage</button>
+      <button type="button" class="mm-role" data-role="av" aria-pressed="false" onclick="setRole('av');toggleHamburger()" data-i18n="role.av">AV</button>
+      <button type="button" class="mm-role" data-role="interp" aria-pressed="false" onclick="setRole('interp');toggleHamburger()" data-i18n="role.interp">Interp</button>
+      <button type="button" class="mm-role" data-role="reg" aria-pressed="false" onclick="setRole('reg');toggleHamburger()" data-i18n="role.reg">Reg</button>
+      <button type="button" class="mm-role" data-role="signage" aria-pressed="false" onclick="setRole('signage');toggleHamburger()" data-i18n="role.signage">Signage</button>
+      <div style="height:1px;background:var(--border);margin:2px 6px"></div>
+    </div>
     <button onclick="openShortcutsModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-keyboard"/></svg>Shortcuts</button>
     <button onclick="openQuickRefModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-list"/></svg>Quick Ref</button>
     <button onclick="openChangelogModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-sparkle"/></svg>What's New</button>
@@ -2471,7 +2487,7 @@
   <input id="bc-input" type="text" placeholder="Message to all operators" maxlength="200" aria-label="Broadcast message"
          oninput="onBCInput()" onkeydown="if(event.key==='Enter')sendBroadcast()">
   <span id="bc-char" class="bc-char"></span>
-  <select id="bc-pri" aria-label="Priority">
+  <select id="bc-pri" aria-label="Priority" onchange="dropBCArm()">
     <option value="info">info</option>
     <option value="warn">warn</option>
     <option value="critical">critical</option>
@@ -2904,9 +2920,10 @@ function subscribeControl(eventId) {
           if (r) counts[r] = (counts[r] || 0) + 1;
         }
       }
-      S.presenceList = Object.values(state).flat().map(e => ({ role: e.role, name: e.name || '' }));
+      S.presenceList = Object.values(state).flat().map(e => ({ role: e.role, userId: e.userId, name: e.name || '' }));
       S.presence = counts;
       refreshPresence();
+      if (S.broadcast?.message) showBCBanner(S.broadcast);   // the sender's name may only now be known
     })
     .subscribe(async st => {
       S.rtStatus = st === 'SUBSCRIBED' ? 'ok' : 'error';
@@ -3427,11 +3444,23 @@ async function markArrived(sessionId, arrived) {
 // Critical needs a second press within 3 s (spec 2.9); info and warn send at once.
 // The arm is the shared one (armOrConfirm): solid red, announced, re-render safe.
 const _bcPending = new Map();
+let _bcArmKey = null;   // the message and priority the arm was given for
+function dropBCArm() {
+  const a = _bcPending.get('critical');
+  if (!a) return;
+  clearTimeout(a.timer);
+  _bcPending.delete('critical');
+  renderBCSend();
+}
 function sendBroadcast() {
   const msg = document.getElementById('bc-input').value.trim();
   const pri = document.getElementById('bc-pri').value;
   if (!msg || !S.event) return;
   if (pri === 'critical') {
+    // An arm confirms only the exact message and priority it was given for.
+    const key = `${pri}|${msg}`;
+    if (_bcArmKey !== key) dropBCArm();
+    _bcArmKey = key;
     armOrConfirm(_bcPending, 'critical', document.getElementById('bc-send'), null, 'cc.bc.pressAgain', 3000, doSendBroadcast);
     return;
   }
@@ -3453,7 +3482,7 @@ async function doSendBroadcast() {
   // One row per event (id = event id); 'global' made every event share one row.
   const { error } = await sb.from('leod_broadcast').upsert({
     id: S.event.id, event_id: S.event.id,
-    message: msg, priority: pri, sent_at: new Date().toISOString(),
+    message: msg, priority: pri, sent_at: new Date().toISOString(), sent_by: S.user?.id ?? null,
   });
   if (!error) {
     document.getElementById('bc-input').value = '';
@@ -3545,7 +3574,13 @@ document.addEventListener('keydown', e => {
   }
 
   if (e.key === 'Escape') {
+    // Focus goes back to whatever opened the menu or popover being closed.
+    const opener = document.querySelector('#header [aria-haspopup][aria-expanded="true"]');
+    const presets = document.getElementById('bc-presets-menu');
+    const presetsOpen = !!presets?.open;
     closeProfilePanel(); closePopovers(); closeEvDropdown();
+    if (presets) presets.open = false;
+    if (opener) opener.focus(); else if (presetsOpen) presets.querySelector('summary')?.focus();
     // Close command palette first
     if (document.getElementById('cmd-palette').style.display === 'flex') { closeCmdPalette(); return; }
     // Close help dropdown
@@ -5322,10 +5357,15 @@ function refreshPresence() {
   if (cnt) cnt.textContent = tf('cc.hdr.crew', { on: online.length, all: PRESENCE_ROLES.length });
   const list = document.getElementById('crew-list');
   if (list) {
-    // List exactly the roles the count counts, so "Crew 3/5" shows three names.
-    const people = (S.presenceList || []).filter(p => PRESENCE_ROLES.includes(p.role));
-    list.innerHTML = people.length
-      ? people.map(p => `<li><span class="crew-dot"></span><span>${esc(p.name || '–')}</span><span class="crew-role">${esc(t('role.' + p.role))}</span></li>`).join('')
+    // One row per role the count counts ("Crew 3/5" shows three rows); each person
+    // once, however many tabs they have open.
+    const rows = PRESENCE_ROLES.map(r => {
+      const names = new Map();
+      for (const p of S.presenceList || []) if (p.role === r) names.set(p.userId || p.name, p.name || '–');
+      return [r, [...names.values()]];
+    }).filter(([, names]) => names.length);
+    list.innerHTML = rows.length
+      ? rows.map(([r, names]) => `<li><span class="crew-dot"></span><span>${esc(names.join(', '))}</span><span class="crew-role">${esc(t('role.' + r))}</span></li>`).join('')
       : `<li class="crew-none">${esc(t('cc.hdr.crewNone'))}</li>`;
   }
 }
@@ -5690,13 +5730,21 @@ function renderLog() {
     </div>`).join('');
 }
 
+// The sender's first name from data the console already holds; never invented.
+function bcSenderName(id) {
+  if (!id) return '';
+  const p = (S.presenceList || []).find(x => x.userId === id && x.name);
+  const o = p ? null : (_operatorsData || []).find(x => x.id === id && x.name);
+  const full = p?.name || o?.name || (id === S.user?.id ? (S.userName || '') : '');
+  return full ? full.trim().split(/\s+/)[0] : t('cc.bc.sender');
+}
 function showBCBanner(b) {
   const el = document.getElementById('bc-banner');
   if (!b?.message) { hideBCBanner(); return; }
   S.bcKey = `${b.sent_at || ''}|${b.message}`;
   el.className = b.priority;
   el.innerHTML = `${icon(b.priority === 'info' ? 'info' : 'alert')}<span class="bc-msg">${esc(b.message)}</span>`
-    + `<span class="bc-when">${esc(tsHM(b.sent_at))}</span>`
+    + `<span class="bc-when">${esc([bcSenderName(b.sent_by), tsHM(b.sent_at)].filter(Boolean).join(' · '))}</span>`
     + `<button type="button" class="btn sm ghost bc-dismiss" onclick="dismissBanner()">${esc(t('cc.bc.dismiss'))}</button>`;
   const chip = document.getElementById('bc-chip');
   if (chip) chip.className = `pill bc-chip ${b.priority}`;
@@ -5737,6 +5785,7 @@ function fillPreset(text) {
 }
 
 function onBCInput() {
+  dropBCArm();
   const inp = document.getElementById('bc-input');
   const len = inp?.value.length || 0;
   const el  = document.getElementById('bc-char');
@@ -5765,8 +5814,19 @@ function setRole(role) {
     b.classList.toggle('active', on);
     b.setAttribute('aria-checked', String(on));
   });
+  document.querySelectorAll('.mm-role[data-role]').forEach(b => {
+    const on = b.dataset.role === role;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
   const va = document.getElementById('viewas-lbl');
-  if (va) va.textContent = tf('cc.hdr.viewAs', { role: t('role.' + role) });
+  if (va) {
+    // Sentence case mid-sentence ("View as director") where the language lowercases
+    // role nouns; acronyms such as AV keep their capitals.
+    let rn = t('role.' + role);
+    if (['en', 'pl'].includes(CueDeckI18n.getLocale()) && rn !== rn.toUpperCase()) rn = rn.toLowerCase();
+    va.textContent = tf('cc.hdr.viewAs', { role: rn });
+  }
   const bw = document.getElementById('brain-wrap');
   if (bw) bw.hidden = role !== 'director' || !(S.brainCount > 0);
   // Show auto-start button for director/stage only
@@ -7944,6 +8004,8 @@ async function loadUserRole() {
 
   // Show Users button and pending badge for directors
   if (data.role === 'director') {
+    const mmRoles = document.getElementById('mm-roles');
+    if (mmRoles) mmRoles.hidden = false;
     document.getElementById('users-btn').style.display = 'flex';
     loadPendingBadge();
   }

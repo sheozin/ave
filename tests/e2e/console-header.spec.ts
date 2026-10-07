@@ -3,7 +3,7 @@
 // event switcher, system pill naming what failed, crew, View as for
 // directors only, account menu with Tools, banner that collapses to a chip.
 import { test, expect } from '@playwright/test';
-import { openConsole, evalPage } from './console-boot-mock';
+import { openConsole, evalPage, iso, EVENT_ID, USER_ID } from './console-boot-mock';
 
 test('header: one 52 px bar, no diagnostics strip or role bar, top chrome at most 100 px', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
@@ -136,5 +136,105 @@ test('header: the clock is 26 px bold and tabular, as in the approved demo (spec
   expect(st.size).toBeGreaterThanOrEqual(26);
   expect(st.weight).toBeGreaterThanOrEqual(700);
   expect(st.num).toContain('tabular-nums');
+  await ctx.close();
+});
+
+// ── Fix round 1 ──────────────────────────────────────────────────────────
+test('header: on a phone a director switches role from the menu', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 390, height: 844 }, touch: true });
+  await page.locator('#hamburger-btn').click();
+  await page.locator('#mobile-menu .mm-role[data-role="stage"]').click();
+  expect(await evalPage(page, 'S.role')).toBe('stage');
+  await ctx.close();
+});
+
+test('header: on a phone a locked operator sees no role items', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', viewport: { width: 390, height: 844 }, touch: true });
+  await page.locator('#hamburger-btn').click();
+  await expect(page.locator('#mobile-menu')).toBeVisible();
+  await expect(page.locator('#mobile-menu .mm-role')).toHaveCount(6);       // present in the markup ...
+  await expect(page.locator('#mobile-menu .mm-role:visible')).toHaveCount(0); // ... never shown to a locked role
+  await ctx.close();
+});
+
+const BC = (o: Record<string, unknown>) => ({ id: EVENT_ID, event_id: EVENT_ID, message: 'Hall B on hold: projector signal lost. Main Stage running on time.', priority: 'warn', sent_at: iso(-8), ...o });
+
+test('header: the banner names the sender and the time', async ({ browser }) => {
+  for (const [sentBy, expected] of [[USER_ID, 'Nour · 11:32'], ['p2', 'Ahmed · 11:32'], ['ffffffff-0000-4000-8000-000000000000', 'Operator · 11:32'], [null, '11:32']] as const) {
+    const { ctx, page } = await openConsole(browser, { broadcast: BC({ sent_by: sentBy }) });
+    await expect(page.locator('#bc-banner .bc-when')).toHaveText(expected);
+    await ctx.close();
+  }
+});
+
+test('header: a sent broadcast records who sent it', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const bodies: Record<string, unknown>[] = [];
+  page.on('request', r => { if (r.url().includes('/rest/v1/leod_broadcast') && r.method() === 'POST') bodies.push(JSON.parse(r.postData() || '{}')); });
+  await page.locator('#bc-input').fill('Doors open');
+  await page.locator('#bc-input').press('Enter');
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0].sent_by).toBe(USER_ID);
+  await ctx.close();
+});
+
+test('header: editing an armed critical broadcast drops the arm; the next press only re-arms', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const writes: string[] = [];
+  page.on('request', r => { if (r.url().includes('/rest/v1/leod_broadcast') && r.method() !== 'GET') writes.push(r.method()); });
+  const send = page.locator('#bc-send');
+  await page.locator('#bc-input').fill('Evacuate Hall B');
+  await page.locator('#bc-pri').selectOption('critical');
+  await send.click();
+  await expect(send).toHaveClass(/confirm-pending/);
+  await page.locator('#bc-input').fill('Evacuate Hall C');
+  await expect(send).not.toHaveClass(/confirm-pending/);
+  await expect(send).toHaveText('Send');
+  await send.click();                                   // within 3 s of the first press
+  await expect(send).toHaveClass(/confirm-pending/);    // re-armed, not sent
+  expect(writes).toEqual([]);
+  await page.locator('#bc-pri').selectOption('warn');   // a priority change drops it too
+  await expect(send).not.toHaveClass(/confirm-pending/);
+  expect(writes).toEqual([]);
+  await ctx.close();
+});
+
+test('header: crew counts people once, even with two tabs open', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `S.presenceList = [
+    { role: 'director', userId: 'u1', name: 'Nour Selim' }, { role: 'director', userId: 'u1', name: 'Nour Selim' },
+    { role: 'stage', userId: 'u2', name: 'Ahmed Fawzy' }, { role: 'av', userId: 'u3', name: 'Mona Adel' }];
+    S.presence = { director: 2, stage: 1, av: 1 }; refreshPresence();`);
+  await expect(page.locator('#crew-count')).toHaveText('Crew 3/5');
+  await expect(page.locator('#crew-list li')).toHaveCount(3);
+  expect(await page.locator('#crew-list').evaluate(el => (el.textContent || '').split('Nour Selim').length - 1)).toBe(1);
+  await ctx.close();
+});
+
+test('header: Escape closes a popover and gives focus back to its button', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#conn-pill').click();
+  await expect(page.locator('#sys-pop')).toBeVisible();
+  await page.locator('#sys-pop-title').click();          // focus leaves the pill
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#sys-pop')).toBeHidden();
+  await expect(page.locator('#conn-pill')).toBeFocused();
+  await ctx.close();
+});
+
+test('header: Escape closes the broadcast Presets menu', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#bc-presets-menu > summary').click();
+  await expect(page.locator('#bc-presets-menu')).toHaveJSProperty('open', true);
+  await page.locator('#bc-bar .lbl').click();            // focus leaves the summary
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#bc-presets-menu')).toHaveJSProperty('open', false);
+  await expect(page.locator('#bc-presets-menu > summary')).toBeFocused();
+  await ctx.close();
+});
+
+test('header: View as reads in sentence case', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await expect(page.locator('#viewas-lbl')).toHaveText('View as director');
   await ctx.close();
 });
