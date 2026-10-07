@@ -214,6 +214,8 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         if (m.event === 'phx_join') {
           const pc = (m.payload?.config?.postgres_changes || []).map((b: any, i: number) => ({ ...b, id: 1000 + i }));
           out(m.topic, 'phx_reply', { status: 'ok', response: { postgres_changes: pc } }, m.ref, m.join_ref ?? m.ref);
+          const w = window as any;
+          (w.__rtJoins ||= new Map()).set(m.topic, { ws: this, pc, arr });
           const meta = (rl: string, key: string, name: string) => ({ [key]: { metas: [{ phx_ref: key, role: rl, userId: key, name }] } });
           out(m.topic, 'presence_state', { ...meta('director', 'p1', 'Nour Selim'), ...meta('stage', 'p2', 'Ahmed Fawzy'), ...meta('av', 'p3', 'Mona Adel'), ...meta('signage', 'p4', 'Bassem Lotfy') }, null, m.join_ref ?? m.ref);
         } else {
@@ -222,6 +224,30 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       }
       close() { this.readyState = 3; const e = new CloseEvent('close', { code: 1000 }); this.onclose?.(e); this.dispatchEvent(e); }
     }
+    // Deliver a postgres change the way Supabase Realtime does: a binding with a
+    // filter gets INSERT/UPDATE only when the row matches it and never gets
+    // DELETE ("Delete events are not filterable"); DELETE carries old_record = { id }
+    // (replica identity default).
+    (window as any).__rtPush = (table: string, type: 'INSERT' | 'UPDATE' | 'DELETE', record: any, oldRecord: any) => {
+      let sent = 0;
+      for (const [topic, j] of ((window as any).__rtJoins || new Map()) as Map<string, any>) {
+        const ids = j.pc.filter((b: any) => {
+          if (b.schema !== 'public' || b.table !== table) return false;
+          if (b.event !== '*' && String(b.event).toUpperCase() !== type) return false;
+          if (!b.filter) return true;
+          if (type === 'DELETE') return false;
+          const [col, val] = String(b.filter).split('=eq.');
+          return String(record?.[col]) === val;
+        }).map((b: any) => b.id);
+        if (!ids.length) continue;
+        const cols = Object.keys({ ...(record || {}), ...(oldRecord || {}) }).map(name => ({ name, type: 'text' }));
+        const payload = { ids, data: { schema: 'public', table, commit_timestamp: new Date().toISOString(), type, columns: cols,
+          record: type === 'DELETE' ? {} : record, old_record: type === 'INSERT' ? {} : oldRecord, errors: null } };
+        j.ws._emit(j.arr ? JSON.stringify([null, null, topic, 'postgres_changes', payload]) : JSON.stringify({ topic, event: 'postgres_changes', payload, ref: null }));
+        sent++;
+      }
+      return sent;
+    };
     (window as any).WebSocket = function (url: string, p?: any) {
       return String(url).includes('supabase.co') ? new FakeWS(url) : new Native(url, p);
     } as any;
@@ -307,6 +333,11 @@ export const MASK_SELECTORS = ['#hdr-clock', '#hdr-offset', '#sb-time', '.ck-val
 
 // toHaveScreenshot against the committed baseline, or, with CONSOLE_NOTES_DIR
 // set, a plain PNG for the before/after note to Sherif (use CONSOLE_DSF=2).
+// One realtime postgres change through the fake socket (see __rtPush above).
+export async function rtPush(page: Page, table: string, type: 'INSERT' | 'UPDATE' | 'DELETE', record: unknown, old: unknown = {}) {
+  return page.evaluate(([tb, ty, r, o]) => (window as any).__rtPush(tb, ty, r, o), [table, type, record, old] as const);
+}
+
 export async function snap(page: Page, name: string) {
   const notes = process.env.CONSOLE_NOTES_DIR;
   if (notes) {

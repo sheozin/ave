@@ -2968,6 +2968,12 @@ function subscribeControl(eventId) {
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'leod_sessions', filter: `event_id=eq.${eventId}` },
         onSessionChange)
+    // Realtime never filters DELETE ("Delete events are not filterable"), so a
+    // filtered binding never hears one. This unfiltered binding hears every
+    // event's deletes with old = { id } only; onSessionChange drops unknown ids.
+    .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'leod_sessions' },
+        onSessionChange)
     .on('postgres_changes',
         { event: '*', schema: 'public', table: 'leod_event_log', filter: `event_id=eq.${eventId}` },
         p => { if (p.eventType === 'INSERT' && p.new) pushLogFromRow(p.new); })
@@ -3018,6 +3024,8 @@ function onSessionChange(payload) {
   if (!row) return;
   if (S.event && row.event_id && row.event_id !== S.event.id) return; // another event's row
   if (payload.eventType === 'DELETE') {
+    // Only this event's sessions; a second delivery of the same delete is a no-op.
+    if (!row.id || !S.sessions.some(s => s.id === row.id)) return;
     dropStaleArms(row.id);
     delete S.seqMap[row.id];
     S.sessions = S.sessions.filter(s => s.id !== row.id);
@@ -4226,7 +4234,10 @@ function mostUrgentSession() {
 function inspectorSession() {
   const sel = S.selectedId ? S.sessions.find(s => s.id === S.selectedId) : null;
   if (S.selectedId && !sel) S.selectedId = null;
-  return sel || mostUrgentSession();
+  const s = sel || mostUrgentSession();
+  // More belongs to the session it was opened on: an auto-pick of another session closes it.
+  if (!sel && s?.id !== S.inspectedId) S.inspMoreOpen = false;
+  return s;
 }
 // "Show #3 (overrun)": only while the operator holds a selection and a session ranks
 // above it. Text-sized, in the header row, so it never shifts or replaces a control.
@@ -4551,7 +4562,7 @@ function renderTimeline() {
   const head = `<div class="tl-bar-head"><span class="lbl">${esc(t('filter.timeline'))}</span>
     <button type="button" class="btn sm ghost" data-fk="tl-fit" aria-pressed="${!!S.tlFit}" onclick="toggleTlFit()">${esc(t('cc.tl.fitDay'))}</button></div>`;
   if (!visible.length) {
-    list.innerHTML = `<div id="timeline-wrap">${head}<p class="tl-empty">No sessions to display in timeline.</p></div>`;
+    list.innerHTML = `<div id="timeline-wrap">${head}<p class="tl-empty">${esc(t('cc.tl.empty'))}</p></div>`;
     restoreFocus(fk);
     buildCtxPanel();
     return;
