@@ -16,6 +16,8 @@ export const FUNCTION_GATES = {
   'checkin-create-checkout': { perm: 'go_live', forbidden: NOT_OWNER },
   'checkin-import-attendees': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   'checkin-send-qr-emails': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
+  // Waitlist and approval: releasing a held guest is a guest-list change.
+  'checkin-held': { perm: 'manage_guests', forbidden: { error: 'Forbidden, organizers only' } },
   // The desk maps a 403 whose message contains 'organizer' to its
   // "who can set up a kiosk" note, so keep that word in the message.
   'checkin-kiosk-pair': { perm: 'kiosk', forbidden: { error: 'Forbidden, organizers and desk leads only' } },

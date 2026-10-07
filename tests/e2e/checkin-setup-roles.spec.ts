@@ -430,3 +430,35 @@ test('on a phone the tabs are one scrolling row and the page does not overflow',
   const tops = await page.locator('.st:visible').evaluateAll(els => [...new Set(els.map(e => Math.round(e.getBoundingClientRect().top)))]);
   expect(tops.length).toBe(1);
 });
+
+test('registration tab: waitlist and approval switches, and held guests are offered a place or removed', async ({ page }) => {
+  const flow: Record<string, unknown>[] = [];
+  const held: Record<string, unknown>[] = [];
+  let removed = 0;
+  let list = [
+    { id: 'h1', kind: 'approval', first_name: 'Ada', last_name: 'Approve', email: 'ada@example.invalid', company: 'Contoso Demo', created_at: new Date(FIXED_NOW.getTime() - 3600e3).toISOString() },
+    { id: 'h2', kind: 'waitlist', first_name: 'Wes', last_name: 'Wait', email: 'wes@example.invalid', company: null, created_at: new Date(FIXED_NOW.getTime() - 600e3).toISOString() },
+  ];
+  await open(page, { role: 'organizer' }, 'register', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_enabled: true, registration_code: 'ABCDEFGH23',
+      registration_questions: [], registration_capacity: 100, registration_waitlist: true, registration_approval: false }]);
+    await rpc(page, 'checkin_held_list', () => list);
+    await rpc(page, 'checkin_set_registration_flow', (a) => { flow.push(a); return { waitlist: a.p_waitlist, approval: a.p_approval }; });
+    await rpc(page, 'checkin_held_remove', (a) => { removed++; list = list.filter(h => h.id !== a.p_held_id); return true; });
+    await fn(page, 'checkin-held', (b) => { held.push(b); list = list.filter(h => h.id !== b.held_id); return { body: { ok: true, released: 1, emailed: 1, failed: 0 } }; });
+  });
+  await expect(page.locator('#held-title')).toHaveText('1 awaiting approval · 1 on the waitlist');
+  await expect(page.locator('#rg-waitlist')).toBeChecked();
+  await page.locator('#rg-approval').evaluate((e: HTMLInputElement) => e.click());
+  await expect(page.locator('#held-ok')).toHaveText('Saved.');
+  expect(flow[0]).toMatchObject({ p_event_id: EVENT_ID, p_waitlist: true, p_approval: true });
+  await page.locator('#held-body tr', { hasText: 'Ada' }).getByRole('button', { name: 'Approve' }).click();
+  await expect(page.locator('#held-ok')).toHaveText('1 guest added to your guest list, ticket emailed.');
+  expect(held[0]).toMatchObject({ event_id: EVENT_ID, action: 'release', held_id: 'h1' });
+  const rm = page.locator('#held-body tr', { hasText: 'Wes' }).getByRole('button', { name: 'Remove' });
+  await rm.click();
+  expect(removed).toBe(0);                     // first click only arms it
+  await page.locator('#held-body tr', { hasText: 'Wes' }).getByRole('button', { name: 'Click again' }).click();
+  await expect(page.locator('#held-box')).toBeHidden();
+  expect(removed).toBe(1);
+});
