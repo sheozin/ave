@@ -62,3 +62,25 @@ test('tokens: HOLD and LIVE badges do not animate, CALLING may', async ({ browse
   expect(await anim('.badge-LIVE')).toBe('none');
   await ctx.close();
 });
+
+test('type: no visible console text is smaller than 11 px', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const tooSmall = await page.evaluate(() => {
+    const out: string[] = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.textContent?.trim()) continue;
+      const el = n.parentElement;
+      if (!el || el.closest('svg, script, style, #stage-monitor, #loading-overlay')) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      const px = parseFloat(cs.fontSize);
+      if (px < 11) out.push(`${el.tagName.toLowerCase()}.${el.className} ${px}px "${n.textContent.trim().slice(0, 24)}"`);
+    }
+    return out;
+  });
+  expect(tooSmall).toEqual([]);
+  await ctx.close();
+});
