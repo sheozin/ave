@@ -280,7 +280,7 @@
     <div class="err" id="att-err"></div>
     <div id="sp-box" hidden>
       <h3 class="sc-h">Speakers from your run of show</h3>
-      <div class="toggle"><div><b>Tell the production console when a speaker arrives</b><p>When a guest whose name matches a speaker checks in, their session shows the speaker as arrived in the console. Panels count once everyone on them is in.</p></div><label class="sw"><input type="checkbox" id="sp-on"><span></span></label></div>
+      <div class="toggle"><div><b>Tell the production console when a speaker arrives</b><p>When a guest you listed (or the desk added in person) checks in and their name matches a speaker, their session shows the speaker as arrived in the console. Names typed on the registration page or a kiosk never count. Panels count once everyone on them is in.</p></div><label class="sw"><input type="checkbox" id="sp-on"><span></span></label></div>
       <p class="small" id="sp-sum"></p>
       <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Speaker</th><th>Session</th><th>Status</th></tr></thead><tbody id="sp-body"></tbody></table></div>
       <div class="err" id="sp-err"></div>
@@ -837,7 +837,9 @@ async function renderSpeakers() {
     const tr = el('tr');
     const who = el('td'); who.append(el('div', 'nm', p.name), el('div', 'em', p.role));
     const ses = el('td'); ses.append(el('div', null, p.session), el('div', 'em', p.time || ''));
-    const st = el('td'); st.append(el('span', 'tag ' + (p.arrived ? 't-in' : p.on_list ? 't-sent' : 't-test'), p.arrived ? 'Arrived' : p.on_list ? 'On the guest list' : 'Not on the guest list'));
+    // A self-registered name proves nothing (113): only guests you listed, or the desk added in person, can mark a speaker arrived.
+    const st = el('td'); st.append(el('span', 'tag ' + (p.arrived ? 't-in' : p.on_list ? 't-sent' : 't-test'), p.arrived ? 'Arrived' : p.on_list ? 'On the guest list' : p.self_only ? 'Registered online only' : 'Not on the guest list'));
+    if (p.self_only && !p.arrived) st.append(el('div', 'em', 'Add them to your guest list yourself so their arrival counts.'));
     tr.append(who, ses, st);
     return tr;
   }));
