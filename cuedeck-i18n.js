@@ -1017,7 +1017,7 @@ const CueDeckI18n = (() => {
     // Batch bar buttons
     const batchBar = document.getElementById('batch-bar');
     if (batchBar) {
-      batchBar.querySelectorAll('.abtn').forEach(btn => {
+      batchBar.querySelectorAll('[data-batch]').forEach(btn => {
         const map = { 'SET READY': 'batch.setReady', 'END ALL': 'batch.endAll', 'CANCEL ALL': 'batch.cancelAll' };
         const key = map[btn.textContent.trim()];
         if (key) btn.textContent = t(key);

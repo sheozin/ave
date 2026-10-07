@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const BUDGET = 378;
+const BUDGET = 366;
 const FILE = resolve(__dirname, '../cuedeck-console.html');
 // Hex colours (3, 4, 6, 8 digits) not part of an entity (&#9662;) or an id
 // selector with a hyphen (#bc-bar), plus rgb(a)/hsl(a) functions.

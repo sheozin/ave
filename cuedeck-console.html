@@ -598,18 +598,22 @@
 
     /* ── BADGES ── */
     .badge {
-      font-size: var(--fs-11); font-weight: 700; letter-spacing: .06em;
-      text-transform: uppercase;
-      padding: 3px 9px; border-radius: 100px; flex-shrink: 0;
+      display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+      border-radius: var(--r-badge); border: 1px solid transparent;
+      font: 700 var(--fs-11)/1 var(--font-sans); letter-spacing: var(--ls-badge); text-transform: uppercase;
+      white-space: nowrap; flex-shrink: 0; animation: none;
     }
+    .badge .ico { width: 12px; height: 12px; stroke-width: 2.5; }
     .badge-PLANNED   { background: var(--st-planned-bg);   color: var(--st-planned-fg); }
     .badge-READY     { background: var(--st-ready-bg);     color: var(--st-ready-fg); }
-    .badge-CALLING   { background: var(--st-calling-bg);   color: var(--st-calling-fg); }
+    .badge-CALLING   { background: var(--st-calling-bg);   color: var(--st-calling-fg); animation: badge-ring 1.6s ease-out infinite; }
     .badge-LIVE      { background: var(--st-live);         color: var(--on-solid); }
+    .badge-LIVE::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
     .badge-OVERRUN   { background: var(--st-overrun);      color: var(--on-solid); }
     .badge-HOLD      { background: var(--st-hold);         color: var(--on-solid); }
     .badge-ENDED     { background: var(--st-ended-bg);     color: var(--st-ended-fg); }
-    .badge-CANCELLED { background: var(--st-cancelled-bg); color: var(--st-cancelled-fg); }
+    .badge-CANCELLED { background: transparent; color: var(--st-cancelled-fg); border-color: var(--st-cancelled-line); text-decoration: line-through; }
+    @keyframes badge-ring { 0% { box-shadow: 0 0 0 0 var(--st-calling-line); } 100% { box-shadow: 0 0 0 6px transparent; } }
 
     .sc-meta {
       padding: 0 16px 8px;
@@ -660,31 +664,10 @@
     /* Speaker arrived indicator */
     .arrived-tag { font-size: var(--fs-11); color: var(--green); font-weight: 500; }
 
-    /* Action buttons */
-    .sc-actions { padding: 8px 16px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-    .abtn {
-      padding: 0 14px; height: 32px; border-radius: 6px; border: 1px solid;
-      font-size: var(--fs-12); font-family: inherit; font-weight: 600;
-      cursor: pointer; transition: filter .1s, transform .1s;
-      letter-spacing: .03em; display: inline-flex; align-items: center;
-    }
-    /* Tier 1 — Primary (GO LIVE, SET READY) */
-    .abtn.tier-1 { height: 36px; font-size: var(--fs-13); font-weight: 700; padding: 0 20px; text-transform: uppercase; letter-spacing: .04em; }
-    .abtn:hover  { filter: brightness(1.15); }
-    .abtn:active { transform: scale(.97); }
-    .abtn:disabled { opacity: .3; cursor: not-allowed; }
-    .btn-green  { background: rgba(34,197,94,.10);  border-color: rgba(34,197,94,.40);  color: var(--green-lt); }
-    .btn-red    { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.35);  color: var(--red-lt); }
-    .btn-amber  { background: rgba(249,115,22,.10); border-color: rgba(249,115,22,.40); color: var(--amber-lt); }
-    .btn-blue   { background: rgba(37,99,235,.10); border-color: rgba(37,99,235,.40); color: var(--blue-lt); }
-    .btn-grey   { background: var(--card-hi);       border-color: var(--border);        color: var(--text-muted); }
-    .btn-purple { background: rgba(168,85,247,.10); border-color: rgba(168,85,247,.40); color: var(--purple-lt); }
-    /* Dangerous action style (END SESSION, CANCEL) */
-    .btn-red:hover { background: rgba(239,68,68,.20); }
-    .abtn.confirm-pending, .ctx-btn.confirm-pending { background: rgba(239,68,68,.25); border-color: var(--st-live); color: var(--red-lt); animation: pulse-confirm .5s ease-in-out infinite alternate; }
-    @keyframes pulse-confirm { from { opacity:.85; } to { opacity:1; } }
-    .delay-grp  { margin-left: auto; display: flex; gap: 3px; align-items: center; }
-    .delay-grp .dl { font-size: var(--fs-11); color: var(--dim); }
+    /* Action buttons (legacy markup; new markup uses .btn) */
+    .sc-actions { padding: 8px 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .delay-grp  { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+    .delay-grp .dl { font-size: var(--fs-11); font-weight: 700; letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary); }
 
     /* ── SIDEBAR ACTION BUTTONS (AI Agents, Stage Monitor, etc.) ── */
     .sb-action-btn {
@@ -1722,9 +1705,131 @@
     }
     body { font-family: var(--font-sans); }
     .tv, .lt-remain, .lt-elapsed, .le-ts, .ck-val, #hdr-clock { font-variant-numeric: tabular-nums; }
+    /* ═══ Command center components (stage 2) ═══ */
+    .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -3px; }
+    .btn, .abtn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: var(--btn-md); padding: 0 12px; border-radius: var(--r-ctl);
+      font: 600 var(--fs-13)/1 var(--font-sans); letter-spacing: 0; text-transform: none; white-space: nowrap;
+      background: var(--raised); border: 1px solid var(--border-control); color: var(--text-primary);
+      cursor: pointer; transition: background-color .12s, border-color .12s; filter: none;
+    }
+    .btn.sm, .abtn.abtn-sm { height: var(--btn-sm); padding: 0 10px; font-size: var(--fs-12); }
+    .btn.md { height: var(--btn-md); }
+    .btn.lg { height: var(--btn-lg); padding: 0 16px; font-size: var(--fs-14); }
+    .btn.icon-only { width: var(--btn-md); padding: 0; }
+    .btn.sm.icon-only { width: var(--btn-sm); }
+    .btn:hover, .abtn:hover { background: var(--overlay); filter: none; }
+    .btn:active, .abtn:active { transform: translateY(1px); }
+    .btn:disabled, .abtn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn.primary, .btn.btn-blue, .abtn.btn-blue, .sb-action-btn.btn-blue { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .btn.primary:hover, .btn.btn-blue:hover, .abtn.btn-blue:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn.fwd, .btn.hold { color: var(--on-solid); }
+    .btn.fwd-ready, .btn.btn-green, .abtn.btn-green, .sb-action-btn.btn-green { background: var(--st-ready); border-color: var(--st-ready); color: var(--on-solid); }
+    .btn.fwd-calling { background: var(--st-calling); border-color: var(--st-calling); }
+    .btn.fwd-go      { background: var(--st-ready);   border-color: var(--st-ready); }   /* On stage, Go live, Resume: green, never red */
+    .btn.hold        { background: var(--st-hold);    border-color: var(--st-hold); }
+    .btn.fwd:hover, .btn.hold:hover, .btn.btn-green:hover, .abtn.btn-green:hover { box-shadow: inset 0 0 0 999px var(--hover-veil); }
+    .btn.fwd-ready:hover { background: var(--st-ready); } .btn.fwd-calling:hover { background: var(--st-calling); }
+    .btn.fwd-go:hover { background: var(--st-ready); }   .btn.hold:hover { background: var(--st-hold); }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
+    .btn.ghost:hover { background: var(--raised); color: var(--text-primary); }
+    .btn.danger, .btn.btn-red, .abtn.btn-red, .sb-action-btn.btn-red { background: transparent; border-color: var(--danger-line); color: var(--danger-fg); }
+    .btn.danger:hover, .btn.btn-red:hover, .abtn.btn-red:hover { background: var(--st-live-bg); }
+    .btn.btn-amber, .abtn.btn-amber { background: var(--st-hold-bg); border-color: var(--st-hold-line); color: var(--st-hold-fg); }
+    .btn.btn-grey, .abtn.btn-grey { background: var(--raised); border-color: var(--border-control); color: var(--text-primary); }
+    .btn.btn-purple, .abtn.btn-purple { background: var(--raised); border-color: var(--border-control); color: var(--purple-lt); }
+    .btn.confirm-pending, .abtn.confirm-pending, .ctx-btn.confirm-pending {
+      background: var(--st-live); border-color: var(--st-live); color: var(--on-solid);
+      animation: pulse-confirm .5s ease-in-out infinite alternate;   /* armed is an exception that animates */
+    }
+    @keyframes pulse-confirm { from { opacity: .85; } to { opacity: 1; } }
+    .act-gap { display: inline-block; width: 20px; height: 24px; border-left: 1px solid var(--border-divider); margin-left: 12px; flex: none; }
+    @media (pointer: coarse) {
+      .btn.sm, .abtn.abtn-sm { height: 40px; } .btn, .btn.md, .abtn { height: 44px; } .btn.lg { height: 48px; }
+      .btn.icon-only { width: 44px; } .btn.sm.icon-only { width: 40px; }
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; max-width: 100%;
+      border-radius: var(--r-chip); border: 1px solid var(--border-divider); background: transparent;
+      color: var(--text-secondary); font-size: var(--fs-12); white-space: nowrap;
+    }
+    .chip .ico { width: 12px; height: 12px; }
+    .chip-txt { overflow: hidden; text-overflow: ellipsis; }
+    .lbl, .sb-title, .ctx-section-lbl, .sp-section-title, #sess-modal .smv-sec-title, .tl {
+      font: 700 var(--fs-11)/1.3 var(--font-sans); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-tertiary);
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+      border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--card);
+      color: var(--text-secondary); font: 500 var(--fs-12)/1 var(--font-sans); white-space: nowrap; cursor: pointer;
+    }
+    .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st-planned); flex: none; }
+    .pill.is-ok   .dot { background: var(--st-ready); }
+    .pill.is-warn { border-color: var(--st-hold-line); color: var(--st-hold-fg); }   .pill.is-warn .dot { background: var(--st-hold); }
+    .pill.is-err  { border-color: var(--st-live-line); color: var(--st-live-fg); }   .pill.is-err  .dot { background: var(--st-live); animation: conn-lost 1s ease-in-out infinite; }
+    @keyframes conn-lost { 50% { opacity: .35; } }
 </style>
 </head>
 <body>
+<!-- ICON SPRITE (16 px line set, stroke currentColor) -->
+<svg id="cd-icons" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/></symbol>
+  <symbol id="i-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></symbol>
+  <symbol id="i-stream" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 12a9 9 0 0 1 8 8M2 16a5 5 0 0 1 4 4M2 20h.01"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></symbol>
+  <symbol id="i-remote" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-anchor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><path d="M12 22V8M5 12H2a10 10 0 0 0 20 0h-3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="14" r="8"/><path d="M12 10v4l2 2M9 2h6M12 2v4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-broadcast" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3zM11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2M16 3.1a4 4 0 0 1 0 7.8M22 21v-2a4 4 0 0 0-3-3.9"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-report" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8M8 9h2"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 4 14 8-14 8z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+  <symbol id="i-room" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><path d="M7 7h.01"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 12h.01M19 12h.01M5 12h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="i-coffee" viewBox="0 0 24 24"><path d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4zM6 2v2M10 2v2M14 2v2"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M12 20h.01M2 8.8a15 15 0 0 1 20 0M5 12.9a10 10 0 0 1 14 0M8.5 16.4a5 5 0 0 1 7 0"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><path d="M3 21h18M6 21V3h12v18M14 12h.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+  <symbol id="i-checkin" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+</svg>
 
 <!-- TOAST NOTIFICATIONS -->
 <div id="toast-container"></div>
@@ -1735,7 +1840,7 @@
   display:none;align-items:center;gap:12px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5);
   font-size:13px;color:var(--text-primary)">
   <span id="undo-msg"></span>
-  <button id="undo-btn" class="abtn btn-amber" style="font-size:11px;padding:5px 14px" onclick="executeUndo()">UNDO</button>
+  <button id="undo-btn" class="btn sm" onclick="executeUndo()">UNDO</button>
   <span id="undo-timer" style="font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:20px"></span>
   <button style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:16px;padding:0 2px" onclick="dismissUndo()">×</button>
 </div>
@@ -1746,10 +1851,10 @@
   align-items:center;gap:10px;z-index:9998;box-shadow:0 8px 32px rgba(0,0,0,.5);
   font-size:12px;color:var(--text-primary)">
   <span id="batch-count" style="font-weight:700"></span>
-  <button class="abtn abtn-sm btn-amber" data-batch="READY" onclick="batchTransition('READY')">SET READY</button>
-  <button class="abtn abtn-sm btn-red"   data-batch="ENDED" onclick="batchTransition('ENDED')">END ALL</button>
-  <button class="abtn abtn-sm btn-grey"  data-batch="CANCELLED" onclick="batchTransition('CANCELLED')">CANCEL ALL</button>
-  <button class="abtn abtn-sm btn-grey"  onclick="clearBatchSelection()" style="margin-left:4px">Clear</button>
+  <button class="btn sm fwd fwd-ready" data-batch="READY" onclick="batchTransition('READY')">SET READY</button>
+  <button class="btn sm danger" data-batch="ENDED" onclick="batchTransition('ENDED')">END ALL</button>
+  <button class="btn sm danger" data-batch="CANCELLED" onclick="batchTransition('CANCELLED')">CANCEL ALL</button>
+  <button class="btn sm ghost" onclick="clearBatchSelection()" style="margin-left:4px">Clear</button>
 </div>
 
 <!-- LOADING / LOGIN -->
@@ -2683,13 +2788,13 @@ const EF_MAP = {
 // Button config
 function getBtnCfg() {
   return {
-    LIVE:      { label: t('btn.goLive'),      cls:'btn-green'  },
-    READY:     { label: t('btn.setReady'),    cls:'btn-amber'  },
-    CALLING:   { label: t('btn.callSpeaker'), cls:'btn-amber'  },
-    HOLD:      { label: t('btn.hold'),        cls:'btn-red'    },
-    ENDED:     { label: t('btn.endSession'),  cls:'btn-red'    },
-    PLANNED:   { label: t('btn.deArm'),       cls:'btn-grey'   },
-    CANCELLED: { label: t('btn.cancel'),      cls:'btn-grey'   },
+    LIVE:      { label: t('btn.goLive'),      cls: 'fwd fwd-go' },
+    READY:     { label: t('btn.setReady'),    cls: 'fwd fwd-ready' },
+    CALLING:   { label: t('btn.callSpeaker'), cls: 'fwd fwd-calling' },
+    HOLD:      { label: t('btn.hold'),        cls: 'hold' },
+    ENDED:     { label: t('btn.endSession'),  cls: 'danger' },
+    PLANNED:   { label: t('btn.deArm'),       cls: '' },
+    CANCELLED: { label: t('btn.cancel'),      cls: 'danger' },
   };
 }
 function getBtnOverride() {
@@ -3571,6 +3676,35 @@ function applyFilters() {
 }
 
 // ═══════════════════════════════════════════════════
+// COMMAND CENTER: shared view helpers (redesign, stage 2)
+// ═══════════════════════════════════════════════════
+const FINISHED = ['ENDED', 'CANCELLED'];
+
+// t() with {placeholders}: tf('cc.list.completed', { n: 3 })
+function tf(key, vars = {}) {
+  return t(key).replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+}
+function icon(name, cls = '') {
+  return `<svg class="ico${cls ? ' ' + cls : ''}" aria-hidden="true" focusable="false"><use href="#i-${name}"/></svg>`;
+}
+function statusBadge(status) {
+  return `<span class="badge badge-${status}">${status === 'HOLD' ? icon('pause') : ''}${esc(t('status.' + status))}</span>`;
+}
+function chipHTML(kind, text) {
+  return `<span class="chip chip-${kind}">${icon(kind === 'room' ? 'room' : 'tag')}<span class="chip-txt">${esc(text)}</span></span>`;
+}
+// Times are HH:MM everywhere except running timers and the header clock.
+function hm(v) { return v ? String(v).slice(0, 5) : '–'; }
+function sessionSpan(s) { return `${hm(s.scheduled_start)}–${hm(s.scheduled_end)}`; }
+// A timestamp shown as HH:MM in the event's own time zone (the show-safety
+// eventClockParts keeps one cached formatter per zone; fmtTS is the HH:MM:SS twin).
+function tsHM(ts) {
+  if (!ts) return '–';
+  const c = eventClockParts(new Date(ts).getTime());
+  return `${pad(c.h)}:${pad(c.m)}`;
+}
+
+// ═══════════════════════════════════════════════════
 // RENDERING
 // ═══════════════════════════════════════════════════
 function renderSessions() {
@@ -3969,7 +4103,7 @@ function cardHTML(s, nowMs) {
     ${isDirector ? `<input type="checkbox" class="batch-chk" data-sid="${s.id}" onclick="event.stopPropagation();toggleBatchSelect('${s.id}',this.checked)" style="width:14px;height:14px;accent-color:#3b82f6;cursor:pointer;flex-shrink:0" ${_batchSelected.has(s.id)?'checked':''}>` : ''}
     <span class="sc-num">${s.sort_order}</span>
     <span class="sc-title">${esc(s.title)}</span>
-    <span class="badge badge-${s.status}">${t('status.' + s.status)}</span>
+    ${statusBadge(s.status)}
     ${mgmt}
   </div>
   <div class="sc-meta">
@@ -4090,23 +4224,23 @@ function buildButtons(s) {
   const _btnCfg = getBtnCfg();
   const _btnOvr = getBtnOverride();
   const btnHtml = possible.map(to => {
-    const cfg   = _btnCfg[to] || { label: to, cls: 'btn-blue' };
+    const cfg   = _btnCfg[to] || { label: to, cls: '' };
     const label = _btnOvr[`${s.status}→${to}`] || cfg.label;
     // PR-015: CANCEL uses inline two-step confirmation instead of direct transition
     if (to === 'CANCELLED') {
       const armed = isArmed(_cancelPending, s);
-      return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
+      return `<button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmCancel('${s.id}',this)">${armed ? t('confirm.confirmCancel') : label}</button>`;
     }
     // END SESSION uses two-step confirmation to prevent accidental ending
     if (to === 'ENDED') {
       const armed = isArmed(_endPending, s);
-      return `<button class="abtn ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
+      return `<span class="act-gap" aria-hidden="true"></span><button class="btn md ${cfg.cls}${armed ? ' confirm-pending' : ''}" onclick="confirmEnd('${s.id}',this)">${armed ? t('confirm.confirmEnd') : label}</button>`;
     }
-    return `<button class="abtn ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
+    return `<button class="btn md ${cfg.cls}" onclick="transition('${s.id}','${to}')">${label}</button>`;
   }).join('');
 
   const arriveHtml = canArrive
-    ? `<button class="abtn ${s.speaker_arrived ? 'btn-grey' : 'btn-blue'}"
+    ? `<button class="btn sm"
          onclick="markArrived('${s.id}', ${!s.speaker_arrived})"
          title="Toggle speaker arrival">${s.speaker_arrived ? '✓ ARRIVED' : 'MARK ARRIVED'}</button>`
     : '';
@@ -4114,9 +4248,9 @@ function buildButtons(s) {
   const delayHtml = canDelay
     ? `<div class="delay-grp">
          <span class="dl">+MIN</span>
-         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',5)">5</button>
-         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',10)">10</button>
-         <button class="abtn btn-amber" onclick="applyDelay('${s.id}',15)">15</button>
+         <button class="btn sm" onclick="applyDelay('${s.id}',5)">5</button>
+         <button class="btn sm" onclick="applyDelay('${s.id}',10)">10</button>
+         <button class="btn sm" onclick="applyDelay('${s.id}',15)">15</button>
        </div>`
     : '';
 
@@ -4126,13 +4260,13 @@ function buildButtons(s) {
   const nudgeHtml = canNudge
     ? `<div class="delay-grp">
          <span class="dl">NUDGE</span>
-         <button class="abtn btn-grey"  onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
-         <button class="abtn btn-amber" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
+         <button class="btn sm" onclick="nudgeSession('${s.id}',-1)" title="Shorten by 1 minute">−1m</button>
+         <button class="btn sm" onclick="nudgeSession('${s.id}', 1)" title="Extend by 1 minute">+1m</button>
        </div>`
     : '';
 
   const restartHtml = canRestart
-    ? `<button class="abtn btn-grey" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
+    ? `<button class="btn sm" data-restart="${esc(s.id)}" onclick="openRestartModal('${esc(s.id)}')">${t('btn.restart')}</button>`
     : '';
 
   return `<div class="sc-actions">${btnHtml}${arriveHtml}${restartHtml}${delayHtml}${nudgeHtml}</div>`;
@@ -4179,8 +4313,8 @@ function buildCtxPanel() {
 
   const role = S.role;
   let html = '';
-  const cbtn = (label, cls, action, icon = '') =>
-    `<button class="ctx-btn ${cls}" onclick="${action}">${icon ? icon + ' ' : ''}${label}</button>`;
+  const cbtn = (label, cls, action, ico = '') =>
+    `<button class="btn md ctx-btn ${cls}" onclick="${action}">${ico ? icon(ico) : ''}${label}</button>`;
   const sectionLbl = v => `<div class="ctx-section-lbl">${v}</div>`;
 
   if (role === 'director' || role === 'stage') {
@@ -4190,7 +4324,7 @@ function buildCtxPanel() {
       const _btnOvr2 = getBtnOverride();
       const possible = (ALLOWED[tgt.status] || []).filter(st => (ROLE_WRITE[role] || []).includes(st));
       possible.forEach(to => {
-        const cfg   = _btnCfg2[to] || { label: to, cls: 'btn-blue' };
+        const cfg   = _btnCfg2[to] || { label: to, cls: '' };
         const label = _btnOvr2[`${tgt.status}→${to}`] || cfg.label;
         if (to === 'CANCELLED') {
           const armed = isArmed(_cancelPending, tgt);
@@ -4210,16 +4344,16 @@ function buildCtxPanel() {
                      `markArrived('${esc(tgt.id)}', ${!tgt.speaker_arrived})`);
     }
     html += sectionLbl('MONITOR');
-    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
-    html += cbtn('STAGE TIMER', 'btn-blue', 'openStageTimerDisplay()', '⏱');
+    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', 'monitor');
+    html += cbtn('STAGE TIMER', 'btn-blue', 'openStageTimerDisplay()', 'timer');
 
   } else if (role === 'av') {
     if (tgt && (tgt.status === 'LIVE' || tgt.status === 'OVERRUN')) {
       html += sectionLbl('AV CONTROL');
-      html += cbtn('HOLD SESSION', 'btn-amber', `transition('${esc(tgt.id)}','HOLD')`, '⏸');
+      html += cbtn('HOLD SESSION', 'btn-amber', `transition('${esc(tgt.id)}','HOLD')`, 'pause');
     }
     html += sectionLbl('MONITOR');
-    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', '⊡');
+    html += cbtn('STAGE MONITOR', 'btn-blue', 'openStageMonitor()', 'monitor');
 
   } else if (role === 'signage') {
     const dispCount = S.displays.length;
@@ -4242,8 +4376,8 @@ function buildCtxPanel() {
   } else if (role === 'reg') {
     html += sectionLbl('LOBBY');
     if (tgt) html += cbtn('ANNOUNCE SESSION', 'btn-blue',
-      `sendBroadcastQuick('📢 ${esc(tgt.title).substring(0,40)} — starting now. Please take your seats.','info')`, '📢');
-    html += cbtn('BREAK ALERT', 'btn-amber', "sendBroadcastQuick('☕ Coffee break starting now','info')", '☕');
+      `sendBroadcastQuick('📢 ${esc(tgt.title).substring(0,40)} — starting now. Please take your seats.','info')`, 'broadcast');
+    html += cbtn('BREAK ALERT', 'btn-amber', "sendBroadcastQuick('☕ Coffee break starting now','info')", 'coffee');
 
   } else if (role === 'interp') {
     if (tgt) {

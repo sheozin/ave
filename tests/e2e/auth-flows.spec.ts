@@ -395,7 +395,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     const sessionCard = page.locator(`#card-${process.env.TEST_SESSION_ID}`);
     await sessionCard.waitFor({ timeout: 5000 });
     // Click GO LIVE
-    await page.locator('.abtn.btn-green:has-text("GO LIVE")').first().click();
+    await page.locator('button.fwd-go:has-text("Go live")').first().click();
     await page.waitForTimeout(1500);
     expect(errors).toHaveLength(0);
   });
@@ -410,7 +410,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await page.waitForTimeout(2000);
     await page.locator('.rbtn[data-role="director"]').click();
     // Click HOLD (appears in ctx-actions when a LIVE session exists)
-    const holdBtn = page.locator('.abtn.btn-red:has-text("HOLD")');
+    const holdBtn = page.locator('button.hold:has-text("Hold")');
     if (await holdBtn.count() > 0) {
       await holdBtn.first().click();
       await page.waitForTimeout(1500);
@@ -426,7 +426,7 @@ test.describe('Director flow: GO LIVE → HOLD (requires TEST_EMAIL + TEST_SESSI
     await page.waitForTimeout(2000);
     await page.locator('.rbtn[data-role="director"]').click();
     // Structural pass — delay buttons exist when sessions are loaded
-    const delay5 = page.locator('.abtn.btn-amber:has-text("5")');
+    const delay5 = page.locator('button[onclick*="applyDelay"]:has-text("5")');
     const count = await delay5.count();
     expect(count).toBeGreaterThanOrEqual(0);
   });
