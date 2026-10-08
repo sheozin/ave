@@ -119,6 +119,9 @@ test('header: Displays is pressed in the signage view, and a second press return
   await evalPage(page, `setRole('stage')`);
   await btn.click();
   expect(await evalPage(page, 'S.role')).toBe('signage');
+  // ... and a second press returns to the view it came from (stage), not to director
+  await btn.click();
+  expect(await evalPage(page, 'S.role')).toBe('stage');
   await ctx.close();
 });
 

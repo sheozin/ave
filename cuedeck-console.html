@@ -4864,9 +4864,9 @@ function msgTitle(s) { return s.room ? tf('cc.msg.titleRoom', { room: s.room }) 
 // ns the press-guard slot set.
 function msgInputHTML(s, ns, pre) {
   const draft = S.msgDraft[s.id] || '';
-  const presets = MSG_PRESETS.map((k, i) => `<button type="button" class="btn sm msg-preset" data-fk="${pre}-msg-p${i}"${slotAttr(`${ns}:msg-p${i}`, s.id + '>' + k)} onclick="if(pressOk(event,this))sendStageMessage('${s.id}', t('cc.msg.p.${k}'))">${esc(t('cc.msg.p.' + k))}</button>`).join('');
+  const presets = MSG_PRESETS.map((k, i) => `<button type="button" class="btn sm msg-preset" data-fk="${pre}-msg-p${i}-${s.id}"${slotAttr(`${ns}:msg-p${i}`, s.id + '>' + k)} onclick="if(pressOk(event,this))sendStageMessage('${s.id}', t('cc.msg.p.${k}'))">${esc(t('cc.msg.p.' + k))}</button>`).join('');
   return `<div class="msg-presets">${presets}</div>
-    <div class="msg-row"><span class="msg-field"><input type="text" class="msg-in" id="${pre}-msg-in" data-sid="${s.id}" data-fk="${pre}-msg-in" maxlength="${MSG_MAX}" dir="auto" autocomplete="off" enterkeyhint="send"
+    <div class="msg-row"><span class="msg-field"><input type="text" class="msg-in" id="${pre}-msg-in" data-sid="${s.id}" data-fk="${pre}-msg-in-${s.id}" maxlength="${MSG_MAX}" dir="auto" autocomplete="off" enterkeyhint="send"
       value="${esc(draft)}" placeholder="${esc(t('cc.msg.placeholder'))}" aria-label="${esc(t('cc.msg.inputLabel'))}" oninput="onMsgInput(this)" onkeydown="onMsgKey(event,this)"><span class="msg-count" aria-hidden="true">${draft.length}/${MSG_MAX}</span></span>
       <button type="button" class="btn sm primary msg-send" data-fk="${pre}-msg-send"${draft.trim() ? '' : ' disabled'} onclick="if(pressOk(event,this))sendMsgFrom(this)">${esc(t('cc.msg.send'))}</button></div>`;
 }
@@ -4891,6 +4891,15 @@ function onMsgInput(el) {
 }
 let _msgComposing = false;   // an input method is composing in a message field
 document.addEventListener('compositionstart', ev => { if (ev.target.closest?.('.msg-in')) _msgComposing = true; });
+// Reaching into an inspector's message controls pins the inspector to that session, so an
+// automatic urgency change (another room going OVERRUN) can never swap it under the operator
+// and send their text to a different speaker. Focus keys also carry the session id.
+document.addEventListener('focusin', ev => {
+  const el = ev.target.closest?.('#ctx-wrap .insp-msg .msg-in, #ctx-wrap .insp-msg .msg-preset');
+  if (!el || S.selectedId) return;
+  const sid = el.dataset.sid || el.closest('.insp-msg')?.querySelector('.msg-in')?.dataset.sid;
+  if (sid) S.selectedId = sid;
+});
 document.addEventListener('compositionend', ev => { if (ev.target.closest?.('.msg-in')) _msgComposing = false; });
 function onMsgKey(ev, el) {
   if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); if (el.value.trim()) sendStageMessage(el.dataset.sid, el.value); }
@@ -5778,7 +5787,14 @@ function refreshDisplaysPill() {
 }
 // The signage panel, as View as > Signage opens it; a second press takes a director back.
 function openDisplays() {
-  setRole(S.role === 'signage' && S.userRole === 'director' ? 'director' : 'signage');
+  // Pressing it again returns a director to the view they came from (stage, av, ...),
+  // not always to director.
+  if (S.role === 'signage' && S.userRole === 'director') {
+    setRole(S.preDisplaysRole && S.preDisplaysRole !== 'signage' ? S.preDisplaysRole : 'director');
+  } else {
+    S.preDisplaysRole = S.role;
+    setRole('signage');
+  }
   closePopovers();
 }
 function renderSignagePanel() {

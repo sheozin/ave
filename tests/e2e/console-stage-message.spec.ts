@@ -107,6 +107,27 @@ test('message: typing survives the 1 s re-render with focus and caret kept, and 
   await ctx.close();
 });
 
+test('message: typing with nothing selected pins the inspector; an overrun elsewhere never moves the cursor to another session', async ({ browser }) => {
+  // Final review, 8 Oct: with no row selected the inspector follows the most urgent session.
+  // Another room going OVERRUN used to swap the inspector and restoreFocus put the cursor in the
+  // NEW session's field (same focus key), so Enter sent the half-typed text to the wrong speaker.
+  const { ctx, page } = await openConsole(browser);
+  await afterBootReread(page);
+  const calls = await mockRpcs(page);
+  expect(await evalPage(page, 'S.selectedId')).toBeFalsy();
+  await expect(insp(page).locator('.insp-title')).toContainText('Panel: Airport Retail');
+  await sec(page).locator('input.msg-in').click();
+  await page.keyboard.type('Two min');
+  const hb = demoSessions().find(s => s.id === ID(2))!;
+  await rtPush(page, 'leod_sessions', 'UPDATE', { ...hb, status: 'OVERRUN', version: (hb.version as number) + 1, actual_start: iso(-60) });
+  await page.clock.runFor(2100);
+  await expect(insp(page).locator('.insp-title')).toContainText('Panel: Airport Retail');
+  await page.keyboard.type('utes');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => calls.send.map(b => [b.p_session_id, b.p_text])).toEqual([[PANEL_ID, 'Two minutes']]);
+  await ctx.close();
+});
+
 test('message: while the input has focus or composes, the re-render never takes it out of the DOM, and the strip still updates', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await afterBootReread(page);
