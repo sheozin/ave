@@ -50,11 +50,15 @@ Inviting happens from inside an event ("Team for GTR North Africa 2026"):
 - Team window shows the current event's members with role, status and last seen (replaces the account-wide `get_operators_with_last_seen`).
 - An account that is only ever a member (never created an event) sees no billing, no "trial", no plan upsell.
 
-## 6. Plans and billing
+## 6. Plans, billing and seats (decided by Sherif, 8 Oct)
 
-- Limits come from the **event owner's** plan, for that event (displays, operators per event, reports, AI). Today they come from the viewer's own account, which gives an invited director a 3-day trial and then locks them out even when the owner is on Pro (inventory §4).
-- Creating your own event uses your own plan; events you are only a member of do not count toward your event limit.
+- **Invited people are free.** Every member (director, stage, av, interp, reg, signage) works on the **event owner's** plan: no trial, no plan of their own, no billing screens, no upsell. Today an invited director gets a 3-day trial and is then locked out even when the owner is on Pro (inventory §4); that ends.
+- **Seats per event.** The plan's existing `operators` number is the team size **per event**, unchanged: Per-event 5, Starter 5, Pro 20, Enterprise unlimited, Trial unlimited. The creator never uses a seat. A person on two of the owner's events uses one seat on each. Active and suspended members hold a seat; removed members free it.
+- **Enforced on the server** (in the invite function and the membership insert), not only in the browser as today. The Team window shows "Team 7 of 20 seats"; when full, inviting is refused with "Upgrade for more seats" for the owner (and "Ask the organiser for more seats" for an invited director).
+- All other limits for an event (displays, reports, AI) also come from the event owner's plan.
+- Creating your own event uses **your** plan; events you are only a member of never count toward your own limits.
 - No trial is created for someone who has only memberships; a trial starts when they create their first own event.
+- A downgrade that leaves an event over its seat count keeps the existing members (nobody is cut off mid-show) and only blocks new invites until the team fits.
 
 ## 7. Switch-over
 
