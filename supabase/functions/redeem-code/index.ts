@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  if (promo.max_uses !== null && promo.uses >= promo.max_uses) {
+  if (promo.max_uses !== null && (promo.uses ?? 0) >= promo.max_uses) {
     return new Response(JSON.stringify({ error: 'Code has reached its maximum uses' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
@@ -99,6 +99,32 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'No subscription found for this account' }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
+  }
+
+  // ── Claim one use before anything is applied ───────────────────
+  // Compare-and-swap: the row only moves from the count read above, so two
+  // redemptions at once cannot both pass max_uses. The loser is told to
+  // retry and nothing is applied for it.
+  // uses is nullable (default 0): a NULL count is matched with IS NULL.
+  const usedBefore: number = promo.uses ?? 0
+  const claim = sb.from('leod_promo_codes').update({ uses: usedBefore + 1 }).eq('code', code)
+  const { data: claimed, error: claimErr } = await (promo.uses === null || promo.uses === undefined
+    ? claim.is('uses', null) : claim.eq('uses', promo.uses)).select('code')
+  if (claimErr) {
+    return new Response(JSON.stringify({ error: 'Could not redeem the code: ' + claimErr.message }), {
+      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!claimed?.length) {
+    return new Response(JSON.stringify({ error: 'This code was just used by someone else. Try again.' }), {
+      status: 409, headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+  }
+  // A failed apply gives the use back (best effort, only if nobody used it since).
+  const releaseUse = async () => {
+    const { error } = await sb.from('leod_promo_codes').update({ uses: usedBefore })
+      .eq('code', code).eq('uses', usedBefore + 1)
+    if (error) console.error('redeem-code: use not released', error.message)
   }
 
   // ── Apply code by type ───────────────────────────────────────────
@@ -125,6 +151,7 @@ Deno.serve(async (req) => {
       .eq('director_id', directorId)
 
     if (updateErr) {
+      await releaseUse()
       return new Response(JSON.stringify({ error: 'Failed to extend trial: ' + updateErr.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
       })
@@ -153,6 +180,7 @@ Deno.serve(async (req) => {
       .eq('director_id', directorId)
 
     if (updateErr) {
+      await releaseUse()
       return new Response(JSON.stringify({ error: 'Failed to unlock plan: ' + updateErr.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
       })
@@ -167,16 +195,11 @@ Deno.serve(async (req) => {
     }
 
   } else {
+    await releaseUse()
     return new Response(JSON.stringify({ error: `Unknown code type: ${promo.type}` }), {
       status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-
-  // ── Increment uses ───────────────────────────────────────────────
-  await sb
-    .from('leod_promo_codes')
-    .update({ uses: promo.uses + 1 })
-    .eq('code', code)
 
   return new Response(JSON.stringify(result), {
     headers: { ...cors, 'Content-Type': 'application/json' },

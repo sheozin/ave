@@ -27,11 +27,14 @@ const EV3 = '60000000-0000-4000-8000-000000000003'
 type Row = Record<string, unknown>
 let tables: Record<string, Row[]>
 let anthropicCalls: number
+let failOn: Record<string, { status: number; body: Row }> = {}
 
 function rowFilter(url: URL): (r: Row) => boolean {
   const tests: ((r: Row) => boolean)[] = []
   for (const [k, v] of url.searchParams) {
-    if (v.startsWith('eq.')) tests.push(r => String(r[k]) === v.slice(3))
+    // eq never matches NULL (as in SQL); is.null does
+    if (v.startsWith('eq.')) tests.push(r => r[k] !== null && r[k] !== undefined && String(r[k]) === v.slice(3))
+    if (v === 'is.null') tests.push(r => r[k] === null || r[k] === undefined)
   }
   return (r: Row) => tests.every(fn => fn(r))
 }
@@ -49,6 +52,7 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     return reply(200, { content: [{ type: 'text', text: 'stub answer' }] })
   }
   if (url.host !== 'stub.local') return reply(599, { message: 'unexpected network call ' + url.host })
+  if (failOn[`${method} ${url.pathname}`]) return reply(failOn[`${method} ${url.pathname}`].status, failOn[`${method} ${url.pathname}`].body)
   if (url.pathname === '/auth/v1/user') {
     const id = (headers.get('Authorization') ?? '').replace('Bearer ', '')
     return reply(200, { id, email: id + '@stub.test', aud: 'authenticated' })
@@ -107,6 +111,7 @@ const past = new Date(Date.now() - 3600e3).toISOString()
 
 function setup() {
   anthropicCalls = 0
+  failOn = {}
   tables = {
     // MEMBER still carries the old team link (role stage, invited_by OWNER):
     // it must no longer decide anything.
@@ -182,4 +187,36 @@ Deno.test('redeem-code: an organiser who is also a member redeems on their own p
   const r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
   assert(r.status === 200 && r.body.type === 'plan_unlock', JSON.stringify(r))
   assert(sub(ORG2)?.plan === 'pro' && JSON.stringify(sub(OWNER)) === before, JSON.stringify(tables.leod_subscriptions))
+})
+
+Deno.test('redeem-code: two redemptions at once cannot both pass a one-use cap', async () => {
+  setup()
+  const promo = tables.leod_promo_codes.find(p => p.code === 'PROUNLOCK')!
+  promo.max_uses = 1
+  const [a, b] = await Promise.all([
+    call('redeem-code', ORG2, { code: 'PROUNLOCK' }),
+    call('redeem-code', T_OWNER, { code: 'PROUNLOCK' }),
+  ])
+  const ok = [a, b].filter(r => r.status === 200)
+  assert(ok.length === 1, 'both or neither passed: ' + JSON.stringify([a, b]))
+  assert(promo.uses === 1, 'uses ' + promo.uses)
+  const unlocked = [sub(ORG2), sub(T_OWNER)].filter(x => x?.plan === 'pro')
+  assert(unlocked.length === 1, 'plans changed: ' + JSON.stringify(tables.leod_subscriptions))
+})
+
+Deno.test('redeem-code: a failed use count is a 500 and the plan is not changed', async () => {
+  setup()
+  failOn['PATCH /rest/v1/leod_promo_codes'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  const before = JSON.stringify(sub(ORG2))
+  const r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
+  assert(r.status === 500, JSON.stringify(r))
+  assert(JSON.stringify(sub(ORG2)) === before, 'the plan changed')
+})
+
+Deno.test('redeem-code: a code whose use count is NULL is claimed (NULL counts as 0)', async () => {
+  setup()
+  const promo = tables.leod_promo_codes.find(p => p.code === 'PROUNLOCK')!
+  promo.uses = null
+  const r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
+  assert(r.status === 200 && promo.uses === 1 && sub(ORG2)?.plan === 'pro', JSON.stringify(r) + ' uses ' + promo.uses)
 })
