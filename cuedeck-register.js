@@ -156,6 +156,8 @@ function renderEvent() {
   root.setProperty('--accent-ink', pal.ink); root.setProperty('--accent-deep', pal.deep);
   document.querySelector('meta[name=theme-color]').setAttribute('content', '#F6F5F2');
   document.title = tr('Register: {event}', { event: e.name || '' });
+  // (128) White label: the organizer's brand only. The privacy link stays.
+  document.getElementById('foot-by').hidden = pg.white_label === true;
 
   const host = pg.host_name || '';
   $('host-name').textContent = host || e.name || 'Event';

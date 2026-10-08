@@ -14,6 +14,8 @@ export interface ConfirmEmailEvent {
   name: string
   date: string | null
   venue: string | null
+  // (128) White label: no CueDeck footer, and a neutral sender name.
+  white_label?: boolean
 }
 
 function esc(s: string): string {
@@ -54,10 +56,10 @@ export function renderConfirmEmail(raw: ConfirmEmailEvent, link: string, lang: L
         <p style="text-align:center;margin:0 0 20px;"><a href="${esc(link)}" style="display:inline-block;background:#0071e3;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:10px;">${esc(et(lang, 'Confirm my registration'))}</a></p>
         <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">${esc(et(lang, 'If it was not you, ignore this email. Nothing is registered unless the button is used, and the request is deleted after 48 hours.'))}</p>
       </div>
-      <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
+      ${raw.white_label ? '' : `<div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
         <span style="font-size:10px;color:#b0b0b8;">${esc(et(lang, 'Registration by'))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
-      </div>
+      </div>`}
     </div>
   </div>
 </body></html>`
@@ -66,7 +68,7 @@ export function renderConfirmEmail(raw: ConfirmEmailEvent, link: string, lang: L
 
 export async function sendConfirmEmail(to: string, event: ConfirmEmailEvent, link: string, lang: Lang = 'en'): Promise<boolean> {
   const { subject, html, text } = renderConfirmEmail(event, link, lang)
-  const { error } = await sendEmail({ to, subject, html, text, fromName: 'CueDeck Registration', tags: [{ name: 'type', value: 'registration_confirm' }] })
+  const { error } = await sendEmail({ to, subject, html, text, fromName: event.white_label ? 'Event Registration' : 'CueDeck Registration', tags: [{ name: 'type', value: 'registration_confirm' }] })
   if (error) console.error('registration-confirm-email: send failed')
   return !error
 }

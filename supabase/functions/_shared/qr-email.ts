@@ -27,6 +27,8 @@ export interface QrEmailEvent {
   brand_color?: string | null
   logo_url?: string | null
   host_name?: string | null
+  // (128) White label: no "powered by CueDeck" footer.
+  white_label?: boolean
   // (123) The event, so each guest's email comes in their language.
   event_id?: string
 }
@@ -38,11 +40,11 @@ export async function withBrand(
   sb: ReturnType<typeof import('./client.ts').adminClient>, eventId: string, event: QrEmailEvent,
 ): Promise<QrEmailEvent> {
   const { data, error } = await sb.from('leod_checkin_entitlements')
-    .select('registration_brand_color, registration_logo_path, registration_host_name').eq('event_id', eventId).maybeSingle()
+    .select('registration_brand_color, registration_logo_path, registration_host_name, white_label').eq('event_id', eventId).maybeSingle()
   if (error || !data) return { ...event, event_id: eventId }
   const color = /^#[0-9A-Fa-f]{6}$/.test(data.registration_brand_color ?? '') ? data.registration_brand_color : null
   const logo = data.registration_logo_path ? Deno.env.get('SUPABASE_URL') + '/storage/v1/object/public/checkin-public/' + data.registration_logo_path : null
-  return { ...event, event_id: eventId, brand_color: color, logo_url: logo, host_name: data.registration_host_name ?? null }
+  return { ...event, event_id: eventId, brand_color: color, logo_url: logo, host_name: data.registration_host_name ?? null, white_label: data.white_label === true }
 }
 
 export interface QrEmailResult {
@@ -68,7 +70,7 @@ export function generateQrDataUrl(token: string): string {
   return qr.createDataURL()
 }
 
-function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string, guestOf?: string, lang: Lang = 'en'): string {
+export function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string, guestOf?: string, lang: Lang = 'en'): string {
   const safeName = escapeHtml(event.name)
   const safeFirstName = escapeHtml(attendee.first_name)
   const venueLine = event.venue ? ` &middot; ${escapeHtml(event.venue)}` : ''
@@ -103,10 +105,10 @@ function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDat
         </div>
         <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">${escapeHtml(et(lang, 'Lost this email? Just show your name at the entrance instead.'))}</p>
       </div>
-      <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
+${event.white_label ? '' : `<div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
         <span style="font-size:10px;color:#b0b0b8;">${escapeHtml(et(lang, 'Check-in powered by'))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
-      </div>
+      </div>`}
     </div>
   </div>
 </body>

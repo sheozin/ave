@@ -1730,3 +1730,28 @@ Deno.test(`${WH}: a name resolving to a private address is never called`, async 
     assert(res.args.p_ok === false && String(res.args.p_detail).includes('private'), JSON.stringify(res.args))
   } finally { globalThis.fetch = real }
 })
+
+// (128) White label: every guest email drops CueDeck when it is on, and
+// keeps the credit when it is off.
+Deno.test('white label: guest emails carry no CueDeck credit when on', async () => {
+  const { renderQrEmailHtml } = await import('../../supabase/functions/_shared/qr-email.ts')
+  const { reminderEmail, thankyouEmail } = await import('../../supabase/functions/_shared/reminder-email.ts')
+  const { renderConfirmEmail } = await import('../../supabase/functions/_shared/registration-confirm-email.ts')
+  const { inviteEmail } = await import(`${FN_DIR}checkin-invite-guests/index.ts`)
+  const att = { id: 'a1', first_name: 'Ada', email: 'ada@example.com', qr_token: 'TOKEN1234567890' }
+  for (const wl of [false, true]) {
+    const ev = { name: 'Summit', date: '2026-11-03', venue: 'Hall A', white_label: wl }
+    const rem = { ...ev, start: '09:00', timezone: 'Europe/Warsaw', address: null, reminder_message: null, thankyou_message: null, thankyou_link: null }
+    const html = [
+      renderQrEmailHtml(ev, att, 'data:image/png;base64,AA', undefined, 'en'),
+      renderQrEmailHtml(ev, att, 'data:image/png;base64,AA', 'Bob', 'pl'),
+      reminderEmail(rem, att, 'de').html,
+      thankyouEmail(rem, att, 'ar').html,
+      renderConfirmEmail(ev, 'https://app.cuedeck.io/r/X#c=1', 'en').html,
+      inviteEmail({ ...ev, start: '09:00' }, 'Ada', 'https://app.cuedeck.io/r/X#i=1', 'en').html,
+    ]
+    // Links to app.cuedeck.io are addresses, not branding.
+    const credits = html.map(h => h.replace(/https:\/\/app\.cuedeck\.io[^"'\s<]*/g, '').includes('CueDeck'))
+    assert(JSON.stringify(credits) === JSON.stringify(html.map(() => !wl)), 'white_label=' + wl + ': ' + JSON.stringify(credits))
+  }
+})
