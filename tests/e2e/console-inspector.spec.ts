@@ -496,6 +496,25 @@ test('log: minimised, an error shows in the error colour and turns the new badge
   await ctx.close();
 });
 
+// CI on Linux (8 Oct): text renders about 5% wider than on a Mac, and the German
+// READY row (Edit, the two arrows, Back to planned) wrapped at 1280. Letter spacing
+// stands in for the wider metrics: the row still fits one line, nothing clipped.
+test('inspector: de 1280: the Session row stays one line with wider text', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { locale: 'de', viewport: { width: 1280, height: 720 } });
+  await page.addStyleTag({ content: '#ctx-wrap .btn { letter-spacing: 0.05em; }' });
+  for (const id of [ID(5), PANEL_ID, ID(1)]) {
+    await evalPage(page, `selectSession('${id}')`);
+    const row = await insp(page).locator('.insp-sbtns').evaluate(el => {
+      const btns = [...el.querySelectorAll('.btn')] as HTMLElement[];
+      return { tops: [...new Set(btns.map(b => b.offsetTop))], clipped: btns.filter(b => b.scrollWidth > b.clientWidth + 1).length, over: el.scrollWidth > el.clientWidth };
+    });
+    expect(row.tops, `${id} wraps`).toHaveLength(1);
+    expect(row.clipped, id).toBe(0);
+    expect(row.over, id).toBe(false);
+  }
+  await ctx.close();
+});
+
 // 5.2b fix round 1 (4), owner: the Session row fits one line at the real rail widths in every
 // language (Move up and Move down are icon-only with a translated name); Cancel stays apart.
 for (const locale of ['en', 'ar', 'pl', 'de'] as const) {

@@ -1861,6 +1861,9 @@
       .insp-primary .btn { padding: 0 12px; font-size: var(--fs-13); }
     }
     @media (max-width: 1439px) and (pointer: fine) { .insp-primary .btn { height: var(--btn-md); } }
+    /* 295 px rail: the Session row's text buttons take 6 px padding and a 4 px gap, so German
+       (Edit, both arrows, Back to planned) keeps one line where text renders wider (Linux) */
+    @media (max-width: 1439px) { .insp-sbtns { gap: 4px; } .insp-sbtns .btn:not(.icon-only) { padding-inline: 6px; } }
     /* ═══ Command center phone (stage 5) ═══ */
     .ph-only { display: none; }
     @media screen and (max-width: 767px) {
