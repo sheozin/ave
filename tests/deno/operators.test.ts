@@ -34,6 +34,7 @@ let links: { email: string; type: string; data: Row }[]
 let emails: Row[] = []
 let authAdmin: { method: string; id: string }[]
 let writes: { method: string; table: string; body: unknown }[]
+let reads: string[] = []
 let seatLimit: number | null
 let inviteCreatedAt: string | null = null
 let failOn: Record<string, { status: number; body: Row }> = {}
@@ -45,6 +46,7 @@ function rowFilter(url: URL): (r: Row) => boolean {
     const get = (r: Row) => { const m = k.match(/^(\w+)->>(\w+)$/); return m ? (r[m[1]] as Row | undefined)?.[m[2]] : r[k] }
     if (v.startsWith('eq.')) tests.push(r => String(get(r)) === v.slice(3))
     if (v.startsWith('gte.')) tests.push(r => String(get(r) ?? '') >= v.slice(4))
+    if (v.startsWith('in.(')) { const set = v.slice(4, -1).split(',').map(x => x.replace(/^"|"$/g, '')); tests.push(r => set.includes(String(get(r)))) }
   }
   return (r: Row) => tests.every(fn => fn(r))
 }
@@ -107,6 +109,7 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     return new Response(null, { status: 200, headers: { 'Content-Range': `*/${rows.filter(match).length}` } })
   }
   if (method === 'GET') {
+    reads.push(table)
     let hit = rows.filter(match)
     const limit = url.searchParams.get('limit')
     if (limit) hit = hit.slice(0, Number(limit))
@@ -171,6 +174,7 @@ function setup() {
   emails = []
   authAdmin = []
   writes = []
+  reads = []
   seatLimit = null
   inviteCreatedAt = null
   failOn = {}
@@ -501,6 +505,25 @@ Deno.test("manage: without an event, remove covers every event the caller create
   assert(r.status === 200 && (r.body.events as string[]).sort().join() === [EV, EV_OWN2].sort().join(), JSON.stringify(r))
   assert(!member(EV, STAGE) && !member(EV_OWN2, STAGE) && member(EV_THEIRS, STAGE)?.role === 'reg', JSON.stringify(tables.leod_event_members))
   assert(logs('MEMBER_REMOVED').length === 2 && authAdmin.length === 0, 'logs or a ban')
+})
+
+Deno.test('manage: without an event, the memberships on all the caller\'s events are read in one query', async () => {
+  setup()
+  const extra = Array.from({ length: 12 }, (_, i) => `30000000-0000-4000-8000-0000000001${String(i).padStart(2, '0')}`)
+  for (const id of extra) tables.leod_events.push({ id, created_by: OWNER, name: 'x', created_via: 'console', active: true })
+  tables.leod_event_members.push({ event_id: extra[5], user_id: STAGE, role: 'reg', active: true })
+  const r = await call('manage-operator', OWNER, { action: 'suspend', user_id: STAGE })
+  assert(r.status === 200 && (r.body.events as string[]).length === 3, JSON.stringify(r))
+  const memberReads = reads.filter(t => t === 'leod_event_members').length
+  assert(memberReads === 1, `leod_event_members read ${memberReads} times`)
+  assert(member(extra[5], STAGE)?.active === false && member(EV_THEIRS, THEIR_OP)?.active === true, 'wrong rows changed')
+})
+
+Deno.test('manage: a failed membership read is a 500 and changes nothing', async () => {
+  setup()
+  failOn['GET /rest/v1/leod_event_members'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  const r = await call('manage-operator', OWNER, { action: 'remove', user_id: STAGE })
+  assert(r.status === 500 && writes.length === 0, JSON.stringify(r))
 })
 
 Deno.test('manage: without an event, an invited director reaches nobody', async () => {

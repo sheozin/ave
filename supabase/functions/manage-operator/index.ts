@@ -68,12 +68,13 @@ Deno.serve(async (req) => {
   }
 
   // ── The person's memberships on them ───────────────────────────
-  const targets: { event_id: string; role: string }[] = []
-  for (const eventId of events) {
-    const { data: m, error: mErr } = await sb.from('leod_event_members').select('event_id, role')
-      .eq('event_id', eventId).eq('user_id', targetId).maybeSingle()
+  // One query for all of them (an organiser may have many events).
+  let targets: { event_id: string; role: string }[] = []
+  if (events.length) {
+    const { data: ms, error: mErr } = await sb.from('leod_event_members').select('event_id, role')
+      .eq('user_id', targetId).in('event_id', events)
     if (mErr) return json(500, { error: mErr.message })
-    if (m) targets.push(m)
+    targets = ms ?? []
   }
   if (!targets.length) return json(404, { error: 'This person is not on the team of this event', code: 'not_member' })
 
