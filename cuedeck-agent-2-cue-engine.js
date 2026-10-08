@@ -258,6 +258,7 @@ const CueDeckCueEngine = (() => {
   let cueStartTime      = null;
   let totalSeconds      = 0;
   let _supabaseClient   = null;
+  let _getEventId       = null;   // () => current event id (event teams: AI runs on its owner's plan)
 
   // Clock function — overridden with CueDeck's correctedNow() via options.correctedNow
   // Default: Date.now() (client time, may have skew — pass correctedNow for accuracy)
@@ -336,6 +337,7 @@ const CueDeckCueEngine = (() => {
   function init(sessionsArray, options = {}) {
     alertMinutes     = options.alertMinutesBefore || 8;
     _supabaseClient  = options.supabaseClient || null;
+    _getEventId      = typeof options.getEventId === 'function' ? options.getEventId : null;
 
     // Accept CueDeck's correctedNow() for clock-sync accuracy
     if (typeof options.correctedNow === 'function') {
@@ -475,7 +477,8 @@ Generate 6-8 specific, actionable items.`;
           body: {
             model:      'claude-haiku-4-5-20251001',
             max_tokens: 1000,
-            messages:   [{ role: 'user', content: prompt }]
+            messages:   [{ role: 'user', content: prompt }],
+            event_id:   _getEventId ? _getEventId() : undefined
           }
         }),
         API_TIMEOUT_MS

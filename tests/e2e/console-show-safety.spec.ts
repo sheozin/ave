@@ -211,6 +211,10 @@ test.describe('batch actions', () => {
 
   test('switching event clears the batch selection and its armed button', async ({ page }) => {
     await setup(page, [live(), sess('p2', 2, { status: 'PLANNED' })]);
+    // event teams: switchEvent re-reads the role for each event (cuedeck_my_events)
+    await page.route('**/rest/v1/rpc/cuedeck_my_events', r => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(['ev-1', 'ev-2'].map(id => ({ event_id: id, role: 'director', is_owner: true, owner_id: 'user-1',
+        organiser: '', plan: 'pro', plan_status: 'active', trial_ends_at: null }))) }));
     await page.evaluate(() => { (0, eval)('S').events = [{ id: 'ev-1', name: 'One' }, { id: 'ev-2', name: 'Two', timezone: 'UTC' }]; });
     await page.locator('#card-live1').hover();
     await page.locator('#card-live1 .batch-chk').check();

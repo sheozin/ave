@@ -328,7 +328,7 @@ test.describe('Session people: CSV import and event copy', () => {
       const el = document.getElementById('loading-overlay');
       if (el) el.style.display = 'none';
       // eslint-disable-next-line no-eval
-      (0, eval)(`S.user = { id: 'u1' }; S.subscription = null; S.planLimits = null;
+      (0, eval)(`S.user = { id: 'u1' }; S.subscription = { plan: 'pro', status: 'active' }; S.planLimits = null;
         S.events = [{ id: 'from-event', name: 'GTR 2026', active: true }];
         S.event = S.events[0]; S.sessions = [];`);
       (window as unknown as { openEvModal: (m: string) => void }).openEvModal('create');
