@@ -1057,7 +1057,7 @@
     .sm-msg-lbl { font: 800 clamp(11px, 1.8vh, 20px)/1.2 var(--font-sans); letter-spacing: .2em; text-transform: uppercase; opacity: .75; }
     .sm-msg-text { font: 800 clamp(28px, 7vh, 80px)/1.08 var(--font-sans); letter-spacing: -.01em; text-align: center; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     #sm-message.sm-msg-new { animation: sm-msg-in 1.2s ease-out 1; }
-    @keyframes sm-msg-in { 0%, 35% { background: #fff; } 100% { background: var(--msg-band); } }
+    @keyframes sm-msg-in { 0%, 35% { background: var(--on-accent); } 100% { background: var(--msg-band); } }
     @media (prefers-reduced-motion: reduce) { #sm-message.sm-msg-new { animation: none; } }
     .sm-footer-evt { font-size: var(--fs-11); color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
     .sm-clock { font-family: 'SF Mono','Fira Code','Monaco',monospace; font-size: 18px; font-weight: 600; color: var(--blue-lt); letter-spacing: .06em; }
