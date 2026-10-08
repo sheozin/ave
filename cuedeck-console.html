@@ -10462,7 +10462,7 @@ function getCmdStaticItems() {
     { cat: 'Navigation', icon: 'keyboard', label: 'Keyboard Shortcuts', hint: '?', action: () => openShortcutsModal() },
     { cat: 'Navigation', icon: 'sparkle', label: 'What\'s New', action: () => openChangelogModal() },
     { cat: 'Navigation', icon: 'info', label: 'About CueDeck', action: () => openAboutModal() },
-    { cat: 'Navigation', icon: 'card', label: 'Open Billing', action: () => openBillingModal() },
+    ...(hasOwnBilling() ? [{ cat: 'Navigation', icon: 'card', label: 'Open Billing', action: () => openBillingModal() }] : []),
     { cat: 'Navigation', icon: 'team', label: 'Manage Operators', action: () => openUsersModal() },
     { cat: 'Help', icon: 'message', label: 'Send Feedback', action: () => openFeedbackModal() },
   ];

@@ -588,6 +588,7 @@ test('teams: a member with a leftover trial row sees no trial badge, upgrade or 
       .toEqual(['none', 'none', 'none', 'none']);
     expect(await evalPage(page, `toggleProfileEdit(); document.getElementById('pp-billing-section').style.display`)).toBe('none');
     expect(await evalPage(page, `['hm-billing', 'hm-invoices'].map(id => document.getElementById(id).style.display)`)).toEqual(['none', 'none']);
+    expect(await evalPage(page, `getCmdStaticItems().some(c => c.label === 'Open Billing')`)).toBe(false);
   } finally { await ctx.close(); }
 });
 
