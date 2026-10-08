@@ -83,23 +83,10 @@ Deno.serve(async (req) => {
     })
   }
 
-  // ── Resolve director ID ──────────────────────────────────────────
-  const { data: callerRow, error: callerErr } = await sb
-    .from('leod_users')
-    .select('role, invited_by')
-    .eq('id', user.id)
-    .single()
-
-  if (callerErr || !callerRow) {
-    return new Response(JSON.stringify({ error: 'User profile not found' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const directorId =
-    callerRow.role === 'director' || !callerRow.invited_by
-      ? user.id
-      : callerRow.invited_by
+  // ── Whose subscription: always the caller's own (event teams, spec §6).
+  // The plan belongs to the account that pays for it; a member of someone
+  // else's event never changes that organiser's plan.
+  const directorId = user.id
 
   // ── Get director's subscription ──────────────────────────────────
   const { data: subscription, error: subErr } = await sb
