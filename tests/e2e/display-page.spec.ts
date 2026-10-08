@@ -1217,3 +1217,319 @@ test.describe('Display: message band refits on resize', () => {
     expectBandLayout(await bandLayout(page));
   });
 });
+
+// ── FULL SCREEN ON THE FIRST TAP ────────────────────────────────────────────
+// While the page is not full screen, a small hint says so, and the first
+// tap, click or key press only asks for full screen: it reaches nothing else.
+
+// Counts requestFullscreen calls without entering full screen.
+const STUB_FULLSCREEN = () => {
+  (window as unknown as { __fsCalls: number }).__fsCalls = 0;
+  Element.prototype.requestFullscreen = function () {
+    (window as unknown as { __fsCalls: number }).__fsCalls++;
+    return Promise.resolve();
+  };
+};
+const fsCalls = (page: Page) => page.evaluate(() => (window as unknown as { __fsCalls: number }).__fsCalls);
+const fsHint = (page: Page) => page.locator('#fs-hint');
+
+test.describe('Display: full screen hint', () => {
+
+  test('80 the hint shows while the page is not full screen', async ({ page }) => {
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await expect(fsHint(page)).toBeVisible();
+    await expect(fsHint(page)).toHaveText('Tap anywhere for full screen');
+  });
+
+  for (const [locale, text] of [
+    ['pl-PL', 'Dotknij ekranu, aby włączyć pełny ekran'],
+    ['de-DE', 'Für Vollbild irgendwo tippen'],
+    ['ar-EG', 'اضغط في أي مكان لملء الشاشة'],
+  ] as const) {
+    test.describe(`in ${locale}`, () => {
+      test.use({ locale });
+      test(`80b the hint is in the screen's language (${locale})`, async ({ page }) => {
+        await mockSupabase(page);
+        await page.goto(DISP_URL);
+        await expect(fsHint(page)).toHaveText(text);
+        if (locale.startsWith('ar')) await expect(fsHint(page)).toHaveAttribute('dir', 'rtl');
+      });
+    });
+  }
+
+  test('81 on the pairing screen the first click goes full screen and still does its job', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await expect(fsHint(page)).toBeVisible();
+    await page.locator('#manual-display-id').click();
+    expect(await fsCalls(page)).toBe(1);
+    await expect(page.locator('#manual-display-id')).toBeFocused();
+    await expect(fsHint(page)).toBeHidden();
+    await page.locator('button[onclick="manualBoot()"]').click();
+    await expect(page.locator('#su-err')).toHaveText('Paste the display link from the console.');
+    expect(await fsCalls(page)).toBe(1);
+  });
+
+  test('81b on the pairing screen the first click on Connect connects', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await page.locator('button[onclick="manualBoot()"]').click();
+    expect(await fsCalls(page)).toBe(1);
+    await expect(page.locator('#su-err')).toHaveText('Paste the display link from the console.');
+  });
+
+  test('82 on the pairing screen a remote key (Enter) goes full screen and still presses the button', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await expect(fsHint(page)).toBeVisible();
+    await page.locator('button[onclick="manualBoot()"]').focus();
+    await page.keyboard.press('Enter');
+    expect(await fsCalls(page)).toBe(1);
+    await expect(page.locator('#su-err')).toHaveText('Paste the display link from the console.');
+  });
+
+  test('82c on a paired screen a remote key (Enter) only asks for full screen', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await mockSupabase(page);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#display')).toBeVisible();
+    await page.locator('#disconnect-btn').focus();
+    await page.keyboard.press('Enter');
+    expect(await fsCalls(page)).toBe(1);
+    await page.waitForTimeout(500);
+    await expect(page.locator('#display')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('cuedeck_display_id'))).toBe(FAKE_DISP_ID);
+  });
+
+  test('82b a tap on a paired screen does not reach the unpair button', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    const m = await mockSupabase(page);
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#display')).toBeVisible();
+    await page.locator('.d-header').hover();
+    await page.locator('#disconnect-btn').click();
+    expect(await fsCalls(page)).toBe(1);
+    await page.waitForTimeout(500);
+    await expect(page.locator('#display')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('cuedeck_display_id'))).toBe(FAKE_DISP_ID);
+    expect(m.otherRest).toEqual([]);
+  });
+
+  test('83 the hint hides in full screen and comes back after leaving it', async ({ page }) => {
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await expect(fsHint(page)).toBeVisible();
+    await page.mouse.click(5, 300);
+    await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+    await expect(fsHint(page)).toBeHidden();
+    await page.evaluate(() => document.exitFullscreen());
+    await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(false);
+    await expect(fsHint(page)).toBeVisible();
+    // and the next tap asks again
+    await page.mouse.click(5, 300);
+    await expect.poll(() => page.evaluate(() => !!document.fullscreenElement)).toBe(true);
+  });
+
+  test('84 no hint and no interception without the Fullscreen API', async ({ page }) => {
+    await page.addInitScript(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (Element.prototype as any).requestFullscreen;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (Element.prototype as any).webkitRequestFullscreen;
+    });
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    await expect(page.locator('#pairing-code')).toHaveText(/-/);
+    await expect(fsHint(page)).toHaveCount(0);
+    await page.locator('button[onclick="manualBoot()"]').click();
+    await expect(page.locator('#su-err')).toHaveText('Paste the display link from the console.');
+  });
+
+  for (const mode of ['fullscreen', 'standalone']) {
+    test(`85 no hint and no interception when running as an installed app (${mode})`, async ({ page }) => {
+      await page.addInitScript(STUB_FULLSCREEN);
+      await page.addInitScript((m: string) => {
+        const real = window.matchMedia.bind(window);
+        window.matchMedia = (q: string) => {
+          const mql = real(q);
+          if (!q.includes('display-mode')) return mql;
+          return Object.assign(Object.create(mql), { matches: q.includes(`display-mode: ${m}`), media: q });
+        };
+      }, mode);
+      await mockSupabase(page);
+      await page.goto(DISP_URL);
+      await expect(page.locator('#pairing-code')).toHaveText(/-/);
+      await expect(fsHint(page)).toHaveCount(0);
+      await page.locator('button[onclick="manualBoot()"]').click();
+      await expect(page.locator('#su-err')).toHaveText('Paste the display link from the console.');
+      expect(await fsCalls(page)).toBe(0);
+    });
+  }
+
+  test('86 the hint fades out after about 10 s and a tap still works', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    const anim = await fsHint(page).evaluate(e => {
+      const cs = getComputedStyle(e);
+      return { delay: parseFloat(cs.animationDelay), events: cs.pointerEvents };
+    });
+    expect(anim.delay).toBeGreaterThanOrEqual(9);
+    expect(anim.delay).toBeLessThanOrEqual(11);
+    // jump the fade to its end: the hint is invisible, the tap still counts
+    await fsHint(page).evaluate(e => e.getAnimations().forEach(a => a.finish()));
+    expect(await fsHint(page).evaluate(e => getComputedStyle(e).opacity)).toBe('0');
+    await page.mouse.click(400, 300);
+    expect(await fsCalls(page)).toBe(1);
+  });
+});
+
+for (const [w, h] of [[1920, 1080], [1280, 720]] as const) {
+  test.describe(`Display: full screen hint placement at ${w}x${h}`, () => {
+    test.use({ viewport: { width: w, height: h } });
+
+    test(`87 the hint covers neither the countdown nor the message band (${w}x${h})`, async ({ page }) => {
+      await page.addInitScript(WIDE_FONTS);
+      await mockSupabase(page, { feed: () => bigMsgFeed(MSG_60) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('.st-msg-text')).toHaveText(MSG_60);
+      const L = await bandLayout(page);
+      const hint = (await fsHint(page).boundingBox())!;
+      expect(hint).not.toBeNull();
+      expect(hint.x).toBeGreaterThanOrEqual(0);
+      expect(hint.y).toBeGreaterThanOrEqual(0);
+      const clock = (await page.locator('#d-clock').boundingBox())!;
+      const boxes: Record<string, { top: number; bottom: number; left: number; right: number }> = {
+        band: L.band, clock: { top: clock.y, bottom: clock.y + clock.height, left: clock.x, right: clock.x + clock.width },
+      };
+      for (const [sel, b] of Object.entries(L.parts)) if (b) boxes[sel] = b;
+      for (const [name, b] of Object.entries(boxes)) {
+        const apart = hint.x + hint.width <= b.left || hint.x >= b.right
+                   || hint.y + hint.height <= b.top || hint.y >= b.bottom;
+        expect(apart, `hint overlaps ${name}`).toBe(true);
+      }
+    });
+  });
+}
+
+test.describe('Display: installable as a full screen app', () => {
+  test('88 the page links a manifest that opens the display full screen', async ({ page, request }) => {
+    await mockSupabase(page);
+    await page.goto(DISP_URL);
+    const href = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(href).toBeTruthy();
+    const res = await request.get(new URL(href!, DISP_URL).href);
+    expect(res.ok()).toBe(true);
+    const m = await res.json();
+    expect(m.display).toBe('fullscreen');
+    expect(m.name).toBe('CueDeck display');
+    expect(m.id).toBe('/display');
+    expect(m.start_url).toBe('/display');
+    expect(m.start_url.startsWith(m.scope)).toBe(true);
+    expect(m.background_color).toBe('#05060f');
+    expect(m.theme_color).toBe('#05060f');
+    for (const icon of m.icons) {
+      const r = await request.get(new URL(icon.src, DISP_URL).href);
+      expect(r.ok(), icon.src).toBe(true);
+      expect(icon.purpose ?? 'any').toBe('any');
+    }
+  });
+});
+
+// ── ONE TAP FOR FULL SCREEN AND AUDIO ───────────────────────────────────────
+// A fake AudioContext that stays suspended until a user gesture, and counts
+// the silent buffer _doUnlockAudio plays.
+const FAKE_AUDIO = () => {
+  const w = window as unknown as Record<string, unknown>;
+  w.__unlocks = 0;
+  class FakeAudio {
+    state = 'suspended';
+    destination = {};
+    resume() { if (navigator.userActivation.isActive) this.state = 'running'; return Promise.resolve(); }
+    close() { return Promise.resolve(); }
+    createBuffer() { return {}; }
+    createBufferSource() { (w.__unlocks as number)++; w.__unlocks = (w.__unlocks as number); return { connect() {}, start() {} }; }
+  }
+  w.AudioContext = FakeAudio;
+  w.webkitAudioContext = FakeAudio;
+};
+const unlocks = (page: Page) => page.evaluate(() => (window as unknown as { __unlocks: number }).__unlocks);
+const NO_FULLSCREEN_API = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (Element.prototype as any).requestFullscreen;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (Element.prototype as any).webkitRequestFullscreen;
+};
+const PICTO = /\p{Extended_Pictographic}/u;
+function videoFeed() {
+  const f = makeFeed() as ReturnType<typeof makeFeed> & { sponsors: unknown[] };
+  f.sponsors = [{ id: 'sp1', name: 'Video sponsor', logo_url: 'https://example.invalid/a.mp4', bg_color: '#000', sort_order: 0 }];
+  return f;
+}
+
+test.describe('Display: one tap for full screen and audio', () => {
+
+  test('89 with video sponsors one combined hint shows, and one tap does both', async ({ page }) => {
+    await page.addInitScript(STUB_FULLSCREEN);
+    await page.addInitScript(FAKE_AUDIO);
+    await mockSupabase(page, { feed: videoFeed });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('#display')).toBeVisible();
+    await expect(fsHint(page)).toHaveText('Tap anywhere for full screen and audio');
+    await expect(page.locator('#audio-hint')).toBeHidden();
+    await page.mouse.click(640, 400);
+    expect(await fsCalls(page)).toBe(1);
+    expect(await unlocks(page)).toBe(1);
+    await expect(fsHint(page)).toBeHidden();
+    await expect(page.locator('#audio-hint')).toHaveCount(0);
+  });
+
+  test('90 without the Fullscreen API the audio hint shows alone, with no emoji, and a tap unlocks', async ({ page }) => {
+    await page.addInitScript(NO_FULLSCREEN_API);
+    await page.addInitScript(FAKE_AUDIO);
+    await mockSupabase(page, { feed: videoFeed });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    const hint = page.locator('#audio-hint');
+    await expect(hint).toBeVisible();
+    await expect(hint).toHaveText('Tap anywhere for audio');
+    await expect(hint.locator('svg')).toHaveCount(1);
+    expect(PICTO.test((await hint.textContent()) || '')).toBe(false);
+    await expect(fsHint(page)).toHaveCount(0);
+    await page.mouse.click(640, 400);
+    expect(await unlocks(page)).toBe(1);
+    await expect(hint).toHaveCount(0);
+  });
+
+  test('91 the audio hint comes back alone in full screen if audio is still locked', async ({ page }) => {
+    await page.addInitScript(FAKE_AUDIO);
+    await mockSupabase(page, { feed: videoFeed });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(fsHint(page)).toHaveText('Tap anywhere for full screen and audio');
+    // full screen entered some other way (F11, kiosk): audio still needs a tap
+    await page.evaluate(() => document.documentElement.requestFullscreen());
+    await expect(fsHint(page)).toBeHidden();
+    await expect(page.locator('#audio-hint')).toBeVisible();
+  });
+
+  for (const [locale, audio, both] of [
+    ['pl-PL', 'Dotknij ekranu, aby włączyć dźwięk', 'Dotknij ekranu, aby włączyć pełny ekran i dźwięk'],
+    ['de-DE', 'Für Ton irgendwo tippen', 'Für Vollbild und Ton irgendwo tippen'],
+    ['ar-EG', 'اضغط في أي مكان لتشغيل الصوت', 'اضغط في أي مكان لملء الشاشة وتشغيل الصوت'],
+  ] as const) {
+    test.describe(`audio hints in ${locale}`, () => {
+      test.use({ locale });
+      test(`92 the audio and combined hints are translated (${locale})`, async ({ page }) => {
+        await page.addInitScript(FAKE_AUDIO);
+        await mockSupabase(page, { feed: videoFeed });
+        await page.goto(`${DISP_URL}${makeHash()}`);
+        await expect(fsHint(page)).toHaveText(both);
+        await page.evaluate(() => document.documentElement.requestFullscreen());
+        await expect(page.locator('#audio-hint')).toHaveText(audio);
+      });
+    });
+  }
+});

@@ -1,5 +1,6 @@
 {
-  "name": "CueDeck Display",
+  "id": "/display",
+  "name": "CueDeck display",
   "short_name": "CueDeck",
   "description": "Digital signage display for CueDeck live event production.",
   "start_url": "/display",
@@ -13,7 +14,7 @@
       "src": "/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
