@@ -14,7 +14,7 @@
 
 - **Release after GTR (12 Oct 2026).** Nothing from this plan is applied, deployed or pushed before 13 Oct. Build tasks only write and commit files.
 - **Other session's files are off limits.** Never modify `cuedeck-checkin*`, `cuedeck-register*`, `supabase/functions/checkin-*`, `supabase/functions/_shared/checkin-*`, any `leod_checkin_*` table or function, `checkin_guard_results()`, or the check-in tests (`tests/checkin-*`, `tests/deno/checkin-*`, `tests/e2e/checkin-*`). `leod_checkin_operators` and `supabase/functions/checkin-invite-staff/index.ts` are reference only.
-- **Migration numbers.** Reserved here: 130, 131, 132, 133 (129 was the latest on 8 Oct). Another session adds migrations, so right before writing each migration run `ls supabase/migrations | sort -V | tail -5` and `supabase db query --linked "select name from supabase_migrations.schema_migrations order by version desc limit 8"` (from the repo root, SELECT only). If the reserved number is taken, use the next free number and rename the migration file, the probe file, the `PROBE OK NNN` text and every reference in later tasks of this plan in the same commit.
+- **Migration numbers.** Reserved here: 130, 131, 132, 133, 134, 135 (129 was the latest on 8 Oct). Another session adds migrations, so right before writing each migration run `ls supabase/migrations | sort -V | tail -5` and `supabase db query --linked "select name from supabase_migrations.schema_migrations order by version desc limit 8"` (from the repo root, SELECT only). If the reserved number is taken, use the next free number and rename the migration file, the probe file, the `PROBE OK NNN` text and every reference in later tasks of this plan in the same commit.
 - **Database changes are applied by the controller only**, in the release task, after a security review, with the Supabase MCP `apply_migration` (name `NNN_<file stem>`, as `128_stage_messages` was) on project `sawekpguemzvuvvulfbc`, and probes run with `execute_sql` (one statement per call: every probe is a single `DO` block). Each DB task delivers a migration file plus a probe `tests/sql/NNN-*-probe.sql` (template: `tests/sql/128-stage-messages-probe.sql`): a single `DO` block that ends in `RAISE EXCEPTION 'PROBE OK NNN: …'`, so everything it wrote rolls back. The controller runs each probe once before applying and records that it fails with the error the task states.
 - **Live bodies, not old migrations.** Every function and policy this plan rewrites starts from the body fetched live on 8 Oct with `pg_get_functiondef` / `pg_policies`. Each DB task quotes the live body it starts from.
 - **Since migration 079:** every new or replaced function states its grants explicitly (`REVOKE ALL … FROM PUBLIC, anon[, authenticated]` then `GRANT EXECUTE … TO …`). Every `SECURITY DEFINER` function has `SET search_path = public` (the live trigger functions that already use `public, extensions, pg_temp` keep it) and takes the caller from `auth.uid()`, never from an argument.
@@ -46,7 +46,9 @@ Five inputs the spec implies that are most likely to bite a person using this, e
 Build order is the task order below. Releases:
 
 - **Release A (Task 4.1) ships stages 1 and 2 together.** Stage 1 alone is not safe to ship: once access reads `leod_event_members`, the old `invite-operator` (which writes only `leod_users.invited_by`) would create crew with no access at all, and the old `manage-operator` would suspend and ban through `leod_users`. The migrations go first, then the 14 functions immediately after, in one sitting. Release A is compatible with the console that is live before it: the old console sends `event_id` on invites, its team list (`get_operators_with_last_seen`) is rewritten on memberships, and `manage-operator` without `event_id` acts on every event the caller created.
-- **Release B (Task 4.2) ships stage 3 (the console)**, after Release A is verified live. It cannot go first: it calls `cuedeck_my_events` and `cuedeck_event_team` from migration 133.
+- **Release B (Task 4.2) ships stage 3 (the console)**, after Release A is verified live. It cannot go first: it calls `cuedeck_my_events` and `cuedeck_event_team` from migration 133. Migration 135 (private channel policies, Task 3.5) is applied in Release B right before the console push: its policies only govern private channels, so the live console is unaffected until the push switches it.
+- **Release C (Task 4.3) is Sherif turning off "Allow public access"** for Realtime, after Release B and after the check-in session has moved its two public channels to private. It is last because the setting refuses every public channel in the project.
+- **Task 2.5 (daily guard run and its watch, migration 134) ships in Release A**: it only needs migration 132 and touches no console code; its Vercel half (`api/cron/health-check.ts`) deploys with Release A's push.
 
 Before Task 1.1 the controller creates the worktree (once):
 
@@ -68,6 +70,11 @@ ln -s /Users/sheriff/AVE-Production-Console/node_modules /Users/sheriff/AVE-Prod
 | `supabase/migrations/131_event_members_functions.sql`, `tests/sql/131-event-members-functions-probe.sql` | created 1.2 |
 | `supabase/migrations/132_event_teams_guard.sql`, `tests/sql/132-event-teams-isolation-probe.sql` | created 1.3 |
 | `supabase/migrations/133_event_teams_server.sql`, `tests/sql/133-event-teams-server-probe.sql` | created 2.1 |
+| `supabase/migrations/134_cuedeck_guard_schedule.sql`, `tests/sql/134-guard-schedule-probe.sql`, `supabase/functions/cuedeck-guard-alert/index.ts`, `tests/deno/guard-alert.test.ts`, `tests/guard-alert.spec.ts`, `tests/health-check-guards.spec.ts` | created 2.5 |
+| `api/cron/health-check.ts`, `scripts/deploy-functions.sh` | 2.5 |
+| `supabase/migrations/135_cuedeck_realtime_private.sql`, `tests/sql/135-realtime-private-probe.sql` | created 3.5 |
+| `tests/e2e/console-show-safety-boot.spec.ts` (signage topic names the event) | 3.5 |
+| `scripts/check-realtime-private.mjs` | created 4.3 |
 | `tests/sql/095-event-scoped-writes-probe.sql`, `tests/sql/128-stage-messages-probe.sql`, `tests/rls.spec.ts` | updated 1.1 (fixtures and model for memberships) |
 | `tests/sql/083-display-followups-probe.sql`, `tests/sql/093-apply-delay-probe.sql` | updated 1.2 |
 | `supabase/functions/_shared/members.ts` | created 2.2 |
@@ -95,14 +102,17 @@ Unchanged on purpose: `tests/deno/restart-session.test.ts` (its caller is the ev
 | 2 | 2.2 | `eventRole()` in `_shared/transition.ts` reads memberships (9 transitions and apply-delay follow) |
 | 2 | 2.3 | `invite-operator` (any email, per event, seats, owner rate limit, "added to" email) and `manage-operator` (per event, never bans) |
 | 2 | 2.4 | Plan resolver: ai-proxy uses the event owner's plan, redeem-code the caller's own |
+| 2 | 2.5 | `cuedeck_guard_results()` runs daily (pg_cron), every run recorded, alert on a failing guard or a missing or stale run, the watcher watched (migration 134) |
 | 3 | 3.1 | Console role per event on boot and switch; check-in staff with console memberships let in |
 | 3 | 3.2 | Console plans: owner's plan per event, no trial for members-only, own events only count, billing hidden, AI calls carry the event |
 | 3 | 3.3 | Event switcher grouped by organiser; invited directors edit but never deactivate |
 | 3 | 3.4 | Team window per event with seats, invite and manage per event, wizard invite errors read, `invited_by` code guard |
-| 4 | 4.1 | Release A: stages 1 and 2 (migrations with probes, 14 functions) |
-| 4 | 4.2 | Release B: stage 3 (console) |
+| 3 | 3.5 | Private realtime channels per event: `realtime.messages` policies, console joins private (migration 135) |
+| 4 | 4.1 | Release A: stages 1 and 2 (migrations 130 to 134 with probes, 15 functions, the health-check cron) |
+| 4 | 4.2 | Release B: stage 3 (console), with migration 135 |
+| 4 | 4.3 | Release C: Sherif turns off public Realtime channels; controller verifies |
 
-13 tasks: 3 in stage 1, 4 in stage 2, 4 in stage 3, 2 release tasks.
+16 tasks: 3 in stage 1, 5 in stage 2, 5 in stage 3, 3 release tasks.
 
 ---
 
@@ -4025,6 +4035,639 @@ git add supabase/functions/_shared/plan.ts supabase/functions/ai-proxy/index.ts 
 git commit -m "feat(functions): AI uses the event owner's plan; codes apply to your own plan" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- supabase/functions/_shared/plan.ts supabase/functions/ai-proxy/index.ts supabase/functions/redeem-code/index.ts tests/deno/plan-owner.test.ts tests/plan-owner.spec.ts tests/ai-proxy-plan.spec.ts
 ```
 
+### Task 2.5: Schedule the guard, and watch the watcher (migration 134)
+
+Sherif's condition on the plan (8 Oct): `cuedeck_guard_results()` runs every day on a schedule, every run is recorded, and a person is told when a guard fails and when the run itself goes missing or stale. An absent run is a failure, never an all-clear.
+
+Where the pieces come from, found in the repo on 8 Oct:
+- **The run table.** The house job log `leod_checkin_job_runs` (migration 075) is check-in-owned: its name, its migration and its watcher (`checkin_brain_signals`, read by the AVE Brain) belong to the check-in session, so this plan creates a console table, `cuedeck_job_runs`, with the same shape plus `failing` and `alerted_at`.
+- **The alert route.** The existing route that reaches a person from this project is the alert email that `stripe-webhook` sends through `_shared/resend.ts` to the `BILLING_ALERT_EMAIL` secret (Sherif's alert inbox), recording each alert in a table. This task uses that route (the same helper, the same address) from a small Edge Function; it does not add a new channel. The Brain watcher is not used because it only reads check-in tables (`checkin_brain_signals`, off limits).
+- **Two independent schedulers, each watching the other.** pg_cron (installed by 089) runs the guards at 05:10 UTC; the Vercel cron `/api/cron/health-check` (already scheduled daily at 06:00 UTC in `vercel.json`) calls the alert function, which records a heartbeat. If pg_cron stops, the 06:00 call finds no fresh guard run and alerts. If the Vercel cron stops, the next 05:10 run finds no fresh heartbeat and alerts through pg_net. Both stopping at once is the one case nothing reports (named in the note to Sherif).
+
+**Files:**
+- Create: `supabase/migrations/134_cuedeck_guard_schedule.sql`
+- Create: `tests/sql/134-guard-schedule-probe.sql`
+- Create: `supabase/functions/cuedeck-guard-alert/index.ts`
+- Create: `tests/deno/guard-alert.test.ts`, `tests/guard-alert.spec.ts`
+- Modify: `api/cron/health-check.ts` (call the alert function every day)
+- Create: `tests/health-check-guards.spec.ts`
+- Modify: `scripts/deploy-functions.sh` (add `cuedeck-guard-alert` to `ALL_FUNCTIONS` and to the `--no-verify-jwt` case: pg_cron calls it with `x-cron-secret` and no JWT, see `tests/cron-functions-reachable.spec.ts`)
+
+**Interfaces:**
+- Consumes: `cuedeck_guard_results() → (guard, ok, detail, checked_at)` (Task 1.3); `sendEmail({ to, subject, html, text? })` from `_shared/resend.ts` (returns `{ id?, error? }`); `adminClient()`; extensions `pg_cron`, `pg_net`, `vault` (089).
+- Produces:
+  - table `public.cuedeck_job_runs(id bigserial, job_name text, started_at timestamptz, finished_at timestamptz, status text ('ok'|'failed'), failing text[], detail text, alerted_at timestamptz)`; job names `cuedeck-guards` (the runner), `cuedeck-guard-watch` (the Vercel heartbeat), `cuedeck-guard-alert` (each alert email).
+  - `public.cuedeck_run_guards() RETURNS bigint` (the run id): runs the guards, records the run, and when `cuedeck_guard_watch()` is not ok calls the alert function through `net.http_post`. service_role only; scheduled by pg_cron job `cuedeck-guards` at `10 5 * * *`.
+  - `public.cuedeck_guard_watch() RETURNS jsonb` `{ ok: boolean, problems: text[], checked_at }`. Problems, by exclusion (anything not proven fresh and green is a problem): `guard run missing`, `guard run stale: last run <UTC time>` (older than 26 h), `guards failing: <names> (<detail>)`, `guard watch missing`, `guard watch stale: last heartbeat <UTC time>` (older than 26 h). service_role only.
+  - `public.cuedeck_cron_ok(p_secret text) RETURNS boolean` against vault secret `cuedeck_guard_cron_secret`. service_role only.
+  - Edge Function `POST /functions/v1/cuedeck-guard-alert` body `{ caller?: 'vercel' | 'pg_cron' }`, authorised by `Authorization: Bearer <service role key>` (Vercel) or `x-cron-secret` (pg_cron). Answers `200 { ok, problems, emailed }`, `401`, `500 { error }` (no alert address, or the run could not be recorded), `502` (the email failed). Emails each distinct problem set once per UTC day. Records `cuedeck-guard-watch` only for a service-role (Vercel) call.
+  - `api/cron/health-check.ts` returns `guards: 'ok' | 'failing' | 'unreachable'` and `503` unless the database and the guard watch are both fine.
+
+- [ ] **Step 1: Check the migration number** (Global Constraints). Expected next free: 134.
+
+- [ ] **Step 2: Write the failing tests.**
+
+`tests/sql/134-guard-schedule-probe.sql`:
+
+```sql
+-- tests/sql/134-guard-schedule-probe.sql
+-- Run after 134 (needs 132). Expected: an error whose message starts with
+-- 'PROBE OK 134'. Everything is rolled back by the final RAISE, including the
+-- pg_net request the runner queues (pg_net sends only committed requests).
+-- Before 134 it fails with: function cuedeck_run_guards() does not exist.
+DO $probe$
+DECLARE
+  v_run    bigint;
+  v_row    cuedeck_job_runs%ROWTYPE;
+  v_watch  jsonb;
+  v_queued int;
+  v_n      int;
+  v_checks int := 0;
+BEGIN
+  -- start from a clean slate inside this transaction
+  DELETE FROM cuedeck_job_runs;
+  INSERT INTO cuedeck_job_runs (job_name, status, started_at, finished_at) VALUES ('cuedeck-guard-watch', 'ok', now(), now());
+
+  -- 1. a green run is recorded as ok, with no failing guards, and the watch is ok
+  SELECT count(*) INTO v_queued FROM net.http_request_queue WHERE url LIKE '%/cuedeck-guard-alert';
+  v_run := cuedeck_run_guards();
+  SELECT * INTO v_row FROM cuedeck_job_runs WHERE id = v_run;
+  IF v_row.job_name IS DISTINCT FROM 'cuedeck-guards' OR v_row.status IS DISTINCT FROM 'ok'
+     OR cardinality(v_row.failing) <> 0 OR v_row.finished_at IS NULL THEN
+    RAISE EXCEPTION 'PROBE FAIL 1: green run recorded as %', to_jsonb(v_row);
+  END IF;
+  v_watch := cuedeck_guard_watch();
+  IF (v_watch->>'ok')::boolean IS DISTINCT FROM true OR jsonb_array_length(v_watch->'problems') <> 0 THEN
+    RAISE EXCEPTION 'PROBE FAIL 1: watch after a green run %', v_watch;
+  END IF;
+  IF (SELECT count(*) FROM net.http_request_queue WHERE url LIKE '%/cuedeck-guard-alert') <> v_queued THEN
+    RAISE EXCEPTION 'PROBE FAIL 1: a green run called the alert function';
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 2. a failing guard is recorded by name, reported by the watch, and the
+  --    runner calls the alert function at once
+  CREATE POLICY probe_134_old_rule ON leod_reports FOR SELECT TO authenticated
+    USING (event_id IN (SELECT e.id FROM leod_events e
+                         WHERE e.created_by IN (SELECT u.invited_by FROM leod_users u WHERE u.id = auth.uid())));
+  v_run := cuedeck_run_guards();
+  SELECT * INTO v_row FROM cuedeck_job_runs WHERE id = v_run;
+  IF v_row.status IS DISTINCT FROM 'failed' OR NOT ('event_access_not_via_invited_by' = ANY (v_row.failing)) THEN
+    RAISE EXCEPTION 'PROBE FAIL 2: failing run recorded as %', to_jsonb(v_row);
+  END IF;
+  v_watch := cuedeck_guard_watch();
+  IF (v_watch->>'ok')::boolean IS DISTINCT FROM false
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(v_watch->'problems') p
+                     WHERE p LIKE 'guards failing: event_access_not_via_invited_by%') THEN
+    RAISE EXCEPTION 'PROBE FAIL 2: watch did not report the failing guard: %', v_watch;
+  END IF;
+  IF (SELECT count(*) FROM net.http_request_queue WHERE url LIKE '%/cuedeck-guard-alert') <> v_queued + 1 THEN
+    RAISE EXCEPTION 'PROBE FAIL 2: the runner did not call the alert function';
+  END IF;
+  DROP POLICY probe_134_old_rule ON leod_reports;
+  v_checks := v_checks + 1;
+
+  -- 3. no run at all is a failure, not an all-clear; a run older than 26 h is stale
+  DELETE FROM cuedeck_job_runs WHERE job_name = 'cuedeck-guards';
+  v_watch := cuedeck_guard_watch();
+  IF (v_watch->>'ok')::boolean IS DISTINCT FROM false OR NOT (v_watch->'problems' ? 'guard run missing') THEN
+    RAISE EXCEPTION 'PROBE FAIL 3: a missing run was not reported: %', v_watch;
+  END IF;
+  INSERT INTO cuedeck_job_runs (job_name, status, started_at, finished_at)
+  VALUES ('cuedeck-guards', 'ok', now() - interval '27 hours', now() - interval '27 hours');
+  v_watch := cuedeck_guard_watch();
+  IF (v_watch->>'ok')::boolean IS DISTINCT FROM false
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(v_watch->'problems') p WHERE p LIKE 'guard run stale:%') THEN
+    RAISE EXCEPTION 'PROBE FAIL 3: a 27 h old run was not reported stale: %', v_watch;
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 4. the watcher is watched: no heartbeat, or one older than 26 h, is reported
+  v_run := cuedeck_run_guards();   -- a fresh green run, so only the heartbeat is wrong
+  DELETE FROM cuedeck_job_runs WHERE job_name = 'cuedeck-guard-watch';
+  v_watch := cuedeck_guard_watch();
+  IF NOT (v_watch->'problems' ? 'guard watch missing') THEN RAISE EXCEPTION 'PROBE FAIL 4: missing heartbeat not reported: %', v_watch; END IF;
+  INSERT INTO cuedeck_job_runs (job_name, status, started_at, finished_at)
+  VALUES ('cuedeck-guard-watch', 'ok', now() - interval '27 hours', now() - interval '27 hours');
+  v_watch := cuedeck_guard_watch();
+  IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(v_watch->'problems') p WHERE p LIKE 'guard watch stale:%') THEN
+    RAISE EXCEPTION 'PROBE FAIL 4: stale heartbeat not reported: %', v_watch;
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 5. a guard function that errors is a failed run, not a missing one
+  ALTER FUNCTION public.cuedeck_guard_results() RENAME TO cuedeck_guard_results_probe_hidden;
+  v_run := cuedeck_run_guards();
+  ALTER FUNCTION public.cuedeck_guard_results_probe_hidden() RENAME TO cuedeck_guard_results;
+  SELECT * INTO v_row FROM cuedeck_job_runs WHERE id = v_run;
+  IF v_row.status IS DISTINCT FROM 'failed' OR NOT ('guard_error' = ANY (v_row.failing)) THEN
+    RAISE EXCEPTION 'PROBE FAIL 5: an erroring guard run recorded as %', to_jsonb(v_row);
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 6. the schedule, the secret and who may run what
+  SELECT count(*) INTO v_n FROM cron.job
+   WHERE jobname = 'cuedeck-guards' AND schedule = '10 5 * * *' AND active AND command LIKE '%cuedeck_run_guards()%';
+  IF v_n <> 1 THEN RAISE EXCEPTION 'PROBE FAIL 6: pg_cron job cuedeck-guards missing or wrong'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'cuedeck_guard_cron_secret')
+     OR cuedeck_cron_ok('wrong-secret-wrong-secret-wrong-secret') IS DISTINCT FROM false
+     OR cuedeck_cron_ok((SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cuedeck_guard_cron_secret')) IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'PROBE FAIL 6: cron secret';
+  END IF;
+  IF has_function_privilege('authenticated', 'public.cuedeck_run_guards()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.cuedeck_run_guards()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.cuedeck_guard_watch()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.cuedeck_guard_watch()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.cuedeck_cron_ok(text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.cuedeck_cron_ok(text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.cuedeck_guard_watch()', 'EXECUTE')
+     OR has_table_privilege('authenticated', 'public.cuedeck_job_runs', 'SELECT')
+     OR has_table_privilege('anon', 'public.cuedeck_job_runs', 'SELECT')
+     OR NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.cuedeck_job_runs'::regclass) THEN
+    RAISE EXCEPTION 'PROBE FAIL 6: privileges';
+  END IF;
+  v_checks := v_checks + 1;
+
+  RAISE EXCEPTION 'PROBE OK 134: % checks passed (rolled back)', v_checks;
+END
+$probe$;
+```
+
+`tests/deno/guard-alert.test.ts`:
+
+```ts
+// tests/deno/guard-alert.test.ts
+// cuedeck-guard-alert against a stubbed Supabase and Resend: who may call it,
+// that problems reach the alert inbox once a day, that a missing or failed
+// watch read is itself a problem, and that only the Vercel call is a heartbeat.
+// Run: deno test --allow-env --allow-read --no-lock tests/deno/guard-alert.test.ts
+const FN_DIR = new URL('../../supabase/functions/', import.meta.url).href
+Deno.env.set('SUPABASE_URL', 'http://stub.local')
+Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'service-role-stub')
+Deno.env.set('RESEND_API_KEY', 're_stub_key_for_tests')
+Deno.env.set('BILLING_ALERT_EMAIL', 'alerts@example.com')
+
+type Row = Record<string, unknown>
+let runs: Row[]
+let emails: Row[]
+let watch: { status: number; body: unknown }
+let cronSecretOk: boolean
+let resendFails: boolean
+
+const reply = (status: number, body: unknown) =>
+  new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
+  const req = input instanceof Request ? input : null
+  const url = new URL(req ? req.url : String(input))
+  const method = (init?.method ?? req?.method ?? 'GET').toUpperCase()
+  const raw = init?.body ?? (req ? await req.clone().text() : undefined)
+  if (url.host === 'api.resend.com') {
+    emails.push(JSON.parse(String(raw ?? '{}')))
+    return resendFails ? reply(500, { message: 'provider down' }) : reply(200, { id: 'email-stub' })
+  }
+  if (url.host !== 'stub.local') return reply(599, { message: 'unexpected ' + url.host })
+  if (url.pathname === '/rest/v1/rpc/cuedeck_cron_ok') return reply(200, cronSecretOk)
+  if (url.pathname === '/rest/v1/rpc/cuedeck_guard_watch') return reply(watch.status, watch.body)
+  if (url.pathname === '/rest/v1/cuedeck_job_runs') {
+    if (method === 'POST') { const b = JSON.parse(String(raw)); runs.push(...(Array.isArray(b) ? b : [b])); return reply(201, undefined) }
+    const want = [...url.searchParams].filter(([, v]) => v.startsWith('eq.')).map(([k, v]) => [k, v.slice(3)])
+    return reply(200, runs.filter(r => want.every(([k, v]) => String(r[k]) === v)))
+  }
+  return reply(404, { message: 'no route ' + url.pathname })
+}) as typeof fetch
+
+let handler: ((req: Request) => Promise<Response>) | null = null
+Object.defineProperty(Deno, 'serve', { configurable: true, writable: true,
+  value: (h: (req: Request) => Promise<Response>) => { handler = h; return { finished: Promise.resolve(), shutdown: async () => {} } } })
+await import(`${FN_DIR}cuedeck-guard-alert/index.ts`)
+if (!handler) throw new Error('no handler captured')
+
+const OK_WATCH = { status: 200, body: { ok: true, problems: [], checked_at: '2026-10-13T05:10:00Z' } }
+const BAD_WATCH = { status: 200, body: { ok: false, problems: ['guards failing: event_access_not_via_invited_by (1 read invited_by: leod_reports.x)'] } }
+function setup() { runs = []; emails = []; watch = OK_WATCH; cronSecretOk = false; resendFails = false }
+async function call(headers: Record<string, string>, body: Row = {}) {
+  const res = await handler!(new Request('http://stub.local/functions/v1/cuedeck-guard-alert',
+    { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }))
+  return { status: res.status, body: await res.json().catch(() => ({})) as Row }
+}
+const VERCEL = { Authorization: 'Bearer service-role-stub' }
+const CRON = { 'x-cron-secret': 'a'.repeat(64) }
+function assert(c: unknown, m: string): asserts c { if (!c) throw new Error(m) }
+
+Deno.test('guard-alert: no or wrong credentials are refused and nothing is sent', async () => {
+  setup()
+  let r = await call({})
+  assert(r.status === 401, JSON.stringify(r))
+  r = await call(CRON)   // cuedeck_cron_ok answers false
+  assert(r.status === 401 && emails.length === 0 && runs.length === 0, JSON.stringify(r))
+})
+
+Deno.test('guard-alert: the daily Vercel call records a heartbeat and sends nothing when all is well', async () => {
+  setup()
+  const r = await call(VERCEL, { caller: 'vercel' })
+  assert(r.status === 200 && r.body.ok === true && emails.length === 0, JSON.stringify(r))
+  assert(runs.some(x => x.job_name === 'cuedeck-guard-watch' && x.status === 'ok'), JSON.stringify(runs))
+})
+
+Deno.test('guard-alert: a failing guard reaches the alert inbox once a day, from pg_cron without a heartbeat', async () => {
+  setup(); cronSecretOk = true; watch = BAD_WATCH
+  let r = await call(CRON, { caller: 'pg_cron' })
+  assert(r.status === 200 && r.body.ok === false && r.body.emailed === true, JSON.stringify(r))
+  const mail = emails[0] as { to: string | string[]; subject: string; html: string }
+  assert(String(mail.to).includes('alerts@example.com') && mail.subject.startsWith('CueDeck guard alert'), JSON.stringify(mail))
+  assert(mail.html.includes('event_access_not_via_invited_by'), mail.html)
+  assert(!runs.some(x => x.job_name === 'cuedeck-guard-watch'), 'pg_cron counted as the Vercel heartbeat')
+  assert(runs.some(x => x.job_name === 'cuedeck-guard-alert' && x.status === 'ok'), JSON.stringify(runs))
+  r = await call(VERCEL, { caller: 'vercel' })   // the same problem later that day
+  assert(r.body.emailed === false && emails.length === 1, 'emailed twice the same day')
+})
+
+Deno.test('guard-alert: a missing run is a problem like any other', async () => {
+  setup(); watch = { status: 200, body: { ok: false, problems: ['guard run missing'] } }
+  const r = await call(VERCEL, { caller: 'vercel' })
+  assert(r.body.ok === false && r.body.emailed === true && (emails[0] as { html: string }).html.includes('guard run missing'), JSON.stringify(r))
+})
+
+Deno.test('guard-alert: a watch that cannot be read is reported, never treated as all-clear', async () => {
+  setup(); watch = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  const r = await call(VERCEL, { caller: 'vercel' })
+  assert(r.body.ok === false && r.body.emailed === true, JSON.stringify(r))
+  assert((emails[0] as { html: string }).html.includes('cuedeck_guard_watch could not be read'), 'email body')
+})
+
+Deno.test('guard-alert: a failed email is a 502 and is retried on the next call', async () => {
+  setup(); watch = BAD_WATCH; resendFails = true
+  let r = await call(VERCEL, { caller: 'vercel' })
+  assert(r.status === 502 && runs.some(x => x.job_name === 'cuedeck-guard-alert' && x.status === 'failed'), JSON.stringify(r))
+  resendFails = false
+  r = await call(VERCEL, { caller: 'vercel' })
+  assert(r.status === 200 && r.body.emailed === true && emails.length === 2, 'not retried')
+})
+
+Deno.test('guard-alert: no alert address is a 500, not silence', async () => {
+  setup(); watch = BAD_WATCH
+  Deno.env.delete('BILLING_ALERT_EMAIL')
+  try {
+    const r = await call(VERCEL, { caller: 'vercel' })
+    assert(r.status === 500 && emails.length === 0, JSON.stringify(r))
+  } finally { Deno.env.set('BILLING_ALERT_EMAIL', 'alerts@example.com') }
+})
+```
+
+`tests/guard-alert.spec.ts`:
+
+```ts
+// tests/guard-alert.spec.ts
+// Runs tests/deno/guard-alert.test.ts under deno (CI installs deno and must never skip).
+import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
+
+const hasDeno = spawnSync('deno', ['--version']).status === 0;
+describe.skipIf(!hasDeno && !process.env.CI)('guard alert function (deno)', () => {
+  it('tests/deno/guard-alert.test.ts passes', () => {
+    expect(hasDeno, 'deno is not installed; CI must install it (denoland/setup-deno)').toBe(true);
+    const r = spawnSync('deno', ['test', '--allow-env', '--allow-read', '--no-lock', 'tests/deno/guard-alert.test.ts'], { encoding: 'utf8', timeout: 120_000 });
+    expect(r.status, (r.stdout ?? '') + (r.stderr ?? '')).toBe(0);
+  }, 130_000);
+});
+```
+
+`tests/health-check-guards.spec.ts`:
+
+```ts
+// tests/health-check-guards.spec.ts
+// The daily Vercel health check also calls the guard watch (cuedeck-guard-alert),
+// so a dead pg_cron is noticed, and reports 503 unless the guards are fine.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const state = {
+  dbError: null as unknown,
+  invoke: { data: { ok: true, problems: [] } as unknown, error: null as unknown },
+  invoked: [] as { name: string; body: unknown }[],
+};
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    from: () => ({ select: () => ({ limit: async () => ({ error: state.dbError }) }) }),
+    functions: { invoke: async (name: string, opts: { body: unknown }) => { state.invoked.push({ name, body: opts.body }); return state.invoke; } },
+  }),
+}));
+process.env.CRON_SECRET = 'cron-test';
+process.env.SUPABASE_URL = 'http://stub.local';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-stub';
+const { default: handler } = await import('../api/cron/health-check');
+const run = () => handler(new Request('http://x/api/cron/health-check', { headers: { authorization: 'Bearer cron-test' } }));
+
+describe('health-check watches the guards', () => {
+  beforeEach(() => { state.dbError = null; state.invoke = { data: { ok: true, problems: [] }, error: null }; state.invoked = []; });
+  it('calls cuedeck-guard-alert as the Vercel heartbeat and is 200 when all is well', async () => {
+    const res = await run();
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.guards).toBe('ok');
+    expect(state.invoked).toEqual([{ name: 'cuedeck-guard-alert', body: { caller: 'vercel' } }]);
+  });
+  it('is 503 with the problems when a guard fails or a run is missing', async () => {
+    state.invoke = { data: { ok: false, problems: ['guard run missing'] }, error: null };
+    const res = await run();
+    const body = await res.json();
+    expect(res.status).toBe(503);
+    expect(body.guards).toBe('failing');
+    expect(body.guard_problems).toEqual(['guard run missing']);
+  });
+  it('is 503 when the guard watch cannot be reached', async () => {
+    state.invoke = { data: null, error: new Error('down') };
+    const res = await run();
+    expect(res.status).toBe(503);
+    expect((await res.json()).guards).toBe('unreachable');
+  });
+});
+```
+
+- [ ] **Step 3: Run them and see them fail.**
+
+Run: `deno test --allow-env --allow-read --no-lock tests/deno/guard-alert.test.ts`
+Expected: FAIL: `Module not found … cuedeck-guard-alert/index.ts`.
+
+Run: `npx vitest run tests/health-check-guards.spec.ts`
+Expected: FAIL: `expected undefined to be 'ok'` (health-check has no `guards` field).
+
+- [ ] **Step 4 (controller): run probe 134 before its migration.** Expected: `function cuedeck_run_guards() does not exist`. Record it.
+
+- [ ] **Step 5: Write the migration** `supabase/migrations/134_cuedeck_guard_schedule.sql`:
+
+```sql
+-- ============================================================
+-- CueDeck Migration 134: the console guards run every day, and are watched
+-- ============================================================
+-- cuedeck_guard_results() (132) is run daily by pg_cron, each run is
+-- recorded in cuedeck_job_runs, and cuedeck_guard_watch() says what is
+-- wrong: a failing guard, a run that is missing or older than 26 h, or a
+-- watch heartbeat (the Vercel health-check) older than 26 h. Absence is a
+-- failure, never an all-clear. When something is wrong the runner calls the
+-- cuedeck-guard-alert Edge Function at once (pg_net), which emails the
+-- existing alert inbox (BILLING_ALERT_EMAIL, as stripe-webhook does).
+-- leod_checkin_job_runs is not used: it belongs to the check-in work.
+-- The x-cron-secret is made inside the vault and never leaves the database
+-- except in the request itself (pattern of 089).
+-- ============================================================
+
+CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+CREATE TABLE IF NOT EXISTS public.cuedeck_job_runs (
+  id          bigserial   PRIMARY KEY,
+  job_name    text        NOT NULL,
+  started_at  timestamptz NOT NULL DEFAULT now(),
+  finished_at timestamptz,
+  status      text        NOT NULL CHECK (status IN ('ok', 'failed')),
+  failing     text[]      NOT NULL DEFAULT '{}',
+  detail      text,
+  alerted_at  timestamptz
+);
+CREATE INDEX IF NOT EXISTS cuedeck_job_runs_job_idx ON public.cuedeck_job_runs (job_name, started_at DESC);
+ALTER TABLE public.cuedeck_job_runs ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.cuedeck_job_runs FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON SEQUENCE public.cuedeck_job_runs_id_seq FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.cuedeck_job_runs TO service_role;
+GRANT USAGE ON SEQUENCE public.cuedeck_job_runs_id_seq TO service_role;
+-- No policies: only the service role and the database read or write it.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM vault.secrets WHERE name = 'cuedeck_guard_cron_secret') THEN
+    PERFORM vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'),
+                                'cuedeck_guard_cron_secret',
+                                'x-cron-secret for the cuedeck-guard-alert Edge Function (134)');
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.cuedeck_cron_ok(p_secret text)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT COALESCE(length(p_secret) >= 32 AND p_secret = (
+           SELECT decrypted_secret FROM vault.decrypted_secrets
+            WHERE name = 'cuedeck_guard_cron_secret'), false);
+$$;
+REVOKE ALL ON FUNCTION public.cuedeck_cron_ok(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cuedeck_cron_ok(text) TO service_role;
+
+-- What is wrong right now. Everything not proven fresh and green is a problem.
+CREATE OR REPLACE FUNCTION public.cuedeck_guard_watch()
+RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_run      cuedeck_job_runs%ROWTYPE;
+  v_beat     timestamptz;
+  v_problems text[] := '{}';
+BEGIN
+  SELECT * INTO v_run FROM cuedeck_job_runs
+   WHERE job_name = 'cuedeck-guards' ORDER BY started_at DESC, id DESC LIMIT 1;
+  IF NOT FOUND THEN
+    v_problems := v_problems || 'guard run missing'::text;
+  ELSE
+    IF v_run.started_at < now() - interval '26 hours' THEN
+      v_problems := v_problems || ('guard run stale: last run '
+                                   || to_char(v_run.started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') || ' UTC');
+    END IF;
+    IF v_run.status <> 'ok' THEN
+      v_problems := v_problems || ('guards failing: ' || array_to_string(v_run.failing, ', ')
+                                   || coalesce(' (' || left(v_run.detail, 300) || ')', ''));
+    END IF;
+  END IF;
+  SELECT max(started_at) INTO v_beat FROM cuedeck_job_runs WHERE job_name = 'cuedeck-guard-watch';
+  IF v_beat IS NULL THEN
+    v_problems := v_problems || 'guard watch missing'::text;
+  ELSIF v_beat < now() - interval '26 hours' THEN
+    v_problems := v_problems || ('guard watch stale: last heartbeat '
+                                 || to_char(v_beat AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI') || ' UTC');
+  END IF;
+  RETURN jsonb_build_object('ok', cardinality(v_problems) = 0, 'problems', to_jsonb(v_problems), 'checked_at', now());
+END;
+$$;
+REVOKE ALL ON FUNCTION public.cuedeck_guard_watch() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cuedeck_guard_watch() TO service_role;
+
+-- The daily run: run the guards, record the run (an error in the guards is
+-- a failed run, never a missing one), and call the alert function at once
+-- when anything is wrong.
+CREATE OR REPLACE FUNCTION public.cuedeck_run_guards()
+RETURNS bigint
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_started timestamptz := now();
+  v_failing text[];
+  v_detail  text;
+  v_total   int;
+  v_id      bigint;
+BEGIN
+  BEGIN
+    SELECT coalesce(array_agg(g.guard ORDER BY g.guard) FILTER (WHERE NOT g.ok), '{}'),
+           string_agg(g.guard || ': ' || g.detail, '; ' ORDER BY g.guard) FILTER (WHERE NOT g.ok),
+           count(*)
+      INTO v_failing, v_detail, v_total
+      FROM cuedeck_guard_results() g;
+    IF v_total = 0 THEN
+      v_failing := ARRAY['no_guards_ran'];
+      v_detail := 'cuedeck_guard_results returned no rows';
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_failing := ARRAY['guard_error'];
+    v_detail := SQLERRM;
+  END;
+  INSERT INTO cuedeck_job_runs (job_name, started_at, finished_at, status, failing, detail)
+  VALUES ('cuedeck-guards', v_started, clock_timestamp(),
+          CASE WHEN cardinality(v_failing) = 0 THEN 'ok' ELSE 'failed' END, v_failing, v_detail)
+  RETURNING id INTO v_id;
+  IF (cuedeck_guard_watch()->>'ok')::boolean IS DISTINCT FROM true THEN
+    PERFORM net.http_post(
+      url     := 'https://sawekpguemzvuvvulfbc.supabase.co/functions/v1/cuedeck-guard-alert',
+      headers := jsonb_build_object(
+                   'Content-Type', 'application/json',
+                   'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets
+                                      WHERE name = 'cuedeck_guard_cron_secret')),
+      body    := '{"caller":"pg_cron"}'::jsonb,
+      timeout_milliseconds := 30000);
+  END IF;
+  RETURN v_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.cuedeck_run_guards() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cuedeck_run_guards() TO service_role;
+
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'cuedeck-guards';
+SELECT cron.schedule('cuedeck-guards', '10 5 * * *', $cron$ SELECT public.cuedeck_run_guards(); $cron$);
+```
+
+- [ ] **Step 6: Write the Edge Function** `supabase/functions/cuedeck-guard-alert/index.ts`:
+
+```ts
+// cuedeck-guard-alert: tells a person when the console guards (migration 132)
+// fail or stop running (migration 134). Called by two independent schedulers,
+// so either one dying is noticed:
+//  * pg_cron 'cuedeck-guards' (05:10 UTC) runs the guards and calls this at once
+//    when anything is wrong (x-cron-secret, checked against the vault);
+//  * the Vercel cron /api/cron/health-check (06:00 UTC) calls this every day
+//    with the service-role key; that call is the 'cuedeck-guard-watch'
+//    heartbeat the database checks.
+// What is wrong comes from cuedeck_guard_watch(); a watch that cannot be read
+// is itself a problem. Problems go to the existing alert inbox
+// (BILLING_ALERT_EMAIL, as stripe-webhook's billing alerts) once per problem
+// set per UTC day; a failed email is retried on the next call.
+import { adminClient } from '../_shared/client.ts'
+import { sendEmail } from '../_shared/resend.ts'
+
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+Deno.serve(async (req) => {
+  const json = (status: number, payload: unknown) =>
+    new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } })
+  const sb = adminClient()
+
+  // ── Who may call ─────────────────────────────────────────────
+  const bearer = req.headers.get('Authorization')?.replace('Bearer ', '') ?? ''
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  const byVercel = !!serviceKey && bearer === serviceKey
+  let byCron = false
+  if (!byVercel) {
+    const { data, error } = await sb.rpc('cuedeck_cron_ok', { p_secret: req.headers.get('x-cron-secret') ?? '' })
+    if (error) return json(500, { error: 'secret check failed: ' + error.message })
+    byCron = data === true
+  }
+  if (!byVercel && !byCron) return json(401, { error: 'Unauthorized' })
+
+  const record = async (row: Record<string, unknown>) => {
+    const { error } = await sb.from('cuedeck_job_runs').insert({ started_at: new Date().toISOString(), finished_at: new Date().toISOString(), ...row })
+    if (error) console.error('cuedeck-guard-alert: run not recorded', row.job_name, error.message)
+    return error
+  }
+
+  // ── The heartbeat: only the Vercel call counts as one ───────
+  if (byVercel) {
+    const hbErr = await record({ job_name: 'cuedeck-guard-watch', status: 'ok' })
+    if (hbErr) return json(500, { error: 'heartbeat not recorded: ' + hbErr.message })
+  }
+
+  // ── What is wrong ───────────────────────────────────────────
+  const { data: watch, error: watchErr } = await sb.rpc('cuedeck_guard_watch')
+  const problems: string[] = watchErr || !watch
+    ? ['cuedeck_guard_watch could not be read: ' + (watchErr?.message ?? 'no answer')]
+    : (watch as { problems: string[] }).problems
+  if (!problems.length) return json(200, { ok: true, problems, emailed: false })
+
+  // ── Tell a person, once per problem set per UTC day ─────────
+  const key = new Date().toISOString().slice(0, 10) + ' ' + problems.join(' | ')
+  const { data: seen, error: seenErr } = await sb.from('cuedeck_job_runs').select('id')
+    .eq('job_name', 'cuedeck-guard-alert').eq('status', 'ok').eq('detail', key).limit(1)
+  if (seenErr) return json(500, { error: 'alert lookup failed: ' + seenErr.message })
+  if (seen && seen.length) return json(200, { ok: false, problems, emailed: false })
+
+  const to = Deno.env.get('BILLING_ALERT_EMAIL')
+  if (!to) {
+    console.error('cuedeck-guard-alert: BILLING_ALERT_EMAIL is not set; problems:', problems.join(' | '))
+    await record({ job_name: 'cuedeck-guard-alert', status: 'failed', failing: problems, detail: 'no alert address' })
+    return json(500, { error: 'BILLING_ALERT_EMAIL is not set', problems })
+  }
+  const html = `<p>CueDeck console guards need attention:</p><ul>${problems.map(p => `<li>${esc(p)}</li>`).join('')}</ul>`
+    + `<p>Check: <code>select * from cuedeck_guard_results()</code> and <code>select * from cuedeck_job_runs order by id desc limit 10</code>.</p>`
+  const sent = await sendEmail({ to, subject: `CueDeck guard alert: ${problems[0].slice(0, 80)}`, html })
+  if (sent.error) {
+    await record({ job_name: 'cuedeck-guard-alert', status: 'failed', failing: problems, detail: 'email failed: ' + sent.error })
+    return json(502, { error: 'alert email failed', problems })
+  }
+  await record({ job_name: 'cuedeck-guard-alert', status: 'ok', failing: problems, detail: key, alerted_at: new Date().toISOString() })
+  return json(200, { ok: false, problems, emailed: true })
+})
+```
+
+- [ ] **Step 7: The Vercel health check calls it every day.** In `api/cron/health-check.ts`, replace everything from `  const status = {` to the end of the handler with:
+
+```ts
+  // The daily heartbeat for the console guards (migration 134): calling the
+  // alert function records 'cuedeck-guard-watch', and it emails if a guard
+  // fails or the pg_cron run is missing. A watch we cannot reach is not fine.
+  const { data: guards, error: guardErr } = await supabase.functions.invoke('cuedeck-guard-alert', { body: { caller: 'vercel' } });
+  const guardState = guardErr || !guards ? 'unreachable' : (guards as { ok: boolean }).ok ? 'ok' : 'failing';
+
+  const ok = !error && guardState === 'ok';
+  const status = {
+    ok,
+    supabase: error ? "unreachable" : "healthy",
+    latency_ms: latency,
+    guards: guardState,
+    guard_problems: guardState === 'failing' ? (guards as { problems: string[] }).problems : undefined,
+    timestamp: new Date().toISOString(),
+  };
+
+  return new Response(JSON.stringify(status), {
+    status: ok ? 200 : 503,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+```
+
+- [ ] **Step 8: Deploy script.** In `scripts/deploy-functions.sh` add `cuedeck-guard-alert` at the end of `ALL_FUNCTIONS=(…)` and to the `case "$func" in …) extra=(--no-verify-jwt)` list (after `checkin-webhooks`).
+
+- [ ] **Step 9: Run the tests and see them pass.**
+
+Run: `deno test --allow-env --allow-read --no-lock tests/deno/guard-alert.test.ts` → PASS (7 tests).
+Run: `npx vitest run tests/guard-alert.spec.ts tests/health-check-guards.spec.ts tests/cron-functions-reachable.spec.ts` → PASS.
+Run: `deno check supabase/functions/cuedeck-guard-alert/index.ts` → no errors.
+
+- [ ] **Step 10: Commit.**
+
+```bash
+cd /Users/sheriff/AVE-Production-Console-teams
+git status --short
+git add supabase/migrations/134_cuedeck_guard_schedule.sql tests/sql/134-guard-schedule-probe.sql supabase/functions/cuedeck-guard-alert/index.ts tests/deno/guard-alert.test.ts tests/guard-alert.spec.ts api/cron/health-check.ts tests/health-check-guards.spec.ts scripts/deploy-functions.sh
+git commit -m "feat(guards): run the console guards daily and alert on failure or a missing run (migration 134)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- supabase/migrations/134_cuedeck_guard_schedule.sql tests/sql/134-guard-schedule-probe.sql supabase/functions/cuedeck-guard-alert/index.ts tests/deno/guard-alert.test.ts tests/guard-alert.spec.ts api/cron/health-check.ts tests/health-check-guards.spec.ts scripts/deploy-functions.sh
+```
+
 ---
 
 # Stage 3: Console
@@ -5981,6 +6624,300 @@ git add cuedeck-console.html cuedeck-i18n.js tests/e2e/console-boot-mock.ts test
 git commit -m "feat(console): Team window per event with seats, per-event invite and remove; wizard reads invite errors" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- cuedeck-console.html cuedeck-i18n.js tests/e2e/console-boot-mock.ts tests/e2e/console-event-teams.spec.ts tests/e2e/console-forbidden.spec.ts tests/console-colour-ratchet.spec.ts tests/event-teams-no-invited-by.spec.ts
 ```
 
+### Task 3.5: Private realtime channels per event (migration 135)
+
+Sherif's condition on the plan (8 Oct): each event's realtime channel only lets members of that event join, track presence or read presence. Today `leod-ctrl-<event>` is a public channel, so any signed-in user who knows an event id can join it and read its presence list (who is online, with which role).
+
+The mechanism, from the Supabase docs (Realtime Authorization, read 8 Oct, https://supabase.com/docs/guides/realtime/authorization and /broadcast):
+- RLS policies on `realtime.messages` decide who may join a **private** channel and what they may do in it. `realtime.topic()` returns the topic the client is joining (live body: `select nullif(current_setting('realtime.topic', true), '')::text`); `realtime.messages.extension` is `'presence'` or `'broadcast'`. A SELECT policy lets a client join and receive presence and broadcast; an INSERT policy with `extension = 'presence'` lets it track presence.
+- The client opts in with `sb.channel(name, { config: { private: true } })`, after `await sb.realtime.setAuth()` ("Needed for Realtime Authorization").
+- "Private and public channels can subscribe to Postgres Changes"; changes are delivered only to clients allowed to read the row by the table's RLS. So the console's `postgres_changes` bindings keep working on private channels and keep their table protection (tested below by the mock socket and on live in Task 4.2).
+- Public channels stay joinable until the project's Realtime setting "Allow public access" is turned off ("To enforce private channels you need to disable the 'Allow public access' setting"). A private channel and a public channel of the same name do not share presence or broadcasts, so once every member's console is private, a stranger on the public twin sees nobody; turning the setting off then closes the public twin entirely.
+- Policies are checked when a client joins and when it sends a new token, and are cached for the connection: a member removed mid-session keeps the channel until they reconnect or switch event (switchEvent rejoins, Task 3.1). This is stated in the note to Sherif.
+
+Order, so nothing breaks mid-release: (1) migration 135 adds the policies; they only apply to private channels, so the live console is unaffected (Release B, before the push); (2) the console joins private channels (Release B push); (3) Sherif turns off "Allow public access" (Release C, Task 4.3), only after every other page in the project that uses Realtime (check-in's `ck-alerts-*` and `ck-desk-alerts-*`, owned by the other session) has moved to private channels, because the setting refuses every public channel in the project.
+
+**Files:**
+- Create: `supabase/migrations/135_cuedeck_realtime_private.sql`
+- Create: `tests/sql/135-realtime-private-probe.sql`
+- Modify: `cuedeck-console.html`: `replaceChannel` (3142-3158), `subscribeDisplays` (5726-5727 and its options)
+- Modify: `tests/e2e/console-show-safety-boot.spec.ts:64,89` (the signage channel's topic now names the event)
+- Modify: `tests/e2e/console-event-teams.spec.ts` (one test)
+
+**Interfaces:**
+- Consumes: `cuedeck_event_role(uuid)` (Task 1.1); `window.__rtSent` in the console mock (Task 3.1).
+- Produces:
+  - `public.cuedeck_topic_event(p_topic text) RETURNS uuid`: the event id of a console topic `leod-ctrl-<uuid>` or `leod-signage-<uuid>`, else `NULL`. IMMUTABLE, executable by authenticated (the policies run as the client).
+  - policies on `realtime.messages`: `cuedeck_event_channel_read` (SELECT, authenticated: a member of the topic's event) and `cuedeck_event_channel_presence` (INSERT, authenticated, `extension = 'presence'`, same rule). No policy for any other topic, so check-in's channels are untouched.
+  - console channels `leod-ctrl-<eventId>` and `leod-signage-<eventId>` (was `leod-signage`), both joined with `config: { private: true }` after `sb.realtime.setAuth()`.
+
+- [ ] **Step 1: Check the migration number** (Global Constraints). Expected next free: 135.
+
+- [ ] **Step 2: Write the failing tests.**
+
+`tests/sql/135-realtime-private-probe.sql` (Realtime checks a join by inserting into `realtime.messages` as the client and reading it back, then rolling back; this probe does the same):
+
+```sql
+-- tests/sql/135-realtime-private-probe.sql
+-- Run after 135. Expected: an error whose message starts with 'PROBE OK 135'.
+-- Everything is rolled back by the final RAISE. Before 135 it fails with:
+-- function cuedeck_topic_event(text) does not exist.
+-- If an insert fails with 'no partition of relation "messages"', Realtime's
+-- daily partitions are missing on the project: stop and report, do not create them.
+DO $probe$
+DECLARE
+  v_o1   uuid := gen_random_uuid();   -- creates A
+  v_m    uuid := gen_random_uuid();   -- stage member of A
+  v_s    uuid := gen_random_uuid();   -- member of A, suspended
+  v_x    uuid := gen_random_uuid();   -- creates B, nothing on A
+  v_a    uuid;
+  v_b    uuid;
+  v_n    int;
+  v_ok   boolean;
+  v_r    record;
+  v_t    record;
+  v_checks int := 0;
+BEGIN
+  INSERT INTO auth.users (id, email, aud, role)
+  SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated' FROM unnest(ARRAY[v_o1, v_m, v_s, v_x]) u;
+  INSERT INTO leod_users (id, email, role, active)
+  SELECT u, 'probe-' || u || '@cuedeck-test.io', 'director', true FROM unnest(ARRAY[v_o1, v_m, v_s, v_x]) u
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, active = EXCLUDED.active;
+  INSERT INTO leod_events (name, date, event_start, event_end, created_by) VALUES ('Probe 135 A', current_date + 30, '09:00', '18:00', v_o1) RETURNING id INTO v_a;
+  INSERT INTO leod_events (name, date, event_start, event_end, created_by) VALUES ('Probe 135 B', current_date + 30, '09:00', '18:00', v_x) RETURNING id INTO v_b;
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES (v_a, v_m, 'stage', true), (v_a, v_s, 'stage', false);
+  -- one stored presence message per console topic of A (as the database), for the read checks
+  INSERT INTO realtime.messages (topic, extension, event, payload, private)
+  VALUES ('leod-ctrl-' || v_a, 'presence', 'probe', '{}', true), ('leod-signage-' || v_a, 'presence', 'probe', '{}', true);
+
+  -- 1. the topic parser: console topics only, exact shape
+  IF cuedeck_topic_event('leod-ctrl-' || v_a) IS DISTINCT FROM v_a
+     OR cuedeck_topic_event('leod-signage-' || v_a) IS DISTINCT FROM v_a
+     OR cuedeck_topic_event('leod-ctrl-' || v_a || 'x') IS NOT NULL
+     OR cuedeck_topic_event('ck-alerts-' || v_a) IS NOT NULL
+     OR cuedeck_topic_event('leod-signage') IS NOT NULL
+     OR cuedeck_topic_event(NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'PROBE FAIL 1: topic parser';
+  END IF;
+  v_checks := v_checks + 1;
+
+  -- 2. join and read presence: the creator and the member read A's topics;
+  --    the suspended member and a stranger read nothing; nobody from A reads B
+  FOR v_t IN SELECT * FROM (VALUES ('leod-ctrl-' || v_a), ('leod-signage-' || v_a)) AS y(topic) LOOP
+    FOR v_r IN SELECT * FROM (VALUES (v_o1, 1), (v_m, 1), (v_s, 0), (v_x, 0)) AS x(uid, expected) LOOP
+      PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
+      PERFORM set_config('realtime.topic', v_t.topic, true);
+      SET LOCAL ROLE authenticated;
+      SELECT count(*) INTO v_n FROM realtime.messages WHERE topic = v_t.topic AND extension = 'presence';
+      RESET ROLE;
+      IF v_n <> v_r.expected THEN RAISE EXCEPTION 'PROBE FAIL 2: % reads % on %, expected %', v_r.uid, v_n, v_t.topic, v_r.expected; END IF;
+    END LOOP;
+  END LOOP;
+  v_checks := v_checks + 1;
+
+  -- 3. track presence: members may, the suspended member and strangers may not;
+  --    a member of A may not track on B's topic; nobody may send broadcasts
+  FOR v_r IN SELECT * FROM (VALUES
+      (v_o1, 'leod-ctrl-' || v_a, 'presence', true),
+      (v_m,  'leod-ctrl-' || v_a, 'presence', true),
+      (v_m,  'leod-signage-' || v_a, 'presence', true),
+      (v_s,  'leod-ctrl-' || v_a, 'presence', false),
+      (v_x,  'leod-ctrl-' || v_a, 'presence', false),
+      (v_m,  'leod-ctrl-' || v_b, 'presence', false),
+      (v_m,  'leod-ctrl-' || v_a, 'broadcast', false),
+      (v_m,  'ck-alerts-' || v_a, 'presence', false)) AS x(uid, topic, ext, allowed)
+  LOOP
+    v_ok := true;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('realtime.topic', v_r.topic, true);
+    BEGIN
+      SET LOCAL ROLE authenticated;
+      INSERT INTO realtime.messages (topic, extension, event, payload, private) VALUES (v_r.topic, v_r.ext, 'probe', '{}', true);
+    EXCEPTION WHEN insufficient_privilege THEN v_ok := false;
+    END;
+    RESET ROLE;
+    IF v_ok IS DISTINCT FROM v_r.allowed THEN
+      RAISE EXCEPTION 'PROBE FAIL 3: % % on %: allowed % but got %', v_r.uid, v_r.ext, v_r.topic, v_r.allowed, v_ok;
+    END IF;
+  END LOOP;
+  v_checks := v_checks + 1;
+
+  -- 4. anon reads and writes nothing on a console topic
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  PERFORM set_config('realtime.topic', 'leod-ctrl-' || v_a, true);
+  v_ok := true;
+  BEGIN
+    SET LOCAL ROLE anon;
+    SELECT count(*) INTO v_n FROM realtime.messages WHERE topic = 'leod-ctrl-' || v_a;
+    IF v_n <> 0 THEN v_ok := false; END IF;
+  EXCEPTION WHEN insufficient_privilege THEN NULL;   -- no grant at all is also a refusal
+  END;
+  RESET ROLE;
+  IF NOT v_ok THEN RAISE EXCEPTION 'PROBE FAIL 4: anon read a console topic'; END IF;
+  v_checks := v_checks + 1;
+
+  -- 5. the policies exist as written, and RLS is on
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'realtime.messages'::regclass)
+     OR (SELECT count(*) FROM pg_policies WHERE schemaname = 'realtime' AND tablename = 'messages'
+          AND policyname IN ('cuedeck_event_channel_read', 'cuedeck_event_channel_presence')
+          AND coalesce(qual, '') || coalesce(with_check, '') LIKE '%cuedeck_event_role%') <> 2
+     OR has_function_privilege('anon', 'public.cuedeck_topic_event(text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'PROBE FAIL 5: policies, RLS or grants';
+  END IF;
+  v_checks := v_checks + 1;
+
+  RAISE EXCEPTION 'PROBE OK 135: % checks passed (rolled back)', v_checks;
+END
+$probe$;
+```
+
+Append to `tests/e2e/console-event-teams.spec.ts`:
+
+```ts
+test('realtime: the event channels are private and name their event, also after a switch', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'director', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true },
+    { id: EV_B, name: 'Spring summit', role: 'stage', isOwner: false, ownerId: OTHER_OWNER },
+  ] });
+  const joins = () => evalPage(page, `(window.__rtSent || []).filter(m => m.event === 'phx_join')
+    .map(m => ({ topic: m.topic, private: !!(m.payload && m.payload.config && m.payload.config.private),
+                 pc: ((m.payload && m.payload.config && m.payload.config.postgres_changes) || []).length,
+                 token: typeof (m.payload && m.payload.access_token) === 'string' }))`);
+  try {
+    await afterBootReread(page);
+    const boot = await joins();
+    expect(boot).toEqual(expect.arrayContaining([
+      expect.objectContaining({ topic: `realtime:leod-ctrl-${EVENT_ID}`, private: true, token: true }),
+      expect.objectContaining({ topic: `realtime:leod-signage-${EVENT_ID}`, private: true, token: true }),
+    ]));
+    expect(boot.every((j: { private: boolean }) => j.private)).toBe(true);
+    // postgres_changes still ride on the private channel
+    expect(boot.find((j: { topic: string }) => j.topic === `realtime:leod-ctrl-${EVENT_ID}`).pc).toBeGreaterThan(0);
+    await switchTo(page, EV_B);
+    const after = await joins();
+    expect(after).toEqual(expect.arrayContaining([
+      expect.objectContaining({ topic: `realtime:leod-ctrl-${EV_B}`, private: true }),
+    ]));
+    expect(after.every((j: { private: boolean }) => j.private)).toBe(true);
+  } finally { await ctx.close(); }
+});
+```
+
+In `tests/e2e/console-show-safety-boot.spec.ts` replace `c.topic === 'realtime:leod-signage'` (line 64) with ``c.topic === `realtime:leod-signage-${ev}` `` and `'realtime:leod-signage': 1` (line 89) with ``[`realtime:leod-signage-${EVENT_ID}`]: 1``. What they protect is unchanged: one signage channel, replaced not duplicated.
+
+- [ ] **Step 3: Run them and see them fail.**
+
+Run: `CONSOLE_BASE=http://127.0.0.1:7293 npx playwright test -c playwright.console.config.ts tests/e2e/console-event-teams.spec.ts tests/e2e/console-show-safety-boot.spec.ts --global-timeout=900000`
+Expected: `realtime: the event channels are private…` fails (`private: false`, and the signage topic is `realtime:leod-signage`); the two show-safety-boot tests fail on the topic name.
+
+- [ ] **Step 4 (controller): run probe 135 before its migration.** Expected: `function cuedeck_topic_event(text) does not exist`. Record it.
+
+- [ ] **Step 5: Write the migration** `supabase/migrations/135_cuedeck_realtime_private.sql`:
+
+```sql
+-- ============================================================
+-- CueDeck Migration 135: private realtime channels per event
+-- ============================================================
+-- Realtime Authorization (supabase.com/docs/guides/realtime/authorization):
+-- a client joining a PRIVATE channel is checked against RLS on
+-- realtime.messages, with realtime.topic() = the channel's topic. The
+-- console's channels are leod-ctrl-<event id> and leod-signage-<event id>:
+-- only the event's creator and active members may join them, read presence
+-- (and broadcast), and track presence. Nobody may send broadcasts (the
+-- console sends none). Other topics get no policy here, so check-in's
+-- channels are untouched.
+-- These policies only govern private channels: the live console (public
+-- channels) is unaffected until it switches (Release B), and public
+-- channels stay joinable until "Allow public access" is turned off
+-- (Release C, Sherif in the dashboard).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.cuedeck_topic_event(p_topic text)
+RETURNS uuid
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public
+AS $$
+  SELECT CASE
+           WHEN p_topic ~ '^leod-(ctrl|signage)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN right(p_topic, 36)::uuid
+         END
+$$;
+REVOKE ALL ON FUNCTION public.cuedeck_topic_event(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cuedeck_topic_event(text) TO authenticated, service_role;
+
+ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS cuedeck_event_channel_read ON realtime.messages;
+CREATE POLICY cuedeck_event_channel_read ON realtime.messages
+  FOR SELECT TO authenticated
+  USING (public.cuedeck_event_role(public.cuedeck_topic_event((SELECT realtime.topic()))) IS NOT NULL);
+
+DROP POLICY IF EXISTS cuedeck_event_channel_presence ON realtime.messages;
+CREATE POLICY cuedeck_event_channel_presence ON realtime.messages
+  FOR INSERT TO authenticated
+  WITH CHECK (realtime.messages.extension = 'presence'
+              AND public.cuedeck_event_role(public.cuedeck_topic_event((SELECT realtime.topic()))) IS NOT NULL);
+```
+
+- [ ] **Step 6: The console joins private channels.** In `cuedeck-console.html`:
+
+Replace the `replaceChannel` function (and the comment block above it, from `// One live channel per name.` to its closing `}`) with:
+
+```js
+// One live channel per name. sb.channel(name) hands back an existing channel
+// of that name, and adding postgres_changes callbacks to a joined or joining
+// one throws. So remove it, and every channel `removeIf` matches, and wait for
+// that before building the new one. Calls run one at a time (a scheduled
+// reconnect and a tab refocus can land together), and what to remove or skip
+// is decided when the queued step runs, not when it was asked for.
+// Every console channel is private (Realtime Authorization, migration 135):
+// only members of the event named in its topic may join it, track presence
+// or read presence. setAuth hands Realtime the login's token first.
+// postgres_changes on a private channel still pass each row through the
+// table's own RLS.
+let _channelQueue = Promise.resolve();
+function replaceChannel(name, build, { removeIf = () => false, skipIf = () => false } = {}) {
+  const run = _channelQueue.then(async () => {
+    if (skipIf()) return;
+    const old = sb.getChannels().filter(c => c.topic === `realtime:${name}` || removeIf(c));
+    for (const c of old) await sb.removeChannel(c);
+    await sb.realtime.setAuth();
+    return build(sb.channel(name, { config: { private: true } }));
+  });
+  _channelQueue = run.catch(() => {});
+  return run;
+}
+```
+
+In `subscribeDisplays`, change `return replaceChannel('leod-signage', ch => ch` to ``return replaceChannel(`leod-signage-${eventId}`, ch => ch`` (the topic names the event, so the policy can check it), and give the call the same options as the control channel: replace the final `);` of the `replaceChannel(…)` call (right after the `.subscribe(st => { … })` callback closes) with
+
+```js
+  }), {
+    // One signage channel at a time, and never for an event already left.
+    removeIf: c => c.topic.startsWith('realtime:leod-signage-'),
+    skipIf: () => !!S.event && S.event.id !== eventId,
+  });
+```
+
+(Read the lines around 5755-5765 first: the `.subscribe(…)` callback's closing `})` and the call's closing `)` are where the options object goes; the build arrow returns the channel as before.)
+
+- [ ] **Step 7: Run the tests and see them pass.**
+
+Run: `CONSOLE_BASE=http://127.0.0.1:7293 npx playwright test -c playwright.console.config.ts tests/e2e/console-event-teams.spec.ts tests/e2e/console-show-safety-boot.spec.ts --global-timeout=900000`
+Expected: all pass.
+
+- [ ] **Step 8: Every console suite** (Stage 3 preamble). Expected: `0 failed`.
+
+- [ ] **Step 9: Commit.**
+
+```bash
+cd /Users/sheriff/AVE-Production-Console-teams
+git status --short
+git add supabase/migrations/135_cuedeck_realtime_private.sql tests/sql/135-realtime-private-probe.sql cuedeck-console.html tests/e2e/console-event-teams.spec.ts tests/e2e/console-show-safety-boot.spec.ts
+git commit -m "feat(realtime): event channels are private; only the event's team joins or sees presence (migration 135)" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" -- supabase/migrations/135_cuedeck_realtime_private.sql tests/sql/135-realtime-private-probe.sql cuedeck-console.html tests/e2e/console-event-teams.spec.ts tests/e2e/console-show-safety-boot.spec.ts
+```
+
 ---
 
 # Stage 4: Release (controller only)
@@ -5991,7 +6928,7 @@ git commit -m "feat(console): Team window per event with seats, per-event invite
 
 **Files:** none changed (git refs, the live database, Edge Function deployments).
 
-**Interfaces:** Consumes the commits of Tasks 1.1 to 2.4 on `feat/event-teams`. Produces: migrations 130 to 133 applied on `sawekpguemzvuvvulfbc` with every probe `PROBE OK`; the 14 Edge Functions deployed from that source; `main` at the Task 2.4 commit (plus review fixes) pushed to `cuedeck` and `origin`.
+**Interfaces:** Consumes the commits of Tasks 1.1 to 2.5 on `feat/event-teams`. Produces: migrations 130 to 134 applied on `sawekpguemzvuvvulfbc` with every probe `PROBE OK`; the 15 Edge Functions deployed from that source; `main` at the Task 2.5 commit (plus review fixes) pushed to `cuedeck` and `origin` (Vercel then deploys the new health-check cron).
 
 - [ ] **Step 1: Gate.** `date`. Nothing from this plan ships before 13 Oct 2026 (GTR is 12 Oct). Then confirm no show is running anywhere, because the access rules change under every open console:
 
@@ -6014,15 +6951,15 @@ If either range lists commits, `git merge --ff-only cuedeck/main` (or `origin/ma
 
 ```bash
 cd $W && git rebase main
-STAGE2=$(git log --format=%H -1 --grep="AI uses the event owner's plan")
+STAGE2=$(git log --format=%H -1 --grep="run the console guards daily")
 git log --oneline main..$STAGE2
 ```
 
-Expected: the Task 1.1 to 2.4 commits, in order, and nothing else.
+Expected: the Task 1.1 to 2.5 commits, in order, and nothing else.
 
 - [ ] **Step 3: Review before anything is applied** (spec §8: the migration is reviewed by a security reviewer before it is applied).
   - Run the house `diff-review` skill with `{range: "main..$STAGE2", repo: "/Users/sheriff/AVE-Production-Console-teams"}`.
-  - Dispatch one `security-reviewer` agent on `supabase/migrations/130_event_members.sql` to `133_event_teams_server.sql`, `supabase/functions/invite-operator/index.ts`, `manage-operator/index.ts`, `ai-proxy/index.ts`, `_shared/transition.ts`, with the spec, the inventory and this plan's Review Focus. Ask it to try to break the §8 isolation matrix (a member of A reaching B by any route), the seat check, the creator rule, and every `SECURITY DEFINER` function's caller check.
+  - Dispatch one `security-reviewer` agent on `supabase/migrations/130_event_members.sql` to `133_event_teams_server.sql`, `supabase/functions/invite-operator/index.ts`, `manage-operator/index.ts`, `ai-proxy/index.ts`, `_shared/transition.ts`, migration 134 and `cuedeck-guard-alert/index.ts`, with the spec, the inventory and this plan's Review Focus. Ask it to try to break the §8 isolation matrix (a member of A reaching B by any route), the seat check, the creator rule, and every `SECURITY DEFINER` function's caller check.
   - Fix every finding on `feat/event-teams` (test first, new commit), recompute `STAGE2`, and re-run that task's tests. A finding outside this plan goes in the note to Sherif.
 
 - [ ] **Step 4: Full tests at the stage 2 tip.**
@@ -6043,13 +6980,14 @@ Expected: vitest all pass (the deno suites run: `operators`, `session-auth`, `re
   - The expected backfill size: `select count(*) from leod_users u join leod_events e on e.created_by = u.invited_by join auth.users a on a.id = u.id where u.invited_by is not null and u.role in ('director','stage','av','interp','reg','signage') and e.created_by <> u.id` (8 Oct: 1). Record it as `N`.
   - Guards already red before this release: `select guard, detail from checkin_guard_results() where not ok`. Record them; only new reds count against this release.
 
-- [ ] **Step 6: Each probe fails before its migration.** With `execute_sql`, run `tests/sql/130-event-members-probe.sql`, `131-…`, `132-…`, `133-…`. Expected: each errors with `relation "leod_event_members" does not exist` (133: `function cuedeck_plan_seats(uuid) does not exist` or the same relation error). Any `PROBE OK` here means the probe tests nothing: stop.
+- [ ] **Step 6: Each probe fails before its migration.** With `execute_sql`, run `tests/sql/130-event-members-probe.sql`, `131-…`, `132-…`, `133-…`, `134-…`. Expected: each errors with `relation "leod_event_members" does not exist` (133: `function cuedeck_plan_seats(uuid) does not exist`, 134: `function cuedeck_run_guards() does not exist`, or the same relation error). Any `PROBE OK` here means the probe tests nothing: stop.
 
 - [ ] **Step 7: Apply in order, each with its probe.** Check the next free migration numbers once more (Global Constraints). Then, with the Supabase MCP on `sawekpguemzvuvvulfbc`:
   1. `apply_migration` name `130_event_members` with the file's content; `execute_sql` the 130 probe. Expected: `PROBE OK 130: 9 checks passed (rolled back)`.
   2. `apply_migration` `131_event_members_functions`; probe 131. Expected: `PROBE OK 131: 8 checks passed (rolled back)`.
   3. `apply_migration` `132_event_teams_guard`; probe 132. Expected: `PROBE OK 132: 9 checks passed (rolled back)`.
   4. `apply_migration` `133_event_teams_server`; probe 133. Expected: `PROBE OK 133: 10 checks passed (rolled back)`.
+  5. `apply_migration` `134_cuedeck_guard_schedule`; probe 134. Expected: `PROBE OK 134: 6 checks passed (rolled back)`.
 
   Then re-run probes 130, 131, 132 (they must still pass after 133) and the older probes this plan updated or that touch these objects: `083-display-followups`, `093-apply-delay`, `095-event-scoped-writes`, `128-stage-messages`, `129-stage-messages-cancel`. Expected: `PROBE OK` for each.
 
@@ -6069,35 +7007,38 @@ select guard, detail from checkin_guard_results() where not ok;    -- no guard t
 
 ```bash
 cd $M && git merge --ff-only $STAGE2 && git status --short -- supabase/functions
-bash scripts/deploy-functions.sh go-live end-session set-ready hold-stage call-speaker cancel-session reinstate set-overrun restart-session apply-delay invite-operator manage-operator ai-proxy redeem-code
+bash scripts/deploy-functions.sh go-live end-session set-ready hold-stage call-speaker cancel-session reinstate set-overrun restart-session apply-delay invite-operator manage-operator ai-proxy redeem-code cuedeck-guard-alert
 ```
 
-Expected: the status line prints nothing for `supabase/functions` (the deployer refuses uncommitted source); every function `OK … deployed` and every ping `OK`. The window between Step 7 and this step is the only time the old functions run on the new tables: keep it short.
+Expected: the status line prints nothing for `supabase/functions` (the deployer refuses uncommitted source); every function `OK … deployed` and every ping `OK`. Check that `BILLING_ALERT_EMAIL` is set on the project (`supabase secrets list --project-ref sawekpguemzvuvvulfbc` lists the name; never print its value); if it is missing, stop and ask Sherif for the alert address. The window between Step 7 and this step is the only time the old functions run on the new tables: keep it short.
 
-- [ ] **Step 10: What will be pushed.** `git log --oneline cuedeck/main..main` and `git log --oneline origin/main..main` list only the spec and plan doc commits not yet pushed and the Task 1.1 to 2.4 commits (and review fixes). Anything else: stop and ask Sherif. Then `git push cuedeck main && git push origin main`; both range checks then print nothing. `SHA=$(git rev-parse main)`.
+- [ ] **Step 10: What will be pushed.** `git log --oneline cuedeck/main..main` and `git log --oneline origin/main..main` list only the spec and plan doc commits not yet pushed and the Task 1.1 to 2.5 commits (and review fixes). Anything else: stop and ask Sherif. Then `git push cuedeck main && git push origin main`; both range checks then print nothing. `SHA=$(git rev-parse main)`.
 
 - [ ] **Step 11: Live check.**
   - `supabase functions list --project-ref sawekpguemzvuvvulfbc` shows the 14 functions updated after the Step 7 apply time.
   - Open https://app.cuedeck.io in Chrome (`open -a "Google Chrome" https://app.cuedeck.io`) on Sherif's signed-in session, without pressing any show control: the event list is the same as before, sessions load, Team opens and lists his crew (the live console still uses `get_operators_with_last_seen`, rewritten in 131). A JS console with no new errors.
-  - The Vercel deployment for `SHA` is `READY` (the console file is unchanged in this release).
+  - The Vercel deployment for `SHA` is `READY` (the console file is unchanged in this release; `api/cron/health-check.ts` changed).
+  - The guard schedule works end to end, not just on paper (absence is not all-clear): run `select public.cuedeck_run_guards()` once with `execute_sql` (a write the controller is allowed here) and confirm a `cuedeck-guards` row with `status = 'ok'`; ask Sherif to press Run on the `health-check` cron in Vercel (project `cuedeck-console`, Settings, Cron Jobs) or wait for 06:00 UTC, then confirm a `cuedeck-guard-watch` row: `select job_name, status, started_at from cuedeck_job_runs order by id desc limit 5`. `select jobname, schedule, active from cron.job where jobname = 'cuedeck-guards'` shows `10 5 * * *`, active. The next morning (after 05:10 UTC), `select status, return_message from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'cuedeck-guards') order by start_time desc limit 1` is `succeeded` and a new `cuedeck-guards` run exists.
 
 - [ ] **Step 12: CI.** `gh workflow list -R sheozin/cuedeck-console` and `-R sheozin/ave` show which repos run `CI`; on each, `gh run list -R <repo> --commit "$SHA" --json conclusion,name` until the run exists and shows `success`. A missing run is not a pass; a failure is fixed forward, never left red.
 
-- [ ] **Step 13: Note to Sherif** (short): "Event teams, part 1 is live: access is now per event in the database and the server (migrations 130 to 133, 14 functions). Nothing looks different in the console yet; part 2 (the console) follows. Backfilled N membership(s); all probes and guards green." Add any review finding left for later.
+- [ ] **Step 13: Note to Sherif** (short): "Event teams, part 1 is live: access is now per event in the database and the server (migrations 130 to 133, 14 functions), and the console guards now run every morning and email the alert inbox if a guard fails or a run goes missing (migration 134). Nothing looks different in the console yet; part 2 (the console) follows. Backfilled N membership(s); all probes and guards green." Add any review finding left for later.
 
 ### Task 4.2: Release B: stage 3 (the console)
 
 **Files:** none changed.
 
-**Interfaces:** Consumes Release A (verified live) and the Task 3.1 to 3.4 commits. Produces `main` with the console changes, live on app.cuedeck.io.
+**Interfaces:** Consumes Release A (verified live) and the Task 3.1 to 3.5 commits. Produces migration 135 applied and `main` with the console changes, live on app.cuedeck.io.
 
 - [ ] **Step 1: Gate.** Release A's Step 11 passed. `date` is on or after 13 Oct 2026. No show running (Task 4.1 Step 1 query returns `0`).
 
-- [ ] **Step 2: Integrate, review, merge.** As Task 4.1 Step 2 (remotes first), then `cd $W && git rebase main && git log --oneline main..HEAD` lists only the Task 3.1 to 3.4 commits. Run the house `diff-review` skill on `main..feat/event-teams`; fix findings on the branch first. Then `cd $M && git merge --ff-only feat/event-teams`.
+- [ ] **Step 2: Integrate, review, merge.** As Task 4.1 Step 2 (remotes first), then `cd $W && git rebase main && git log --oneline main..HEAD` lists only the Task 3.1 to 3.5 commits. Run the house `diff-review` skill on `main..feat/event-teams`; fix findings on the branch first. Then `cd $M && git merge --ff-only feat/event-teams`.
 
 - [ ] **Step 3: Full tests on the merged tip** (from `$W`, which now equals `main`): `npx vitest run` all pass; `CONSOLE_BASE=http://127.0.0.1:7293 npx playwright test -c playwright.console.config.ts --global-timeout=1800000` with `0 failed`.
 
-- [ ] **Step 4: What will be pushed.** `git log --oneline cuedeck/main..main` and `origin/main..main` list only the Task 3.1 to 3.4 commits (and review fixes). Then `git push cuedeck main && git push origin main`; both ranges then empty. `SHA=$(git rev-parse main)`.
+- [ ] **Step 3b: Private channel policies before the console.** A `security-reviewer` agent reads migration 135 first. Then with `execute_sql` run probe 135 (expected: `function cuedeck_topic_event(text) does not exist`), `apply_migration` `135_cuedeck_realtime_private`, run probe 135 again (expected: `PROBE OK 135: 5 checks passed (rolled back)`), and re-run probe 132 (expected `PROBE OK 132`). The live console still joins public channels, which these policies do not govern, so nothing changes for it until the push.
+
+- [ ] **Step 4: What will be pushed.** `git log --oneline cuedeck/main..main` and `origin/main..main` list only the Task 3.1 to 3.5 commits (and review fixes). Then `git push cuedeck main && git push origin main`; both ranges then empty. `SHA=$(git rev-parse main)`.
 
 - [ ] **Step 5: Deploy is live.** The Vercel deployment for `SHA` in project `cuedeck-console` is `READY`, then:
 
@@ -6118,7 +7059,80 @@ Expected: `cuedeck_my_events`.
 
 - [ ] **Step 8: CI** as Task 4.1 Step 12.
 
-- [ ] **Step 9: Note to Sherif** with screenshots at 2× scale (switcher, Team window, the throwaway's members-only view): "Event teams is live: invite anyone to one event with one role, including people who already have a CueDeck login; seats per event from your plan; removing someone takes them off that event only." List the follow-ups: the realtime presence channel (see Spec ambiguities, 16), scheduling `cuedeck_guard_results()`, and the spec §7 cleanup (drop `leod_users.invited_by` use, the global role, and `get_operators_with_last_seen`).
+- [ ] **Step 9: Note to Sherif** with screenshots at 2× scale (switcher, Team window, the throwaway's members-only view): "Event teams is live: invite anyone to one event with one role, including people who already have a CueDeck login; seats per event from your plan; removing someone takes them off that event only." Also confirm on his session that the crew popover still lists who is online (presence on the private channel) and that a status change from a second tab arrives (postgres_changes on the private channel). List what remains: Release C (his Realtime setting, after check-in's channels go private), and the spec §7 cleanup (drop `leod_users.invited_by` use, the global role, and `get_operators_with_last_seen`).
+
+### Task 4.3: Release C: refuse public realtime channels (Sherif's setting)
+
+Turning off "Allow public access" is a project-wide security setting: from then on Realtime refuses every public channel in the project, not only the console's. Sherif changes it himself; the controller prepares, gates and verifies.
+
+**Files:**
+- Create: `scripts/check-realtime-private.mjs` (the live verification, committed before the change)
+
+**Interfaces:** Consumes Release B (the console on private channels, migration 135 live). Produces: the project's Realtime setting "Allow public access" off, verified.
+
+- [ ] **Step 1: Gate: nothing in the project still uses a public channel.** Every Realtime channel in every page must be private before the setting changes, or that page loses its live updates.
+
+```bash
+cd /Users/sheriff/AVE-Production-Console
+grep -n -e "\.channel(" cuedeck-*.html cuedeck-*.js | grep -v "private: true"
+grep -n "replaceChannel(\|sb.channel(name" cuedeck-console.html
+```
+
+Expected: the first command prints nothing (the console's own `sb.channel(name, { config: { private: true } })` line is filtered out by its `private: true`). On 8 Oct it would have printed `cuedeck-checkin-dashboard.html:339` (`ck-alerts-<event>`) and `cuedeck-checkin.html:1677` (`ck-desk-alerts-<event>`): those pages belong to the check-in session. Release C waits until that session has made them private with their own `realtime.messages` policies; send it this request through Sherif, with the Supabase docs link and migration 135 as the pattern. Do not edit those files. Also confirm with Sherif that no other app uses this Supabase project's Realtime (the marketing site and AVE Brain do not subscribe to it as of 8 Oct; ask, do not assume).
+
+- [ ] **Step 2: Write the verification script** `scripts/check-realtime-private.mjs`:
+
+```js
+// scripts/check-realtime-private.mjs
+// Live check for Release C of event teams: with "Allow public access" off,
+// a public channel on a console topic is refused, and a private join with no
+// login (anon) is refused too. Exit 0 only when both are refused.
+// Usage: SUPABASE_ANON_KEY=<publishable key> node scripts/check-realtime-private.mjs <event-uuid>
+import { createClient } from '@supabase/supabase-js';
+
+const URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
+const key = process.env.SUPABASE_ANON_KEY;
+const eventId = process.argv[2];
+if (!key || !/^[0-9a-f-]{36}$/.test(eventId || '')) {
+  console.error('usage: SUPABASE_ANON_KEY=… node scripts/check-realtime-private.mjs <event-uuid>');
+  process.exit(2);
+}
+const sb = createClient(URL, key, { auth: { persistSession: false } });
+
+function join(isPrivate) {
+  return new Promise(resolve => {
+    const ch = sb.channel(`leod-ctrl-${eventId}`, { config: { private: isPrivate } });
+    const done = (status, err) => { sb.removeChannel(ch); resolve({ status, err: err?.message || '' }); };
+    const timer = setTimeout(() => done('TIMED_OUT'), 15000);
+    ch.subscribe((status, err) => {
+      if (status === 'SUBSCRIBED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        clearTimeout(timer); done(status, err);
+      }
+    });
+  });
+}
+
+const pub = await join(false);
+const priv = await join(true);
+console.log('public join :', pub.status, pub.err);
+console.log('private join (anon):', priv.status, priv.err);
+const refused = s => s.status !== 'SUBSCRIBED';
+if (refused(pub) && refused(priv)) { console.log('OK: console topics refuse public and anonymous joins'); process.exit(0); }
+console.error('FAIL: ' + (!refused(pub) ? 'public channels are still allowed' : 'an anonymous private join was accepted'));
+process.exit(1);
+```
+
+Commit it on `main` before the change (explicit path and pathspec, trailer as in Global Constraints).
+
+- [ ] **Step 3: See it fail before the change.** Get the publishable key without printing it into a file: `SUPABASE_ANON_KEY=$(supabase projects api-keys --project-ref sawekpguemzvuvvulfbc -o json | python3 -c 'import json,sys;print(next(k["api_key"] for k in json.load(sys.stdin) if k.get("type")=="publishable"))') node scripts/check-realtime-private.mjs <a real console event id>`. Expected: exit 1, `FAIL: public channels are still allowed` (the anonymous private join is already refused by migration 135). If the private join is accepted, stop: migration 135's policies are not doing their job.
+
+- [ ] **Step 4: Sherif changes the setting.** Send him exactly: "In the Supabase dashboard open project sawekpguemzvuvvulfbc (CueDeck), then Realtime, then Settings (https://supabase.com/dashboard/project/sawekpguemzvuvvulfbc/realtime/settings). Turn **Allow public access** OFF and save. Tell me when it is saved." Do not change it for him.
+
+- [ ] **Step 5: Verify.** Run the Step 3 command again. Expected: exit 0, `OK: console topics refuse public and anonymous joins`. Then on Sherif's own session in Chrome (hard reload, no show control pressed): the header shows the connection live (not reconnecting), the crew popover lists the people online, a session status change made from a second tab of his own arrives in the first (postgres_changes on the private channel). With the Task 4.2 throwaway login, which is not on the event checked: it never appears in Sherif's crew list.
+
+- [ ] **Step 6: If anything breaks:** Sherif turns "Allow public access" back ON (same path); nothing else needs undoing, the console keeps working on private channels either way.
+
+- [ ] **Step 7: Note to Sherif:** "Realtime is now private: only an event's team can join its live channel or see who is online. A person removed from a team keeps the channel they already have open until they switch event or reload (Supabase checks access on join)."
 
 ---
 
@@ -6165,6 +7179,8 @@ Expected: `cuedeck_my_events`.
 | §9.1 | Invited director edits the event and sessions; only the creator deletes the event and sees billing and webhooks | 1.1 (`events_director_update`, `leod_events_guard_member_update`; sessions already via the resolver; `owner_delete_events` and `owner_manage_webhooks` unchanged), 3.2 (billing for an account with its own plan), 3.3 |
 | §9.2 | "Added to event" email; no founder welcome for members-only | 2.3, 2.1 (`handle_first_login`) |
 | §9.3 | Switcher groups under the organiser's company name | 2.1 (`organiser`), 3.3 |
+| Sherif's conditions (8 Oct) | Private channels: only an event's members join, track or read presence; postgres_changes keep working | 3.5 (migration 135, probe 135, e2e), 4.3 (setting, live script) |
+| | Guard scheduled daily, runs recorded, alert on failing guard and on a missing or stale run (over 26 h), absence counts as failure, the watcher watched | 2.5 (migration 134, probe 134, `guard-alert` and `health-check-guards` tests), 4.1 Step 11 |
 | §10 | Invited-director trial; suspended reads; `handle_first_login` caller id; wizard invite error | 3.2; 1.1; 2.1 (rewritten, so it takes `auth.uid()`); 3.4. `track_user_login()` (not attached) is unrelated and left alone. |
 
 ## Placeholder scan
@@ -6176,6 +7192,7 @@ Searched the plan for "TBD", "TODO", "implement later", "fill in", "similar to T
 Checked across tasks:
 - SQL: `leod_event_members(event_id, user_id, role, active, invited_by, created_at, updated_at)`; `cuedeck_event_role(uuid)`, `cuedeck_event_role_of(uuid, uuid)`, `leod_event_members_guard()` (1.1, replaced in 2.1 keeping its checks), `leod_events_guard_member_update()`, `cuedeck_guard_results()` with guards `event_access_not_via_invited_by`, `event_members_server_writes_only`, `event_creator_never_member`; `cuedeck_plan_seats(uuid)`, `cuedeck_event_seats_of(uuid) → {used, limit}`, `cuedeck_my_events() → (event_id, role, is_owner, owner_id, organiser, plan, plan_status, trial_ends_at)`, `cuedeck_event_team(uuid) → {is_owner, seats, owner, members[]}`; error messages `seats_full…`, `owner_not_member…` with SQLSTATE 23514. The console mock (3.1, 3.4) answers exactly these shapes; the operators stub (2.3) answers `cuedeck_event_seats_of` with `{used, limit}`.
 - TypeScript: `_shared/members.ts` `MEMBER_ROLES`, `UUID` (2.2), `logMemberChange(sb, eventId, operatorId, action, payload)` (2.3); `eventRole(sb, userId, eventId)` unchanged signature (2.2) used by invite-operator, manage-operator and ai-proxy; `_shared/plan.ts` `aiAllowed(sub, now)`, `PlanRow`, `PAID_AI_PLANS` (2.4). invite-operator `result` values `invited | added | link_resent | unchanged | role_changed` and codes `seats_full | is_owner | already_on_event | invite_rate | not_console_event` match the console's `inviteOperator` and `inviteErrorText` (3.4). manage-operator `{ action, user_id, role?, event_id? }` matches `manageMember` (3.4) and the updated `console-forbidden` tests.
+- Guards and realtime: `cuedeck_job_runs`, `cuedeck_run_guards()`, `cuedeck_guard_watch() → {ok, problems, checked_at}`, `cuedeck_cron_ok(text)`, job names `cuedeck-guards`, `cuedeck-guard-watch`, `cuedeck-guard-alert` (2.5, used the same way by the Edge Function, the probe and the health-check test); `cuedeck_topic_event(text)`, policies `cuedeck_event_channel_read`, `cuedeck_event_channel_presence`, topics `leod-ctrl-<id>` and `leod-signage-<id>` (3.5, matched by the console, the probe, the e2e test and `scripts/check-realtime-private.mjs`).
 - Console: `S.myEvents`, `S.accountRole`, `loadMyEvents`, `applyEventRole`, `noteRoleForWelcome` (3.1); `S.ownPlanLimits`, `isMembersOnlyAccount`, `planEnded`, `ownPlanEnded`, `applyEventPlan`, `showPlanEndedScreen` (3.2); `evGroups` (3.3); `openUsersModal`, `refreshUsersModal`, `renderTeam`, `manageMember`, `armRemoveMember`, `inviteOperator`, `inviteErrorText`, `setTeamStatus`, `TEAM_ROLES`, `_teamData`, `_operatorsData` (3.4). Removed names (`loadPendingBadge`, `approveUser`, `manageOperator`, `confirmRemoveUser`, `renderOperatorRows`, `filterOperators`, `S.operatorCount`, `#users-badge`) are grepped for in 3.4 Step 5. No local variable is named `t`.
 - i18n: 2 (3.1) + 4 (3.2) + 4 (3.3) + 43 (3.4) keys, each in en, ar, pl, de with the same placeholders; every test that asserts English text quotes the en value exactly.
 - Test names quoted in Review Focus exist verbatim in their tasks: probe 131 check 4, `a global director who is stage on this event cannot cancel`, `teams: the role follows the event, both ways`, `teams: presence tracks the role on the current event`, `teams: an event you were removed from is dropped on switch`, probe 133 checks 3 and 5, `invite: a seat taken while inviting (23514) withdraws the new account`, `invite: an existing email typed in another case joins that account`, `team: over the seat count after a downgrade`.
@@ -6201,6 +7218,6 @@ For each input class the spec implies, a test exists in the owning task: global 
 13. **New event for everyone:** anyone signed in may create their own event (on their own plan); before, only accounts with the global director role saw the button.
 14. **Console invites to check-in events** are refused (`not_console_event`): check-in has its own staff invitations (owned by the other session).
 15. **The guard's home:** `cuedeck_guard_results()`, a console guard function, not `checkin_guard_results()` (owned and rewritten whole by the check-in session). Its function check is by exclusion with four named non-access readers.
-16. **Realtime presence is not covered** (see the report): the control channel `leod-ctrl-<event>` is a public Realtime channel, so its presence list (who is online, with which role) can be joined by any signed-in user who knows an event id. Row data in realtime is covered by RLS. Closing presence needs Realtime Authorization (private channels and `realtime.messages` policies) and a project setting; it is listed as a follow-up for Sherif rather than built here.
+16. **Realtime presence** is closed in three steps (Task 3.5, Release C): policies on `realtime.messages`, the console on private channels, then Sherif turns off "Allow public access". The last step waits for check-in's two public channels to go private, because the setting is project-wide. Policies are cached per connection (Supabase docs), so a member removed mid-session keeps an already open channel until they switch event or reload.
 17. **`handle_first_login(p_user_id)`** keeps its argument for the console's call shape but now refuses any id other than the caller's, because it is rewritten here and the rule since 079 applies.
-18. **Nothing schedules `cuedeck_guard_results()`** (nor `checkin_guard_results()`: no caller found in this repo or in `cron.job` on 8 Oct). The release tasks run it; scheduling a reader is listed as a follow-up.
+18. **The guard's schedule and alert route (Task 2.5).** `leod_checkin_job_runs` and the AVE Brain watcher (`checkin_brain_signals`) are check-in-owned, so runs go to a console table, `cuedeck_job_runs`, and alerts take the project's existing alert email route (`_shared/resend.ts` to `BILLING_ALERT_EMAIL`, as stripe-webhook's billing alerts). pg_cron and the Vercel health-check cron watch each other; both stopping together is the one case nothing reports.
