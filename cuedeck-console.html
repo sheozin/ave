@@ -321,7 +321,8 @@
     /* ── TEAM: one event's team ── */
     /* A full Pro team is 21 rows: the header, invite row and Close stay put, the list scrolls */
     /* #users-modal scope: beats .ev-modal-card's 420 px; wide enough for a member's four actions on one row */
-    #users-modal .team-card { max-width: min(640px, calc(100vw - 24px)); max-height: 90vh; }
+    /* overflow-y: a short window scrolls the card, so the title and Close stay reachable */
+    #users-modal .team-card { max-width: min(640px, calc(100vw - 24px)); max-height: 90vh; overflow-y: auto; }
     /* never collapses: on a short screen the card itself scrolls instead */
     #users-modal-body { flex: 1 1 auto; min-height: 120px; overflow-y: auto; }
     #users-modal .team-invite-row input, #users-modal .team-invite-row select, #users-modal .team-invite-row button, #users-modal #um-search { height: 44px; min-height: 44px; box-sizing: border-box; }
@@ -2378,7 +2379,7 @@
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
     <button id="hm-billing" onclick="openBillingModal();toggleHamburger()">Billing</button>
     <button id="hm-invoices" onclick="openInvoiceModal();toggleHamburger()">Invoices</button>
-    <button onclick="openUsersModal();toggleHamburger()">Operators</button>
+    <button id="hm-users" style="display:none" onclick="openUsersModal();toggleHamburger()">Operators</button>
     <button onclick="window.open('/checkin','_blank');toggleHamburger()">Check-in</button>
     <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
@@ -9296,6 +9297,8 @@ function applyEventRole(eventId) {
   if (disp) disp.hidden = !director;
   const users = document.getElementById('users-btn');
   if (users) users.style.display = director && eventId ? 'flex' : 'none';
+  const hmUsers = document.getElementById('hm-users');   // phone menu: same rule as Team
+  if (hmUsers) hmUsers.style.display = director && eventId ? '' : 'none';
   if (director) refreshDisplaysPill();
   renderUserChip();
   return true;
@@ -10463,7 +10466,8 @@ function getCmdStaticItems() {
     { cat: 'Navigation', icon: 'sparkle', label: 'What\'s New', action: () => openChangelogModal() },
     { cat: 'Navigation', icon: 'info', label: 'About CueDeck', action: () => openAboutModal() },
     ...(hasOwnBilling() ? [{ cat: 'Navigation', icon: 'card', label: 'Open Billing', action: () => openBillingModal() }] : []),
-    { cat: 'Navigation', icon: 'team', label: 'Manage Operators', action: () => openUsersModal() },
+    // Team is for the current event's directors (event teams); built on each open, so it follows the role.
+    ...(S.userRole === 'director' && S.event ? [{ cat: 'Navigation', icon: 'team', label: 'Manage Operators', action: () => openUsersModal() }] : []),
     { cat: 'Help', icon: 'message', label: 'Send Feedback', action: () => openFeedbackModal() },
   ];
   // Role switching
