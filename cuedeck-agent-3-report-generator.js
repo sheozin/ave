@@ -433,7 +433,8 @@ Respond ONLY with valid JSON, no markdown:
           body: {
             model:      'claude-sonnet-4-6',
             max_tokens: 1200,
-            messages:   [{ role: 'user', content: prompt }]
+            messages:   [{ role: 'user', content: prompt }],
+            event_id:   _opts.getEventId ? _opts.getEventId() : undefined   // AI runs on this event owner's plan
           }
         }),
         API_TIMEOUT_MS

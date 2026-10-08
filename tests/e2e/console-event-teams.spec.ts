@@ -90,3 +90,77 @@ test('teams: a check-in staff login that is on a console team opens the console'
     expect(await evalPage(page, 'S.accountRole')).toBe('checkin_staff');
   } finally { await ctx.close(); }
 });
+
+test('teams: a members-only account gets no trial, no plan badge and no billing', async ({ browser }) => {
+  const { ctx, page, calls } = await openConsole(browser, {
+    role: 'director', ownSub: null,
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' }],
+  });
+  try {
+    expect(calls.filter(c => c.method === 'POST' && c.path.startsWith('/rest/v1/leod_subscriptions'))).toEqual([]);
+    expect(await evalPage(page, 'S.subscription')).toBeNull();
+    expect(await evalPage(page, 'S.planLimits.label')).toBe('Pro');   // the organiser's plan
+    await expect(page.locator('#plan-badge')).toBeHidden();
+    expect(await evalPage(page, `renderProfilePanel(); document.getElementById('pp-plan-section').style.display`)).toBe('none');
+  } finally { await ctx.close(); }
+});
+
+test('teams: plan limits come from the event owner, per event', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage',    isOwner: false, ownerId: OTHER_OWNER, plan: 'starter' },
+    { id: EV_B,     name: 'Spring summit',         role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' },
+  ] });
+  try {
+    await afterBootReread(page);
+    expect(await evalPage(page, 'S.planLimits.ai')).toBe(false);
+    await switchTo(page, EV_B);
+    expect(await evalPage(page, 'S.planLimits.ai')).toBe(true);
+    expect(await evalPage(page, 'S.planLimits.label')).toBe('Pro');
+  } finally { await ctx.close(); }
+});
+
+test('teams: only your own events count toward your event limit', async ({ browser }) => {
+  // Own plan: Starter (1 event). On someone else's Pro event only: may create one.
+  const member = await openConsole(browser, {
+    role: 'director', ownSub: { plan: 'starter', status: 'active', trial_ends_at: null },
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' }],
+  });
+  try {
+    await evalPage(member.page, `openEvModal('create'); document.getElementById('evm-name').value = 'Own launch'; submitEvModal(); 0`);
+    await expect.poll(() => member.calls.some(c => c.method === 'POST' && c.path.startsWith('/rest/v1/leod_events'))).toBe(true);
+    await expect(member.page.locator('#evm-error')).not.toContainText('plan allows');
+  } finally { await member.ctx.close(); }
+  // The same plan with one own event already: refused, nothing sent.
+  const owner = await openConsole(browser, {
+    role: 'director', ownSub: { plan: 'starter', status: 'active', trial_ends_at: null },
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true, plan: 'starter' }],
+  });
+  try {
+    await evalPage(owner.page, `openEvModal('create'); document.getElementById('evm-name').value = 'Second launch'; submitEvModal(); 0`);
+    await expect(owner.page.locator('#evm-error')).toContainText('plan allows 1 active event');
+    expect(owner.calls.some(c => c.method === 'POST' && c.path.startsWith('/rest/v1/leod_events'))).toBe(false);
+  } finally { await owner.ctx.close(); }
+});
+
+test('teams: an organiser plan that ended is refused on switch, and members see no prices', async ({ browser }) => {
+  const ended = new Date(Date.parse('2026-10-06T08:40:00Z') - 3600e3).toISOString();
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' },
+    { id: EV_B, name: 'Spring summit', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'trial', trialEndsAt: ended },
+  ] });
+  try {
+    await afterBootReread(page);
+    await switchTo(page, EV_B);
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+    await expect(toasts(page)).toContainText('The plan for this event has ended. Ask the organiser to renew it.');
+    // At boot this screen shows inside the loading overlay; after boot the
+    // overlay is gone, so read what the screen would show.
+    await evalPage(page, 'showPlanEndedScreen(true); 0');
+    expect(await evalPage(page, `(() => { const s = document.getElementById('trial-expired-screen');
+      return { member: s.classList.contains('te-member'), shown: s.style.display,
+               title: document.getElementById('te-title').textContent,
+               plans: getComputedStyle(document.getElementById('te-plans')).display,
+               promo: getComputedStyle(s.querySelector('.te-promo')).display }; })()`))
+      .toEqual({ member: true, shown: 'flex', title: 'This event plan has ended', plans: 'none', promo: 'none' });
+  } finally { await ctx.close(); }
+});

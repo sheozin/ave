@@ -257,6 +257,8 @@
     #trial-expired-screen .te-icon { font-size: 32px; }
     #trial-expired-screen .te-title { font-size: var(--fs-16); font-weight: 700; color: var(--text); letter-spacing: -.01em; }
     #trial-expired-screen .te-msg { font-size: var(--fs-12); color: var(--dim); line-height: 1.6; max-width: 420px; }
+    /* event teams: a members-only account is told to ask the organiser, without prices */
+    #trial-expired-screen.te-member .te-toggle, #trial-expired-screen.te-member .te-plans, #trial-expired-screen.te-member .te-promo { display: none; }
     .te-toggle { display:flex; gap:4px; background:var(--card); border-radius:100px; padding:3px; }
     .te-toggle button { background:none; border:none; color:var(--dim); font:500 11px/1 'Inter',sans-serif;
       padding:5px 14px; border-radius:100px; cursor:pointer; transition:all .15s; }
@@ -2164,7 +2166,7 @@
         <button class="te-cta primary" onclick="startCheckout('pro')">Start Pro</button>
       </div>
     </div>
-    <div style="border-top:1px solid var(--border-section);margin:16px 0;padding-top:16px">
+    <div class="te-promo" style="border-top:1px solid var(--border-section);margin:16px 0;padding-top:16px">
       <div style="font-size:12px;color:var(--dim);margin-bottom:8px">Have a code?</div>
       <div style="display:flex;gap:8px;max-width:300px;margin:0 auto">
         <input id="te-promo-code" type="text" placeholder="Enter code" style="flex:1;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:monospace;text-align:center">
@@ -2965,7 +2967,8 @@ const S = {
   _autoStarted:    new Set(), // session IDs already auto-started this session
   chimedSessions:  {},     // sessionId → Set of thresholds already chimed ('5min','1min')
   subscription:    null,   // { plan, status, trial_ends_at, ... }
-  planLimits:      null,   // resolved PLAN_LIMITS entry
+  planLimits:      null,   // PLAN_LIMITS of the current event's organiser's plan (applyEventPlan)
+  ownPlanLimits:   null,   // PLAN_LIMITS of my own plan: only for creating my own events
   operatorCount:   0,      // total non-pending leod_users; cached by loadPendingBadge
   stripePrices:    {},     // key → Stripe price ID (loaded from leod_config)
 };
@@ -7146,8 +7149,14 @@ async function switchEvent(eventId) {
     pushToast(t('cc.ev.noAccess'), 'warn');
     return;
   }
+  const m = mine.get(eventId);
+  if (planEnded(m)) {
+    pushToast(t(m.isOwner ? 'cc.ev.planEndedOwner' : 'cc.ev.planEndedAsk'), 'warn');
+    return;
+  }
   S.event = ev;
   applyEventRole(eventId);
+  applyEventPlan(eventId);
   setStep(`Loading ${ev.name}…`);
   clearBatchSelection(); // a selection belongs to the event it was made in
   disarmAllBatch();
@@ -7229,11 +7238,22 @@ async function submitEvModal() {
 
   try {
     if (evModalMode === 'create') {
-      // Plan limit: check active event count
-      if (S.planLimits && S.planLimits.events !== 999) {
-        const activeCount = S.events.filter(e => e.active).length;
-        if (activeCount >= S.planLimits.events) {
-          errEl.textContent = `Your ${PLAN_LIMITS[S.subscription?.plan]?.label || ''} plan allows ${S.planLimits.events} active event(s). Upgrade to create more.`;
+      // Your own plan (event teams §6). A members-only account gets its trial
+      // now, with its first own event; events you are only a member of never
+      // count toward your limit.
+      if (!S.subscription) {
+        try { await createTrialSubscription(); await loadSubscription(); }
+        catch (e) { errEl.textContent = e?.message || String(e); saveBtn.disabled = false; return; }
+      }
+      if (ownPlanEnded()) {
+        errEl.textContent = t('cc.ev.ownPlanEnded');
+        saveBtn.disabled = false; return;
+      }
+      const own = S.ownPlanLimits || PLAN_LIMITS.trial;
+      if (own.events !== 999) {
+        const ownCount = S.events.filter(e => e.active && S.myEvents.get(e.id)?.isOwner).length;
+        if (ownCount >= own.events) {
+          errEl.textContent = `Your ${PLAN_LIMITS[S.subscription?.plan]?.label || ''} plan allows ${own.events} active event(s). Upgrade to create more.`;
           saveBtn.disabled = false; return;
         }
       }
@@ -8588,13 +8608,13 @@ function renderProfilePanel() {
   badgeEl.style.background   = c.badgeBg;
   badgeEl.style.borderColor  = c.badgeBorder;
 
-  // Plan section — directors only
+  // Plan section: your own plan; none for a members-only account (event teams §5)
   const planSection = document.getElementById('pp-plan-section');
-  planSection.style.display = (role === 'director') ? '' : 'none';
+  planSection.style.display = S.subscription ? '' : 'none';
 
-  if (role === 'director' && S.subscription) {
+  if (S.subscription) {
     const sub    = S.subscription;
-    const limits = S.planLimits;
+    const limits = S.ownPlanLimits;
 
     document.getElementById('pp-plan-name').textContent = (limits && limits.label) ? limits.label : (sub.plan || 'Free');
 
@@ -8620,10 +8640,9 @@ function renderProfilePanel() {
     }
 
     // Usage bars — skip when limit is 999 (unlimited)
-    var eventsUsed = sub.plan === 'perevent' ? (sub.events_used || 0) : (S.events || []).length;
+    var eventsUsed = sub.plan === 'perevent' ? (sub.events_used || 0) : (S.events || []).filter(e => S.myEvents.get(e.id)?.isOwner).length;
     var barsData = [
       { label:'Events',    used: eventsUsed,              max: (limits && limits.events    < 999) ? limits.events    : 0 },
-      { label:'Operators', used: S.operatorCount,         max: (limits && limits.operators < 999) ? limits.operators : 0 },
       { label:'Displays',  used: (S.displays || []).length, max: (limits && limits.displays  < 999) ? limits.displays  : 0 },
     ].filter(function(b) { return b.max > 0; });
 
@@ -8660,7 +8679,7 @@ function toggleProfileEdit() {
     document.getElementById('pp-edit-org').value = S.userOrg || '';
     document.getElementById('pp-edit-phone').value = S.userPhone || '';
     var billingSection = document.getElementById('pp-billing-section');
-    if (S.userRole === 'director') {
+    if (S.subscription) {   // billing details belong to an account with its own plan
       billingSection.style.display = '';
       document.getElementById('pp-edit-company').value = S.userCompanyName || '';
       document.getElementById('pp-edit-vat').value = S.userVatId || '';
@@ -8689,7 +8708,7 @@ async function saveProfileChanges() {
   S.userName = name;
   S.userOrg  = org;
   S.userPhone = phone;
-  if (S.userRole === 'director') {
+  if (S.subscription) {
     var company_name    = document.getElementById('pp-edit-company').value.trim();
     var vat_id          = document.getElementById('pp-edit-vat').value.trim();
     var billing_address = document.getElementById('pp-edit-address').value.trim();
@@ -8717,54 +8736,75 @@ async function saveProfileChanges() {
 
 let _billingInterval = 'month'; // 'month' or 'year' — toggled by UI
 
+// Event teams (spec §5, §6): members work on each event organiser's plan and
+// have no plan of their own. An account that is only ever a member sees no
+// billing, no trial and no upsell; a trial starts with its first own event.
+function isMembersOnlyAccount() {
+  return S.myEvents.size > 0 && ![...S.myEvents.values()].some(m => m.isOwner) && !S.subscription;
+}
+// An organiser's plan has ended: canceled, expired, or a trial past its end.
+function planEnded(m) {
+  if (!m) return false;
+  if (m.planStatus === 'expired' || m.planStatus === 'canceled') return true;
+  return m.plan === 'trial' && !!m.trialEndsAt && new Date(m.trialEndsAt) <= new Date();
+}
+function ownPlanEnded() {
+  return !!S.subscription && (S.subscription.status === 'expired' || S.subscription.status === 'canceled');
+}
+// The plan for one event is always its creator's: displays, reports and AI.
+// No subscription row counts as a trial, as on the server (cuedeck_plan_seats).
+function applyEventPlan(eventId) {
+  const m = S.myEvents.get(eventId);
+  S.planLimits = PLAN_LIMITS[m?.plan] || PLAN_LIMITS.trial;
+}
+// Every event this login can open has an ended plan. An organiser sees the
+// plans, as before; a members-only account sees who to ask and no prices.
+function showPlanEndedScreen(membersOnly) {
+  const scr = document.getElementById('trial-expired-screen');
+  scr.classList.toggle('te-member', !!membersOnly);
+  if (membersOnly) {
+    scr.querySelector('.te-msg').textContent = t('cc.ev.planEndedAsk');
+    showTrialExpiredScreen(t('cc.ev.planEndedTitle'));
+  } else {
+    showTrialExpiredScreen(S.subscription?.plan === 'trial' ? undefined : 'Your subscription has ended');
+  }
+}
+
+// Your own plan. Whether an ended plan blocks anything is decided per event
+// (boot and switchEvent): your own plan only governs your own events.
 async function loadSubscription() {
   const { data, error } = await sb.rpc('get_subscription_for_user');
-
-  if (error || !data || (Array.isArray(data) && data.length === 0)) {
-    // No subscription row — create trial for directors
-    if (S.userRole === 'director' || !S.userRole) {
-      await createTrialSubscription();
-      return loadSubscription();
-    }
-    // Operator without director subscription — allow access with trial limits
-    S.subscription = { plan: 'trial', status: 'active' };
-    S.planLimits = PLAN_LIMITS.trial;
-    return;
-  }
-
+  if (error) throw error;   // a failed read never creates a trial
   const sub = Array.isArray(data) ? data[0] : data;
-  S.subscription = sub;
-
-  await loadStripePrices(); // must complete before expiry checks so pricing screen has price IDs
-
-  // Check trial expiry
-  if (sub.plan === 'trial' && sub.trial_ends_at) {
-    if (new Date(sub.trial_ends_at) <= new Date()) {
-      S.subscription.status = 'expired';
-      showTrialExpiredScreen();
-      throw new Error('trial_expired');
+  if (!sub) {
+    if (isMembersOnlyAccount()) {
+      S.subscription = null;
+      S.ownPlanLimits = null;
+      updatePlanBadge();
+      return;
     }
+    await createTrialSubscription();
+    return loadSubscription();
   }
-
-  // Check subscription status
-  if (sub.status === 'expired' || sub.status === 'canceled') {
-    showTrialExpiredScreen('Your subscription has ended');
-    throw new Error('subscription_expired');
+  S.subscription = sub;
+  await loadStripePrices(); // must complete before expiry checks so pricing screen has price IDs
+  if (sub.plan === 'trial' && sub.trial_ends_at && new Date(sub.trial_ends_at) <= new Date()) {
+    S.subscription.status = 'expired';
   }
-
-  S.planLimits = PLAN_LIMITS[sub.plan] || PLAN_LIMITS.trial;
+  S.ownPlanLimits = PLAN_LIMITS[sub.plan] || PLAN_LIMITS.trial;
   updatePlanBadge();
 }
 
 async function createTrialSubscription() {
   const trialEnd = new Date();
   trialEnd.setDate(trialEnd.getDate() + 3);
-  await sb.from('leod_subscriptions').insert({
+  const { error } = await sb.from('leod_subscriptions').insert({
     director_id: S.user.id,
     plan: 'trial',
     status: 'active',
     trial_ends_at: trialEnd.toISOString(),
   });
+  if (error) throw error;   // a trial that was not saved is never reported as started
 }
 
 async function loadStripePrices() {
@@ -9821,6 +9861,11 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     }
 
     if (!events.length) {
+      // Your own plan ended and you have no event: the plans screen, as before.
+      if (ownPlanEnded()) {
+        showPlanEndedScreen(false);
+        throw new Error('trial_expired');
+      }
       applyEventRole(null);   // a new account directs its own, still empty, account
       noteRoleForWelcome();
       const labels = ['Create event','Add sessions','Invite team','Go live'];
@@ -9851,10 +9896,16 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       return;
     }
 
-    // 3. Select event, and the role on it
-    const ev = events[0];
+    // 3. Select event, its role and its plan: the first event whose
+    //    organiser's plan has not ended (each event runs on its owner's plan)
+    const ev = events.find(e => !planEnded(S.myEvents.get(e.id)));
+    if (!ev) {
+      showPlanEndedScreen(isMembersOnlyAccount());
+      throw new Error('trial_expired');
+    }
     S.event = ev;
     applyEventRole(ev.id);
+    applyEventPlan(ev.id);
     noteRoleForWelcome();
     document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
     buildEvSelect(events);
@@ -9913,6 +9964,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       });
       CueDeckCueEngine.init([], {
         supabaseClient:     sb,
+        getEventId:         () => S.event?.id,
         correctedNow: eventWallClockNow,  // synced clock, read as event wall time
         cueDeckSessions:    S.sessions,   // auto-adapts scheduled_start / room fields
         alertMinutesBefore: 8
@@ -10035,6 +10087,7 @@ function ensureAgentsInited() {
   });
   CueDeckCueEngine.init([], {
     supabaseClient:     typeof sb !== 'undefined' ? sb : null,
+    getEventId:         () => S?.event?.id || null,
     correctedNow:       typeof eventWallClockNow === 'function' ? eventWallClockNow : () => Date.now(),
     cueDeckSessions:    S?.sessions || [],
     alertMinutesBefore: 8
