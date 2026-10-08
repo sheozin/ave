@@ -176,35 +176,25 @@ Deno.serve(async (req) => {
       if (nameErr) console.error('invite-operator: name not saved', nameErr.message)
     }
   }
-  // Undo only an account this request made: never one that existed before.
-  // "Made just now" is a time window, and a concurrent invite of the same new
-  // email gets the same unconfirmed user back from generateLink, so both
-  // requests see it as theirs. Delete only an account that is on no event's
-  // team and organises no event; otherwise it is someone else's by now
-  // (deleting it would cascade their membership).
-  let accountKept = false
-  const removeNewAccount = async (): Promise<string | null> => {
-    if (!createdNow) return null
-    const { count: memberships, error: mErr } = await sb.from('leod_event_members')
-      .select('event_id', { count: 'exact', head: true }).eq('user_id', userId)
-    if (mErr) return mErr.message
-    const { count: owned, error: oErr } = await sb.from('leod_events')
-      .select('id', { count: 'exact', head: true }).eq('created_by', userId)
-    if (oErr) return oErr.message
-    if ((memberships ?? 0) > 0 || (owned ?? 0) > 0) { accountKept = true; return null }
-    const { error } = await sb.auth.admin.deleteUser(userId)
-    return error ? error.message : null
-  }
+  // Nothing here ever deletes an auth account. "Made by this request" can
+  // only be guessed from a time window, and a concurrent invite of the same
+  // new email gets the same unconfirmed user back from generateLink, so a
+  // delete could remove another request's account and cascade its
+  // memberships. An unconfirmed account with no membership is harmless: the
+  // next invite of that email reuses it.
 
   // ── The membership (the database checks the seats again) ────────
+  // created_at identifies this request's own row, so a later undo removes
+  // that row and never one another director wrote under the same key.
+  let myRowCreatedAt: string | null = null
   if (!current) {
-    const { error: insErr } = await sb.from('leod_event_members')
+    const { data: ins, error: insErr } = await sb.from('leod_event_members')
       .insert({ event_id: eventId, user_id: userId, role, active: true, invited_by: user.id })
+      .select('created_at')
+    if (!insErr) myRowCreatedAt = (ins as { created_at: string }[] | null)?.[0]?.created_at ?? null
     if (insErr) {
       const msg = String(insErr.message ?? '')
-      // These three refusals undo nothing: the account may be another
-      // request's (concurrent invite of the same new email), and an
-      // unconfirmed account with no membership is reused by the next invite.
+      // No row was written, so there is nothing to undo.
       if (insErr.code === '23514' && msg.startsWith('seats_full')) {
         return json(409, { error: 'All seats on this event are taken', code: 'seats_full', is_owner: isOwner })
       }
@@ -215,9 +205,7 @@ Deno.serve(async (req) => {
       if (insErr.code === '23505') {
         return json(409, { error: 'This person was just added to this event', code: 'already_on_event' })
       }
-      const undoErr = await removeNewAccount()
-      return json(500, { error: `The membership was not saved (${msg})`
-        + (createdNow && !accountKept ? (undoErr ? `; the new account could not be removed (${undoErr})` : '; the invite was withdrawn') : '') })
+      return json(500, { error: `The membership was not saved (${msg})` })
     }
   }
 
@@ -235,14 +223,17 @@ Deno.serve(async (req) => {
   } else {
     const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: actionLink, actionLabel: 'Accept the invitation' })
     if (mailErr) {
-      // No email means no way in: take back what this request created.
+      // No email means no way in: take back this request's own membership
+      // row (never the account; see above).
       if (!current) {
-        const { error: delErr } = await sb.from('leod_event_members').delete().eq('event_id', eventId).eq('user_id', userId)
+        if (!myRowCreatedAt) {
+          return json(500, { error: `The invitation email failed (${mailErr}) and the membership could not be identified to remove it` })
+        }
+        const { error: delErr } = await sb.from('leod_event_members').delete()
+          .eq('event_id', eventId).eq('user_id', userId).eq('created_at', myRowCreatedAt)
         if (delErr) return json(500, { error: `The invitation email failed (${mailErr}) and the membership could not be removed (${delErr.message})` })
       }
-      const undoErr = await removeNewAccount()
-      if (undoErr) return json(500, { error: `The invitation email failed (${mailErr}) and the new account could not be removed (${undoErr})` })
-      return json(502, { error: 'The invitation email could not be sent. Nothing was created; try again.' })
+      return json(502, { error: 'The invitation email could not be sent. Nothing was added; try again.' })
     }
   }
 

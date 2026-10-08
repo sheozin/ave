@@ -127,7 +127,9 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
       if (table === 'leod_event_members' && rows.some(x => x.event_id === r.event_id && x.user_id === r.user_id)) {
         return reply(409, { code: '23505', message: 'duplicate key value violates unique constraint "leod_event_members_pkey"' })
       }
-      rows.push({ ...r })
+      const row = table === 'leod_event_members' && !r.created_at ? { ...r, created_at: new Date().toISOString() } : { ...r }
+      rows.push(row)
+      r.created_at = row.created_at
     }
     return wantRows ? reply(201, list) : reply(201, undefined)
   }
@@ -433,14 +435,46 @@ Deno.test('invite: a link-shaped event or inviter name is left out of the email'
   assert(m.subject === "You're invited to join a team on CueDeck" && m.html.includes('You have been invited'), m.subject)
 })
 
-Deno.test('invite: a failed invitation email withdraws the new account and the membership', async () => {
+Deno.test('invite: a failed invitation email removes only this request\'s membership, never the account', async () => {
   setup()
   failOn['RESEND'] = { status: 500, body: { message: 'provider down' } }
   const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av', event_id: EV })
   assert(r.status === 502, JSON.stringify(r))
   assert(!member(EV, NEW_ID), 'membership kept')
-  assert(authAdmin.some(a => a.method === 'DELETE' && a.id === NEW_ID), 'account kept ' + JSON.stringify(authAdmin))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'an account was deleted ' + JSON.stringify(authAdmin))
   assert(logs('MEMBER_INVITED').length === 0, 'logged as invited')
+  // the membership delete names this request's row: event, person and its created_at
+  const del = writes.find(w => w.method === 'DELETE' && w.table === 'leod_event_members')
+  assert(!!del, 'no membership delete')
+})
+
+Deno.test('invite: a failed email never removes a membership row that is not this request\'s', async () => {
+  // The row under (event, person) was replaced while the email was being
+  // sent (removed and re-added by another director): it is not ours.
+  setup()
+  failOn['RESEND'] = { status: 500, body: { message: 'provider down' } }
+  const origFetch = globalThis.fetch
+  globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.host === 'api.resend.com') {
+      const m = member(EV, NEW_ID)
+      if (m) m.created_at = '2026-10-08T00:00:00.000Z'   // someone else's row now
+    }
+    return origFetch(input, init)
+  }) as typeof fetch
+  try {
+    const r = await call('invite-operator', OWNER, { email: 'crew@x.test', role: 'av', event_id: EV })
+    assert(r.status === 502, JSON.stringify(r))
+    assert(member(EV, NEW_ID)?.created_at === '2026-10-08T00:00:00.000Z', 'another request\'s membership was deleted')
+  } finally {
+    globalThis.fetch = origFetch
+  }
+})
+
+Deno.test('invite: invite-operator never deletes an auth account (no deleteUser anywhere in it)', async () => {
+  const src = await Deno.readTextFile(new URL('../../supabase/functions/invite-operator/index.ts', import.meta.url))
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+  assert(!/deleteUser\s*\(/.test(code), 'invite-operator calls deleteUser')
 })
 
 Deno.test('invite: a failed notice to an existing login keeps the membership', async () => {
@@ -451,12 +485,13 @@ Deno.test('invite: a failed notice to an existing login keeps the membership', a
   assert(!authAdmin.some(a => a.method === 'DELETE'), 'an existing account was deleted')
 })
 
-Deno.test('invite: a failed membership write is a 500 and deletes only an account made by this request', async () => {
+Deno.test('invite: a failed membership write is a 500 and deletes no account', async () => {
   setup()
   failOn['POST /rest/v1/leod_event_members'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
   let r = await call('invite-operator', OWNER, { email: 'n@x.test', role: 'stage', event_id: EV })
   assert(r.status === 500, JSON.stringify(r))
-  assert(authAdmin.some(a => a.method === 'DELETE' && a.id === NEW_ID), 'new account kept: ' + JSON.stringify(authAdmin))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'an account was deleted: ' + JSON.stringify(authAdmin))
+  assert(emails.length === 0, 'an email was sent')
   setup()
   inviteCreatedAt = '2026-01-01T00:00:00.000Z'   // the auth account existed before this request
   failOn['POST /rest/v1/leod_event_members'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
