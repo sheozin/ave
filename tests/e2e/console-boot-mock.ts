@@ -187,6 +187,8 @@ export interface Scenario {
   ownSub?: Record<string, unknown> | null;   // get_subscription_for_user row; null = none
   fnReply?: (fn: string, body: any) => { status: number; body: unknown } | undefined;   // Edge Function answers
   team?: Record<string, unknown>;   // cuedeck_event_team answer per event id (default: defaultTeam)
+  rpcFail?: string[];            // RPC names that answer 500; read on every request, so a test may change it
+  waitBoot?: boolean;            // false: return once the page has loaded, boot may stop on a screen
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -322,6 +324,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
     }
     if (p.startsWith('/rest/v1/rpc/')) {
       const fn = p.split('/').pop();
+      if (fn && sc.rpcFail?.includes(fn)) return json(r, { code: 'PGRST000', message: `${fn} failed` }, 500);
       if (fn === 'get_server_clock') return json(r, [{ server_time: new Date(T0).toISOString(), tick: 48213 }]);
       if (fn === 'get_subscription_for_user') return json(r, sc.ownSub === null ? [] : [sc.ownSub ?? PRO_SUB]);
       if (fn === 'cuedeck_event_team') {
@@ -351,7 +354,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       }
       const rows: Record<string, unknown[]> = {
         leod_users: [{ id: USER_ID, name: NAMES[role], email, role: sc.accountRole ?? role, organization: 'Nilegate Events', phone: null, active: true, company_name: 'Nilegate Events', vat_id: null, billing_address: null }],
-        leod_config: [], leod_events: myEvents().map(m => ({ ...EVENT, id: m.id, name: m.name })), leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
+        leod_config: [], leod_events: myEvents().map(m => ({ ...EVENT, id: m.id, name: m.name, created_by: m.isOwner ? USER_ID : (m.ownerId ?? OTHER_OWNER) })), leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
         leod_event_log: LOG, leod_signage_displays: DISPLAYS, leod_signage_sponsors: SPONSORS,
         leod_stage_messages: sc.stageMessages ?? [],
       };
@@ -373,6 +376,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   page.on('requestfailed', done);
   page.on('dialog', d => { throw new Error('native dialog opened: ' + d.message()); });
   await page.goto(`${BASE}/cuedeck-console.html`);
+  if (sc.waitBoot === false) { await page.waitForLoadState('load'); return { ctx, page, calls }; }
   await page.waitForFunction(() => document.getElementById('loading-overlay')?.style.display === 'none', null, { timeout: 30_000 });
   await page.waitForFunction(() => (document.getElementById('conn-lbl')?.textContent || '').length > 0);
   await page.waitForTimeout(1500);

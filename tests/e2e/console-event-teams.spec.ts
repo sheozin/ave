@@ -476,3 +476,55 @@ test('switch: a refused switch still applies a role change on the current event'
     await expect(page.locator('#role-lock')).toHaveText('AV');
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (F2): a failed read at boot never leaves a blank console ──
+test('boot: a failed events read with nothing of your own keeps a clear message and Retry', async ({ browser }) => {
+  const fail = ['cuedeck_my_events'];
+  const { ctx, page } = await openConsole(browser, { role: 'stage', rpcFail: fail, waitBoot: false,
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER }] });
+  try {
+    await expect(page.locator('#load-step')).toHaveText('Could not load your events. Check your connection and try again.', { timeout: 30_000 });
+    await expect(page.locator('#boot-retry')).toBeVisible();
+    await page.waitForTimeout(3500);   // the old boot error hid the overlay after 3 s
+    await expect(page.locator('#loading-overlay')).toBeVisible();
+    await expect(page.locator('#boot-retry')).toBeVisible();
+    expect(await evalPage(page, 'S.event')).toBeNull();
+    fail.length = 0;                   // the connection is back
+    await page.locator('#boot-retry').click();
+    await expect(page.locator('#loading-overlay')).toBeHidden({ timeout: 30_000 });
+    await expect(page.locator('#role-lock')).toHaveText('Stage');
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+  } finally { await ctx.close(); }
+});
+
+test('boot: a failed events read never locks the creator out of their own events', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'director', rpcFail: ['cuedeck_my_events'], myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true },
+    { id: EV_B, name: 'Spring summit', role: 'stage', isOwner: false, ownerId: OTHER_OWNER, organiser: 'Northwind Events' },
+  ] });
+  try {
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+    expect(await evalPage(page, 'S.userRole')).toBe('director');
+    expect(await evalPage(page, 'S.events.map(e => e.id)')).toEqual([EVENT_ID]);   // other organisers' events wait for a good read
+    await expect(page.locator('#viewas-btn')).toBeVisible();
+    expect(await evalPage(page, `document.getElementById('boot-retry')?.offsetParent ?? null`)).toBeNull();
+  } finally { await ctx.close(); }
+});
+
+test('boot: a failed plan read lets everyone in; no trial is created while the plan is unknown', async ({ browser }) => {
+  const member = await openConsole(browser, { role: 'stage', rpcFail: ['get_subscription_for_user'], ownSub: null,
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' }] });
+  try {
+    await expect(member.page.locator('#role-lock')).toHaveText('Stage');
+    expect(await evalPage(member.page, 'S.planLimits.label')).toBe('Pro');
+    expect(member.calls.filter(c => c.method === 'POST' && c.path.startsWith('/rest/v1/leod_subscriptions'))).toEqual([]);
+  } finally { await member.ctx.close(); }
+  const fail = ['get_subscription_for_user'];
+  const creator = await openConsole(browser, { role: 'director', rpcFail: fail, ownSub: null });
+  try {
+    expect(await evalPage(creator.page, 'S.event.id')).toBe(EVENT_ID);
+    await evalPage(creator.page, `openEvModal('create'); document.getElementById('evm-name').value = 'Own launch'; submitEvModal(); 0`);
+    await expect(creator.page.locator('#evm-error')).toHaveText('Could not check your plan. Try again.');
+    expect(creator.calls.filter(c => c.method === 'POST' && /\/rest\/v1\/leod_(subscriptions|events)/.test(c.path))).toEqual([]);
+  } finally { await creator.ctx.close(); }
+});

@@ -2052,6 +2052,7 @@
   <div class="load-logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 214 48" fill="none"><defs><linearGradient id="ll-bg" x1="0" y1="4" x2="40" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><rect y="4" width="40" height="40" rx="12" fill="url(#ll-bg)"/><path d="M 25 14 A 10.5 10.5 0 1 0 25 34" stroke="white" stroke-width="5" stroke-linecap="round" fill="none"/><text x="50" y="35.5" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="32" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Cue</tspan><tspan fill="#3b82f6">Deck</tspan></text></svg></div>
   <div class="spinner" id="load-spinner"></div>
   <div class="load-step" id="load-step">Connecting…</div>
+  <button type="button" id="boot-retry" class="btn primary" hidden onclick="retryBoot()">Retry</button>
   <form id="login-form" onsubmit="handleLoginSubmit(event)">
     <div class="lf-title">Operator sign in</div>
     <input id="lf-email"    type="email"    placeholder="Email"    autocomplete="username"         required>
@@ -7292,6 +7293,10 @@ async function submitEvModal() {
       // Your own plan (event teams §6). A members-only account gets its trial
       // now, with its first own event; events you are only a member of never
       // count toward your limit.
+      if (S.ownPlanUnknown) {
+        await loadSubscription();
+        if (S.ownPlanUnknown) { errEl.textContent = t('cc.ev.ownPlanUnknown'); saveBtn.disabled = false; return; }
+      }
       if (!S.subscription) {
         try { await createTrialSubscription(); await loadSubscription(); }
         catch (e) { errEl.textContent = e?.message || String(e); saveBtn.disabled = false; return; }
@@ -8796,10 +8801,21 @@ function showPlanEndedScreen(membersOnly) {
 // (boot and switchEvent): your own plan only governs your own events.
 async function loadSubscription() {
   const { data, error } = await sb.rpc('get_subscription_for_user');
-  if (error) throw error;   // a failed read never creates a trial
+  if (error) {
+    // Unknown, not absent: nobody is locked out and no trial is created. Your
+    // own plan only gates creating your own events, which reads it again; the
+    // server enforces every plan limit.
+    S.ownPlanUnknown = true;
+    S.subscription = null;
+    S.ownPlanLimits = null;
+    updatePlanBadge();
+    console.warn('[CueDeck] get_subscription_for_user failed:', error.message);
+    return;
+  }
+  S.ownPlanUnknown = false;
   const sub = Array.isArray(data) ? data[0] : data;
   if (!sub) {
-    if (isMembersOnlyAccount()) {
+    if (isMembersOnlyAccount() || S.myEventsFailed) {
       S.subscription = null;
       S.ownPlanLimits = null;
       updatePlanBadge();
@@ -9271,7 +9287,13 @@ async function loadUserRole() {
   // The role is per event (event teams): it comes from cuedeck_my_events and
   // applyEventRole sets it on boot and on every switch. leod_users.role only
   // says what kind of account this is (pending, check-in staff, admin).
-  S.myEvents = await loadMyEvents();
+  // A failed read is never guessed into a role: boot then opens only the
+  // events this login created (known from created_by), or asks to retry.
+  try { S.myEvents = await loadMyEvents(); S.myEventsFailed = false; }
+  catch (e) {
+    S.myEvents = new Map(); S.myEventsFailed = true;
+    console.warn('[CueDeck] cuedeck_my_events failed:', e?.message ?? e);
+  }
   if (!data) return;   // no leod_users row yet: an organiser account
 
   // Block access for suspended accounts
@@ -9290,6 +9312,7 @@ async function loadUserRole() {
   // login is also on a console event's team (event teams §7): then the
   // console opens on those events. Without this the console would treat them
   // as an account with no plan and offer a trial.
+  if (data.role === 'checkin_staff' && S.myEventsFailed) throw new Error('my_events_failed');
   if (data.role === 'checkin_staff' && !S.myEvents.size) {
     document.getElementById('load-spinner').style.display = 'none';
     document.getElementById('load-step').style.display = 'none';
@@ -9849,9 +9872,9 @@ async function boot() {
     // 2. Events
     setStep('Loading events…');
     let events;
+    let all;
     try {
-      events = (await loadEvents()).filter(e => S.myEvents.has(e.id));   // only events with a role here
-      S.events = events;
+      all = await loadEvents();
       S.dbStatus = 'ok'; refreshDiag();
     } catch (e) {
       S.dbStatus = 'error'; refreshDiag();
@@ -9887,6 +9910,20 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       overlay.style.display = 'none';
       return;
     }
+
+    if (S.myEventsFailed) {
+      // The events list could not be read: open the events this login created
+      // (always director there, on its own plan) and nothing else, or ask to retry.
+      const sub = S.subscription;
+      S.myEvents = new Map(all.filter(e => S.user && e.created_by === S.user.id).map(e => [e.id, {
+        role: 'director', isOwner: true, ownerId: S.user.id, organiser: '',
+        plan: sub?.plan || null, planStatus: sub?.status || null, trialEndsAt: sub?.trial_ends_at || null }]));
+      if (!S.myEvents.size) throw new Error('my_events_failed');
+      pushLog('WARN', t('cc.ev.othersLoadFailed'), null);
+      pushToast(t('cc.ev.othersLoadFailed'), 'warn');
+    }
+    events = all.filter(e => S.myEvents.has(e.id));   // only events with a role here
+    S.events = events;
 
     if (!events.length) {
       // Your own plan ended and you have no event: the plans screen, as before.
@@ -10031,10 +10068,32 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
   } catch (e) {
     if (['pending','trial_expired','subscription_expired'].includes(e.message)) return;
     S.booted = false; // a failed boot may be retried by the next sign-in
-    setStep(`Boot error: ${e.message}`);
     console.error('CueDeck boot failed:', e);
-    setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+    // Screens of their own (suspended, check-in, admin) are already showing.
+    if (['suspended','checkin_staff','admin'].includes(e.message)) {
+      setTimeout(() => { overlay.style.display = 'none'; }, 3000);
+      return;
+    }
+    // Anything else: keep the overlay, say what happened and offer Retry,
+    // never an empty console that looks ready.
+    showBootRetry(t(e.message === 'my_events_failed' ? 'cc.boot.eventsFailed' : 'cc.boot.failed'));
   }
+}
+
+function showBootRetry(msg) {
+  document.getElementById('loading-overlay').style.display = '';
+  document.getElementById('load-spinner').style.display = 'none';
+  setStep(msg);
+  const b = document.getElementById('boot-retry');
+  b.textContent = t('cc.boot.retry');
+  b.hidden = false;
+  b.focus();
+}
+function retryBoot() {
+  document.getElementById('boot-retry').hidden = true;
+  document.getElementById('load-spinner').style.display = '';
+  setStep('Connecting…');
+  boot();
 }
 
 initAuth();
