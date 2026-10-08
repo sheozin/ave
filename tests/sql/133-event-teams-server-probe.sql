@@ -276,6 +276,36 @@ BEGIN
   END IF;
   v_checks := v_checks + 1;
 
+  -- 11. direct client log inserts carry the caller as operator (security
+  --     review, fix 2): a member's insert with no operator or someone else's
+  --     is refused by event_log_member_insert; with their own id it is
+  --     accepted and stamped with their role on this event (stage, though
+  --     their account's global role is director). SECURITY DEFINER writers
+  --     (owner postgres, RLS not forced) are not subject to the policy.
+  FOR v_r IN SELECT * FROM (VALUES (NULL::uuid), (v_pro)) AS x(op) LOOP
+    v_failed := false;
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_p[1], 'role', 'authenticated')::text, true);
+    BEGIN
+      SET LOCAL ROLE authenticated;
+      INSERT INTO leod_event_log (event_id, action, operator_id, operator_role) VALUES (v_epro, 'PROBE_133_FORGED', v_r.op, 'director');
+    EXCEPTION WHEN insufficient_privilege THEN v_failed := true;
+    END;
+    RESET ROLE;
+    IF NOT v_failed THEN RAISE EXCEPTION 'PROBE FAIL 11: a member logged as operator %', coalesce(v_r.op::text, 'NULL'); END IF;
+  END LOOP;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_p[1], 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  INSERT INTO leod_event_log (event_id, action, operator_id, operator_role) VALUES (v_epro, 'PROBE_133_OWN', v_p[1], 'director');
+  RESET ROLE;
+  IF (SELECT operator_role FROM leod_event_log WHERE event_id = v_epro AND action = 'PROBE_133_OWN' AND operator_id = v_p[1]) IS DISTINCT FROM 'stage' THEN
+    RAISE EXCEPTION 'PROBE FAIL 11: own log row stamped %',
+      (SELECT operator_role FROM leod_event_log WHERE event_id = v_epro AND action = 'PROBE_133_OWN');
+  END IF;
+  IF EXISTS (SELECT 1 FROM leod_event_log WHERE action = 'PROBE_133_FORGED') THEN
+    RAISE EXCEPTION 'PROBE FAIL 11: a forged row was stored';
+  END IF;
+  v_checks := v_checks + 1;
+
   RAISE EXCEPTION 'PROBE OK 133: % checks passed (rolled back)', v_checks;
 END
 $probe$;

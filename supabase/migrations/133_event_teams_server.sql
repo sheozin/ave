@@ -16,6 +16,10 @@
 --   * handle_first_login (§9.2): no founder welcome for an account that is
 --     only on other organisers' events. Rewritten, so it now takes the
 --     caller from auth.uid() (rule since 079; spec §10 side note).
+--   * event_log_member_insert (security review of 130-132, fix 2): a direct
+--     client insert into leod_event_log must name the caller as operator.
+--     Live (095): (operator_id IS NULL OR operator_id = auth.uid()), so a
+--     member could add an anonymous row with any action and role.
 --
 -- Live body of handle_first_login before this migration (2026-10-08):
 --   reads leod_users WHERE id = p_user_id (any id, from the caller), sets
@@ -232,3 +236,15 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.handle_first_login(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.handle_first_login(uuid) TO authenticated, service_role;
+
+-- ── Direct log inserts name the caller ──────────────────────
+-- Replaces 095's policy: same event check, but operator_id must be the
+-- caller; NULL is no longer accepted from a client. Rows the database
+-- writes itself with no operator (checkin_speaker_arrival, SECURITY DEFINER,
+-- owned by postgres) are not subject to RLS: leod_event_log does not FORCE
+-- row level security (checked on live 2026-10-08: relforcerowsecurity false,
+-- owner postgres, rolbypassrls true). validate_event_log_role (131) then
+-- stamps the caller's role on the event.
+DROP POLICY IF EXISTS event_log_member_insert ON public.leod_event_log;
+CREATE POLICY event_log_member_insert ON public.leod_event_log FOR INSERT TO authenticated
+  WITH CHECK (cuedeck_event_role(event_id) IS NOT NULL AND operator_id = auth.uid());
