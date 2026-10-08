@@ -248,3 +248,12 @@ GRANT EXECUTE ON FUNCTION public.handle_first_login(uuid) TO authenticated, serv
 DROP POLICY IF EXISTS event_log_member_insert ON public.leod_event_log;
 CREATE POLICY event_log_member_insert ON public.leod_event_log FOR INSERT TO authenticated
   WITH CHECK (cuedeck_event_role(event_id) IS NOT NULL AND operator_id = auth.uid());
+
+-- ── Index for the invite rate limit ─────────────────────────
+-- invite-operator counts MEMBER_INVITED rows of one event owner in the last
+-- 24 hours before every invite (20 per owner per day). Same shape as 105's
+-- idx_log_operator_invited, which served the old OPERATOR_INVITED count and
+-- goes in the invited_by cleanup.
+CREATE INDEX IF NOT EXISTS idx_log_member_invited
+  ON leod_event_log ((payload->>'event_owner'), ts DESC)
+  WHERE action = 'MEMBER_INVITED';

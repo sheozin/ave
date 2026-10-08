@@ -306,6 +306,19 @@ BEGIN
   END IF;
   v_checks := v_checks + 1;
 
+  -- 12. the invite rate-limit count (invite-operator: MEMBER_INVITED rows of
+  --     one event owner in the last 24 h) has its partial index
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname = 'public' AND tablename = 'leod_event_log'
+                    AND indexname = 'idx_log_member_invited'
+                    AND indexdef LIKE '%(payload ->> ''event_owner''::text)%'
+                    AND indexdef LIKE '%ts DESC%'
+                    AND indexdef LIKE '%WHERE (action = ''MEMBER_INVITED''::text)%') THEN
+    RAISE EXCEPTION 'PROBE FAIL 12: idx_log_member_invited missing or wrong shape: %',
+      coalesce((SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_log_member_invited'), 'none');
+  END IF;
+  v_checks := v_checks + 1;
+
   RAISE EXCEPTION 'PROBE OK 133: % checks passed (rolled back)', v_checks;
 END
 $probe$;
