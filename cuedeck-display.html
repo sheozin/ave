@@ -347,17 +347,21 @@ body.is-live #display{
 @keyframes st-msg-in{0%,35%{background:#fff}100%{background:var(--st-calling)}}
 @media (prefers-reduced-motion: reduce){.st-msg-new{animation:none}}
 
-/* ── FULL SCREEN HINT ── top-left, just below the header strip: clear of the
-   clock, the countdown and the message band. Fades after 10 s; the tap still
-   works because the listener is on the window, not on the hint. */
-#fs-hint{
+/* ── TAP HINTS (full screen, audio) ── top-left, just below the header strip:
+   clear of the clock, the countdown and the message band. Only one shows at a
+   time. The full screen hint fades after 10 s (the tap still works: the
+   listener is on the window); while it also asks for audio it stays. */
+#fs-hint,#audio-hint{
   position:fixed;top:54px;left:16px;z-index:10001;pointer-events:none;
   font-size:13px;line-height:1.3;color:rgba(255,255,255,.4);
   background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);
-  border-radius:6px;padding:5px 10px;
-  animation:fs-hint-fade 1s ease 10s forwards;
+  border-radius:6px;padding:5px 10px;transition:opacity .4s;
 }
-#fs-hint[hidden]{display:none}
+#fs-hint{animation:fs-hint-fade 1s ease 10s forwards}
+#fs-hint.both{animation:none}
+#audio-hint{display:flex;align-items:center;gap:6px}
+#audio-hint svg{width:14px;height:14px;flex-shrink:0}
+#fs-hint[hidden],#audio-hint[hidden]{display:none}
 @keyframes fs-hint-fade{to{opacity:0}}
 </style>
 </head>
@@ -1160,6 +1164,60 @@ function renderWayfinding() {
 }
 
 // ═══════════════════════════════════════════════════
+// TAP HINTS: full screen and audio share one corner and one tap. The display
+// has no translation layer, so the hints follow the browser language.
+// ═══════════════════════════════════════════════════
+const TAP_TEXT = {
+  fs: {
+    en: 'Tap anywhere for full screen',
+    ar: 'اضغط في أي مكان لملء الشاشة',
+    pl: 'Dotknij ekranu, aby włączyć pełny ekran',
+    de: 'Für Vollbild irgendwo tippen',
+  },
+  audio: {
+    en: 'Tap anywhere for audio',
+    ar: 'اضغط في أي مكان لتشغيل الصوت',
+    pl: 'Dotknij ekranu, aby włączyć dźwięk',
+    de: 'Für Ton irgendwo tippen',
+  },
+  both: {
+    en: 'Tap anywhere for full screen and audio',
+    ar: 'اضغط في أي مكان لملء الشاشة وتشغيل الصوت',
+    pl: 'Dotknij ekranu, aby włączyć pełny ekran i dźwięk',
+    de: 'Für Vollbild und Ton irgendwo tippen',
+  },
+};
+const TAP_LANG = (() => {
+  const l = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  return TAP_TEXT.fs[l] ? l : 'en';
+})();
+let _fsArmed = false;              // the next tap asks for full screen
+let _audioUnlockHandler = null;    // set while audio waits for a tap
+
+function makeTapHint(id) {
+  const el = document.createElement('div');
+  el.id = id;
+  el.lang = TAP_LANG;
+  if (TAP_LANG === 'ar') el.dir = 'rtl';
+  document.body.appendChild(el);
+  return el;
+}
+
+// One hint at a time: the full screen hint says "and audio" while audio is
+// also waiting; the audio hint shows alone once the screen is full screen.
+function updateTapHints() {
+  const fs = document.getElementById('fs-hint');
+  const au = document.getElementById('audio-hint');
+  const both = _fsArmed && !!_audioUnlockHandler;
+  if (fs) {
+    fs.hidden = !_fsArmed;
+    fs.classList.toggle('both', both);
+    fs.textContent = TAP_TEXT[both ? 'both' : 'fs'][TAP_LANG];
+  }
+  if (au) au.hidden = _fsArmed;
+}
+
+// ═══════════════════════════════════════════════════
 // AUDIO UNLOCK — satisfies Chrome autoplay policy
 // Strategy: try silent auto-unlock first; if blocked,
 // listen for ANY click/touch on the page to unlock.
@@ -1205,28 +1263,26 @@ async function initAudioUnlock() {
     ctx.close();
   } catch(e) {}
 
-  // Attempt 2: listen for ANY click/touch on the page
-  // Show a small non-blocking hint in the corner
-  const hint = document.createElement('div');
-  hint.id = 'audio-hint';
-  hint.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:8px 20px;display:flex;align-items:center;gap:8px;color:rgba(255,255,255,.7);font-size:15px;cursor:pointer;transition:opacity .4s;animation:pulse-hint 2s ease-in-out infinite';
-  hint.textContent = '\u{1F50A} Tap anywhere for audio';
-  document.body.appendChild(hint);
-
-  // Add pulse animation
-  const style = document.createElement('style');
-  style.textContent = '@keyframes pulse-hint{0%,100%{opacity:.7}50%{opacity:1}}';
-  document.head.appendChild(style);
+  // Attempt 2: listen for ANY click/touch on the page, with a small hint in
+  // the corner (speaker icon, no emoji). The full screen tap calls the same
+  // handler, so one tap does both.
+  if (document.getElementById('audio-hint')) return;
+  const hint = makeTapHint('audio-hint');
+  hint.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg><span></span>';
+  hint.querySelector('span').textContent = TAP_TEXT.audio[TAP_LANG];
 
   // Any click or touch anywhere unlocks audio
   const handler = () => {
+    _audioUnlockHandler = null;
     _doUnlockAudio();
     document.removeEventListener('click', handler, true);
     document.removeEventListener('touchstart', handler, true);
-    style.remove();
+    updateTapHints();
   };
+  _audioUnlockHandler = handler;
   document.addEventListener('click', handler, true);
   document.addEventListener('touchstart', handler, true);
+  updateTapHints();
 }
 
 // ═══════════════════════════════════════════════════
@@ -2086,10 +2142,13 @@ window.addEventListener('online', () => pollFeed());
 // FULL SCREEN ON THE FIRST TAP
 // ═══════════════════════════════════════════════════
 // While the page is not full screen, a hint says so and the first tap, click
-// or remote key only asks for full screen: it is stopped at the window before
-// any page handler (unpair, connect, audio) sees it. One attempt per gesture,
-// so a refused request leaves the page usable. Leaving full screen re-arms it.
-// The resize listener above re-fits the content once the screen grows.
+// or remote key asks for full screen and unlocks audio if it is waiting. On a
+// paired screen showing content that tap does nothing else: it is stopped at
+// the window before any page handler (unpair, video) sees it. On the pairing
+// screen it also does its normal job (focus the link box, press Connect).
+// One attempt per gesture, so a refused request leaves the page usable.
+// Leaving full screen re-arms it. The resize listener above re-fits the
+// content once the screen grows.
 (function fullScreenOnFirstTap() {
   const root = document.documentElement;
   const request = root.requestFullscreen || root.webkitRequestFullscreen;
@@ -2097,44 +2156,36 @@ window.addEventListener('online', () => pollFeed());
                  || window.matchMedia('(display-mode: standalone)').matches;
   if (!request || installed) return;
 
-  const TEXT = {
-    en: 'Tap anywhere for full screen',
-    ar: 'اضغط في أي مكان لملء الشاشة',
-    pl: 'Dotknij ekranu, aby włączyć pełny ekran',
-    de: 'Für Vollbild irgendwo tippen',
-  };
-  const lang = (navigator.language || 'en').slice(0, 2).toLowerCase();
-  const l = TEXT[lang] ? lang : 'en';
-  const hint = document.createElement('div');
-  hint.id = 'fs-hint';
-  hint.lang = l;
-  if (l === 'ar') hint.dir = 'rtl';
-  hint.textContent = TEXT[l];
-  document.body.appendChild(hint);
+  makeTapHint('fs-hint');
 
   const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  let armed = false;
   let eatKeyUp = null;
-  const arm = on => { armed = on; hint.hidden = !on; };
+  const arm = on => { _fsArmed = on; updateTapHints(); };
+  // Only a paired screen showing content swallows the tap.
+  const swallowing = () => _fsArmed && _booted;
   const swallow = e => { e.preventDefault(); e.stopImmediatePropagation(); };
   const go = () => {
     arm(false);
     try { const p = request.call(root); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    if (_audioUnlockHandler) _audioUnlockHandler();
   };
 
   // The press before the click is stopped too, so nothing under the tap
   // reacts or takes focus. touchend keeps its default: it produces the click.
   ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(type =>
-    window.addEventListener(type, e => { if (armed) swallow(e); }, true));
+    window.addEventListener(type, e => { if (swallowing()) swallow(e); }, true));
   ['touchstart', 'touchend'].forEach(type =>
-    window.addEventListener(type, e => { if (armed) e.stopImmediatePropagation(); }, true));
-  window.addEventListener('click', e => { if (armed) { swallow(e); go(); } }, true);
+    window.addEventListener(type, e => { if (swallowing()) e.stopImmediatePropagation(); }, true));
+  window.addEventListener('click', e => {
+    if (!_fsArmed) return;
+    if (swallowing()) swallow(e);
+    go();
+  }, true);
   // TV remotes send Enter and the arrow keys. Escape and modifiers do not count.
   const IGNORED = ['Escape', 'Shift', 'Control', 'Alt', 'Meta'];
   window.addEventListener('keydown', e => {
-    if (!armed || IGNORED.includes(e.key)) return;
-    swallow(e);
-    eatKeyUp = e.key;
+    if (!_fsArmed || IGNORED.includes(e.key)) return;
+    if (swallowing()) { swallow(e); eatKeyUp = e.key; }
     go();
   }, true);
   window.addEventListener('keyup', e => {
