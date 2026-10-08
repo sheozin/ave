@@ -244,6 +244,52 @@ test('message: the other refusals map to their own words', async ({ browser }) =
   await ctx.close();
 });
 
+test('message: a refused Clear shows a translated toast and the message stays', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { stageMessages: [msgRow()] });
+  const calls = await mockRpcs(page, { clear: () => pgErr('42501', 'not allowed', 403) });
+  await sec(page).locator('.msg-clear').click();
+  await expect(page.locator('#toast-container .toast-error')).toContainText('Not allowed');
+  expect(calls.clear).toHaveLength(1);
+  await expect(sec(page).locator('.msg-strip-text')).toHaveText('Please wrap up');
+  await ctx.close();
+});
+
+// Messages are read from leod_stage_messages on reconnect (and boot, event switch); a read
+// answered for an event already switched away from is dropped; a failed read is not silent.
+const routeMessages = (page: Page, reply: (r: import('@playwright/test').Route) => unknown) =>
+  page.route(new RegExp(`^${SB.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/rest/v1/leod_stage_messages`), r => {
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
+    return reply(r) as Promise<void>;
+  });
+const fulfil = (r: import('@playwright/test').Route, status: number, body: unknown) =>
+  r.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body), headers: { 'access-control-allow-origin': '*' } });
+
+test('message: a reconnect reloads the active messages', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await afterBootReread(page);
+  await expect(sec(page).locator('.msg-strip')).toHaveCount(0);
+  await routeMessages(page, r => fulfil(r, 200, [msgRow({ text: 'Stop now' })]));
+  await evalPage(page, `void doReconnect()`);   // not awaited: the channel join waits on the paused page clock
+  await expect.poll(async () => { await page.clock.runFor(500); return evalPage(page, `document.querySelector('#ctx-wrap .insp-msg .msg-strip-text')?.textContent ?? null`); }, { timeout: 20_000 }).toBe('Stop now');
+  await ctx.close();
+});
+
+test('message: a load answered for another event is dropped, and a failed load says so', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await afterBootReread(page);
+  let fail = false;
+  await routeMessages(page, r => fail ? fulfil(r, 500, { code: 'XX000', message: 'boom' }) : fulfil(r, 200, [msgRow()]));
+  await evalPage(page, `loadStageMessages('e0000000-0000-4000-8000-0000000000ff')`);
+  await page.clock.runFor(1100);
+  await expect(sec(page).locator('.msg-strip')).toHaveCount(0);
+  await evalPage(page, `loadStageMessages(S.event.id)`);   // the same rows for this event do show
+  await expect(sec(page).locator('.msg-strip-text')).toHaveText('Please wrap up');
+  fail = true;
+  await evalPage(page, `loadStageMessages(S.event.id)`);
+  await expect(page.locator('#toast-container .toast-error')).toContainText('could not be loaded');
+  await ctx.close();
+});
+
 test('message: phone: the Now card opens a sheet that sends', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { ...PHONE });
   const calls = await mockRpcs(page);
