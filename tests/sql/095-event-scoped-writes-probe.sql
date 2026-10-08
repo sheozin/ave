@@ -39,6 +39,14 @@ BEGIN
   VALUES ('Probe 095', current_date + 30, '09:00', '18:00', v_owner) RETURNING id INTO v_ev;
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 095 other', current_date + 30, '09:00', '18:00', v_other) RETURNING id INTO v_ev2;
+  -- event teams (130): roles are per event in leod_event_members; the
+  -- invited_by values above no longer give anything on their own
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES
+    (v_ev, v_dir,   'director', true),
+    (v_ev, v_av,    'av',       true),
+    (v_ev, v_reg,   'reg',      true),
+    (v_ev, v_dead,  'director', false),
+    (v_ev, v_stage, 'stage',    true);
   INSERT INTO leod_sessions (event_id, sort_order, title, planned_start, planned_end, scheduled_start, scheduled_end)
   VALUES (v_ev, 1, 'Probe session', '09:00', '09:30', '09:00', '09:30') RETURNING id INTO v_sid;
 
@@ -148,12 +156,15 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT;
   RESET ROLE;
   IF v_n <> 1 THEN RAISE EXCEPTION 'PROBE FAIL 2: director deleted % sessions', v_n; END IF;
-  -- reads unchanged: the stranger still sees nothing, the deactivated operator still reads (scoped_read_sessions)
-  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_other, 'role', 'authenticated')::text, true);
-  SET LOCAL ROLE authenticated;
-  SELECT count(*) INTO v_n FROM leod_sessions WHERE event_id = v_ev;
-  RESET ROLE;
-  IF v_n <> 0 THEN RAISE EXCEPTION 'PROBE FAIL 2: stranger reads % sessions', v_n; END IF;
+  -- reads: the stranger sees nothing, and since 130 neither does the
+  -- suspended member (spec §3: suspended members lose reads too)
+  FOR v_r IN SELECT * FROM (VALUES (v_other), (v_dead)) AS x(uid) LOOP
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_r.uid, 'role', 'authenticated')::text, true);
+    SET LOCAL ROLE authenticated;
+    SELECT count(*) INTO v_n FROM leod_sessions WHERE event_id = v_ev;
+    RESET ROLE;
+    IF v_n <> 0 THEN RAISE EXCEPTION 'PROBE FAIL 2: % reads % sessions', v_r.uid, v_n; END IF;
+  END LOOP;
   -- anon cannot write
   v_failed := false;
   PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);

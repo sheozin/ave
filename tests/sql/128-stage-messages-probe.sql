@@ -41,6 +41,11 @@ BEGIN
   VALUES ('Probe 128', current_date + 30, '09:00', '18:00', v_owner) RETURNING id INTO v_ev;
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 128 other', current_date + 30, '09:00', '18:00', v_other) RETURNING id INTO v_ev2;
+  -- event teams (130): roles are per event in leod_event_members
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES
+    (v_ev, v_dir,   'director', true),
+    (v_ev, v_stage, 'stage',    true),
+    (v_ev, v_av,    'av',       true);
   INSERT INTO leod_sessions (event_id, sort_order, title, room, planned_start, planned_end, scheduled_start, scheduled_end)
   VALUES (v_ev, 1, 'Probe keynote', 'Main Stage', '09:00', '09:30', '09:00', '09:30') RETURNING id INTO v_sid;
   INSERT INTO leod_sessions (event_id, sort_order, title, room, planned_start, planned_end, scheduled_start, scheduled_end)

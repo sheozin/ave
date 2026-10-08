@@ -35,13 +35,18 @@ const POLICIES: Policy[] = [
   // leod_users (own row only)
   { table: 'leod_users',            role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_users',            role: 'authenticated',  ops: ['SELECT'],                        condition: 'own_row' },
-  // leod_signage_displays (anon: none since 080; the display page reads through display_feed())
+  // leod_signage_displays (anon: none since 080; the display page reads through display_feed()).
+  // authenticated (130): any member of the event reads; director and signage write
   { table: 'leod_signage_displays', role: 'anon',           ops: [],                                condition: 'never' },
-  { table: 'leod_signage_displays', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
+  { table: 'leod_signage_displays', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'event_member' },
   // leod_signage_sponsors (anon: none since 083; the display reads sponsors through display_feed()).
-  // authenticated: own or invited events only (scoped_all_sponsors, 083)
+  // authenticated (130): any member of the event reads; director and signage write
   { table: 'leod_signage_sponsors', role: 'anon',           ops: [],                                condition: 'never' },
-  { table: 'leod_signage_sponsors', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'always' },
+  { table: 'leod_signage_sponsors', role: 'authenticated',  ops: ['SELECT','INSERT','UPDATE','DELETE'], condition: 'event_member' },
+  // leod_event_members (130): members read their event's roster; writes are server-side only
+  // (invite-operator, manage-operator), like leod_stage_messages
+  { table: 'leod_event_members',    role: 'anon',           ops: [],                                condition: 'never' },
+  { table: 'leod_event_members',    role: 'authenticated',  ops: ['SELECT'],                        condition: 'event_member' },
   // leod_signage_pairing (083: no direct access; display_pair_* functions only)
   { table: 'leod_signage_pairing',  role: 'anon',           ops: [],                                condition: 'never' },
   { table: 'leod_signage_pairing',  role: 'authenticated',  ops: [],                                condition: 'never' },
@@ -197,5 +202,23 @@ describe('095: event-scoped writes', () => {
       const p = POLICIES.find(x => x.table === table && x.role === 'authenticated')!;
       expect(p.condition).toBe('event_member');
     }
+  });
+});
+
+describe('130: event teams', () => {
+  it('32 signage displays and sponsors are event-scoped, not open to any signed-in user', () => {
+    for (const table of ['leod_signage_displays', 'leod_signage_sponsors']) {
+      const p = POLICIES.find(x => x.table === table && x.role === 'authenticated')!;
+      expect(p.condition).toBe('event_member');
+    }
+  });
+  it('33 nobody client-side writes leod_event_members; members read their event roster', () => {
+    for (const role of ['anon', 'authenticated'] as const) {
+      for (const op of ['INSERT', 'UPDATE', 'DELETE'] as const) {
+        expect(canDo(role, 'leod_event_members', op)).toBe(false);
+      }
+    }
+    expect(canDo('anon', 'leod_event_members', 'SELECT')).toBe(false);
+    expect(canDo('authenticated', 'leod_event_members', 'SELECT')).toBe(true);
   });
 });
