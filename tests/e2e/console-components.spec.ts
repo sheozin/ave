@@ -2,7 +2,7 @@
 // Component spec (section 3): sizes, variants, badge recipe, chip, label,
 // pill, and that every icon reference resolves to a sprite symbol.
 import { test, expect, type Page } from '@playwright/test';
-import { openConsole, evalPage, ID, PANEL_ID, textContrast } from './console-boot-mock';
+import { openConsole, evalPage, ID, PANEL_ID, textContrast, borderContrast } from './console-boot-mock';
 
 async function mount(page: Page, html: string) {
   await page.evaluate((h) => { const d = document.createElement('div'); d.id = 'cmp-probe'; d.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;display:flex;gap:8px;padding:8px;background:var(--bg)'; d.innerHTML = h; document.body.append(d); }, html);
@@ -169,5 +169,171 @@ test('components: Hold looks the same for the AV role as for the director', asyn
   const hold = page.locator('#ctx-wrap .insp-primary .btn', { hasText: 'Hold' });
   await expect(hold).toHaveClass(/\bhold\b/);
   expect((await box(page, '#ctx-wrap .insp-primary .btn.hold')).bg).toBe('rgb(251, 146, 60)');
+  await ctx.close();
+});
+
+test('components: inputs are 32 px, control border, radius 8, broadcast input 36 px', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  for (const sel of ['#fb-search', '#fb-status', '#fb-room']) {
+    const b = await box(page, sel);
+    expect(b.h, sel).toBe(32);
+    expect(b.radius, sel).toBe('8px');
+    expect(b.border, sel).toBe('rgba(203, 213, 225, 0.44)');
+  }
+  expect((await box(page, '#bc-input')).h).toBe(36);
+  const inline = await page.evaluate(() => [...document.querySelectorAll('input, select, textarea')].filter(e => /outline\s*:\s*none/i.test(e.getAttribute('style') || '')).map(e => e.id || e.className));
+  expect(inline).toEqual([]);
+  // The field recipe is for text-like inputs only: checkboxes, radios, colour and file inputs keep their own size.
+  await mount(page, '<div class="ev-modal-card"><input type="text" id="mf-text"><input type="checkbox" id="mf-cb"><input type="radio" id="mf-rd"><input type="color" id="mf-col"></div>');
+  expect((await box(page, '#mf-text')).h).toBe(32);
+  for (const sel of ['#mf-cb', '#mf-rd', '#mf-col']) expect((await box(page, sel)).h, sel).not.toBe(32);
+  await ctx.close();
+});
+
+test('components: Escape closes a modal like a click on its backdrop, but never skips the setup wizard', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `document.getElementById('wizard-modal').style.display = 'flex'`);
+  await page.keyboard.press('Escape');
+  expect(await evalPage(page, `document.getElementById('wizard-modal').style.display`)).toBe('flex');
+  await evalPage(page, `document.getElementById('wizard-modal').style.display = 'none'; openAboutModal()`);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#about-modal')).toBeHidden();
+  await ctx.close();
+});
+
+test('components: a modal is a labelled dialog, traps focus, closes on Escape and returns focus', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#help-btn').focus();
+  await evalPage(page, `openShortcutsModal()`);
+  const card = page.locator('#shortcuts-modal .ev-modal-card');
+  await expect(card).toHaveAttribute('role', 'dialog');
+  await expect(card).toHaveAttribute('aria-modal', 'true');
+  expect(await card.getAttribute('aria-labelledby')).toBeTruthy();
+  expect(await page.evaluate(() => !!document.activeElement?.closest('#shortcuts-modal'))).toBe(true);
+  for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => !!document.activeElement?.closest('#shortcuts-modal'))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#shortcuts-modal')).toBeHidden();
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe('help-btn');
+  await ctx.close();
+});
+
+test('components: toasts live in a polite region; errors are alerts and stay 8 s', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await expect(page.locator('#toast-container')).toHaveAttribute('aria-live', 'polite');
+  await evalPage(page, `pushToast('Could not save', 'error')`);
+  const toast = page.locator('#toast-container .toast-error');
+  await expect(toast).toHaveAttribute('role', 'alert');
+  expect(await toast.evaluate(el => getComputedStyle(el).borderTopLeftRadius)).toBe('8px');
+  await page.clock.runFor(7_000);
+  await expect(toast).toBeVisible();
+  await page.clock.runFor(1_500);
+  await expect(toast).toHaveCount(0);
+  await ctx.close();
+});
+
+// Fix round 1: the focus trap only ever lands on visible, real controls.
+const focusInside = (page: Page, id: string) => page.evaluate((m) => {
+  const a = document.activeElement;
+  return !!a && !!a.closest('#' + m) && !(a instanceof SVGElement) && a.getClientRects().length > 0;
+}, id);
+const modalFocusables = (page: Page, id: string) => page.evaluate((m) =>
+  [...document.querySelectorAll(`#${m} a[href], #${m} button, #${m} input, #${m} select, #${m} textarea, #${m} [tabindex]`)]
+    .filter(el => !el.closest('svg') && !(el as HTMLButtonElement).disabled && el.getAttribute('tabindex') !== '-1'
+      && (el as HTMLInputElement).type !== 'hidden' && el.getClientRects().length > 0)
+    .map((el, i) => { (el as HTMLElement).dataset.fi = String(i); return i; }).length, id);
+
+test('modals: session edit opens with focus inside the dialog, not on a hidden control', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#help-btn').focus();
+  await evalPage(page, `openSessModal('edit', '${PANEL_ID}')`);
+  expect(await focusInside(page, 'sess-modal')).toBe(true);
+  await ctx.close();
+});
+
+test('modals: welcome opens with focus inside, never on a sprite <use>', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await page.locator('#help-btn').focus();
+  await evalPage(page, `showWelcomeModal('stage')`);
+  expect(await focusInside(page, 'welcome-modal')).toBe(true);
+  await ctx.close();
+});
+
+test('modals: Tab from the last control wraps to the first, Shift+Tab from the first to the last', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  // The new-director welcome starts with a sprite icon, whose <use href> the trap must not count as a control.
+  await evalPage(page, `S.events = []; showWelcomeModal('director')`);
+  const n = await modalFocusables(page, 'welcome-modal');
+  expect(n).toBeGreaterThanOrEqual(2);
+  await page.locator(`#welcome-modal [data-fi="${n - 1}"]`).focus();
+  await page.keyboard.press('Tab');
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.fi)).toBe('0');
+  await page.keyboard.press('Shift+Tab');
+  expect(await page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.fi)).toBe(String(n - 1));
+  await ctx.close();
+});
+
+test('modals: director shortcuts do nothing while the session edit modal is open', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await evalPage(page, `openSessModal('edit', '${PANEL_ID}'); document.activeElement && document.activeElement.blur()`);
+  await page.keyboard.press('b');   // B focuses the broadcast input when no modal is open
+  await page.keyboard.press('/');   // / focuses the search
+  expect(await page.evaluate(() => document.activeElement?.id)).not.toBe('bc-input');
+  expect(await page.evaluate(() => document.activeElement?.id)).not.toBe('fb-search');
+  await ctx.close();
+});
+
+test('modals: every field in a dialog and the seq-slide builder has a border of at least 3:1', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const check = async (open: string, sels: string[], close: string) => {
+    await evalPage(page, open);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());   // resting state, not the focus colour
+    for (const sel of sels) {
+      expect(await page.locator(sel).first().isVisible(), sel).toBe(true);
+      // Against the field's own fill, and against the surface it sits on (WCAG 1.4.11
+      // compares the boundary with the adjacent colours on both sides): for the
+      // second reading the border pixel is made opaque and the fill transparent,
+      // so the helper composites only the ancestors.
+      expect(await borderContrast(page, sel, 'top'), `${sel} on its fill`).toBeGreaterThanOrEqual(3);
+      const saved = await page.locator(sel).first().evaluate(el => {
+        const e = el as HTMLElement, cs = getComputedStyle(e);
+        const p = (c: string) => c.match(/[\d.]+/g)!.map(Number);
+        const [br, bgc] = [p(cs.borderTopColor), p(cs.backgroundColor)];
+        const a = br[3] ?? 1, fa = bgc[3] ?? 1;
+        // The border pixel is the border colour over the field's own fill (an opaque fill here).
+        const px = [0, 1, 2].map(i => Math.round(br[i] * a + bgc[i] * (1 - a)));
+        const keep = e.getAttribute('style');
+        e.style.setProperty('border-top-color', `rgb(${px.join(',')})`, 'important');
+        e.style.setProperty('background', 'transparent', 'important');
+        return { keep, opaque: fa === 1 };
+      });
+      expect(saved.opaque, `${sel} has an opaque fill`).toBe(true);
+      expect(await borderContrast(page, sel, 'top'), `${sel} on its surface`).toBeGreaterThanOrEqual(3);
+      await page.locator(sel).first().evaluate((el, keep) => { if (keep === null) el.removeAttribute('style'); else el.setAttribute('style', keep); }, saved.keep);
+    }
+    await evalPage(page, close);
+  };
+  await check(`openSessModal('edit', '${PANEL_ID}')`, ['#smv-title', '#smv-room', '#smv-notes'], `closeSessModal()`);
+  await check(`openEvModal('create')`, ['#evm-name', '#evm-tz'], `closeEvModal()`);
+  await check(`openUsersModal()`, ['#inv-email', '#inv-role', '#um-search'], `closeUsersModal()`);
+  await check(`openFeedbackModal()`, ['#fb-cat', '#fb-msg'], `closeFeedbackModal()`);
+  await check(`showSetupWizard()`, ['#wiz-ev-name', '#wiz-ev-tz'], `document.getElementById('wizard-modal').style.display = 'none'`);
+  await check(`openDisplayModal('add'); document.getElementById('dm-seq-enable').checked = true; toggleSeqBuilder(); addSeqSlide();`,
+    ['#dm-name', '#dm-seq-list select', '#dm-seq-list input'], `closeDisplayModal()`);
+  await ctx.close();
+});
+
+test('modals: language selects and the AI key input carry the control border', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const tok = (v: string) => page.evaluate((x) => { const p = document.createElement('div'); p.style.color = `var(${x})`; document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; }, v);
+  const read = (sel: string) => page.evaluate((q) => {
+    let el = document.querySelector(q) as HTMLElement | null;
+    if (!el) { el = document.createElement('input'); el.className = 'ai-key-input'; document.body.append(el); }
+    const cs = getComputedStyle(el); return [cs.borderTopStyle, cs.borderTopColor];
+  }, sel);
+  // The profile panel is an overlay surface, so its select takes the raised control token.
+  expect(await read('#lang-switcher')).toEqual(['solid', await tok('--border-control-raised')]);
+  expect(await read('#mm-lang')).toEqual(['solid', await tok('--border-control')]);
+  expect(await read('.ai-key-input')).toEqual(['solid', await tok('--border-control')]);
   await ctx.close();
 });

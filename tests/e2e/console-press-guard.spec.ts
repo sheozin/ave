@@ -5,7 +5,7 @@
 // action changing does nothing (no transition, no arm). The two-press End still
 // confirms, because arming changes the label, not the action.
 import { test, expect, type Page } from '@playwright/test';
-import { openConsole, evalPage, rtPush, ID, demoSessions, iso } from './console-boot-mock';
+import { openConsole, evalPage, rtPush, afterBootReread, ID, demoSessions, iso } from './console-boot-mock';
 
 function efLog(page: Page) {
   const calls: string[] = [];
@@ -17,9 +17,9 @@ const settle = (page: Page) => page.waitForTimeout(250);   // let any request le
 // Hall B: #2 finished, so the lane's "now" is #4 CALLING and its lead slot says On stage.
 const callingHallB = () => demoSessions().map(x => x.id === ID(2) ? { ...x, status: 'ENDED', actual_end: iso(-1) } : x);
 const s4 = () => callingHallB().find(x => x.id === ID(4))!;
-// Boot re-reads the sessions once about 0.7 s in (clock resync); let that pass first,
-// or it overwrites the realtime update with the mocked rows.
-const goLiveElsewhere = async (page: Page) => { await page.clock.runFor(1500); return rtPush(page, 'leod_sessions', 'UPDATE', { ...s4(), status: 'LIVE', version: 5, actual_start: iso(0), state_changed_at: iso(0) }, { id: ID(4) }); };
+// Boot re-reads the sessions once after freeze (clock resync); wait until it has
+// landed, or it overwrites the realtime update with the mocked rows.
+const goLiveElsewhere = async (page: Page) => { await afterBootReread(page); return rtPush(page, 'leod_sessions', 'UPDATE', { ...s4(), status: 'LIVE', version: 5, actual_start: iso(0), state_changed_at: iso(0) }, { id: ID(4) }); };
 
 const LANE_B = '#band .lane[data-room="Hall B"]';
 
