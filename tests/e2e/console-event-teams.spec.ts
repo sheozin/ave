@@ -641,3 +641,15 @@ test('team: a full team still changes the role of, or resends to, someone alread
     await expect(page.locator('#inv-btn')).toBeDisabled();
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (F9): the last role is remembered per event ──
+test('teams: different roles on two events are not a role change; a real change is told per event, translated', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: twoEvents() });
+  try {
+    await evalPage(page, `localStorage.setItem('cuedeck_last_role_${USER_ID}', 'director'); delete S._showRoleChange; delete S._showWelcome; noteRoleForWelcome(); 0`);
+    expect(await evalPage(page, 'S._showRoleChange || null')).toBeNull();     // director on the other event is not a change here
+    expect(await evalPage(page, 'S._showWelcome || null')).toBeNull();
+    await evalPage(page, `localStorage.setItem('cuedeck_last_role_${USER_ID}_${EVENT_ID}', 'av'); noteRoleForWelcome(); showRoleNotice(); 0`);
+    await expect(toasts(page)).toContainText('Your role on GTR North Africa 2026 is now Stage.');
+  } finally { await ctx.close(); }
+});

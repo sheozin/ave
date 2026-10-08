@@ -9301,15 +9301,25 @@ function applyEventRole(eventId) {
   return true;
 }
 
-// Welcome modal or role-change toast for the role the console opens on.
+// Welcome modal (once per account) or role-change toast for the role the
+// console opens on. The role is per event (event teams), so the last role is
+// remembered per event: different roles on two events are not a change.
 function noteRoleForWelcome() {
   if (!S.user || !S.userRole) return;
   const key = 'cuedeck_last_role_' + S.user.id;
   const last = localStorage.getItem(key);
-  if (last === S.userRole) return;
   if (!last || last === 'pending') S._showWelcome = S.userRole;   // first login after joining
-  else S._showRoleChange = { from: last, to: S.userRole };
   localStorage.setItem(key, S.userRole);
+  if (!S.event) return;
+  const evKey = key + '_' + S.event.id;
+  const lastHere = localStorage.getItem(evKey);
+  if (lastHere && lastHere !== S.userRole && !S._showWelcome) S._showRoleChange = { event: S.event.name, from: lastHere, to: S.userRole };
+  localStorage.setItem(evKey, S.userRole);
+}
+function showRoleNotice() {
+  if (!S._showRoleChange) return;
+  pushToast(tf('cc.role.changed', { event: S._showRoleChange.event, role: t('role.' + S._showRoleChange.to) }), 'info');
+  delete S._showRoleChange;
 }
 
 async function loadUserRole() {
@@ -10090,8 +10100,7 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       showWelcomeModal(S._showWelcome);
       delete S._showWelcome;
     } else if (S._showRoleChange) {
-      pushToast(`Role updated: ${S._showRoleChange.from} → ${S._showRoleChange.to}`, 'info');
-      delete S._showRoleChange;
+      showRoleNotice();
     }
 
     // Onboarding: checklist + tooltips
