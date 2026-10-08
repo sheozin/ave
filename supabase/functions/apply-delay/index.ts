@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
   }
 
   // ── Who may delay ────────────────────────────────────────────────────────
-  // Same rule as runTransition: owner, or an active operator the owner
-  // invited, with a role in ROLE_DELAY. operator_role is only logged.
+  // Same rule as runTransition: the event's creator, or an active member
+  // of this event, with a role in ROLE_DELAY. operator_role is only logged.
   // rpc_apply_delay checks p_operator_id again inside the transaction.
   const { data: target, error: targetErr } = await sb
     .from('leod_sessions').select('event_id').eq('id', session_id).maybeSingle()

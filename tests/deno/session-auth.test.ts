@@ -13,13 +13,14 @@ Deno.env.set('SUPABASE_URL', 'http://stub.local')
 Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', 'service-role-stub')
 
 const OWNER       = '10000000-0000-4000-8000-000000000001'
-const OP_DIRECTOR = '10000000-0000-4000-8000-000000000002'
-const OP_STAGE    = '10000000-0000-4000-8000-000000000003'
-const OP_AV       = '10000000-0000-4000-8000-000000000004'
-const OP_OFF      = '10000000-0000-4000-8000-000000000005' // deactivated director
-const STRANGER    = '10000000-0000-4000-8000-000000000006' // owns another event
-const OTHER_OP    = '10000000-0000-4000-8000-000000000007' // stage, invited by STRANGER
+const OP_DIRECTOR = '10000000-0000-4000-8000-000000000002' // director member of EVENT
+const OP_STAGE    = '10000000-0000-4000-8000-000000000003' // stage on EVENT, director on OTHER_EVENT
+const OP_AV       = '10000000-0000-4000-8000-000000000004' // av member of EVENT
+const OP_OFF      = '10000000-0000-4000-8000-000000000005' // director member of EVENT, suspended
+const STRANGER    = '10000000-0000-4000-8000-000000000006' // creates OTHER_EVENT
+const OTHER_OP    = '10000000-0000-4000-8000-000000000007' // stage member of OTHER_EVENT only
 const NO_ROW      = '10000000-0000-4000-8000-000000000008' // signed in, no leod_users row
+const LEGACY      = '10000000-0000-4000-8000-000000000009' // leod_users.invited_by = OWNER, no membership
 const EVENT       = '33333333-3333-4333-8333-333333333333'
 const OTHER_EVENT = '44444444-4444-4444-8444-444444444444'
 const SESSION     = '77777777-7777-4777-8777-777777777777'
@@ -127,13 +128,22 @@ function setup(session: Row = {}) {
       { id: OTHER_EVENT, created_by: STRANGER },
     ],
     leod_users: [
-      { id: OWNER,       role: 'director', invited_by: null,     active: true },
-      { id: OP_DIRECTOR, role: 'director', invited_by: OWNER,    active: true },
-      { id: OP_STAGE,    role: 'stage',    invited_by: OWNER,    active: true },
-      { id: OP_AV,       role: 'av',       invited_by: OWNER,    active: true },
-      { id: OP_OFF,      role: 'director', invited_by: OWNER,    active: false },
-      { id: STRANGER,    role: 'director', invited_by: null,     active: true },
-      { id: OTHER_OP,    role: 'stage',    invited_by: STRANGER, active: true },
+      { id: OWNER,       role: 'director', invited_by: null,  active: true },
+      { id: OP_DIRECTOR, role: 'director', invited_by: null,  active: true },
+      { id: OP_STAGE,    role: 'director', invited_by: null,  active: true },
+      { id: OP_AV,       role: 'director', invited_by: null,  active: true },
+      { id: OP_OFF,      role: 'director', invited_by: null,  active: true },
+      { id: STRANGER,    role: 'director', invited_by: null,  active: true },
+      { id: OTHER_OP,    role: 'director', invited_by: null,  active: true },
+      { id: LEGACY,      role: 'stage',    invited_by: OWNER, active: true },
+    ],
+    leod_event_members: [
+      { event_id: EVENT,       user_id: OP_DIRECTOR, role: 'director', active: true },
+      { event_id: EVENT,       user_id: OP_STAGE,    role: 'stage',    active: true },
+      { event_id: EVENT,       user_id: OP_AV,       role: 'av',       active: true },
+      { event_id: EVENT,       user_id: OP_OFF,      role: 'director', active: false },
+      { event_id: OTHER_EVENT, user_id: OTHER_OP,    role: 'stage',    active: true },
+      { event_id: OTHER_EVENT, user_id: OP_STAGE,    role: 'director', active: true },
     ],
     leod_sessions: [{
       id: SESSION, event_id: EVENT, title: 'Keynote', version: 7,
@@ -175,6 +185,10 @@ const CASES: [string, string, string, string, number][] = [
   ['owner of another event is refused',     'go-live',         'READY',   STRANGER,    403],
   ["another owner's operator is refused",   'end-session',     'LIVE',    OTHER_OP,    403],
   ['a user with no operator row is refused','go-live',         'READY',   NO_ROW,      403],
+  ['a global director who is stage on this event cannot cancel', 'cancel-session', 'READY', OP_STAGE, 403],
+  ['a suspended member is refused',          'end-session',     'LIVE',    OP_OFF,      403],
+  ['the old invited_by link alone is refused', 'go-live',       'READY',   LEGACY,      403],
+  ['director on another event is stage here: no reinstate', 'reinstate', 'CANCELLED', OP_STAGE, 403],
 ]
 
 for (const [label, fn, from, who, expected] of CASES) {
@@ -216,6 +230,7 @@ const DELAY_CASES: [string, string, number][] = [
   ['deactivated director',        OP_OFF,      403],
   ['owner of another event',      STRANGER,    403],
   ["another owner's operator",    OTHER_OP,    403],
+  ['the old invited_by link alone', LEGACY,     403],
 ]
 for (const [label, who, expected] of DELAY_CASES) {
   Deno.test(`apply-delay: ${label} (${expected})`, async () => {
