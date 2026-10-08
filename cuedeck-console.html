@@ -318,31 +318,29 @@
     .ps-role-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 12px; text-align:left; }
     .ps-role-name { font-size: var(--fs-12); font-weight:600; margin-bottom:3px; text-transform:uppercase; letter-spacing:.04em; }
     .ps-role-desc { font-size: var(--fs-11); color:var(--text-secondary); line-height:1.5; }
-    /* ── USERS MODAL ── */
-    .um-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border2); }
-    .um-row:last-child { border-bottom:none; }
-    .um-name { flex:1; font-size: var(--fs-12); color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .um-email { font-size: var(--fs-11); color:var(--dim); }
-    .um-role-sel { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:4px 6px; border-radius:5px; font-size: var(--fs-11); font-family:inherit; }
-    .um-approve-btn { background:rgba(34,197,94,.15); border:1px solid rgba(34,197,94,.4); color:var(--green); border-radius:5px; padding:4px 10px; font-size: var(--fs-11); font-family:inherit; cursor:pointer; white-space:nowrap; }
-    .um-approve-btn:hover { background:rgba(34,197,94,.25); }
-    .um-suspend-btn, .um-activate-btn, .um-remove-btn {
-      background: transparent;
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: var(--fs-11);
-      font-family: inherit;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .um-suspend-btn { border: 1px solid rgba(245,158,11,.3); color: #fbbf24; background: rgba(245,158,11,.08); }
-    .um-activate-btn { border: 1px solid rgba(16,185,129,.3); color: #34d399; background: rgba(16,185,129,.08); }
-    .um-remove-btn { border: 1px solid rgba(239,68,68,.3); color: var(--red-lt); background: rgba(239,68,68,.08); }
-    .um-empty { font-size: var(--fs-12); color:var(--dim); text-align:center; padding:12px 0; }
-    #users-badge {
-      display:none; background:var(--red); color:#fff;
-      border-radius:8px; padding:1px 5px; font-size: var(--fs-11); font-weight:700;
-    }
+    /* ── TEAM: one event's team ── */
+    /* A full Pro team is 21 rows: the header, invite row and Close stay put, the list scrolls */
+    .team-card { max-width: 560px; max-height: 90vh; }
+    #users-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    .team-card > :not(#users-modal-body) { flex-shrink: 0; }
+    .team-seats { font-size: var(--fs-13); color: var(--text-secondary); margin-bottom: var(--sp-2); }
+    .team-seats.is-full { color: var(--danger-fg); }
+    .team-invite { border-bottom: 1px solid var(--border-section); padding-bottom: var(--sp-3); margin-bottom: var(--sp-2); }
+    .team-invite-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2); }
+    .team-invite-row input[type="email"] { flex: 1; min-width: 160px; }
+    .team-invite-row input[type="text"] { width: 140px; }
+    .team-status { font-size: var(--fs-12); min-height: 18px; margin-top: var(--sp-1); color: var(--text-secondary); }
+    .team-status.is-error { color: var(--danger-fg); }
+    #um-search { width: 100%; margin: var(--sp-2) 0; }
+    .team-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border-divider); }
+    .team-row:last-child { border-bottom: none; }
+    .team-row.is-suspended .team-who { opacity: .6; }
+    .team-who { flex: 1; min-width: 160px; }
+    .team-name { font-size: var(--fs-13); color: var(--text-primary); }
+    .team-meta { font-size: var(--fs-11); color: var(--text-tertiary); }
+    .team-acts { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
+    .um-empty { font-size: var(--fs-12); color: var(--dim); text-align: center; padding: 12px 0; }
+    @media (pointer: coarse) { #users-modal input, #users-modal select { min-height: 44px; } }
     /* USER CHIP */
     .user-chip {
       display:none; align-items:center; gap:7px;
@@ -2326,7 +2324,7 @@
       </div>
       <div class="pp-actions" role="menu">
         <a id="checkin-btn" class="pp-action" role="menuitem" href="/checkin" target="_blank" rel="noopener"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-checkin"/></svg><span class="pp-label" data-i18n="cc.menu.checkin">Check-in</span></a>
-        <button id="users-btn" class="pp-action" role="menuitem" style="display:none" onclick="closeProfilePanel();openUsersModal()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-team"/></svg><span class="pp-label" data-i18n="cc.menu.team">Team</span><span id="users-badge"></span></button>
+        <button id="users-btn" class="pp-action" role="menuitem" style="display:none" onclick="closeProfilePanel();openUsersModal()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-team"/></svg><span class="pp-label" data-i18n="cc.menu.team">Team</span></button>
         <button id="pp-billing-btn" class="pp-action" role="menuitem" style="display:none" onclick="openBillingModal();closeProfilePanel()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-card"/></svg><span class="pp-label" data-i18n="cc.menu.billing">Billing</span></button>
         <button id="pp-invoices-btn" class="pp-action" role="menuitem" style="display:none" onclick="openInvoiceModal();closeProfilePanel()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-report"/></svg><span class="pp-label" data-i18n="cc.menu.invoices">Invoices</span></button>
         <div id="pp-upgrade-wrap" style="display:none">
@@ -2588,36 +2586,29 @@
   </div>
 </div>
 
-<!-- USERS MODAL -->
+<!-- TEAM: one event's team (event teams, spec 2026-10-08 §4, §5). openUsersModal sets every text. -->
 <div id="users-modal" class="ev-modal-backdrop" style="display:none" onclick="if(event.target===this)closeUsersModal()">
-  <div class="ev-modal-card" role="dialog" aria-modal="true" aria-labelledby="users-modal-title" style="max-width:520px">
-    <div class="ev-modal-title" id="users-modal-title">Operator Accounts</div>
-    <!-- INVITE SECTION (director only) -->
-    <div id="invite-section" style="border-bottom:1px solid var(--border-section);padding-bottom:12px">
-      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Invite New Operator</div>
-      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-        <input id="inv-email" type="email" placeholder="Email address" style="flex:1;min-width:140px;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-        <input id="inv-name" type="text" placeholder="Name (optional)" style="width:120px;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-        <select id="inv-role" style="background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 10px;border-radius:6px;font-size:12px;font-family:inherit">
-          <option value="stage">Stage</option>
-          <option value="av">AV</option>
-          <option value="interp">Interp</option>
-          <option value="reg">Reg</option>
-          <option value="signage">Signage</option>
-          <option value="director">Director</option>
+  <div class="ev-modal-card team-card" role="dialog" aria-modal="true" aria-labelledby="users-modal-title">
+    <div class="ev-modal-title" id="users-modal-title">Team</div>
+    <div id="team-seats" class="team-seats" aria-live="polite"></div>
+    <div id="team-full" class="team-status is-error" role="status" hidden></div>
+    <div id="invite-section" class="team-invite">
+      <div class="lbl" id="team-invite-lbl">Invite to this event</div>
+      <div class="team-invite-row">
+        <input id="inv-email" type="email" autocomplete="off" data-fk="team-inv-email">
+        <input id="inv-name" type="text" autocomplete="off" data-fk="team-inv-name">
+        <select id="inv-role" data-fk="team-inv-role">
+          <option value="stage">Stage</option><option value="av">AV</option><option value="interp">Interp</option>
+          <option value="reg">Reg</option><option value="signage">Signage</option><option value="director">Director</option>
         </select>
-        <button id="inv-btn" onclick="inviteOperator()" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:var(--blue);border-radius:6px;padding:7px 14px;font-size:11px;font-family:inherit;font-weight:500;cursor:pointer;white-space:nowrap">Send Invite</button>
+        <button type="button" id="inv-btn" class="btn sm primary" data-fk="team-inv-send" onclick="if(pressOk(event,this))inviteOperator()">Send invite</button>
       </div>
-      <div id="inv-status" style="font-size:11px;min-height:16px;margin-top:4px"></div>
+      <div id="inv-status" class="team-status" role="status"></div>
     </div>
-    <div style="padding:8px 0">
-      <input id="um-search" type="text" placeholder="Search operators" oninput="filterOperators()" style="width:100%;background:var(--input-bg);border:1px solid var(--border-control-raised);color:var(--text-primary);padding:7px 12px;border-radius:6px;font-size:12px;font-family:inherit">
-    </div>
-    <div id="users-modal-body">
-      <div class="um-empty">Loading…</div>
-    </div>
+    <input id="um-search" type="search" autocomplete="off" data-fk="team-search" oninput="renderTeam(_teamData)">
+    <div id="users-modal-body"><div class="um-empty"></div></div>
     <div class="ev-modal-actions">
-      <button onclick="closeUsersModal()">Close</button>
+      <button type="button" id="team-close" onclick="closeUsersModal()">Close</button>
     </div>
   </div>
 </div>
@@ -2971,7 +2962,6 @@ const S = {
   subscription:    null,   // { plan, status, trial_ends_at, ... }
   planLimits:      null,   // PLAN_LIMITS of the current event's organiser's plan (applyEventPlan)
   ownPlanLimits:   null,   // PLAN_LIMITS of my own plan: only for creating my own events
-  operatorCount:   0,      // total non-pending leod_users; cached by loadPendingBadge
   stripePrices:    {},     // key → Stripe price ID (loaded from leod_config)
 };
 
@@ -8245,161 +8235,160 @@ function showPendingScreen(email) {
   document.getElementById('pending-email').textContent    = email;
 }
 
-// ── Users / approval modal (director only) ─────────────────
+// ── Team, per event (event teams, spec 2026-10-08 §4, §5) ────────────────
+// The current event's team only: its organiser, every member with role,
+// status and last seen, and the seats left on the organiser's plan
+// ("Team 7 of 20 seats"). Invites and changes go through invite-operator and
+// manage-operator with this event's id; Remove takes the person off this
+// event only, and their login and other events stay. "Remove from all my
+// events" (the creator's) sends no event id, so the server covers every
+// event the caller created.
+var _operatorsData = [];        // { id, name } of this event's team, read by bcSenderName
+var _teamData = null;           // the last cuedeck_event_team answer
+const TEAM_ROLES = ['stage', 'av', 'interp', 'reg', 'signage', 'director'];
+const _memberRemovePending = new Map();   // 'userId:one' | 'userId:all' → timer (two presses, as Reset key)
+
 async function openUsersModal() {
+  if (!S.event) return;
   document.getElementById('users-modal').style.display = 'flex';
+  document.getElementById('users-modal-title').textContent = tf('cc.team.title', { event: S.event.name });
+  document.getElementById('team-invite-lbl').textContent = t('cc.team.invite');
+  const em = document.getElementById('inv-email');
+  em.placeholder = t('cc.team.email'); em.setAttribute('aria-label', t('cc.team.email'));
+  const nm = document.getElementById('inv-name');
+  nm.placeholder = t('cc.team.name'); nm.setAttribute('aria-label', t('cc.team.name'));
+  const rs = document.getElementById('inv-role');
+  rs.setAttribute('aria-label', t('cc.team.role'));
+  rs.innerHTML = TEAM_ROLES.map(r => `<option value="${r}">${esc(t('role.' + r))}</option>`).join('');
+  document.getElementById('inv-btn').textContent = t('cc.team.send');
+  const q = document.getElementById('um-search');
+  q.placeholder = t('cc.team.search'); q.setAttribute('aria-label', t('cc.team.search')); q.value = '';
+  document.getElementById('team-close').textContent = t('cc.team.close');
+  setTeamStatus('', false);
+  document.getElementById('users-modal-body').innerHTML = `<div class="um-empty">${esc(t('cc.team.loading'))}</div>`;
   await refreshUsersModal();
 }
 function closeUsersModal() {
   document.getElementById('users-modal').style.display = 'none';
 }
-
-var _operatorsData = [];
+function setTeamStatus(text, isError) {
+  const el = document.getElementById('inv-status');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('is-error', !!isError);
+}
 
 async function refreshUsersModal() {
-  var body = document.getElementById('users-modal-body');
-  body.textContent = '';
-  var loading = document.createElement('div');
-  loading.className = 'um-empty';
-  loading.textContent = 'Loading\u2026';
-  body.appendChild(loading);
-
-  var searchEl = document.getElementById('um-search');
-  if (searchEl) searchEl.value = '';
-
-  var { data, error } = await sb.rpc('get_operators_with_last_seen');
-  if (error || !data || data.length === 0) {
-    body.textContent = '';
-    var empty = document.createElement('div');
-    empty.className = 'um-empty';
-    empty.textContent = 'No operator accounts found.';
-    body.appendChild(empty);
+  const ev = S.event;
+  const body = document.getElementById('users-modal-body');
+  if (!ev || !body) return;
+  const { data, error } = await sb.rpc('cuedeck_event_team', { p_event_id: ev.id });
+  if (S.event?.id !== ev.id) return;   // switched away meanwhile
+  if (error || !data || !Array.isArray(data.members)) {
+    _teamData = null;
+    body.innerHTML = `<div class="um-empty">${esc(t('cc.team.loadFailed'))}</div>`;
     return;
   }
-
-  _operatorsData = data;
-  renderOperatorRows(data);
+  _teamData = data;
+  _operatorsData = [data.owner, ...data.members].filter(Boolean).map(m => ({ id: m.user_id, name: m.name || '' }));
+  renderTeam(data);
 }
 
-function renderOperatorRows(data) {
-  var body = document.getElementById('users-modal-body');
-  var ROLES = ['director','stage','av','interp','reg','signage','pending'];
-  var ROLE_LABELS = { director:'Director', stage:'Stage', av:'AV', interp:'Interp', reg:'Reg', signage:'Signage', pending:'Pending' };
+function renderTeam(data) {
+  const body = document.getElementById('users-modal-body');
+  if (!body || !data) return;
+  const fk = focusKey();
+  const seats = data.seats || { used: data.members.length, limit: null };
+  const full = seats.limit !== null && seats.limit !== undefined && seats.used >= seats.limit;
+  const seatsEl = document.getElementById('team-seats');
+  seatsEl.textContent = seats.limit === null || seats.limit === undefined
+    ? tf('cc.team.seatsUnlimited', { used: seats.used })
+    : tf('cc.team.seats', { used: seats.used, limit: seats.limit });
+  seatsEl.classList.toggle('is-full', full);
+  const fullEl = document.getElementById('team-full');
+  fullEl.hidden = !full;
+  fullEl.textContent = full ? t(data.is_owner ? 'cc.team.fullOwner' : 'cc.team.fullAsk') : '';
+  document.getElementById('inv-btn').disabled = full;
 
-  var markup = '';
-  data.forEach(function(u, idx) {
-    var isSuspended = u.active === false;
-    var isPending   = u.role === 'pending';
-    var isSelf      = u.id === (S.user ? S.user.id : '');
-
-    // Last seen
-    var lastSeenText = 'never';
-    var lastSeenColor = '#64748b';
-    if (u.last_sign_in_at) {
-      var ago = Date.now() - new Date(u.last_sign_in_at).getTime();
-      if (ago < 60000) { lastSeenText = 'just now'; lastSeenColor = '#34d399'; }
-      else if (ago < 3600000) { lastSeenText = Math.floor(ago / 60000) + 'm ago'; lastSeenColor = '#34d399'; }
-      else if (ago < 86400000) { lastSeenText = Math.floor(ago / 3600000) + 'h ago'; lastSeenColor = '#34d399'; }
-      else { lastSeenText = Math.floor(ago / 86400000) + 'd ago'; }
-    }
-
-    var dotBg = isSuspended ? '#ef4444' : (u.last_sign_in_at ? '#34d399' : '#4b5563');
-
-    // Action buttons
-    var actions = '';
-    if (!isSelf) {
-      if (isPending) {
-        actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Approve</button>' +
-          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')" aria-label="' + esc(t('cc.a11y.remove')) + '"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg></button>';
-      } else if (isSuspended) {
-        actions = '<button class="um-activate-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'reactivate\')">' + icon('play') + ' Activate</button>' +
-          '<button class="um-remove-btn" onclick="confirmRemoveUser(\'' + esc(u.id) + '\',\'' + esc((u.name || u.email || '').replace(/\'/g, '')) + '\')" aria-label="' + esc(t('cc.a11y.remove')) + '"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-trash"/></svg></button>';
-      } else {
-        actions = '<button class="um-approve-btn" onclick="approveUser(\'' + esc(u.id) + '\', this.closest(\'.um-row\').querySelector(\'.um-role-sel\').value)">Update</button>' +
-          '<button class="um-suspend-btn" onclick="manageOperator(\'' + esc(u.id) + '\',\'suspend\')" aria-label="' + esc(t('cc.a11y.suspend')) + '" title="' + esc(t('cc.a11y.suspend')) + '">' + icon('pause') + '</button>';
-      }
-    }
-
-    var roleOptions = ROLES.map(function(r) {
-      return '<option value="' + r + '"' + (r === u.role ? ' selected' : '') + '>' + ROLE_LABELS[r] + '</option>';
-    }).join('');
-
-    if (idx > 0) markup += '<div style="border-top:1px solid var(--border-section)"></div>';
-    markup += '<div class="um-row" data-uid="' + esc(u.id) + '" style="' + (isSuspended ? 'opacity:0.6' : '') + '">' +
-      '<div style="flex:1;min-width:0">' +
-        '<div class="um-name">' + esc(u.name || '\u2013') +
-          (u.organization ? ' <span style="color:var(--dim);font-weight:400;font-size:11px">\u00B7 ' + esc(u.organization) + '</span>' : '') +
-          (isSuspended ? ' <span style="display:inline-block;font-size:11px;background:rgba(239,68,68,.12);color:#f87171;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px;text-transform:uppercase;">Suspended</span>' : '') +
-        '</div>' +
-        '<div class="um-email">' + esc(u.email || '') + '</div>' +
-        '<div style="font-size:11px;color:var(--dim);margin-top:2px">' +
-          '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:' + dotBg + ';vertical-align:middle;margin-right:4px"></span>' +
-          'Last seen: <span style="color:' + lastSeenColor + '">' + lastSeenText + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<select class="um-role-sel" data-uid="' + esc(u.id) + '">' + roleOptions + '</select>' +
-      actions +
-    '</div>';
-  });
-
-  // Status summary
-  var total     = data.length;
-  var pending   = data.filter(function(u) { return u.role === 'pending'; }).length;
-  var suspended = data.filter(function(u) { return u.active === false; }).length;
-
-  markup += '<div style="margin-top:14px;font-size:11px;color:var(--dim)">' +
-    total + ' operator' + (total !== 1 ? 's' : '') +
-    (pending ? ' \u00B7 ' + pending + ' pending' : '') +
-    (suspended ? ' \u00B7 ' + suspended + ' suspended' : '') +
-  '</div>';
-
-  body.innerHTML = markup;
+  const q = (document.getElementById('um-search')?.value || '').trim().toLowerCase();
+  const match = m => !q || (m.name || '').toLowerCase().includes(q) || (m.email || '').toLowerCase().includes(q);
+  const rel = new Intl.RelativeTimeFormat(CueDeckI18n.getLocale(), { numeric: 'auto' });
+  const seen = ts => {
+    if (!ts) return t('cc.team.never');
+    const mins = Math.round((Date.parse(ts) - Date.now()) / 60000);
+    if (Math.abs(mins) < 60) return rel.format(mins, 'minute');
+    if (Math.abs(mins) < 1440) return rel.format(Math.round(mins / 60), 'hour');
+    return rel.format(Math.round(mins / 1440), 'day');
+  };
+  const o = data.owner;
+  const ownerRow = o && match(o)
+    ? `<div class="team-row" data-uid="${esc(o.user_id)}"><div class="team-who">`
+      + `<div class="team-name">${esc(o.name || o.email || '–')}</div>`
+      + `<div class="team-meta">${esc(t('cc.team.owner'))} · ${esc(t('role.director'))} · ${esc(tf('cc.team.lastSeen', { when: seen(o.last_sign_in_at) }))}</div>`
+      + `</div></div>`
+    : '';
+  const rows = data.members.filter(match).map(m => {
+    const id = esc(m.user_id);
+    const self = m.user_id === S.user?.id;
+    const armed = _memberRemovePending.has(m.user_id + ':one');
+    const armedAll = _memberRemovePending.has(m.user_id + ':all');
+    const opts = TEAM_ROLES.map(r => `<option value="${r}"${r === m.role ? ' selected' : ''}>${esc(t('role.' + r))}</option>`).join('');
+    const acts = self ? '' :
+      `<select class="team-role" data-fk="team-role-${id}" aria-label="${esc(t('cc.team.role'))}" onchange="manageMember('${id}','set_role',this.value,false)">${opts}</select>`
+      + (m.active
+        ? `<button type="button" class="btn sm" data-fk="team-suspend-${id}" onclick="if(pressOk(event,this))manageMember('${id}','suspend',null,false)">${icon('pause')}${esc(t('cc.team.suspend'))}</button>`
+        : `<button type="button" class="btn sm" data-fk="team-reactivate-${id}" onclick="if(pressOk(event,this))manageMember('${id}','reactivate',null,false)">${icon('play')}${esc(t('cc.team.reactivate'))}</button>`)
+      + `<button type="button" class="btn sm danger${armed ? ' confirm-pending' : ''}" data-fk="team-remove-${id}" onclick="if(pressOk(event,this))armRemoveMember('${id}',false)">${armed ? '' : icon('trash')}${esc(t(armed ? 'cc.team.removeConfirm' : 'cc.team.remove'))}</button>`
+      + (data.is_owner
+        ? `<button type="button" class="btn sm ghost danger${armedAll ? ' confirm-pending' : ''}" data-fk="team-removeall-${id}" onclick="if(pressOk(event,this))armRemoveMember('${id}',true)">${esc(t(armedAll ? 'cc.team.removeAllConfirm' : 'cc.team.removeAll'))}</button>`
+        : '');
+    const status = m.active ? t('cc.team.active') : t('cc.team.suspended');
+    return `<div class="team-row${m.active ? '' : ' is-suspended'}" data-uid="${id}"><div class="team-who">`
+      + `<div class="team-name">${esc(m.name || m.email || '–')}</div>`
+      + `<div class="team-meta">${esc(t('role.' + m.role))} · ${esc(status)} · ${esc(m.email || '')} · ${esc(tf('cc.team.lastSeen', { when: seen(m.last_sign_in_at) }))}</div>`
+      + `</div><div class="team-acts">${acts}</div></div>`;
+  }).join('');
+  body.innerHTML = ownerRow + (rows || (data.members.length ? '' : `<div class="um-empty">${esc(t('cc.team.empty'))}</div>`));
+  restoreFocus(fk);
 }
 
-function filterOperators() {
-  var q = (document.getElementById('um-search').value || '').trim().toLowerCase();
-  if (!q) { renderOperatorRows(_operatorsData); return; }
-  var filtered = _operatorsData.filter(function(u) {
-    return (u.name || '').toLowerCase().indexOf(q) !== -1 || (u.email || '').toLowerCase().indexOf(q) !== -1;
-  });
-  renderOperatorRows(filtered);
+// Remove takes two presses, as Reset key: the first arms the button for 3 s.
+function armRemoveMember(userId, all) {
+  const key = userId + (all ? ':all' : ':one');
+  if (_memberRemovePending.has(key)) {
+    clearTimeout(_memberRemovePending.get(key));
+    _memberRemovePending.delete(key);
+    renderTeam(_teamData);
+    manageMember(userId, 'remove', null, all);
+    return;
+  }
+  _memberRemovePending.set(key, setTimeout(() => { _memberRemovePending.delete(key); renderTeam(_teamData); }, 3000));
+  announce(t(all ? 'cc.team.removeAllConfirm' : 'cc.team.removeConfirm'));
+  renderTeam(_teamData);
 }
 
-async function approveUser(userId, role) {
-  // Another user's role can only be changed by manage-operator (service
-  // role, team-scoped); a direct update is refused by row security and
-  // used to report success anyway.
-  const { error } = await sb.functions.invoke('manage-operator', {
-    body: { user_id: userId, action: 'set_role', role },
-  });
+// One membership change through manage-operator (service role, event-scoped).
+// functions.invoke never throws: the error is read, and nothing claims success
+// unless the server said so.
+async function manageMember(userId, action, role, all) {
+  const ev = S.event;
+  if (!ev) return;
+  const name = (_teamData?.members || []).find(m => m.user_id === userId)?.name || t('cc.team.member');
+  const body = { user_id: userId, action };
+  if (role) body.role = role;
+  if (!all) body.event_id = ev.id;
+  const { error } = await sb.functions.invoke('manage-operator', { body });
   if (error) {
     let why = error.message || 'Unknown error';
-    try { const b = await error.context?.json?.(); if (b?.error) why = b.error; } catch {}
-    pushToast('Failed: ' + why, 'error');
+    try { const b = await error.context?.json?.(); if (b?.error) why = b.error; } catch (_) { /* no body */ }
+    pushToast(tf('cc.team.actionFailed', { reason: why }), 'error');
+    await refreshUsersModal();
     return;
   }
-  pushToast(`\u2713 Role set to ${role}`, 'success');
+  if (action === 'remove') pushToast(tf(all ? 'cc.team.removedAll' : 'cc.team.removed', { name }), 'success');
+  else if (action === 'set_role') pushToast(tf('cc.team.roleChanged', { role: t('role.' + role) }), 'success');
+  else pushToast(t(action === 'suspend' ? 'cc.team.suspendedToast' : 'cc.team.reactivatedToast'), 'success');
   await refreshUsersModal();
-  await loadPendingBadge();
-}
-
-async function manageOperator(userId, action) {
-  var { data, error } = await sb.functions.invoke('manage-operator', {
-    body: { user_id: userId, action: action },
-  });
-  if (error) {
-    var why = error.message || 'Unknown error';
-    try { var b = await error.context?.json?.(); if (b && b.error) why = b.error; } catch (_) {}
-    pushToast('Failed: ' + why, 'error');
-    return;
-  }
-  pushToast('\u2713 Operator ' + action + 'd', 'success');
-  await refreshUsersModal();
-}
-
-function confirmRemoveUser(userId, displayName) {
-  if (!confirm('Remove ' + displayName + '? This cannot be undone.')) return;
-  manageOperator(userId, 'remove');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -8471,84 +8460,52 @@ function dismissWelcome(launchWizard) {
 // ── INVITE OPERATOR (director sends invite email) ────────────────
 // ═══════════════════════════════════════════════════════════════════
 async function inviteOperator() {
-  const email  = document.getElementById('inv-email').value.trim();
-  const name   = document.getElementById('inv-name').value.trim();
-  const role   = document.getElementById('inv-role').value;
-  const btn    = document.getElementById('inv-btn');
-  const status = document.getElementById('inv-status');
-
-  if (!email) { status.innerHTML = '<span style="color:var(--red)">Email is required</span>'; return; }
-
-  // Plan limit: check operator count
-  if (S.planLimits && S.planLimits.operators !== 999) {
-    const { count } = await sb.from('leod_users')
-      .select('id', { count: 'exact', head: true }).neq('role', 'pending').eq('invited_by', S.user.id);
-    if (count >= S.planLimits.operators) {
-      status.innerHTML = `<span style="color:var(--red)">Your plan allows ${S.planLimits.operators} operators. Upgrade to invite more.</span>`;
-      return;
-    }
-  }
+  const ev = S.event;
+  if (!ev) return;
+  const email = document.getElementById('inv-email').value.trim();
+  const name  = document.getElementById('inv-name').value.trim();
+  const role  = document.getElementById('inv-role').value;
+  const btn   = document.getElementById('inv-btn');
+  if (!email) { setTeamStatus(t('cc.team.emailRequired'), true); return; }
 
   btn.disabled = true;
-  btn.textContent = 'Sending…';
-  status.textContent = '';
-
+  btn.textContent = t('cc.team.sending');
+  setTeamStatus('', false);
   try {
+    // Seats are checked by the server (invite-operator and the membership
+    // insert), not counted here: the browser cannot see another director's invite.
     const { data, error } = await sb.functions.invoke('invite-operator', {
-      // The open event is named in the invitation (the server names it only
-      // if this director's team owns it).
-      body: { email, role, name: name || undefined, event_id: S.event?.id },
+      body: { email, role, name: name || undefined, event_id: ev.id },
     });
-
     if (error) {
-      let errMsg = 'Invite failed';
-      try {
-        const errBody = typeof error.context?.json === 'function'
-          ? await error.context.json() : error.context;
-        if (errBody?.error === 'User already exists') {
-          errMsg = `Already registered as ${errBody.existing_role}`;
-        } else if (errBody?.error) {
-          errMsg = errBody.error;
-        }
-      } catch {}
-      status.innerHTML = `<span style="color:var(--red)">${esc(errMsg)}</span>`;
+      let b = null;
+      try { b = typeof error.context?.json === 'function' ? await error.context.json() : null; } catch (_) { /* no body */ }
+      setTeamStatus(inviteErrorText(b, error), true);
     } else {
-      status.innerHTML = `<span style="color:var(--green)">Invite sent to ${esc(email)} as ${esc(role)}</span>`;
+      const key = { invited: 'cc.team.invited', added: 'cc.team.added', link_resent: 'cc.team.linkResent',
+                    unchanged: 'cc.team.unchanged', role_changed: 'cc.team.roleChanged' }[data?.result] || 'cc.team.invited';
+      setTeamStatus(tf(key, { email, role: t('role.' + role) }), false);
       document.getElementById('inv-email').value = '';
       document.getElementById('inv-name').value = '';
-      await refreshUsersModal();
-      await loadPendingBadge();
       // Onboarding: mark invite step done
       const uid = S.user?.id || 'anon';
       localStorage.setItem(CK_KEY + uid + '_invited', '1');
       if (typeof refreshChecklist === 'function') refreshChecklist();
     }
-  } catch (e) {
-    status.innerHTML = `<span style="color:var(--red)">Network error</span>`;
+  } catch (_) {
+    setTeamStatus(t('cc.team.network'), true);
   }
-
-  btn.disabled = false;
-  btn.textContent = 'Send Invite';
+  btn.textContent = t('cc.team.send');
+  await refreshUsersModal();   // also re-enables the button unless the team is full
 }
 
-async function loadPendingBadge() {
-  if (S.userRole !== 'director') return;
-  const { count } = await sb.from('leod_users')
-    .select('id', { count: 'exact', head: true }).eq('role', 'pending').eq('invited_by', S.user.id);
-  const badge = document.getElementById('users-badge');
-  const btn   = document.getElementById('users-btn');
-  if (count > 0) {
-    badge.textContent = count;
-    badge.style.display = '';
-    btn.style.borderColor = 'rgba(239,68,68,.5)';
-  } else {
-    badge.style.display = 'none';
-    btn.style.borderColor = '';
-  }
-  // Cache total for profile panel usage bar (own team only)
-  const { count: total } = await sb.from('leod_users')
-    .select('id', { count: 'exact', head: true }).neq('role', 'pending').eq('invited_by', S.user.id);
-  S.operatorCount = total || 0;
+// The server's refusal of an invite, in words (Team window and setup wizard).
+function inviteErrorText(b, error) {
+  if (b?.code === 'seats_full') return t(b.is_owner ? 'cc.team.fullOwner' : 'cc.team.fullAsk');
+  if (b?.code === 'is_owner') return t('cc.team.isOwner');
+  if (b?.code === 'invite_rate') return t('cc.team.rate');
+  if (b?.code === 'already_on_event') return t('cc.team.alreadyOnEvent');
+  return tf('cc.team.failed', { reason: b?.error || error?.message || '' });
 }
 
 function renderUserChip() {
@@ -9754,11 +9711,17 @@ async function wizNext() {
       if (email) {
         const name = document.getElementById('wiz-inv-name')?.value?.trim() || '';
         const role = document.getElementById('wiz-inv-role')?.value || 'stage';
-        try {
-          await sb.functions.invoke('invite-operator', { body: { email, name, role, event_id: S.event?.id } });
-          const uid = S.user?.id || 'anon';
-          localStorage.setItem(CK_KEY + uid + '_invited', '1');
-        } catch (_) { /* non-blocking — skip is fine */ }
+        // functions.invoke never throws: read its error (it used to be
+        // ignored, so a refused invite looked sent).
+        const { error } = await sb.functions.invoke('invite-operator', { body: { email, name, role, event_id: S.event?.id } });
+        if (error) {
+          let b = null;
+          try { b = typeof error.context?.json === 'function' ? await error.context.json() : null; } catch (_) { /* no body */ }
+          wizShowError(inviteErrorText(b, error));
+          return;
+        }
+        const uid = S.user?.id || 'anon';
+        localStorage.setItem(CK_KEY + uid + '_invited', '1');
       }
       // Allow skipping invite step without email
     } else if (_wizStep === 3) {

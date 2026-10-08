@@ -163,6 +163,14 @@ export interface MyEvent {
 }
 export const PRO_SUB = { plan: 'pro', status: 'active', trial_ends_at: null, current_period_end: '2026-11-01T00:00:00Z' };
 export interface Call { method: string; path: string; body: any }
+export const defaultTeam = () => ({
+  is_owner: true, seats: { used: 2, limit: 20 },
+  owner: { user_id: USER_ID, name: 'Nour Selim', email: 'nour@example.com', last_sign_in_at: iso(0) },
+  members: [
+    { user_id: 'op-1', name: 'Ahmed Fawzy', email: 'ahmed@example.com', role: 'stage', active: true,  last_sign_in_at: iso(-5), added_at: '2026-09-02T09:00:00Z' },
+    { user_id: 'op-2', name: 'Mona Adel',   email: 'mona@example.com',  role: 'av',    active: false, last_sign_in_at: null,     added_at: '2026-09-03T09:00:00Z' },
+  ],
+});
 
 export interface Scenario {
   role?: string;
@@ -178,6 +186,7 @@ export interface Scenario {
   myEvents?: MyEvent[];          // cuedeck_my_events; read on every request, so a test may change it
   ownSub?: Record<string, unknown> | null;   // get_subscription_for_user row; null = none
   fnReply?: (fn: string, body: any) => { status: number; body: unknown } | undefined;   // Edge Function answers
+  team?: Record<string, unknown>;   // cuedeck_event_team answer per event id (default: defaultTeam)
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -315,6 +324,10 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       const fn = p.split('/').pop();
       if (fn === 'get_server_clock') return json(r, [{ server_time: new Date(T0).toISOString(), tick: 48213 }]);
       if (fn === 'get_subscription_for_user') return json(r, sc.ownSub === null ? [] : [sc.ownSub ?? PRO_SUB]);
+      if (fn === 'cuedeck_event_team') {
+        const ev = (() => { try { return JSON.parse(req.postData() || '{}').p_event_id; } catch { return null; } })();
+        return json(r, (sc.team as Record<string, unknown> | undefined)?.[ev] ?? defaultTeam());
+      }
       if (fn === 'cuedeck_my_events') return json(r, myEvents().map(m => ({
         event_id: m.id, role: m.role, is_owner: m.isOwner, owner_id: m.isOwner ? USER_ID : (m.ownerId ?? OTHER_OWNER),
         organiser: m.organiser === undefined ? 'Nilegate Events' : m.organiser,

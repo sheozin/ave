@@ -4,7 +4,7 @@
 // Mocked Supabase (console-boot-mock.ts); the page clock is paused after
 // boot, so anything that waits on the network steps the clock (switchTo).
 import { test, expect, type Page } from '@playwright/test';
-import { openConsole, evalPage, afterBootReread, EVENT_ID, USER_ID, OTHER_OWNER, type MyEvent } from './console-boot-mock';
+import { openConsole, evalPage, afterBootReread, EVENT_ID, USER_ID, OTHER_OWNER, defaultTeam, type MyEvent } from './console-boot-mock';
 
 const EV_B = 'b0b0b0b0-0000-4000-8000-0000000000b2';
 const EV_C = 'c0c0c0c0-0000-4000-8000-0000000000c3';
@@ -228,5 +228,155 @@ test('teams: a refused event edit says so instead of looking saved; crew see New
     await evalPage(page, `openEvModal('edit', '${EVENT_ID}'); submitEvModal(); 0`);
     await expect(page.locator('#evm-error')).toHaveText('Only the directors of this event can edit it.');
     await expect(page.locator('#ev-modal')).toBeVisible();
+  } finally { await ctx.close(); }
+});
+
+const openTeam = async (page: Page) => {
+  await evalPage(page, 'openUsersModal(); 0');
+  await expect(page.locator('#team-seats')).not.toBeEmpty();
+};
+const member = (k: number, o: Record<string, unknown> = {}) => ({ user_id: `op-${k}`, name: `Crew ${k}`, email: `crew${k}@example.com`,
+  role: 'av', active: true, last_sign_in_at: null, added_at: `2026-09-0${k}T09:00:00Z`, ...o });
+const inviteReply = (fn: string, body: any) => fn === 'invite-operator'
+  ? { status: 200, body: { ok: true, role: body.role, result: String(body.email).startsWith('new') ? 'invited' : 'added' } }
+  : undefined;
+
+test("team: the window shows this event's team, its seats and who organises it", async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, {});
+  try {
+    await openTeam(page);
+    await expect(page.locator('#users-modal-title')).toHaveText('Team for GTR North Africa 2026');
+    await expect(page.locator('#team-seats')).toHaveText('Team 2 of 20 seats');
+    await expect(page.locator('#users-modal-body .team-row')).toHaveCount(3);
+    await expect(page.locator('#users-modal-body .team-row').first()).toContainText('Organiser');
+    await expect(page.locator('.team-row[data-uid="op-2"]')).toHaveClass(/is-suspended/);
+    await expect(page.locator('[data-fk="team-removeall-op-1"]')).toBeVisible();   // the creator may remove from all
+    await expect(page.locator('#inv-btn')).toBeEnabled();
+  } finally { await ctx.close(); }
+});
+
+test('team: inviting an existing account says it was added; a new email is invited; both name this event', async ({ browser }) => {
+  const { ctx, page, calls } = await openConsole(browser, { fnReply: inviteReply });
+  try {
+    await openTeam(page);
+    await page.fill('#inv-email', 'karim@example.com');
+    await page.selectOption('#inv-role', 'av');
+    await page.locator('#inv-btn').click();
+    await expect(page.locator('#inv-status')).toHaveText('karim@example.com was added to this event.');
+    await page.fill('#inv-email', 'new.crew@example.com');
+    await page.locator('#inv-btn').click();
+    await expect(page.locator('#inv-status')).toHaveText('Invitation sent to new.crew@example.com.');
+    const sent = calls.filter(c => c.path === '/functions/v1/invite-operator').map(c => c.body);
+    expect(sent).toEqual([
+      expect.objectContaining({ email: 'karim@example.com', role: 'av', event_id: EVENT_ID }),
+      expect.objectContaining({ email: 'new.crew@example.com', event_id: EVENT_ID }),
+    ]);
+  } finally { await ctx.close(); }
+});
+
+test('team: a full team asks the owner to upgrade, and an invited director to ask the organiser', async ({ browser }) => {
+  const full = { is_owner: true, seats: { used: 5, limit: 5 }, owner: defaultTeam().owner, members: [1, 2, 3, 4, 5].map(k => member(k)) };
+  const owner = await openConsole(browser, { team: { [EVENT_ID]: full } });
+  try {
+    await openTeam(owner.page);
+    await expect(owner.page.locator('#team-full')).toHaveText('All seats are taken. Upgrade for more seats.');
+    await expect(owner.page.locator('#inv-btn')).toBeDisabled();
+  } finally { await owner.ctx.close(); }
+  const invited = await openConsole(browser, {
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER }],
+    team: { [EVENT_ID]: { ...full, is_owner: false } },
+  });
+  try {
+    await openTeam(invited.page);
+    await expect(invited.page.locator('#team-full')).toHaveText('All seats are taken. Ask the organiser for more seats.');
+    await expect(invited.page.locator('[data-fk="team-removeall-op-1"]')).toHaveCount(0);   // only the creator removes from all
+  } finally { await invited.ctx.close(); }
+  // The server refuses a seat the window thought was free (another director took it).
+  const raced = await openConsole(browser, {
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER }],
+    fnReply: (fn) => fn === 'invite-operator' ? { status: 409, body: { error: 'All seats on this event are taken', code: 'seats_full', is_owner: false } } : undefined,
+  });
+  try {
+    await openTeam(raced.page);
+    await raced.page.fill('#inv-email', 'late@example.com');
+    await raced.page.locator('#inv-btn').click();
+    await expect(raced.page.locator('#inv-status')).toHaveText('All seats are taken. Ask the organiser for more seats.');
+  } finally { await raced.ctx.close(); }
+});
+
+test('team: over the seat count after a downgrade', async ({ browser }) => {
+  const over = { is_owner: true, seats: { used: 7, limit: 5 }, owner: defaultTeam().owner, members: [1, 2, 3, 4, 5, 6, 7].map(k => member(k)) };
+  const { ctx, page, calls } = await openConsole(browser, { team: { [EVENT_ID]: over } });
+  try {
+    await openTeam(page);
+    await expect(page.locator('#team-seats')).toHaveText('Team 7 of 5 seats');
+    await expect(page.locator('#inv-btn')).toBeDisabled();
+    await expect(page.locator('#users-modal-body .team-row')).toHaveCount(8);   // nobody was cut off
+    await expect(page.locator('[data-fk="team-role-op-3"]')).toBeEnabled();
+    await page.locator('[data-fk="team-suspend-op-3"]').click();
+    await expect.poll(() => calls.filter(c => c.path === '/functions/v1/manage-operator').map(c => c.body))
+      .toEqual([{ user_id: 'op-3', action: 'suspend', event_id: EVENT_ID }]);
+  } finally { await ctx.close(); }
+});
+
+test('team: remove takes two presses and names this event only; the person stays on the other event', async ({ browser }) => {
+  const { ctx, page, calls } = await openConsole(browser, { role: 'director', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true },
+    { id: EV_B, name: 'Spring summit', role: 'director', isOwner: true },
+  ] });
+  try {
+    await afterBootReread(page);
+    await openTeam(page);
+    await page.locator('[data-fk="team-remove-op-1"]').click();
+    await expect(page.locator('[data-fk="team-remove-op-1"]')).toHaveText('Press again to remove');
+    expect(calls.filter(c => c.path === '/functions/v1/manage-operator')).toEqual([]);
+    await page.locator('[data-fk="team-remove-op-1"]').click();
+    await expect.poll(() => calls.filter(c => c.path === '/functions/v1/manage-operator').map(c => c.body))
+      .toEqual([{ user_id: 'op-1', action: 'remove', event_id: EVENT_ID }]);
+    await expect(toasts(page)).toContainText('Ahmed Fawzy was removed from this event.');
+    await evalPage(page, 'closeUsersModal(); 0');
+    await switchTo(page, EV_B);
+    await openTeam(page);
+    await expect(page.locator('.team-row[data-uid="op-1"]')).toHaveCount(1);
+    await expect(page.locator('#users-modal-title')).toHaveText('Team for Spring summit');
+  } finally { await ctx.close(); }
+});
+
+test('team: remove from all my events is the creator\'s, takes two presses and sends no event', async ({ browser }) => {
+  const { ctx, page, calls } = await openConsole(browser, {});
+  try {
+    await openTeam(page);
+    await page.locator('[data-fk="team-removeall-op-1"]').click();
+    await expect(page.locator('[data-fk="team-removeall-op-1"]')).toHaveText('Press again to remove from all');
+    await page.locator('[data-fk="team-removeall-op-1"]').click();
+    await expect.poll(() => calls.filter(c => c.path === '/functions/v1/manage-operator').map(c => c.body))
+      .toEqual([{ user_id: 'op-1', action: 'remove' }]);
+    await expect(toasts(page)).toContainText('Ahmed Fawzy was removed from all your events.');
+  } finally { await ctx.close(); }
+});
+
+test('team: a full Pro team keeps the seats, the invite row and Close on screen; the list scrolls', async ({ browser }) => {
+  const twenty = { is_owner: true, seats: { used: 20, limit: 20 }, owner: defaultTeam().owner, members: Array.from({ length: 20 }, (_, i) => member(i + 1, { added_at: '2026-09-01T09:00:00Z' })) };
+  const { ctx, page } = await openConsole(browser, { team: { [EVENT_ID]: twenty } });
+  try {
+    await openTeam(page);
+    for (const sel of ['#users-modal-title', '#team-seats', '#inv-email', '#team-close']) await expect(page.locator(sel)).toBeInViewport();
+    const scrolls = await evalPage(page, `(() => { const b = document.getElementById('users-modal-body'); return b.scrollHeight > b.clientHeight && getComputedStyle(b).overflowY === 'auto'; })()`);
+    expect(scrolls).toBe(true);
+    // nothing above the list is squeezed to make room for it
+    expect(await evalPage(page, `document.getElementById('um-search').getBoundingClientRect().height`)).toBeGreaterThanOrEqual(30);
+  } finally { await ctx.close(); }
+});
+
+test('team: an invite the server refuses as already on this event says so', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, {
+    fnReply: (fn) => fn === 'invite-operator' ? { status: 409, body: { error: 'This person was just added to this event', code: 'already_on_event' } } : undefined,
+  });
+  try {
+    await openTeam(page);
+    await page.fill('#inv-email', 'ahmed@example.com');
+    await page.locator('#inv-btn').click();
+    await expect(page.locator('#inv-status')).toHaveText("This person is already on this event's team.");
+    await expect(page.locator('#inv-status')).toHaveClass(/is-error/);
   } finally { await ctx.close(); }
 });

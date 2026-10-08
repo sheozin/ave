@@ -208,26 +208,26 @@ test('clearing a broadcast targets this event and reports a failure', async ({ p
   expect(patch.url).toContain('id=eq.ev-1');
 });
 
-test('changing a role goes through manage-operator, not a direct write', async ({ page }) => {
-  const calls = await setup(page, 200, { ok: true, action: 'set_role', role: 'av' });
-  await evalPage(page, `S.user = { id: 'user-1' }; approveUser('u-2', 'av')`);
-  await expect(toasts(page)).toContainText('Role set to av');
+test('changing a role goes through manage-operator for this event, not a direct write', async ({ page }) => {
+  const calls = await setup(page, 200, { ok: true, action: 'set_role', role: 'av', events: ['ev-1'] });
+  await evalPage(page, `S.user = { id: 'user-1' }; manageMember('u-2', 'set_role', 'av', false)`);
+  await expect(toasts(page)).toContainText('Role changed to AV.');
   const c = calls.filter(x => x.fn === 'manage-operator');
   expect(c).toHaveLength(1);
-  expect(c[0].body).toMatchObject({ action: 'set_role', user_id: 'u-2', role: 'av' });
-  expect(rest.filter(r => r.method === 'PATCH' && r.url.includes('leod_users'))).toEqual([]);
+  expect(c[0].body).toMatchObject({ action: 'set_role', user_id: 'u-2', role: 'av', event_id: 'ev-1' });
+  expect(rest.filter(r => r.method === 'PATCH' && (r.url.includes('leod_users') || r.url.includes('leod_event_members')))).toEqual([]);
 });
 
 test('a refused role change says why and does not claim success', async ({ page }) => {
-  await setup(page, 403, { error: 'Forbidden: not an operator on your team' });
-  await evalPage(page, `approveUser('u-2', 'av')`);
-  await expect(toasts(page)).toContainText('not an operator on your team');
-  await expect(toasts(page)).not.toContainText('Role set');
+  await setup(page, 403, { error: 'Forbidden: only the directors of this event can change its team' });
+  await evalPage(page, `manageMember('u-2', 'set_role', 'av', false)`);
+  await expect(toasts(page)).toContainText('only the directors of this event');
+  await expect(toasts(page)).not.toContainText('Role changed');
 });
 
-test('a failed remove shows the server reason (e.g. the ban failed)', async ({ page }) => {
-  await setup(page, 500, { error: 'Remove failed: the account could not be banned (auth down)' });
-  await evalPage(page, `manageOperator('u-2', 'remove')`);
-  await expect(toasts(page)).toContainText('could not be banned');
-  await expect(toasts(page)).not.toContainText('Operator removed');
+test('a failed remove shows the server reason and does not claim success', async ({ page }) => {
+  await setup(page, 500, { error: 'Changed on 1 events, then failed: boom' });
+  await evalPage(page, `manageMember('u-2', 'remove', null, true)`);
+  await expect(toasts(page)).toContainText('then failed: boom');
+  await expect(toasts(page)).not.toContainText('was removed');
 });
