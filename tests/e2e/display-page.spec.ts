@@ -1319,6 +1319,51 @@ test.describe('Display: full screen hint', () => {
     expect(m.otherRest).toEqual([]);
   });
 
+  // iPad Safari sends no click for a tap on plain content (only touch
+  // events), and older iPadOS has only the webkit-prefixed API.
+  const touchTap = (page: Page) => page.evaluate(() => {
+    const t = document.elementFromPoint(400, 300) || document.body;
+    const touch = new Touch({ identifier: 1, target: t, clientX: 400, clientY: 300 });
+    t.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [touch], changedTouches: [touch] }));
+    t.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [touch] }));
+  });
+  const STUB_WEBKIT_ONLY = () => {
+    (window as unknown as { __fsCalls: number }).__fsCalls = 0;
+    delete (Element.prototype as any).requestFullscreen;
+    (Element.prototype as any).webkitRequestFullscreen = function () {
+      (window as unknown as { __fsCalls: number }).__fsCalls++;
+    };
+  };
+
+  test('82d iPad: a touch with no click asks for full screen on a paired screen', async ({ browser }) => {
+    const ctx = await browser.newContext({ hasTouch: true, viewport: { width: 1024, height: 768 } });
+    const page = await ctx.newPage();
+    try {
+      await page.addInitScript(STUB_WEBKIT_ONLY);
+      await mockSupabase(page);
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await expect(page.locator('#display')).toBeVisible();
+      await expect(fsHint(page)).toBeVisible();
+      await touchTap(page);
+      expect(await fsCalls(page)).toBe(1);
+      await expect(page.locator('#display')).toBeVisible();
+      expect(await page.evaluate(() => localStorage.getItem('cuedeck_display_id'))).toBe(FAKE_DISP_ID);
+    } finally { await ctx.close(); }
+  });
+
+  test('82e iPad: a touch with no click asks for full screen on the pairing screen', async ({ browser }) => {
+    const ctx = await browser.newContext({ hasTouch: true, viewport: { width: 1024, height: 768 } });
+    const page = await ctx.newPage();
+    try {
+      await page.addInitScript(STUB_WEBKIT_ONLY);
+      await mockSupabase(page);
+      await page.goto(DISP_URL);
+      await expect(fsHint(page)).toBeVisible();
+      await touchTap(page);
+      expect(await fsCalls(page)).toBe(1);
+    } finally { await ctx.close(); }
+  });
+
   test('83 the hint hides in full screen and comes back after leaving it', async ({ page }) => {
     await mockSupabase(page);
     await page.goto(DISP_URL);

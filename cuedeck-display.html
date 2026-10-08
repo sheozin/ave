@@ -2174,8 +2174,16 @@ window.addEventListener('online', () => pollFeed());
   // reacts or takes focus. touchend keeps its default: it produces the click.
   ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(type =>
     window.addEventListener(type, e => { if (swallowing()) swallow(e); }, true));
-  ['touchstart', 'touchend'].forEach(type =>
-    window.addEventListener(type, e => { if (swallowing()) e.stopImmediatePropagation(); }, true));
+  window.addEventListener('touchstart', e => { if (swallowing()) e.stopImmediatePropagation(); }, true);
+  // iPad Safari sends no click for a tap on plain content, so the touch
+  // itself asks (touchend counts as a user gesture there). On a paired
+  // screen it also cancels the click the tap would make; on the pairing
+  // screen that click still does its job (go() has already disarmed).
+  window.addEventListener('touchend', e => {
+    if (!_fsArmed) return;
+    if (swallowing()) swallow(e);
+    go();
+  }, true);
   window.addEventListener('click', e => {
     if (!_fsArmed) return;
     if (swallowing()) swallow(e);
