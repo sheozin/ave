@@ -528,3 +528,22 @@ test('boot: a failed plan read lets everyone in; no trial is created while the p
     expect(creator.calls.filter(c => c.method === 'POST' && /\/rest\/v1\/leod_(subscriptions|events)/.test(c.path))).toEqual([]);
   } finally { await creator.ctx.close(); }
 });
+
+// ── Review round 1 (F3): the AI panels follow the current event's plan ──
+test('teams: the AI panels follow the current event owner\'s plan on every switch', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'director', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' },
+    { id: EV_B, name: 'Spring summit', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'starter' },
+  ] });
+  const shown = () => evalPage(page, `['ai-agents-wrap', 'ave-brain-wrap'].map(id => document.getElementById(id).style.display)`);
+  try {
+    await afterBootReread(page);
+    expect(await shown()).toEqual(['', '']);
+    await switchTo(page, EV_B);
+    expect(await shown()).toEqual(['none', 'none']);
+    await evalPage(page, `setRole('director'); 0`);   // View as director again does not bring them back
+    expect(await shown()).toEqual(['none', 'none']);
+    await switchTo(page, EVENT_ID);
+    expect(await shown()).toEqual(['', '']);
+  } finally { await ctx.close(); }
+});

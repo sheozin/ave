@@ -7043,11 +7043,13 @@ function setRole(role) {
   // Show auto-start button for director/stage only
   const autoBtn = document.getElementById('auto-start-btn');
   if (autoBtn) autoBtn.style.display = (role === 'director' || role === 'stage') ? '' : 'none';
-  // Show AI agents panel for director only
+  // AI panels: directors, on an event whose owner's plan includes AI (event
+  // teams §6; applyEventPlan runs before applyEventRole, so this is current)
+  const ai = role === 'director' && (!S.planLimits || S.planLimits.ai);
   const aiWrap = document.getElementById('ai-agents-wrap');
-  if (aiWrap) aiWrap.style.display = role === 'director' ? '' : 'none';
+  if (aiWrap) aiWrap.style.display = ai ? '' : 'none';
   const brainWrap = document.getElementById('ave-brain-wrap');
-  if (brainWrap) { brainWrap.style.display = role === 'director' ? '' : 'none'; if (role === 'director') loadBrainInsights(); }
+  if (brainWrap) { brainWrap.style.display = ai ? '' : 'none'; if (ai) loadBrainInsights(); }
   buildFilterBar();
   renderSessions();
   buildBCPresets();
@@ -9969,8 +9971,8 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       throw new Error('trial_expired');
     }
     S.event = ev;
+    applyEventPlan(ev.id);   // first: setRole reads the plan for the AI panels
     applyEventRole(ev.id);
-    applyEventPlan(ev.id);
     noteRoleForWelcome();
     document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
     buildEvSelect(events);
