@@ -2376,8 +2376,8 @@
     <button onclick="openAboutModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-info"/></svg>About</button>
     <button onclick="openFeedbackModal();toggleHamburger()"><svg class="ico" aria-hidden="true" focusable="false"><use href="#i-message"/></svg>Feedback</button>
     <div style="height:1px;background:var(--border);margin:2px 6px"></div>
-    <button onclick="openBillingModal();toggleHamburger()">Billing</button>
-    <button onclick="openInvoiceModal();toggleHamburger()">Invoices</button>
+    <button id="hm-billing" onclick="openBillingModal();toggleHamburger()">Billing</button>
+    <button id="hm-invoices" onclick="openInvoiceModal();toggleHamburger()">Invoices</button>
     <button onclick="openUsersModal();toggleHamburger()">Operators</button>
     <button onclick="window.open('/checkin','_blank');toggleHamburger()">Check-in</button>
     <button onclick="toggleAutoStart();toggleHamburger()">Auto-start</button>
@@ -8642,9 +8642,12 @@ function renderProfilePanel() {
 
   // Plan section: your own plan; none for a members-only account (event teams §5)
   const planSection = document.getElementById('pp-plan-section');
-  planSection.style.display = S.subscription ? '' : 'none';
+  planSection.style.display = hasOwnBilling() ? '' : 'none';
+  if (!hasOwnBilling()) {
+    for (const id of ['pp-billing-btn', 'pp-invoices-btn', 'pp-upgrade-wrap']) document.getElementById(id).style.display = 'none';
+  }
 
-  if (S.subscription) {
+  if (hasOwnBilling()) {
     const sub    = S.subscription;
     const limits = S.ownPlanLimits;
 
@@ -8711,7 +8714,7 @@ function toggleProfileEdit() {
     document.getElementById('pp-edit-org').value = S.userOrg || '';
     document.getElementById('pp-edit-phone').value = S.userPhone || '';
     var billingSection = document.getElementById('pp-billing-section');
-    if (S.subscription) {   // billing details belong to an account with its own plan
+    if (hasOwnBilling()) {   // billing details belong to an account with its own plan
       billingSection.style.display = '';
       document.getElementById('pp-edit-company').value = S.userCompanyName || '';
       document.getElementById('pp-edit-vat').value = S.userVatId || '';
@@ -8740,7 +8743,7 @@ async function saveProfileChanges() {
   S.userName = name;
   S.userOrg  = org;
   S.userPhone = phone;
-  if (S.subscription) {
+  if (hasOwnBilling()) {
     var company_name    = document.getElementById('pp-edit-company').value.trim();
     var vat_id          = document.getElementById('pp-edit-vat').value.trim();
     var billing_address = document.getElementById('pp-edit-address').value.trim();
@@ -8771,8 +8774,16 @@ let _billingInterval = 'month'; // 'month' or 'year' — toggled by UI
 // Event teams (spec §5, §6): members work on each event organiser's plan and
 // have no plan of their own. An account that is only ever a member sees no
 // billing, no trial and no upsell; a trial starts with its first own event.
+// Members-only (spec §5): on events of others and has never created one. A
+// trial row left by the old console (it gave invited directors a trial) does
+// not make an organiser; only a paid plan of its own does.
 function isMembersOnlyAccount() {
-  return S.myEvents.size > 0 && ![...S.myEvents.values()].some(m => m.isOwner) && !S.subscription;
+  if (!S.myEvents.size || [...S.myEvents.values()].some(m => m.isOwner)) return false;
+  return !S.subscription || S.subscription.plan === 'trial';
+}
+// Billing, upgrade, invoices and the plan badge: an account with a plan of its own.
+function hasOwnBilling() {
+  return !!S.subscription && !isMembersOnlyAccount();
 }
 // An organiser's plan has ended: canceled, expired, or a trial past its end.
 function planEnded(m) {
@@ -8860,7 +8871,11 @@ async function loadStripePrices() {
 
 function updatePlanBadge() {
   const badge = document.getElementById('plan-badge');
-  if (!S.subscription) { badge.style.display = 'none'; return; }
+  for (const id of ['hm-billing', 'hm-invoices']) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hasOwnBilling() ? '' : 'none';
+  }
+  if (!hasOwnBilling()) { badge.style.display = 'none'; return; }
 
   badge.style.display = '';
   const plan = S.subscription.plan;

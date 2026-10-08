@@ -100,7 +100,8 @@ test('teams: a members-only account gets no trial, no plan badge and no billing'
     expect(calls.filter(c => c.method === 'POST' && c.path.startsWith('/rest/v1/leod_subscriptions'))).toEqual([]);
     expect(await evalPage(page, 'S.subscription')).toBeNull();
     expect(await evalPage(page, 'S.planLimits.label')).toBe('Pro');   // the organiser's plan
-    await expect(page.locator('#plan-badge')).toBeHidden();
+    // #plan-badge is display:none in CSS since the redesign: read what updatePlanBadge decided
+    expect(await evalPage(page, `document.getElementById('plan-badge').style.display`)).toBe('none');
     expect(await evalPage(page, `renderProfilePanel(); document.getElementById('pp-plan-section').style.display`)).toBe('none');
   } finally { await ctx.close(); }
 });
@@ -569,5 +570,39 @@ test('team: on a short screen the member list keeps a usable height', async ({ b
   try {
     await openTeam(page);
     expect(await evalPage(page, `document.getElementById('users-modal-body').getBoundingClientRect().height`)).toBeGreaterThanOrEqual(120);
+  } finally { await ctx.close(); }
+});
+
+// ── Review round 1 (F5): members-only means never created an event (spec §5) ──
+const STALE_TRIAL = { plan: 'trial', status: 'active', trial_ends_at: '2026-09-20T08:00:00Z' };   // left by the old console
+test('teams: a member with a leftover trial row sees no trial badge, upgrade or billing', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'director', ownSub: STALE_TRIAL,
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro' }] });
+  try {
+    expect(await evalPage(page, 'isMembersOnlyAccount()')).toBe(true);
+    expect(await evalPage(page, `document.getElementById('plan-badge').style.display`)).toBe('none');
+    expect(await evalPage(page, `renderProfilePanel(); ['pp-plan-section', 'pp-upgrade-wrap', 'pp-billing-btn', 'pp-invoices-btn'].map(id => document.getElementById(id).style.display)`))
+      .toEqual(['none', 'none', 'none', 'none']);
+    expect(await evalPage(page, `toggleProfileEdit(); document.getElementById('pp-billing-section').style.display`)).toBe('none');
+    expect(await evalPage(page, `['hm-billing', 'hm-invoices'].map(id => document.getElementById(id).style.display)`)).toEqual(['none', 'none']);
+  } finally { await ctx.close(); }
+});
+
+test('teams: a member with a leftover trial whose event plans all ended gets the screen without prices', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', ownSub: STALE_TRIAL, waitBoot: false,
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER, plan: 'pro', planStatus: 'canceled' }] });
+  try {
+    await expect(page.locator('#trial-expired-screen')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('#trial-expired-screen')).toHaveClass(/te-member/);
+    await expect(page.locator('#te-title')).toHaveText('This event plan has ended');
+  } finally { await ctx.close(); }
+});
+
+test('teams: an organiser keeps the trial badge and billing', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'director', ownSub: { plan: 'trial', status: 'active', trial_ends_at: '2026-10-08T08:00:00Z' } });
+  try {
+    expect(await evalPage(page, 'isMembersOnlyAccount()')).toBe(false);
+    expect(await evalPage(page, `[document.getElementById('plan-badge').style.display, document.getElementById('plan-badge').textContent.startsWith('TRIAL')]`)).toEqual(['', true]);
+    expect(await evalPage(page, `['hm-billing', 'hm-invoices'].map(id => document.getElementById(id).style.display)`)).toEqual(['', '']);
   } finally { await ctx.close(); }
 });
