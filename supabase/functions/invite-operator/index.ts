@@ -177,8 +177,21 @@ Deno.serve(async (req) => {
     }
   }
   // Undo only an account this request made: never one that existed before.
+  // "Made just now" is a time window, and a concurrent invite of the same new
+  // email gets the same unconfirmed user back from generateLink, so both
+  // requests see it as theirs. Delete only an account that is on no event's
+  // team and organises no event; otherwise it is someone else's by now
+  // (deleting it would cascade their membership).
+  let accountKept = false
   const removeNewAccount = async (): Promise<string | null> => {
     if (!createdNow) return null
+    const { count: memberships, error: mErr } = await sb.from('leod_event_members')
+      .select('event_id', { count: 'exact', head: true }).eq('user_id', userId)
+    if (mErr) return mErr.message
+    const { count: owned, error: oErr } = await sb.from('leod_events')
+      .select('id', { count: 'exact', head: true }).eq('created_by', userId)
+    if (oErr) return oErr.message
+    if ((memberships ?? 0) > 0 || (owned ?? 0) > 0) { accountKept = true; return null }
     const { error } = await sb.auth.admin.deleteUser(userId)
     return error ? error.message : null
   }
@@ -188,8 +201,10 @@ Deno.serve(async (req) => {
     const { error: insErr } = await sb.from('leod_event_members')
       .insert({ event_id: eventId, user_id: userId, role, active: true, invited_by: user.id })
     if (insErr) {
-      const undoErr = await removeNewAccount()
       const msg = String(insErr.message ?? '')
+      // These three refusals undo nothing: the account may be another
+      // request's (concurrent invite of the same new email), and an
+      // unconfirmed account with no membership is reused by the next invite.
       if (insErr.code === '23514' && msg.startsWith('seats_full')) {
         return json(409, { error: 'All seats on this event are taken', code: 'seats_full', is_owner: isOwner })
       }
@@ -200,8 +215,9 @@ Deno.serve(async (req) => {
       if (insErr.code === '23505') {
         return json(409, { error: 'This person was just added to this event', code: 'already_on_event' })
       }
+      const undoErr = await removeNewAccount()
       return json(500, { error: `The membership was not saved (${msg})`
-        + (createdNow ? (undoErr ? `; the new account could not be removed (${undoErr})` : '; the invite was withdrawn') : '') })
+        + (createdNow && !accountKept ? (undoErr ? `; the new account could not be removed (${undoErr})` : '; the invite was withdrawn') : '') })
     }
   }
 

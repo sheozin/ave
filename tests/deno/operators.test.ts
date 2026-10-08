@@ -339,13 +339,49 @@ Deno.test('invite: a full team is refused before anything is created, with who s
   assert(r.status === 200 && r.body.result === 'role_changed', 'role change on a full team ' + JSON.stringify(r))
 })
 
-Deno.test('invite: a seat taken while inviting (23514) withdraws the new account', async () => {
+Deno.test('invite: a seat taken while inviting (23514) is a 409 and deletes no account', async () => {
+  // A concurrent invite of the same new email may have created this account
+  // (generateLink reuses an unconfirmed user): refusing must never delete it.
+  // An unconfirmed account with no membership is reused by the next invite.
   setup()
   failOn['POST /rest/v1/leod_event_members'] = { status: 400, body: { code: '23514', message: 'seats_full: 3 of 3 seats used on this event' } }
   const r = await call('invite-operator', OWNER, { email: 'n@x.test', role: 'av', event_id: EV })
   assert(r.status === 409 && r.body.code === 'seats_full', JSON.stringify(r))
-  assert(authAdmin.some(a => a.method === 'DELETE' && a.id === NEW_ID), 'new account kept: ' + JSON.stringify(authAdmin))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'an account was deleted: ' + JSON.stringify(authAdmin))
   assert(emails.length === 0, 'an email was sent')
+})
+
+// Two invites of the same NEW email at once (security review, stage 2 HIGH):
+// both requests see the account as created just now. The loser must never
+// delete it: the winner's membership (and its cascade) would go with it.
+Deno.test('invite: the losing request of a concurrent new-email invite never deletes the winner\'s account', async () => {
+  // a. same event: the winner's membership is there, the loser's insert hits 23505
+  setup()
+  inviteCreatedAt = new Date().toISOString()
+  tables.leod_event_members.push({ event_id: EV, user_id: NEW_ID, role: 'av', active: true })
+  failOn['POST /rest/v1/leod_event_members'] = { status: 409, body: { code: '23505', message: 'duplicate key value violates unique constraint "leod_event_members_pkey"' } }
+  let r = await call('invite-operator', DIR, { email: 'fresh@x.test', role: 'av', event_id: EV })
+  assert(r.status === 409 && r.body.code === 'already_on_event', 'a ' + JSON.stringify(r))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'a: the winner\'s account was deleted')
+  assert(member(EV, NEW_ID), 'a: the winner\'s membership is gone')
+  // b. the winner is on another event, the loser's invitation email fails:
+  //    the loser removes only its own membership, never the account
+  setup()
+  inviteCreatedAt = new Date().toISOString()
+  tables.leod_event_members.push({ event_id: EV_THEIRS, user_id: NEW_ID, role: 'reg', active: true })
+  failOn['RESEND'] = { status: 500, body: { message: 'provider down' } }
+  r = await call('invite-operator', OWNER, { email: 'fresh@x.test', role: 'av', event_id: EV })
+  assert(r.status === 502, 'b ' + JSON.stringify(r))
+  assert(!member(EV, NEW_ID) && member(EV_THEIRS, NEW_ID), 'b: memberships ' + JSON.stringify(tables.leod_event_members))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'b: the winner\'s account was deleted')
+  // c. a failed membership write while the account already organises an event
+  setup()
+  inviteCreatedAt = new Date().toISOString()
+  tables.leod_events.push({ id: '30000000-0000-4000-8000-0000000000ee', created_by: NEW_ID, name: 'Fresh own', created_via: 'console', active: true })
+  failOn['POST /rest/v1/leod_event_members'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  r = await call('invite-operator', OWNER, { email: 'fresh@x.test', role: 'av', event_id: EV })
+  assert(r.status === 500, 'c ' + JSON.stringify(r))
+  assert(!authAdmin.some(a => a.method === 'DELETE'), 'c: an organiser\'s account was deleted')
 })
 
 Deno.test('invite: someone added the same person a moment earlier: 409, their membership stays', async () => {
