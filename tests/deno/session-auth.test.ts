@@ -21,6 +21,7 @@ const STRANGER    = '10000000-0000-4000-8000-000000000006' // creates OTHER_EVEN
 const OTHER_OP    = '10000000-0000-4000-8000-000000000007' // stage member of OTHER_EVENT only
 const NO_ROW      = '10000000-0000-4000-8000-000000000008' // signed in, no leod_users row
 const LEGACY      = '10000000-0000-4000-8000-000000000009' // leod_users.invited_by = OWNER, no membership
+const BANNED      = '10000000-0000-4000-8000-00000000000a' // active director member of EVENT, account suspended by an admin
 const EVENT       = '33333333-3333-4333-8333-333333333333'
 const OTHER_EVENT = '44444444-4444-4444-8444-444444444444'
 const SESSION     = '77777777-7777-4777-8777-777777777777'
@@ -136,6 +137,7 @@ function setup(session: Row = {}) {
       { id: STRANGER,    role: 'director', invited_by: null,  active: true },
       { id: OTHER_OP,    role: 'director', invited_by: null,  active: true },
       { id: LEGACY,      role: 'stage',    invited_by: OWNER, active: true },
+      { id: BANNED,      role: 'director', invited_by: null,  active: false },
     ],
     leod_event_members: [
       { event_id: EVENT,       user_id: OP_DIRECTOR, role: 'director', active: true },
@@ -144,6 +146,7 @@ function setup(session: Row = {}) {
       { event_id: EVENT,       user_id: OP_OFF,      role: 'director', active: false },
       { event_id: OTHER_EVENT, user_id: OTHER_OP,    role: 'stage',    active: true },
       { event_id: OTHER_EVENT, user_id: OP_STAGE,    role: 'director', active: true },
+      { event_id: EVENT,       user_id: BANNED,      role: 'director', active: true },
     ],
     leod_sessions: [{
       id: SESSION, event_id: EVENT, title: 'Keynote', version: 7,
@@ -189,6 +192,7 @@ const CASES: [string, string, string, string, number][] = [
   ['a suspended member is refused',          'end-session',     'LIVE',    OP_OFF,      403],
   ['the old invited_by link alone is refused', 'go-live',       'READY',   LEGACY,      403],
   ['director on another event is stage here: no reinstate', 'reinstate', 'CANCELLED', OP_STAGE, 403],
+  ['an account suspended by an admin is refused despite an active membership', 'go-live', 'READY', BANNED, 403],
 ]
 
 for (const [label, fn, from, who, expected] of CASES) {
@@ -207,6 +211,13 @@ for (const [label, fn, from, who, expected] of CASES) {
     }
   })
 }
+
+Deno.test('the creator is director even with a suspended account flag (unchanged)', async () => {
+  setup({ status: 'READY' })
+  tables.leod_users.find(u => u.id === OWNER)!.active = false
+  const r = await call('go-live', OWNER, { session_id: SESSION, version: 7, command_id: 'cmd-owner-flag' })
+  assert(r.status === 200 && sess().version === 8, JSON.stringify(r))
+})
 
 Deno.test('operator_role in the body is not trusted: av claiming director is refused', async () => {
   setup({ status: 'READY' })
@@ -231,6 +242,7 @@ const DELAY_CASES: [string, string, number][] = [
   ['owner of another event',      STRANGER,    403],
   ["another owner's operator",    OTHER_OP,    403],
   ['the old invited_by link alone', LEGACY,     403],
+  ['an account suspended by an admin', BANNED, 403],
 ]
 for (const [label, who, expected] of DELAY_CASES) {
   Deno.test(`apply-delay: ${label} (${expected})`, async () => {

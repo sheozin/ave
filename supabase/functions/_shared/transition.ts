@@ -42,7 +42,8 @@ export const ROLE_DELAY: Record<string, boolean> = { director: true, stage: true
 // The caller's role in an event, or null when they are not part of it. Same
 // rule as cuedeck_event_role (migration 130): the creator
 // (leod_events.created_by) is director; anyone else needs an active row in
-// leod_event_members for this event, and the role is that row's, never the
+// leod_event_members for this event and an account not suspended by an
+// admin (leod_users.active not false), and the role is that row's, never the
 // operator_role a request claims and never the account's global role. A
 // failed lookup throws, so the caller refuses instead of guessing.
 // deno-lint-ignore no-explicit-any
@@ -57,6 +58,12 @@ export async function eventRole(sb: any, userId: string, eventId: string): Promi
     .eq('event_id', eventId).eq('user_id', userId).maybeSingle()
   if (mErr) throw new Error('membership lookup failed: ' + mErr.message)
   if (!m || m.active !== true || !MEMBER_ROLES.has(m.role)) return null
+  // An account suspended by an admin (leod_users.active = false) has no
+  // member role anywhere; the creator branch above does not look at it.
+  const { data: acct, error: aErr } = await sb
+    .from('leod_users').select('active').eq('id', userId).maybeSingle()
+  if (aErr) throw new Error('account lookup failed: ' + aErr.message)
+  if (!acct || acct.active === false) return null
   return m.role
 }
 

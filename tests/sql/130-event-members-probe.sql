@@ -12,6 +12,9 @@ DECLARE
   v_off    uuid := gen_random_uuid();   -- director member of v_ev, suspended
   v_legacy uuid := gen_random_uuid();   -- leod_users.invited_by = v_owner and no membership
   v_other  uuid := gen_random_uuid();   -- another organiser, creates v_ev2
+  v_banned uuid := gen_random_uuid();   -- signage member of v_ev, account suspended by an admin (leod_users.active = false)
+  v_banown uuid := gen_random_uuid();   -- creates v_ev4, account suspended by an admin
+  v_ev4    uuid;
   v_ev     uuid;
   v_ev2    uuid;
   v_ev3    uuid;
@@ -77,6 +80,42 @@ BEGIN
   v_role := cuedeck_event_role(v_ev);
   RESET ROLE;
   IF v_role IS NOT NULL THEN RAISE EXCEPTION 'PROBE FAIL 1: no user id got %', v_role; END IF;
+  v_checks := v_checks + 1;
+
+  -- 1b. an account suspended by an admin (leod_users.active = false, set by
+  --     admin-manage-user) has no member role anywhere, even with an active
+  --     membership: it reads and writes nothing of the event. The creator
+  --     branch does not look at the account flag (unchanged from before 130).
+  INSERT INTO auth.users (id, email, aud, role)
+  SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated' FROM unnest(ARRAY[v_banned, v_banown]) AS u;
+  INSERT INTO leod_users (id, email, role, active)
+  SELECT u, 'probe-' || u || '@cuedeck-test.io', 'director', false FROM unnest(ARRAY[v_banned, v_banown]) AS u
+  ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, active = EXCLUDED.active;
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES (v_ev, v_banned, 'signage', true);
+  INSERT INTO leod_events (name, date, event_start, event_end, created_by)
+  VALUES ('Probe 130 suspended owner', current_date + 30, '09:00', '18:00', v_banown) RETURNING id INTO v_ev4;
+  IF cuedeck_event_role_of(v_ev, v_banned) IS NOT NULL THEN
+    RAISE EXCEPTION 'PROBE FAIL 1b: a suspended account resolves to %', cuedeck_event_role_of(v_ev, v_banned);
+  END IF;
+  IF cuedeck_event_role_of(v_ev4, v_banown) IS DISTINCT FROM 'director' THEN
+    RAISE EXCEPTION 'PROBE FAIL 1b: a suspended creator resolves to %', cuedeck_event_role_of(v_ev4, v_banown);
+  END IF;
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', v_banned, 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  v_role := cuedeck_event_role(v_ev);
+  SELECT (SELECT count(*) FROM leod_events WHERE id = v_ev)
+       + (SELECT count(*) FROM leod_sessions WHERE event_id = v_ev)
+       + (SELECT count(*) FROM leod_signage_displays WHERE event_id = v_ev)
+       + (SELECT count(*) FROM leod_event_members WHERE event_id = v_ev)
+    INTO v_n;
+  UPDATE leod_signage_displays SET name = name WHERE id = v_disp;
+  GET DIAGNOSTICS v_m = ROW_COUNT;
+  RESET ROLE;
+  IF v_role IS NOT NULL OR v_n <> 0 OR v_m <> 0 THEN
+    RAISE EXCEPTION 'PROBE FAIL 1b: the suspended account got role %, read % rows, updated % displays', v_role, v_n, v_m;
+  END IF;
+  -- out of the way of the roster counts below
+  DELETE FROM leod_event_members WHERE event_id = v_ev AND user_id = v_banned;
   v_checks := v_checks + 1;
 
   -- 2. the table: one membership per person and event, six roles only, the

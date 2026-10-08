@@ -63,6 +63,8 @@ GRANT ALL ON public.leod_event_members TO service_role;
 -- database itself and the service role (rpc_apply_delay checks the
 -- operator an Edge Function names; validate_event_log_role stamps log rows).
 -- Never callable by clients: it takes a user id.
+-- The creator is director whatever their account flag (unchanged from the
+-- resolver before 130); a member also needs leod_users.active not false.
 CREATE OR REPLACE FUNCTION public.cuedeck_event_role_of(p_event_id uuid, p_user_id uuid)
 RETURNS text
 LANGUAGE sql
@@ -76,7 +78,12 @@ AS $$
                    FROM leod_event_members m
                   WHERE m.event_id = e.id
                     AND m.user_id = p_user_id
-                    AND m.active)
+                    AND m.active
+                    -- an account suspended by an admin (admin-manage-user
+                    -- sets leod_users.active = false) has no member role on
+                    -- any event; the old resolver checked the same flag
+                    AND EXISTS (SELECT 1 FROM leod_users u
+                                 WHERE u.id = p_user_id AND u.active IS NOT FALSE))
          END
     FROM leod_events e
    WHERE e.id = p_event_id
