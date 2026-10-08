@@ -4815,21 +4815,34 @@ function renderInspector() {
     buildRoleCtxPanel();
   } else {
     const s = inspectorSession();
-    // The message field is the one node kept across the 1 s re-render, so typing keeps its
-    // caret and an input method's composition (task MSG); the rest is redrawn as before.
-    const keep = document.getElementById('insp-msg-in');
-    const caret = keep && document.activeElement === keep ? [keep.selectionStart, keep.selectionEnd, keep.selectionDirection] : null;
-    wrap.innerHTML = s ? inspectorHTML(s, correctedNow())
+    const html = s ? inspectorHTML(s, correctedNow())
       : `<div class="insp-head"><span class="lbl" id="insp-title">${esc(t('cc.insp.label'))}</span></div>
          <p class="insp-empty">${esc(t('cc.insp.empty'))}</p><div id="ctx-actions" class="insp-controls">${monitorRowHTML()}</div>`;
-    const fresh = keep && document.getElementById('insp-msg-in');
-    if (fresh && fresh.dataset.sid === keep.dataset.sid && fresh.value === keep.value) {
-      keep.placeholder = fresh.placeholder; keep.setAttribute('aria-label', fresh.getAttribute('aria-label'));
-      fresh.replaceWith(keep);
-      if (caret) { keep.focus({ preventScroll: true }); keep.setSelectionRange(...caret); }
-    }
+    // While the message field has focus or an input method is composing, its row is never taken
+    // out of the DOM (that would break IME and dead-key composition, task MSG): everything around
+    // it is redrawn, the row stays as it is.
+    const keepRow = document.querySelector('#ctx-wrap .insp-msg .msg-row');
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const freshRow = tmp.querySelector('.insp-msg .msg-row');
+    const typing = keepRow && (_msgComposing || document.activeElement === keepRow.querySelector('.msg-in'));
+    if (typing && freshRow && freshRow.querySelector('.msg-in').dataset.sid === keepRow.querySelector('.msg-in').dataset.sid) {
+      let k = keepRow, f = freshRow;
+      while (k !== wrap) { keepAround(k, f); k = k.parentElement; f = f.parentElement; }
+      const inp = keepRow.querySelector('.msg-in'), fin = freshRow.querySelector('.msg-in');
+      inp.placeholder = fin.placeholder; inp.setAttribute('aria-label', fin.getAttribute('aria-label'));
+      keepRow.querySelector('.msg-send').textContent = freshRow.querySelector('.msg-send').textContent;
+    } else wrap.innerHTML = html;
   }
   restoreFocus(fk);
+}
+// Replace everything around `keep` with what surrounds `fresh`, leaving `keep` itself in place.
+function keepAround(keep, fresh) {
+  const parent = keep.parentElement;
+  while (parent.firstChild !== keep) parent.firstChild.remove();
+  while (keep.nextSibling) keep.nextSibling.remove();
+  while (fresh.previousSibling) parent.insertBefore(fresh.previousSibling, keep);
+  while (fresh.nextSibling) parent.appendChild(fresh.nextSibling);
 }
 // Every existing caller (nudge, timeline, role switch) keeps calling this name.
 function buildCtxPanel() { renderInspector(); }
@@ -4876,8 +4889,11 @@ function onMsgInput(el) {
   row.querySelector('.msg-count').textContent = `${el.value.length}/${MSG_MAX}`;
   row.querySelector('.msg-send').disabled = !el.value.trim();
 }
+let _msgComposing = false;   // an input method is composing in a message field
+document.addEventListener('compositionstart', ev => { if (ev.target.closest?.('.msg-in')) _msgComposing = true; });
+document.addEventListener('compositionend', ev => { if (ev.target.closest?.('.msg-in')) _msgComposing = false; });
 function onMsgKey(ev, el) {
-  if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); sendStageMessage(el.dataset.sid, el.value); }
+  if (ev.key === 'Enter' && !ev.isComposing) { ev.preventDefault(); if (el.value.trim()) sendStageMessage(el.dataset.sid, el.value); }
   // In the inspector Escape only leaves the field: it never reaches the clear-filters shortcut.
   // In the sheet it closes the sheet (the modal's Escape).
   else if (ev.key === 'Escape' && !el.closest('#msg-sheet')) { ev.stopPropagation(); el.blur(); }
@@ -4907,7 +4923,9 @@ async function sendStageMessage(sid, raw) {
     }
     if (!S.event || S.event.id !== eventId) return;   // answer for an event already switched away from
     delete S.msgDraft[sid];
-    document.querySelectorAll('.msg-in').forEach(el => { if (el.dataset.sid === sid) el.value = ''; });
+    document.querySelectorAll('.msg-in').forEach(el => { if (el.dataset.sid === sid) { el.value = ''; onMsgInput(el); } });
+    delete S.msgDraft[sid];
+    if (_msgSheetSid === sid) closeMsgSheet();
     if (data && data.id) applyStageMsg({ ...data, event_id: eventId, session_id: data.session_id || sid, cleared_at: null });
     else refreshMessageViews();
   } catch (e) {
@@ -4989,9 +5007,12 @@ function openMsgSheet(sid) {
   document.getElementById('msg-sheet').style.display = 'flex';
 }
 function closeMsgSheet() {
+  const sid = _msgSheetSid;
   _msgSheetSid = null;
   const m = document.getElementById('msg-sheet');
   if (m) m.style.display = 'none';
+  // The Now card is rebuilt every second, so the button is found by its data-fk, not remembered.
+  if (sid) document.querySelector(`[data-fk="${CSS.escape('ph-msg-' + sid)}"]`)?.focus({ preventScroll: true });
 }
 function renderMsgSheetStrip() {
   if (!_msgSheetSid) return;

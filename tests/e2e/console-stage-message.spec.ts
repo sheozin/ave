@@ -107,6 +107,60 @@ test('message: typing survives the 1 s re-render with focus and caret kept, and 
   await ctx.close();
 });
 
+test('message: while the input has focus or composes, the re-render never takes it out of the DOM, and the strip still updates', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  await afterBootReread(page);
+  const input = sec(page).locator('input.msg-in');
+  await input.click();
+  await input.evaluate((el: HTMLInputElement) => {
+    (el as any).__mark = 'same';
+    (window as any).__removed = 0;
+    new MutationObserver(ms => { for (const m of ms) m.removedNodes.forEach(n => { if (n === el || (n as Element).contains?.(el)) (window as any).__removed++; }); })
+      .observe(document.getElementById('ctx-wrap')!, { childList: true, subtree: true });
+    el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+  });
+  await page.keyboard.type('Gr');
+  await page.clock.runFor(2100);
+  expect(await input.evaluate((el: HTMLInputElement) => [(el as any).__mark, el.value, el.isConnected, document.activeElement === el])).toEqual(['same', 'Gr', true, true]);
+  // a message from another operator still shows, in place
+  await rtPush(page, 'leod_stage_messages', 'INSERT', msgRow({ text: 'Take questions now' }));
+  await expect(sec(page).locator('.msg-strip-text')).toHaveText('Take questions now');
+  await page.clock.runFor(1100);
+  expect(await input.evaluate((el: HTMLInputElement) => [(el as any).__mark, el.value, document.activeElement === el, (window as any).__removed])).toEqual(['same', 'Gr', true, 0]);
+  await expect(sec(page).locator('.msg-send')).toBeEnabled();
+  await ctx.close();
+});
+
+test('message: a composition that outlives a blur keeps the field until compositionend', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const input = sec(page).locator('input.msg-in');
+  await input.click();
+  await input.evaluate((el: HTMLInputElement) => {
+    (el as any).__mark = 'same'; (window as any).__removed = 0;
+    new MutationObserver(ms => { for (const m of ms) m.removedNodes.forEach(n => { if (n === el || (n as Element).contains?.(el)) (window as any).__removed++; }); })
+      .observe(document.getElementById('ctx-wrap')!, { childList: true, subtree: true });
+    el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    el.blur();
+  });
+  await page.clock.runFor(2100);
+  expect(await input.evaluate(() => (window as any).__removed)).toBe(0);
+  await ctx.close();
+});
+
+test('message: Enter on an empty or blank input does nothing: no call, no toast', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const calls = await mockRpcs(page);
+  const input = sec(page).locator('input.msg-in');
+  await input.click();
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('   ');
+  await page.keyboard.press('Enter');
+  await page.clock.runFor(500);
+  expect(calls.send).toEqual([]);
+  await expect(page.locator('#toast-container .toast')).toHaveCount(0);
+  await ctx.close();
+});
+
 test('message: Escape in the input does not clear the filters', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   await evalPage(page, `F.text = 'panel'; buildFilterBar(); renderSessions();`);
@@ -304,11 +358,24 @@ test('message: phone: the Now card opens a sheet that sends', async ({ browser }
     expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await page.clock.runFor(1100);   // the Now tab's re-render does not touch the sheet
   await page.locator('#msg-sheet .msg-preset', { hasText: 'Stop now' }).click();
-  await expect(page.locator('#msg-sheet .msg-strip-text')).toHaveText('Stop now');
+  await expect(page.locator('#msg-sheet')).toBeHidden();   // a successful send closes the sheet
   expect(calls.send).toEqual([{ p_event_id: EVENT_ID, p_session_id: PANEL_ID, p_text: 'Stop now' }]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-  await page.keyboard.press('Escape');
+  await ctx.close();
+});
+
+test('message: phone: a send closes the sheet and focus returns to the Now card button', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { ...PHONE });
+  const calls = await mockRpcs(page);
+  const btn = page.locator('#phone-now .ph-lane[data-room="Main Stage"] .ph-now-card .ph-msg-btn');
+  const fk = await btn.getAttribute('data-fk');
+  await btn.click();
+  await expect(page.locator('#msg-sheet')).toBeVisible();
+  await page.clock.runFor(1100);   // the Now card is rebuilt meanwhile
+  await page.locator('#msg-sheet .msg-preset', { hasText: 'Stop now' }).click();
   await expect(page.locator('#msg-sheet')).toBeHidden();
+  expect(calls.send.map(b => b.p_text)).toEqual(['Stop now']);
+  expect(await page.evaluate(() => document.activeElement?.getAttribute('data-fk'))).toBe(fk);
   await ctx.close();
 });
 
