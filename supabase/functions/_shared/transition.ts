@@ -237,7 +237,7 @@ export async function runTransition(
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: upErr.message, resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     return new Response(upErr.message, { status: 500, headers: cors })
   }
@@ -249,7 +249,7 @@ export async function runTransition(
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: 'Version conflict', resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     return new Response(
       JSON.stringify({ error: 'Version conflict' }),
@@ -264,7 +264,7 @@ export async function runTransition(
     await sb.from('leod_commands')
       .update({ status: 'EXECUTED', result: resultPayload, resolved_at: now })
       .eq('command_id', command_id)
-      .then(() => {}).catch(() => {})
+      .then(() => {}, () => {})
   }
 
   // Write event log (best-effort)
@@ -282,7 +282,7 @@ export async function runTransition(
           previous_actual_end: session.actual_end ?? null }
       : { command_id, via: 'edge-function' },
     server_time_ms: Date.now(),
-  }).then(() => {}).catch(() => {})
+  }).then(() => {}, () => {})
 
   return new Response(
     JSON.stringify(resultPayload),

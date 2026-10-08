@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: rpcError.message, resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     // 42501: rpc_apply_delay re-checked the caller and refused.
     if (rpcError.code === '42501') return forbidden(cors)
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
     await sb.from('leod_commands')
       .update({ status: 'EXECUTED', result: resultPayload, resolved_at: now })
       .eq('command_id', command_id)
-      .then(() => {}).catch(() => {})
+      .then(() => {}, () => {})
   }
 
   return new Response(
