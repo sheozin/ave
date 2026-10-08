@@ -36,8 +36,8 @@ Deno.serve(async (req) => {
   }
 
   // ── Who may delay ────────────────────────────────────────────────────────
-  // Same rule as runTransition: owner, or an active operator the owner
-  // invited, with a role in ROLE_DELAY. operator_role is only logged.
+  // Same rule as runTransition: the event's creator, or an active member
+  // of this event, with a role in ROLE_DELAY. operator_role is only logged.
   // rpc_apply_delay checks p_operator_id again inside the transaction.
   const { data: target, error: targetErr } = await sb
     .from('leod_sessions').select('event_id').eq('id', session_id).maybeSingle()
@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: rpcError.message, resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     // 42501: rpc_apply_delay re-checked the caller and refused.
     if (rpcError.code === '42501') return forbidden(cors)
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
     await sb.from('leod_commands')
       .update({ status: 'EXECUTED', result: resultPayload, resolved_at: now })
       .eq('command_id', command_id)
-      .then(() => {}).catch(() => {})
+      .then(() => {}, () => {})
   }
 
   return new Response(

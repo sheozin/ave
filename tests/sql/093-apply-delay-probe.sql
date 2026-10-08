@@ -31,6 +31,11 @@ BEGIN
 
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 093', current_date + 30, '09:00', '18:00', v_owner) RETURNING id INTO v_ev;
+  -- event teams (130): roles are per event in leod_event_members
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES
+    (v_ev, v_stage, 'stage',    true),
+    (v_ev, v_av,    'av',       true),
+    (v_ev, v_dead,  'director', false);
 
   -- Running order:
   --   1 Opening   ENDED                    (before the target: untouched)

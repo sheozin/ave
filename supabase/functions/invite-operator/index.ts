@@ -1,221 +1,244 @@
-// invite-operator — Director invites a crew member by email.
-// Creates the auth account with generateLink (Supabase sends nothing) and
-// emails the link itself through _shared/invite-email.ts, so the invitation
-// names the event the director has open, who invited them and the role.
-// then sets the leod_users row the auth trigger (handle_new_auth_user)
-// already created as a self-registered director: role, invited_by, active.
-// The operator joins the caller's team: invited_by is the event owner, also
-// when an invited director sends the invite.
+// invite-operator: a director adds a person to ONE event with ONE role
+// (event teams, spec docs/superpowers/specs/2026-10-08-event-teams-design.md §4).
+//  * A new email gets an account (auth.admin.generateLink, Supabase sends
+//    nothing), a membership on this event, and the branded invitation that
+//    names the event, the inviter and the role.
+//  * An existing account (any organiser, any role) gets the membership and a
+//    short "added to" email with a link to the console: no signup, no
+//    password step. If it never signed in, a fresh link instead.
+//  * Already on this event with the same role: nothing changes or is sent.
+//    With another role: the role is changed, nothing is sent.
+// Who: the event's creator and its active director members (eventRole).
+// Seats: the event owner's plan (cuedeck_event_seats_of), checked before
+// anything is created; the membership insert checks again in the database
+// (trigger, migration 133), so two invites cannot both take the last seat.
+// Rate limit: 20 invitations per event owner per 24 hours.
+// The account's own leod_users role and team link are never written here.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { sendInviteEmail } from '../_shared/invite-email.ts'
+import { eventRole } from '../_shared/transition.ts'
+import { MEMBER_ROLES, UUID, logMemberChange } from '../_shared/members.ts'
 
-const VALID_ROLES = new Set(['director', 'stage', 'av', 'interp', 'reg', 'signage'])
 const ROLE_TEXT: Record<string, string> = {
   director: 'the Director role', stage: 'the Stage role', av: 'the AV role',
   interp: 'the Interpretation role', reg: 'the Registration role', signage: 'the Signage role',
 }
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
   const startedAt = Date.now()
-
-  // Pre-flight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: cors })
-  }
-
-  // Parse body
-  let body: Record<string, unknown>
-  try { body = await req.json() } catch {
-    return new Response(JSON.stringify({ error: 'Bad request' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
-  // Ping support (deploy verification)
-  if (body._ping) {
-    return new Response(JSON.stringify({ pong: true }), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
-  // ── Auth: verify caller is a director ──────────────────────────
-  const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
-  if (!jwt) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
-  const sb = adminClient()
-  const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
-  if (authErr || !user) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
-
   const json = (status: number, payload: unknown) => new Response(JSON.stringify(payload), {
     status, headers: { ...cors, 'Content-Type': 'application/json' },
   })
 
-  // Verify caller is an active director
-  const { data: callerRow, error: callerErr } = await sb.from('leod_users')
-    .select('role, invited_by, active, name, email').eq('id', user.id).maybeSingle()
-  if (callerErr) return json(500, { error: callerErr.message })
-  if (!callerRow || callerRow.role !== 'director' || callerRow.active === false) {
-    return new Response(JSON.stringify({ error: 'Forbidden — directors only' }), {
-      status: 403, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
-  // ── Validate input ─────────────────────────────────────────────
+  let body: Record<string, unknown>
+  try { body = await req.json() } catch { return json(400, { error: 'Bad request' }) }
+
+  // Ping support (deploy verification)
+  if (body._ping) return json(200, { pong: true })
+
+  const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
+  if (!jwt) return json(401, { error: 'Unauthorized' })
+  const sb = adminClient()
+  const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
+  if (authErr || !user) return json(401, { error: 'Unauthorized' })
+
+  // ── Input ──────────────────────────────────────────────────────
   const email = String(body.email || '').trim().toLowerCase()
   const role  = String(body.role || '')
-  const name  = String(body.name || '').trim() || null
-
-  if (!email || !VALID_ROLES.has(role)) {
-    return new Response(JSON.stringify({ error: 'Missing or invalid email/role' }), {
-      status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
+  const name  = String(body.name || '').trim().slice(0, 120) || null
+  const eventId = typeof body.event_id === 'string' && UUID.test(body.event_id) ? body.event_id : null
+  if (!email || !MEMBER_ROLES.has(role) || !eventId) {
+    return json(400, { error: 'An email, a role and the event are required' })
   }
 
-  const teamOwner: string = callerRow.invited_by ?? user.id
+  // ── The event, and the caller's role on it ──────────────────────
+  const { data: ev, error: evErr } = await sb.from('leod_events')
+    .select('id, name, date, created_by, created_via').eq('id', eventId).maybeSingle()
+  if (evErr) return json(500, { error: evErr.message })
+  let callerRole: string | null = null
+  if (ev) {
+    try { callerRole = await eventRole(sb, user.id, eventId) } catch (e) { return json(500, { error: (e as Error).message }) }
+  }
+  // An unknown event and someone else's event answer alike.
+  if (!ev || callerRole !== 'director') return json(403, { error: 'Forbidden: only the directors of this event can invite' })
+  if (ev.created_via !== 'console') {
+    return json(400, { error: 'Check-in events invite their staff from Check-in', code: 'not_console_event' })
+  }
+  const owner: string = ev.created_by
+  const isOwner = owner === user.id
 
-  // ── Check if user already exists ───────────────────────────────
-  const { data: existingUser, error: existingErr } = await sb.from('leod_users')
-    .select('id, email, role').eq('email', email).maybeSingle()
-  if (existingErr) return json(500, { error: existingErr.message })
-  if (existingUser) {
-    return new Response(
-      JSON.stringify({ error: 'User already exists', existing_role: existingUser.role }),
-      { status: 409, headers: { ...cors, 'Content-Type': 'application/json' } },
-    )
+  // ── The person: an existing account, or none yet ───────────────
+  const { data: existing, error: exErr } = await sb.from('leod_users').select('id').eq('email', email).maybeSingle()
+  if (exErr) return json(500, { error: exErr.message })
+  if (existing?.id === owner) {
+    return json(409, { error: 'This person organises the event and is already its director', code: 'is_owner' })
+  }
+  let current: { role: string; active: boolean } | null = null
+  if (existing) {
+    const { data: m, error: mErr } = await sb.from('leod_event_members').select('role, active')
+      .eq('event_id', eventId).eq('user_id', existing.id).maybeSingle()
+    if (mErr) return json(500, { error: mErr.message })
+    current = m
   }
 
-  // ── Rate limit: 20 invitations per team per 24 hours ──────────
-  // The email is ours now, not Supabase's, so Supabase's own invite rate
-  // limit no longer applies. Counted from the audit log before anything is
-  // created or sent; a failed count refuses rather than sends.
+  // ── On this event with another role: change it, send nothing ───
+  if (existing && current && current.role !== role) {
+    const { data: upd, error: upErr } = await sb.from('leod_event_members').update({ role })
+      .eq('event_id', eventId).eq('user_id', existing.id).select('user_id')
+    if (upErr) return json(500, { error: upErr.message })
+    if (!upd?.length) return json(500, { error: 'No membership row updated' })
+    await logMemberChange(sb, eventId, user.id, 'MEMBER_ROLE_CHANGED',
+      { target_user_id: existing.id, from_role: current.role, role, event_owner: owner })
+    return json(200, { ok: true, role, result: 'role_changed' })
+  }
+
+  // ── An existing account: has it ever signed in? ─────────────────
+  let signedIn = false
+  let confirmed = false
+  if (existing) {
+    const { data: au, error: auErr } = await sb.auth.admin.getUserById(existing.id)
+    if (auErr || !au?.user) {
+      console.error('invite-operator: auth user lookup failed', auErr?.status ?? 'missing')
+      return json(502, { error: 'Could not send the invitation' })
+    }
+    signedIn = !!au.user.last_sign_in_at
+    confirmed = !!au.user.email_confirmed_at
+    // Same role on this event, and the login works: nothing to do.
+    if (current && signedIn) return json(200, { ok: true, role, result: 'unchanged' })
+  }
+
+  // ── Rate limit: 20 invitations per event owner per 24 hours ─────
+  // Counted from the event logs before anything is created or sent; a
+  // failed count refuses rather than sends.
   const since = new Date(Date.now() - 24 * 3600e3).toISOString()
   const { count: sent, error: countErr } = await sb.from('leod_event_log')
     .select('id', { count: 'exact', head: true })
-    .eq('action', 'OPERATOR_INVITED').eq('payload->>team_owner', teamOwner).gte('ts', since)
-  if (countErr) { console.error('invite-operator: invite count failed', countErr.code); return json(503, { error: 'Could not send the invitation right now. Try again shortly.' }) }
-  if ((sent ?? 0) >= 20) return json(429, { error: 'Your team has sent 20 invitations in the last 24 hours. Try again later.', code: 'invite_rate' })
-
-  // ── The event to name in the invitation ───────────────────────
-  // Only an event the director's team owns: a forged id must not put another
-  // team's event name into an email to an address the caller chose.
-  let event: { name: string; date: string | null } | null = null
-  const eventId = typeof body.event_id === 'string' && UUID.test(body.event_id) ? body.event_id : null
-  if (eventId) {
-    const { data: ev, error: evErr } = await sb.from('leod_events')
-      .select('name, date, created_by').eq('id', eventId).maybeSingle()
-    if (evErr) console.error('invite-operator: event read failed', evErr.code)
-    else if (ev && ev.created_by === teamOwner) event = { name: ev.name, date: ev.date }
+    .eq('action', 'MEMBER_INVITED').eq('payload->>event_owner', owner).gte('ts', since)
+  if (countErr) {
+    console.error('invite-operator: invite count failed', countErr.code)
+    return json(503, { error: 'Could not send the invitation right now. Try again shortly.' })
   }
-  // No usable event sent (a console tab older than this feature, the setup
-  // wizard, an invite from a page with no event open): if the team has
-  // exactly one active event, that is the one the person is joining.
-  if (!event) {
-    const { data: evs, error: evsErr } = await sb.from('leod_events')
-      .select('id, name, date').eq('created_by', teamOwner).eq('active', true).limit(2)
-    if (evsErr) console.error('invite-operator: team events read failed', evsErr.code)
-    else if (evs && evs.length === 1) event = { name: evs[0].name, date: evs[0].date }
+  if ((sent ?? 0) >= 20) {
+    return json(429, { error: 'This organiser has sent 20 invitations in the last 24 hours. Try again later.', code: 'invite_rate' })
   }
 
-  // ── Create the account and its link; Supabase sends no email ───
+  // ── Seats, before anything is created (a new membership only) ───
+  if (!current) {
+    const { data: seats, error: seatErr } = await sb.rpc('cuedeck_event_seats_of', { p_event_id: eventId })
+    if (seatErr || !seats) return json(500, { error: seatErr?.message ?? 'Could not read the seats of this event' })
+    const s = seats as { used: number; limit: number | null }
+    if (s.limit !== null && s.used >= s.limit) {
+      return json(409, { error: 'All seats on this event are taken', code: 'seats_full', used: s.used, limit: s.limit, is_owner: isOwner })
+    }
+  }
+
+  // ── The account and its link ───────────────────────────────────
   const appUrl = Deno.env.get('ALLOWED_ORIGIN') || 'https://app.cuedeck.io'
-  const { data: linkData, error: inviteErr } = await sb.auth.admin.generateLink({
-    type: 'invite', email,
-    options: { data: { name: name || '', invited_role: role }, redirectTo: appUrl },
-  })
-  const actionLink = linkData?.properties?.action_link
-  if (inviteErr || !linkData?.user || !actionLink) {
-    return new Response(
-      JSON.stringify({ error: inviteErr?.message ?? 'Could not create the invitation' }),
-      { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
-    )
-  }
-  const inviteData = { user: linkData.user }
-
-  const newId = inviteData.user.id
-
-  // ── Never take over someone else's account ─────────────────────
-  // The auth trigger has normally just created this row as a fresh,
-  // uninvited director. If the account already belongs to another team, or
-  // owns events of its own, an invite must not change its role.
-  const { data: row, error: rowErr } = await sb.from('leod_users')
-    .select('id, invited_by').eq('id', newId).maybeSingle()
-  if (rowErr) return json(500, { error: rowErr.message })
-  if (row?.invited_by && row.invited_by !== teamOwner) {
-    return json(409, { error: 'This account already belongs to another team' })
-  }
-  const { data: owned, error: ownedErr } = await sb.from('leod_events')
-    .select('id').eq('created_by', newId).limit(1)
-  if (ownedErr) return json(500, { error: ownedErr.message })
-  if (owned && owned.length > 0) {
-    return json(409, { error: 'This account owns events and cannot be made an operator' })
-  }
-
-  // ── Set the operator row (upsert: the trigger usually created it) ─
-  const { data: saved, error: upsertErr } = await sb.from('leod_users').upsert({
-    id:         newId,
-    email,
-    name,
-    role,
-    active:     true,
-    invited_by: teamOwner,
-  }, { onConflict: 'id' }).select('id')
-  if (upsertErr || !saved?.length) {
-    const why = upsertErr?.message ?? 'no row'
-    // Undo the invite, but only for an account this request created: an
-    // older account (an earlier, unconfirmed invite) is never deleted here.
-    const created = Date.parse(String(inviteData.user.created_at ?? ''))
-    if (Number.isFinite(created) && created >= startedAt - 5_000) {
-      const { error: delErr } = await sb.auth.admin.deleteUser(newId)
-      if (delErr) {
-        return json(500, { error: `The operator row was not saved (${why}) and the new account could not be removed (${delErr.message})` })
+  const notice = !!existing && signedIn   // a working login: a short notice, nothing to accept
+  let userId: string
+  let createdNow = false
+  let actionLink = appUrl
+  if (existing) {
+    userId = existing.id
+    if (!signedIn) {
+      // Never signed in: a fresh link, an invite if never confirmed, else a password link.
+      const { data: l, error: lErr } = await sb.auth.admin.generateLink({
+        type: confirmed ? 'recovery' : 'invite', email, options: { redirectTo: appUrl },
+      })
+      const al = l?.properties?.action_link
+      if (lErr || !al) {
+        console.error('invite-operator: link failed', lErr?.status ?? 'no link')
+        return json(502, { error: 'Could not send the invitation' })
       }
-      return json(500, { error: `The operator row was not saved (${why}); the invite was withdrawn` })
+      actionLink = al
     }
-    return json(500, { error: `Invite sent but the operator row was not saved: ${why}` })
+  } else {
+    const { data: l, error: lErr } = await sb.auth.admin.generateLink({
+      type: 'invite', email, options: { data: { name: name || '', invited_role: role }, redirectTo: appUrl },
+    })
+    const al = l?.properties?.action_link
+    if (lErr || !l?.user || !al) return json(500, { error: lErr?.message ?? 'Could not create the invitation' })
+    userId = l.user.id
+    const created = Date.parse(String(l.user.created_at ?? ''))
+    createdNow = Number.isFinite(created) && created >= startedAt - 5_000
+    actionLink = al
+    if (userId === owner) {
+      return json(409, { error: 'This person organises the event and is already its director', code: 'is_owner' })
+    }
+    // The signup trigger made the leod_users row; only the typed name is added.
+    if (name && createdNow) {
+      const { error: nameErr } = await sb.from('leod_users').update({ name }).eq('id', userId)
+      if (nameErr) console.error('invite-operator: name not saved', nameErr.message)
+    }
+  }
+  // Nothing here ever deletes an auth account. "Made by this request" can
+  // only be guessed from a time window, and a concurrent invite of the same
+  // new email gets the same unconfirmed user back from generateLink, so a
+  // delete could remove another request's account and cascade its
+  // memberships. An unconfirmed account with no membership is harmless: the
+  // next invite of that email reuses it.
+
+  // ── The membership (the database checks the seats again) ────────
+  // created_at identifies this request's own row, so a later undo removes
+  // that row and never one another director wrote under the same key.
+  let myRowCreatedAt: string | null = null
+  if (!current) {
+    const { data: ins, error: insErr } = await sb.from('leod_event_members')
+      .insert({ event_id: eventId, user_id: userId, role, active: true, invited_by: user.id })
+      .select('created_at')
+    if (!insErr) myRowCreatedAt = (ins as { created_at: string }[] | null)?.[0]?.created_at ?? null
+    if (insErr) {
+      const msg = String(insErr.message ?? '')
+      // No row was written, so there is nothing to undo.
+      if (insErr.code === '23514' && msg.startsWith('seats_full')) {
+        return json(409, { error: 'All seats on this event are taken', code: 'seats_full', is_owner: isOwner })
+      }
+      if (insErr.code === '23514' && msg.startsWith('owner_not_member')) {
+        return json(409, { error: 'This person organises the event and is already its director', code: 'is_owner' })
+      }
+      // Another director added the same person a moment ago: theirs stays.
+      if (insErr.code === '23505') {
+        return json(409, { error: 'This person was just added to this event', code: 'already_on_event' })
+      }
+      return json(500, { error: `The membership was not saved (${msg})` })
+    }
   }
 
-  // ── The invitation email ──────────────────────────────────────
-  const { error: mailErr } = await sendInviteEmail({
-    to: email, product: 'console', eventName: event?.name ?? null, eventDate: event?.date ?? null,
-    inviterName: callerRow.name || callerRow.email || null, roleText: ROLE_TEXT[role],
-    actionUrl: actionLink, actionLabel: 'Accept the invitation',
-  })
-  if (mailErr) {
-    // No email means no way in: withdraw what this request created.
-    const created = Date.parse(String(inviteData.user.created_at ?? ''))
-    if (Number.isFinite(created) && created >= startedAt - 5_000) {
-      const { error: delErr } = await sb.auth.admin.deleteUser(newId)
-      if (delErr) return json(500, { error: `The invitation email failed (${mailErr}) and the new account could not be removed (${delErr.message})` })
+  // ── The email ──────────────────────────────────────────────────
+  const { data: caller, error: callerErr } = await sb.from('leod_users').select('name, email').eq('id', user.id).maybeSingle()
+  if (callerErr) console.error('invite-operator: inviter name not read', callerErr.message)
+  const mail = {
+    to: email, product: 'console' as const, eventName: ev.name, eventDate: ev.date ?? null,
+    inviterName: caller?.name || caller?.email || null, roleText: ROLE_TEXT[role],
+  }
+  if (notice) {
+    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: appUrl, actionLabel: 'Open CueDeck', existingAccount: true })
+    // The membership is in place; a lost notice is logged, not failed (as check-in does).
+    if (mailErr) console.error('invite-operator: added-to notice failed for event', eventId, mailErr)
+  } else {
+    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: actionLink, actionLabel: 'Accept the invitation' })
+    if (mailErr) {
+      // No email means no way in: take back this request's own membership
+      // row (never the account; see above).
+      if (!current) {
+        if (!myRowCreatedAt) {
+          return json(500, { error: `The invitation email failed (${mailErr}) and the membership could not be identified to remove it` })
+        }
+        const { error: delErr } = await sb.from('leod_event_members').delete()
+          .eq('event_id', eventId).eq('user_id', userId).eq('created_at', myRowCreatedAt)
+        if (delErr) return json(500, { error: `The invitation email failed (${mailErr}) and the membership could not be removed (${delErr.message})` })
+      }
+      return json(502, { error: 'The invitation email could not be sent. Nothing was added; try again.' })
     }
-    return json(502, { error: 'The invitation email could not be sent. Nothing was created; try again.' })
   }
 
-  // ── Audit log (best-effort, but a failure is logged) ──────────
-  const { error: logErr } = await sb.from('leod_event_log').insert({
-    event_id:      null,
-    session_id:    null,
-    action:        'OPERATOR_INVITED',
-    operator_id:   user.id,
-    operator_role: 'director',
-    payload:       { invited_email: email, assigned_role: role, invited_user_id: newId, team_owner: teamOwner, event_id: eventId, event_named: event?.name ?? null },
-    server_time_ms: Date.now(),
-  })
-  if (logErr) console.error('OPERATOR_INVITED log failed:', logErr.message)
-
-  return new Response(
-    JSON.stringify({ ok: true, user_id: newId, role }),
-    { headers: { ...cors, 'Content-Type': 'application/json' } },
-  )
+  await logMemberChange(sb, eventId, user.id, 'MEMBER_INVITED',
+    { target_user_id: userId, role, event_owner: owner, existing_account: !!existing })
+  // No account id in the answer: it would confirm the address has a login.
+  return json(200, { ok: true, role, result: existing ? (current ? 'link_resent' : 'added') : 'invited' })
 })

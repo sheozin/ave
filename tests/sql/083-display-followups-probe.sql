@@ -34,6 +34,10 @@ BEGIN
 
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 083', current_date + 30, '09:00', '18:00', v_owner) RETURNING id INTO v_ev;
+  -- event teams (130): roles are per event in leod_event_members
+  INSERT INTO leod_event_members (event_id, user_id, role, active) VALUES
+    (v_ev, v_op,   'signage', true),
+    (v_ev, v_dead, 'signage', false);
   INSERT INTO leod_events (name, date, event_start, event_end, created_by)
   VALUES ('Probe 083 other', current_date + 30, '09:00', '18:00', v_other) RETURNING id INTO v_ev2;
   INSERT INTO leod_signage_displays (event_id, name) VALUES (v_ev, 'Probe TV')

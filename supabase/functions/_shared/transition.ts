@@ -1,5 +1,6 @@
 import { adminClient } from './client.ts'
 import { corsHeaders } from './cors.ts'
+import { MEMBER_ROLES } from './members.ts'
 
 // ── Time helper ──────────────────────────────────────────────────────────────
 // timeStr is "HH:MM:SS" (TIME column from Postgres)
@@ -38,11 +39,13 @@ export const ROLE_WRITE: Record<string, string[]> = {
 }
 export const ROLE_DELAY: Record<string, boolean> = { director: true, stage: true }
 
-// The caller's role in an event, or null when they are not part of it. The
-// owner (leod_events.created_by) counts as director. Anyone else must have
-// been invited by the owner and not be deactivated; their role is the one in
-// leod_users, never the operator_role a request claims. A failed lookup
-// throws, so the caller refuses instead of guessing.
+// The caller's role in an event, or null when they are not part of it. Same
+// rule as cuedeck_event_role (migration 130): the creator
+// (leod_events.created_by) is director; anyone else needs an active row in
+// leod_event_members for this event and an account not suspended by an
+// admin (leod_users.active not false), and the role is that row's, never the
+// operator_role a request claims and never the account's global role. A
+// failed lookup throws, so the caller refuses instead of guessing.
 // deno-lint-ignore no-explicit-any
 export async function eventRole(sb: any, userId: string, eventId: string): Promise<string | null> {
   const { data: ev, error: evErr } = await sb
@@ -50,11 +53,18 @@ export async function eventRole(sb: any, userId: string, eventId: string): Promi
   if (evErr) throw new Error('event lookup failed: ' + evErr.message)
   if (!ev?.created_by) return null
   if (ev.created_by === userId) return 'director'
-  const { data: me, error: meErr } = await sb
-    .from('leod_users').select('role, invited_by, active').eq('id', userId).maybeSingle()
-  if (meErr) throw new Error('operator lookup failed: ' + meErr.message)
-  if (!me || me.invited_by !== ev.created_by || me.active === false) return null
-  return me.role ?? null
+  const { data: m, error: mErr } = await sb
+    .from('leod_event_members').select('role, active')
+    .eq('event_id', eventId).eq('user_id', userId).maybeSingle()
+  if (mErr) throw new Error('membership lookup failed: ' + mErr.message)
+  if (!m || m.active !== true || !MEMBER_ROLES.has(m.role)) return null
+  // An account suspended by an admin (leod_users.active = false) has no
+  // member role anywhere; the creator branch above does not look at it.
+  const { data: acct, error: aErr } = await sb
+    .from('leod_users').select('active').eq('id', userId).maybeSingle()
+  if (aErr) throw new Error('account lookup failed: ' + aErr.message)
+  if (!acct || acct.active === false) return null
+  return m.role
 }
 
 export const forbidden = (cors: Record<string, string>) =>
@@ -227,7 +237,7 @@ export async function runTransition(
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: upErr.message, resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     return new Response(upErr.message, { status: 500, headers: cors })
   }
@@ -239,7 +249,7 @@ export async function runTransition(
       await sb.from('leod_commands')
         .update({ status: 'REJECTED', error: 'Version conflict', resolved_at: now })
         .eq('command_id', command_id)
-        .then(() => {}).catch(() => {})
+        .then(() => {}, () => {})
     }
     return new Response(
       JSON.stringify({ error: 'Version conflict' }),
@@ -254,7 +264,7 @@ export async function runTransition(
     await sb.from('leod_commands')
       .update({ status: 'EXECUTED', result: resultPayload, resolved_at: now })
       .eq('command_id', command_id)
-      .then(() => {}).catch(() => {})
+      .then(() => {}, () => {})
   }
 
   // Write event log (best-effort)
@@ -272,7 +282,7 @@ export async function runTransition(
           previous_actual_end: session.actual_end ?? null }
       : { command_id, via: 'edge-function' },
     server_time_ms: Date.now(),
-  }).then(() => {}).catch(() => {})
+  }).then(() => {}, () => {})
 
   return new Response(
     JSON.stringify(resultPayload),
