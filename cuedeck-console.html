@@ -9346,8 +9346,10 @@ async function loadUserRole() {
     throw new Error('suspended'); // abort boot()
   }
 
-  // Block access for pending accounts
-  if (data.role === 'pending') {
+  // Block access for pending accounts, unless the login is on an event's team
+  // (event teams: invite-operator adds a membership and leaves leod_users.role).
+  if (data.role === 'pending' && S.myEventsFailed) throw new Error('my_events_failed');
+  if (data.role === 'pending' && !S.myEvents.size) {
     showPendingScreen(S.user.email);
     throw new Error('pending'); // abort boot()
   }

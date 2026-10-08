@@ -653,3 +653,14 @@ test('teams: different roles on two events are not a role change; a real change 
     await expect(toasts(page)).toContainText('Your role on GTR North Africa 2026 is now Stage.');
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (F10): a legacy pending account on an event team gets in ──
+test('teams: an account still marked pending that is on an event team opens the console', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', accountRole: 'pending',
+    myEvents: [{ id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER }] });
+  try {
+    await expect(page.locator('#pending-screen')).toBeHidden();
+    await expect(page.locator('#role-lock')).toHaveText('Stage');
+    expect(await evalPage(page, 'S.accountRole')).toBe('pending');
+  } finally { await ctx.close(); }
+});
