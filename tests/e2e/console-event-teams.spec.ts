@@ -380,3 +380,99 @@ test('team: an invite the server refuses as already on this event says so', asyn
     await expect(page.locator('#inv-status')).toHaveClass(/is-error/);
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (stage3-review.md F1, F8, F13): the switch is atomic ──
+const sessionsOf = (id: string) => new RegExp(`/rest/v1/leod_sessions\\?.*event_id=eq\\.${id}`);
+const startSwitch = (page: Page, id: string, tag: string) => evalPage(page,
+  `window.__sw_${tag} = false; switchEvent('${id}').then(() => { window.__sw_${tag} = true; }, e => { window.__sw_${tag} = 'error: ' + (e && e.message); }); 0`);
+async function waitSwitch(page: Page, tag: string) {
+  for (let i = 0; i < 200; i++) {
+    const done = await evalPage(page, `window.__sw_${tag}`);
+    if (done === true) return;
+    if (typeof done === 'string') throw new Error(done);
+    await page.clock.runFor(50);
+  }
+  throw new Error(`switch ${tag} did not finish`);
+}
+const ctrlJoins = (page: Page) => evalPage(page,
+  `(window.__rtSent || []).filter(m => m.event === 'phx_join' && String(m.topic).startsWith('realtime:leod-ctrl-')).map(m => m.topic.replace('realtime:leod-ctrl-', ''))`);
+
+test('switch: while the new event loads, the old event keeps its own role and list', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'av', isOwner: false, ownerId: OTHER_OWNER },
+    { id: EV_B, name: 'Spring summit', role: 'director', isOwner: false, ownerId: OTHER_OWNER },
+  ] });
+  try {
+    await afterBootReread(page);
+    let release!: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    await page.route(sessionsOf(EV_B), async r => { await gate; await r.fallback(); });
+    await startSwitch(page, EV_B, 'b');
+    for (let i = 0; i < 10; i++) await page.clock.runFor(50);
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+    expect(await evalPage(page, 'S.userRole')).toBe('av');
+    expect(await evalPage(page, 'S.role')).toBe('av');
+    await expect(page.locator('#role-lock')).toHaveText('AV');
+    release();
+    await waitSwitch(page, 'b');
+    expect(await evalPage(page, 'S.event.id')).toBe(EV_B);
+    expect(await evalPage(page, 'S.userRole')).toBe('director');
+  } finally { await ctx.close(); }
+});
+
+test('switch: a failed load of the new event stays fully on the current event and says so', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: twoEvents() });
+  try {
+    await afterBootReread(page);
+    const before = await evalPage(page, 'S.sessions.map(s => s.id)');
+    const joinsBefore = (await ctrlJoins(page)).length;
+    await page.route(sessionsOf(EV_B), r => r.fulfill({ status: 500, contentType: 'application/json',
+      body: JSON.stringify({ message: 'upstream timeout' }), headers: { 'access-control-allow-origin': '*' } }));
+    await startSwitch(page, EV_B, 'f');
+    await waitSwitch(page, 'f');
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+    expect(await evalPage(page, 'S.userRole')).toBe('stage');
+    expect(await evalPage(page, 'S.sessions.map(s => s.id)')).toEqual(before);
+    await expect(page.locator('#role-lock')).toHaveText('Stage');
+    expect((await ctrlJoins(page)).length).toBe(joinsBefore);   // realtime untouched
+    await expect(toasts(page)).toContainText('Could not open Spring summit. You are still on GTR North Africa 2026.');
+  } finally { await ctx.close(); }
+});
+
+test('switch: only the latest of two quick switches applies', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: [
+    ...twoEvents(),
+    { id: EV_C, name: 'Atlas awards', role: 'av', isOwner: false, ownerId: OTHER_OWNER, organiser: 'Nilegate Events' },
+  ] });
+  try {
+    await afterBootReread(page);
+    let release!: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    await page.route(sessionsOf(EV_B), async r => { await gate; await r.fallback(); });
+    await startSwitch(page, EV_B, 'b');
+    for (let i = 0; i < 5; i++) await page.clock.runFor(50);
+    await startSwitch(page, EV_C, 'c');
+    await waitSwitch(page, 'c');
+    release();
+    await waitSwitch(page, 'b');
+    for (let i = 0; i < 10; i++) await page.clock.runFor(50);
+    expect(await evalPage(page, 'S.event.id')).toBe(EV_C);
+    expect(await evalPage(page, 'S.userRole')).toBe('av');
+    expect((await ctrlJoins(page)).pop()).toBe(EV_C);
+    expect(await ctrlJoins(page)).not.toContain(EV_B);
+  } finally { await ctx.close(); }
+});
+
+test('switch: a refused switch still applies a role change on the current event', async ({ browser }) => {
+  const mine = twoEvents();
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: mine });
+  try {
+    await afterBootReread(page);
+    mine[0].role = 'av';    // the organiser changed this person's role here
+    mine.splice(1, 1);      // and removed them from Spring summit
+    await switchTo(page, EV_B);
+    expect(await evalPage(page, 'S.event.id')).toBe(EVENT_ID);
+    expect(await evalPage(page, 'S.userRole')).toBe('av');
+    await expect(page.locator('#role-lock')).toHaveText('AV');
+  } finally { await ctx.close(); }
+});

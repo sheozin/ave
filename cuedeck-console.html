@@ -3090,12 +3090,21 @@ async function loadEvents() {
   return data || [];
 }
 
-async function loadSnapshot(eventId) {
+async function fetchSnapshot(eventId) {
   const { data, error } = await sb
     .from('leod_sessions').select('*').eq('event_id', eventId).order('sort_order');
   if (error) throw error;
+  return data || [];
+}
+
+async function loadSnapshot(eventId) {
+  const data = await fetchSnapshot(eventId);
   if (S.event && S.event.id !== eventId) return false; // answer for an event already switched away from
-  S.sessions  = data || [];
+  applySnapshot(data);
+}
+
+function applySnapshot(data) {
+  S.sessions  = data;
   S.dbStatus  = 'ok';
   S.lastSyncAt = Date.now(); // PR-016: record sync time for diag tooltip
   // PR-006: seed seqMap from snapshot so first realtime event doesn't trigger false gap
@@ -7146,41 +7155,70 @@ function clearFilters() {
   renderSessions();
 }
 
+// Only the latest switch applies (a slow answer for an event already left is dropped).
+let _switchSeq = 0;
 async function switchEvent(eventId) {
   const ev = S.events.find(e => e.id === eventId);
   if (!ev) return;
+  const seq = ++_switchSeq;
+  const stale = () => seq !== _switchSeq;
   // The role is per event (event teams §5): read again on every switch, so a
   // change, a suspension or a removal since boot counts now.
   let mine;
   try { mine = await loadMyEvents(); }
-  catch (e) { pushToast(t('cc.ev.roleLoadFailed'), 'error'); return; }
+  catch (e) { if (!stale()) pushToast(t('cc.ev.roleLoadFailed'), 'error'); return; }
+  if (stale()) return;
   S.myEvents = mine;
+  // A refused switch still applies what changed on the event this person stays on.
+  const stay = (msg) => {
+    if (S.event && mine.has(S.event.id)) { applyEventPlan(S.event.id); applyEventRole(S.event.id); }
+    pushToast(msg, 'warn');
+  };
   if (!mine.has(eventId)) {
     S.events = S.events.filter(x => mine.has(x.id));
     buildEvSelect(S.events);
-    pushToast(t('cc.ev.noAccess'), 'warn');
+    stay(t('cc.ev.noAccess'));
     return;
   }
   const m = mine.get(eventId);
   if (planEnded(m)) {
-    pushToast(t(m.isOwner ? 'cc.ev.planEndedOwner' : 'cc.ev.planEndedAsk'), 'warn');
+    stay(t(m.isOwner ? 'cc.ev.planEndedOwner' : 'cc.ev.planEndedAsk'));
     return;
   }
-  S.event = ev;
-  applyEventRole(eventId);
-  applyEventPlan(eventId);
+  // Load the new event's run of show first. Until it is here nothing changes:
+  // the current event keeps its list, its role and its realtime. A failed load
+  // leaves this person fully on the current event.
   setStep(`Loading ${ev.name}…`);
+  let rows;
+  try { rows = await fetchSnapshot(eventId); }
+  catch (e) {
+    if (stale()) return;
+    pushLog('ERROR', `event not opened: ${e?.message ?? e}`, null);
+    pushToast(tf('cc.ev.switchFailed', { event: ev.name, current: S.event?.name || '' }), 'error');
+    return;
+  }
+  if (stale()) return;
+  // One synchronous step: event, plan, list and role change together, so the
+  // new role is never drawn over the old event's sessions.
+  S.event = ev;
   clearBatchSelection(); // a selection belongs to the event it was made in
   disarmAllBatch();
-  F.text = ''; F.status = ROLE_FILTER_DEFAULT[S.role] || ''; F.room = ''; // clear filters on event switch
+  F.text = ''; F.status = ROLE_FILTER_DEFAULT[m.role] || ''; F.room = ''; // clear filters on event switch
   // The list of the new event opens at its first unfinished row, nothing selected or unfolded.
   S.listOpened = false; S.selectedId = null; S.foldOpen = { ENDED: false, CANCELLED: false };
   S.stageMsgs = {}; S.msgDraft = {}; closeMsgSheet();   // messages belong to the event they were sent in
-  await loadSnapshot(eventId);
+  S.sessions = rows;
+  applyEventPlan(eventId);
+  applyEventRole(eventId);
+  applySnapshot(rows);
   await loadBroadcast(eventId).catch(() => {});
+  if (stale()) return;
   await loadLog(eventId).catch(() => {});
+  if (stale()) return;
   await loadStageMessages(eventId).catch(e => pushLog('ERROR', `messages to speaker not loaded: ${e?.message ?? e}`, null));
+  if (stale()) return;
   await subscribeControl(eventId);
+  if (stale()) return;
   document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
   buildEvSelect(S.events);
 }
