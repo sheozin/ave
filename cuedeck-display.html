@@ -346,6 +346,19 @@ body.is-live #display{
 .st-msg-new{animation:st-msg-in 1.2s ease-out 1}
 @keyframes st-msg-in{0%,35%{background:#fff}100%{background:var(--st-calling)}}
 @media (prefers-reduced-motion: reduce){.st-msg-new{animation:none}}
+
+/* ── FULL SCREEN HINT ── top-left, just below the header strip: clear of the
+   clock, the countdown and the message band. Fades after 10 s; the tap still
+   works because the listener is on the window, not on the hint. */
+#fs-hint{
+  position:fixed;top:54px;left:16px;z-index:10001;pointer-events:none;
+  font-size:13px;line-height:1.3;color:rgba(255,255,255,.4);
+  background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);
+  border-radius:6px;padding:5px 10px;
+  animation:fs-hint-fade 1s ease 10s forwards;
+}
+#fs-hint[hidden]{display:none}
+@keyframes fs-hint-fade{to{opacity:0}}
 </style>
 </head>
 <body>
@@ -2068,6 +2081,71 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') pollFeed();
 });
 window.addEventListener('online', () => pollFeed());
+
+// ═══════════════════════════════════════════════════
+// FULL SCREEN ON THE FIRST TAP
+// ═══════════════════════════════════════════════════
+// While the page is not full screen, a hint says so and the first tap, click
+// or remote key only asks for full screen: it is stopped at the window before
+// any page handler (unpair, connect, audio) sees it. One attempt per gesture,
+// so a refused request leaves the page usable. Leaving full screen re-arms it.
+// The resize listener above re-fits the content once the screen grows.
+(function fullScreenOnFirstTap() {
+  const root = document.documentElement;
+  const request = root.requestFullscreen || root.webkitRequestFullscreen;
+  const installed = window.matchMedia('(display-mode: fullscreen)').matches
+                 || window.matchMedia('(display-mode: standalone)').matches;
+  if (!request || installed) return;
+
+  const TEXT = {
+    en: 'Tap anywhere for full screen',
+    ar: 'اضغط في أي مكان لملء الشاشة',
+    pl: 'Dotknij ekranu, aby włączyć pełny ekran',
+    de: 'Für Vollbild irgendwo tippen',
+  };
+  const lang = (navigator.language || 'en').slice(0, 2).toLowerCase();
+  const l = TEXT[lang] ? lang : 'en';
+  const hint = document.createElement('div');
+  hint.id = 'fs-hint';
+  hint.lang = l;
+  if (l === 'ar') hint.dir = 'rtl';
+  hint.textContent = TEXT[l];
+  document.body.appendChild(hint);
+
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  let armed = false;
+  let eatKeyUp = null;
+  const arm = on => { armed = on; hint.hidden = !on; };
+  const swallow = e => { e.preventDefault(); e.stopImmediatePropagation(); };
+  const go = () => {
+    arm(false);
+    try { const p = request.call(root); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  };
+
+  // The press before the click is stopped too, so nothing under the tap
+  // reacts or takes focus. touchend keeps its default: it produces the click.
+  ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(type =>
+    window.addEventListener(type, e => { if (armed) swallow(e); }, true));
+  ['touchstart', 'touchend'].forEach(type =>
+    window.addEventListener(type, e => { if (armed) e.stopImmediatePropagation(); }, true));
+  window.addEventListener('click', e => { if (armed) { swallow(e); go(); } }, true);
+  // TV remotes send Enter and the arrow keys. Escape and modifiers do not count.
+  const IGNORED = ['Escape', 'Shift', 'Control', 'Alt', 'Meta'];
+  window.addEventListener('keydown', e => {
+    if (!armed || IGNORED.includes(e.key)) return;
+    swallow(e);
+    eatKeyUp = e.key;
+    go();
+  }, true);
+  window.addEventListener('keyup', e => {
+    if (eatKeyUp !== null && e.key === eatKeyUp) { eatKeyUp = null; swallow(e); }
+  }, true);
+
+  const onChange = () => arm(!isFull());
+  document.addEventListener('fullscreenchange', onChange);
+  document.addEventListener('webkitfullscreenchange', onChange);
+  arm(!isFull());
+})();
 </script>
 </body>
 </html>
