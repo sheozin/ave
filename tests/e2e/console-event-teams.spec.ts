@@ -547,3 +547,27 @@ test('teams: the AI panels follow the current event owner\'s plan on every switc
     expect(await shown()).toEqual(['', '']);
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (F4, F11): the Team card's size ──
+test('team: at 1440 the card is wide enough for each member\'s actions on one row; the fields are 44 px', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, {});
+  try {
+    await openTeam(page);
+    const g = await evalPage(page, `(() => { const r = s => document.querySelector(s).getBoundingClientRect();
+      const acts = ['team-role-op-1', 'team-suspend-op-1', 'team-remove-op-1', 'team-removeall-op-1'].map(k => Math.round(r('[data-fk="' + k + '"]').top + r('[data-fk="' + k + '"]').height / 2));
+      return { card: Math.round(r('#users-modal .ev-modal-card').width), acts,
+               fields: ['#inv-email', '#inv-name', '#inv-role', '#inv-btn', '#um-search'].map(s => Math.round(r(s).height)) }; })()`);
+    expect(g.card).toBeGreaterThanOrEqual(560);
+    expect(Math.max(...g.acts) - Math.min(...g.acts)).toBeLessThanOrEqual(2);   // one row
+    expect(g.fields).toEqual([44, 44, 44, 44, 44]);
+  } finally { await ctx.close(); }
+});
+
+test('team: on a short screen the member list keeps a usable height', async ({ browser }) => {
+  const twenty = { is_owner: true, seats: { used: 20, limit: 20 }, owner: defaultTeam().owner, members: Array.from({ length: 20 }, (_, i) => member(i + 1, { added_at: '2026-09-01T09:00:00Z' })) };
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 900, height: 420 }, team: { [EVENT_ID]: twenty } });
+  try {
+    await openTeam(page);
+    expect(await evalPage(page, `document.getElementById('users-modal-body').getBoundingClientRect().height`)).toBeGreaterThanOrEqual(120);
+  } finally { await ctx.close(); }
+});

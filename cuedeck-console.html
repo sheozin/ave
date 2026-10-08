@@ -320,8 +320,11 @@
     .ps-role-desc { font-size: var(--fs-11); color:var(--text-secondary); line-height:1.5; }
     /* ── TEAM: one event's team ── */
     /* A full Pro team is 21 rows: the header, invite row and Close stay put, the list scrolls */
-    .team-card { max-width: 560px; max-height: 90vh; }
-    #users-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    /* #users-modal scope: beats .ev-modal-card's 420 px; wide enough for a member's four actions on one row */
+    #users-modal .team-card { max-width: min(640px, calc(100vw - 24px)); max-height: 90vh; }
+    /* never collapses: on a short screen the card itself scrolls instead */
+    #users-modal-body { flex: 1 1 auto; min-height: 120px; overflow-y: auto; }
+    #users-modal .team-invite-row input, #users-modal .team-invite-row select, #users-modal .team-invite-row button, #users-modal #um-search { height: 44px; min-height: 44px; box-sizing: border-box; }
     .team-card > :not(#users-modal-body) { flex-shrink: 0; }
     .team-seats { font-size: var(--fs-13); color: var(--text-secondary); margin-bottom: var(--sp-2); }
     .team-seats.is-full { color: var(--danger-fg); }
