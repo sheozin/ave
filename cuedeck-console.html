@@ -2599,7 +2599,7 @@
     <div id="invite-section" class="team-invite">
       <div class="lbl" id="team-invite-lbl">Invite to this event</div>
       <div class="team-invite-row">
-        <input id="inv-email" type="email" autocomplete="off" data-fk="team-inv-email">
+        <input id="inv-email" type="email" autocomplete="off" data-fk="team-inv-email" oninput="updateInviteBtn()">
         <input id="inv-name" type="text" autocomplete="off" data-fk="team-inv-name">
         <select id="inv-role" data-fk="team-inv-role">
           <option value="stage">Stage</option><option value="av">AV</option><option value="interp">Interp</option>
@@ -8335,6 +8335,7 @@ async function refreshUsersModal() {
   if (error || !data || !Array.isArray(data.members)) {
     _teamData = null;
     body.innerHTML = `<div class="um-empty">${esc(t('cc.team.loadFailed'))}</div>`;
+    updateInviteBtn();   // seats unknown: the server decides
     return;
   }
   _teamData = data;
@@ -8356,7 +8357,7 @@ function renderTeam(data) {
   const fullEl = document.getElementById('team-full');
   fullEl.hidden = !full;
   fullEl.textContent = full ? t(data.is_owner ? 'cc.team.fullOwner' : 'cc.team.fullAsk') : '';
-  document.getElementById('inv-btn').disabled = full;
+  updateInviteBtn();
 
   const q = (document.getElementById('um-search')?.value || '').trim().toLowerCase();
   const match = m => !q || (m.name || '').toLowerCase().includes(q) || (m.email || '').toLowerCase().includes(q);
@@ -8398,6 +8399,19 @@ function renderTeam(data) {
   }).join('');
   body.innerHTML = ownerRow + (rows || (data.members.length ? '' : `<div class="um-empty">${esc(t('cc.team.empty'))}</div>`));
   restoreFocus(fk);
+}
+
+// A full team blocks new people only: a role change or a new link for someone
+// already on the event needs no seat (the server checks seats the same way).
+function updateInviteBtn() {
+  const btn = document.getElementById('inv-btn');
+  if (!btn) return;
+  const d = _teamData;
+  const seats = d?.seats;
+  const full = !!seats && seats.limit !== null && seats.limit !== undefined && seats.used >= seats.limit;
+  const email = (document.getElementById('inv-email')?.value || '').trim().toLowerCase();
+  const onTeam = !!email && (d?.members || []).some(m => (m.email || '').toLowerCase() === email);
+  btn.disabled = full && !onTeam;
 }
 
 // Remove takes two presses, as Reset key: the first arms the button for 3 s.

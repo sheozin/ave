@@ -606,3 +606,38 @@ test('teams: an organiser keeps the trial badge and billing', async ({ browser }
     expect(await evalPage(page, `['hm-billing', 'hm-invoices'].map(id => document.getElementById(id).style.display)`)).toEqual(['', '']);
   } finally { await ctx.close(); }
 });
+
+// ── Review round 1 (F6, F7): Send after a failed re-read, and on a full team ──
+test('team: a failed re-read after an invite leaves Send usable', async ({ browser }) => {
+  const fail: string[] = [];
+  const { ctx, page } = await openConsole(browser, { rpcFail: fail, fnReply: inviteReply });
+  try {
+    await openTeam(page);
+    fail.push('cuedeck_event_team');
+    await page.fill('#inv-email', 'new.crew@example.com');
+    await page.locator('#inv-btn').click();
+    await expect(page.locator('#inv-status')).toHaveText('Invitation sent to new.crew@example.com.');
+    await expect(page.locator('#users-modal-body')).toContainText('Could not load the team.');
+    await expect(page.locator('#inv-btn')).toBeEnabled();
+    await expect(page.locator('#inv-btn')).toHaveText('Send invite');
+  } finally { await ctx.close(); }
+});
+
+test('team: a full team still changes the role of, or resends to, someone already on it', async ({ browser }) => {
+  const full = { is_owner: true, seats: { used: 5, limit: 5 }, owner: defaultTeam().owner, members: [1, 2, 3, 4, 5].map(k => member(k)) };
+  const { ctx, page, calls } = await openConsole(browser, { team: { [EVENT_ID]: full },
+    fnReply: (fn, body) => fn === 'invite-operator' ? { status: 200, body: { ok: true, role: body.role, result: 'role_changed' } } : undefined });
+  try {
+    await openTeam(page);
+    await expect(page.locator('#inv-btn')).toBeDisabled();
+    await page.fill('#inv-email', 'Crew3@example.com');
+    await expect(page.locator('#inv-btn')).toBeEnabled();
+    await page.selectOption('#inv-role', 'stage');
+    await page.locator('#inv-btn').click();
+    await expect(page.locator('#inv-status')).toHaveText('Role changed to Stage.');
+    expect(calls.filter(c => c.path === '/functions/v1/invite-operator').map(c => c.body))
+      .toEqual([expect.objectContaining({ email: 'Crew3@example.com', role: 'stage', event_id: EVENT_ID })]);
+    await page.fill('#inv-email', 'someone.new@example.com');
+    await expect(page.locator('#inv-btn')).toBeDisabled();
+  } finally { await ctx.close(); }
+});
