@@ -668,3 +668,32 @@ test('teams: an account still marked pending that is on an event team opens the 
     expect(await evalPage(page, 'S.accountRole')).toBe('pending');
   } finally { await ctx.close(); }
 });
+
+// ── Re-review (N2, N3) ──
+test('teams: Operators in the phone menu and Manage Operators in the palette are for this event\'s directors', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: twoEvents() });
+  const state = () => evalPage(page, `[document.getElementById('hm-users').style.display, getCmdStaticItems().some(i => i.label === 'Manage Operators')]`);
+  try {
+    await afterBootReread(page);
+    expect(await state()).toEqual(['none', false]);
+    await switchTo(page, EV_B);
+    expect(await state()).toEqual(['', true]);
+    await switchTo(page, EVENT_ID);
+    expect(await state()).toEqual(['none', false]);
+  } finally { await ctx.close(); }
+});
+
+test('team: in a short desktop window the card scrolls, so the title and Close stay reachable', async ({ browser }) => {
+  const twenty = { is_owner: true, seats: { used: 20, limit: 20 }, owner: defaultTeam().owner, members: Array.from({ length: 20 }, (_, i) => member(i + 1, { added_at: '2026-09-01T09:00:00Z' })) };
+  const { ctx, page } = await openConsole(browser, { viewport: { width: 1440, height: 480 }, team: { [EVENT_ID]: twenty } });
+  try {
+    await openTeam(page);
+    const g = await evalPage(page, `(() => { const c = document.querySelector('#users-modal .team-card'); const r = c.getBoundingClientRect();
+      return { overflow: getComputedStyle(c).overflowY, top: r.top >= 0, bottom: r.bottom <= innerHeight, fits: c.scrollHeight <= c.clientHeight }; })()`);
+    expect(g.top && g.bottom).toBe(true);
+    expect(g.overflow === 'auto' || g.fits).toBe(true);
+    await page.locator('#team-close').scrollIntoViewIfNeeded();
+    await expect(page.locator('#team-close')).toBeInViewport();
+    await expect(page.locator('#users-modal-title')).toBeAttached();
+  } finally { await ctx.close(); }
+});
