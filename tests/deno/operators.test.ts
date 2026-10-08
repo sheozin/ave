@@ -217,7 +217,7 @@ function assert(cond: unknown, msg: string): asserts cond {
 Deno.test('invite: a new email gets an account, a membership on this event only, and the invitation', async () => {
   setup()
   const r = await call('invite-operator', OWNER, { email: 'New.Crew@x.test', name: 'New Crew', role: 'stage', event_id: EV })
-  assert(r.status === 200 && r.body.result === 'invited' && r.body.user_id === NEW_ID, JSON.stringify(r))
+  assert(r.status === 200 && r.body.result === 'invited' && !('user_id' in r.body) && !!member(EV, NEW_ID), JSON.stringify(r))
   const m = member(EV, NEW_ID)
   assert(m?.role === 'stage' && m.active === true && m.invited_by === OWNER, 'membership ' + JSON.stringify(m))
   assert(!member(EV_OWN2, NEW_ID), 'joined another event')
@@ -237,7 +237,7 @@ Deno.test('invite: a new email gets an account, a membership on this event only,
 Deno.test("invite: an existing account on another organiser's event is added with a short notice, no password step", async () => {
   setup()
   const r = await call('invite-operator', OWNER, { email: 'theirs@y.test', role: 'av', event_id: EV })
-  assert(r.status === 200 && r.body.result === 'added' && r.body.user_id === THEIR_OP, JSON.stringify(r))
+  assert(r.status === 200 && r.body.result === 'added' && !('user_id' in r.body), JSON.stringify(r))
   assert(member(EV, THEIR_OP)?.role === 'av' && member(EV_THEIRS, THEIR_OP)?.role === 'av', 'memberships ' + JSON.stringify(tables.leod_event_members))
   assert(links.length === 0, 'a link was made for a login that already works')
   const mail = emails[0] as { subject: string; html: string }
@@ -256,8 +256,16 @@ Deno.test("invite: an organiser of their own events can crew someone else's even
 Deno.test('invite: an existing email typed in another case joins that account', async () => {
   setup()
   const r = await call('invite-operator', OWNER, { email: '  Theirs@Y.Test ', role: 'reg', event_id: EV })
-  assert(r.status === 200 && r.body.user_id === THEIR_OP && member(EV, THEIR_OP)?.role === 'reg', JSON.stringify(r))
+  assert(r.status === 200 && member(EV, THEIR_OP)?.role === 'reg', JSON.stringify(r))
   assert(links.length === 0 && tables.leod_users.length === 6, 'a second account was made')
+})
+
+Deno.test('invite: no answer names the account id (adding an address must not confirm it has a login)', async () => {
+  for (const [email, role] of [['theirs@y.test', 'av'], ['stage@x.test', 'stage'], ['stage@x.test', 'director'], ['fresh@x.test', 'av']]) {
+    setup()
+    const r = await call('invite-operator', OWNER, { email, role, event_id: EV })
+    assert(r.status === 200 && !('user_id' in r.body), `${email} ${role}: ` + JSON.stringify(r))
+  }
 })
 
 Deno.test('invite: the same role again changes nothing and sends nothing', async () => {

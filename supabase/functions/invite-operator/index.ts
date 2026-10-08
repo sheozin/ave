@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
     if (!upd?.length) return json(500, { error: 'No membership row updated' })
     await logMemberChange(sb, eventId, user.id, 'MEMBER_ROLE_CHANGED',
       { target_user_id: existing.id, from_role: current.role, role, event_owner: owner })
-    return json(200, { ok: true, user_id: existing.id, role, result: 'role_changed' })
+    return json(200, { ok: true, role, result: 'role_changed' })
   }
 
   // ── An existing account: has it ever signed in? ─────────────────
@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
     signedIn = !!au.user.last_sign_in_at
     confirmed = !!au.user.email_confirmed_at
     // Same role on this event, and the login works: nothing to do.
-    if (current && signedIn) return json(200, { ok: true, user_id: existing.id, role, result: 'unchanged' })
+    if (current && signedIn) return json(200, { ok: true, role, result: 'unchanged' })
   }
 
   // ── Rate limit: 20 invitations per event owner per 24 hours ─────
@@ -248,5 +248,6 @@ Deno.serve(async (req) => {
 
   await logMemberChange(sb, eventId, user.id, 'MEMBER_INVITED',
     { target_user_id: userId, role, event_owner: owner, existing_account: !!existing })
-  return json(200, { ok: true, user_id: userId, role, result: existing ? (current ? 'link_resent' : 'added') : 'invited' })
+  // No account id in the answer: it would confirm the address has a login.
+  return json(200, { ok: true, role, result: existing ? (current ? 'link_resent' : 'added') : 'invited' })
 })
