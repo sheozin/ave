@@ -200,6 +200,8 @@
     </div>
     <p class="small" id="rg-img-msg" role="status" aria-live="polite" style="margin:8px 0 0"></p>
     <div class="toggle"><div><b>Show the programme</b><p>Guests see your sessions and times from the run of show, and they follow any delays. Only for events you run in CueDeck.</p></div><label class="sw"><input type="checkbox" id="rg-prog"><span></span></label></div>
+    <div class="toggle"><div><b>White label</b><p>Guests see only your brand: no "Registration by CueDeck" on the page and no CueDeck footer in guest emails. The privacy link and the consent text stay, because they tell guests who handles their data.</p></div><label class="sw"><input type="checkbox" id="rg-wl"><span></span></label></div>
+    <p class="small" id="rg-wl-msg" role="status" aria-live="polite"></p>
     <div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn btn-p" id="rg-save-design" type="button">Save design</button><span class="small" id="rg-design-state"></span></div>
     <div class="err" id="rg-design-err"></div><div class="ok" id="rg-design-ok"></div>
         <h3 class="sc-h">Where it is used</h3>
@@ -1288,6 +1290,13 @@ $('rg-embed-copy').onclick = async () => {
   setTimeout(() => { $('rg-embed-copy').textContent = 'Copy code'; }, 1800);
 };
 $('rg-waitlist').onchange = saveFlow; $('rg-approval').onchange = saveFlow;
+$('rg-wl').onchange = async () => {
+  $('rg-wl-msg').textContent = '';
+  const { data, error } = await sb.rpc('checkin_set_white_label', { p_event_id: EVENT_ID, p_on: $('rg-wl').checked });
+  if (error) { $('rg-wl-msg').textContent = error.message; $('rg-wl').checked = !$('rg-wl').checked; return; }
+  ENT.white_label = data;
+  $('rg-wl-msg').textContent = data ? 'Saved. Guests no longer see CueDeck on the page or in emails.' : 'Saved. The page and emails show "by CueDeck" again.';
+};
 $('rg-wlauto').onchange = async () => {
   $('held-err').textContent = ''; $('held-ok').textContent = '';
   const { data, error } = await sb.rpc('checkin_set_waitlist_auto', { p_event_id: EVENT_ID, p_on: $('rg-wlauto').checked });
@@ -1608,6 +1617,7 @@ function renderDesign() {
   const c = ENT.registration_brand_color || (/^#[0-9A-Fa-f]{6}$/.test(EV.brand_color || '') ? EV.brand_color : '');
   $('rg-color').value = c; $('rg-color-pick').value = c || '#1F4ED8';
   $('rg-prog').checked = !!ENT.registration_show_programme;
+  $('rg-wl').checked = ENT.white_label === true;
   RG_IMG = { cover: ENT.registration_cover_path || null, logo: ENT.registration_logo_path || null };
   RG_SAVED = { ...RG_IMG };
   showImg('cover'); showImg('logo');

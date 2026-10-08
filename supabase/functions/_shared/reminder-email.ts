@@ -40,10 +40,10 @@ function frame(e: QrEmailEvent, title: string, body: string, lang: Lang = 'en', 
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);border-top:4px solid ${accent};">
       ${brand}
       ${body}
-      <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
+      ${e.white_label ? '' : `<div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
         <span style="font-size:10px;color:#b0b0b8;">${escapeHtml(et(lang, footer))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
-      </div>
+      </div>`}
     </div>
   </div>
 </body></html>`

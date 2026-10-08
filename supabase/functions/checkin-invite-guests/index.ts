@@ -32,7 +32,7 @@ async function sha256Hex(s: string): Promise<string> {
   return Array.from(new Uint8Array(d)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-type Ev = { name: string; date: string; venue: string | null; brand_color?: string | null; logo_url?: string | null; host_name?: string | null; start: string | null }
+type Ev = { name: string; date: string; venue: string | null; brand_color?: string | null; logo_url?: string | null; host_name?: string | null; white_label?: boolean; start: string | null }
 
 export function inviteEmail(e: Ev, firstName: string, link: string, lang: Lang = 'en'): { subject: string; html: string } {
   const accent = /^#[0-9A-Fa-f]{6}$/.test(e.brand_color ?? '') ? e.brand_color! : '#1a1a2e'
@@ -56,10 +56,10 @@ export function inviteEmail(e: Ev, firstName: string, link: string, lang: Lang =
         <p style="margin:0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${accent};color:#ffffff;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px;text-decoration:none;">${escapeHtml(et(lang, 'Reply to the invitation'))}</a></p>
         <p style="margin:14px 0 0;font-size:12px;color:#9ca3af;text-align:center;">${escapeHtml(et(lang, 'This link is personal to you. Your ticket arrives by email once you say you are coming.'))}</p>
       </div>
-      <div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
+      ${e.white_label ? '' : `<div style="background:#fafafa;padding:12px 24px;text-align:center;border-top:1px solid #f0f0f0;">
         <span style="font-size:10px;color:#b0b0b8;">${escapeHtml(et(lang, 'Invitations powered by'))}</span>
         <span style="font-size:11px;color:#8a8a95;font-weight:600;margin-left:4px;">CueDeck</span>
-      </div>
+      </div>`}
     </div>
   </div>
 </body></html>`

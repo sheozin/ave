@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
 
   const sb = adminClient()
   const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
-    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_mode, registration_language, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme')
+    .select('event_id, status, checkin_core, registration_enabled, registration_capacity, registration_closes_at, registration_questions, registration_waitlist, registration_approval, registration_plus_ones, registration_mode, registration_language, registration_host_name, registration_description, registration_address, registration_brand_color, registration_cover_path, registration_logo_path, registration_show_programme, white_label')
     .eq('registration_code', code).maybeSingle()
   if (entErr) {
     console.error('checkin-register: entitlement read failed', entErr.code)
@@ -242,6 +242,7 @@ Deno.serve(async (req) => {
         brand_color: hex(ent.registration_brand_color) ?? hex(event.brand_color),
         cover_url: pub(ent.registration_cover_path), logo_url: pub(ent.registration_logo_path),
         programme,
+        white_label: ent.white_label === true,
       },
       questions: questions.map(q => ({ id: q.id, label: q.label, type: q.type, required: q.required, options: q.options })),
       turnstile_site_key: TURNSTILE_SITE_KEY,
@@ -556,7 +557,7 @@ Deno.serve(async (req) => {
     // The confirmation goes in the language of the form, but nothing is
     // stored for the address yet: the submitter has not shown they own it.
     // Their language is recorded when they confirm (security review of 123).
-    const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue }, link, lang ?? (isLang(ent.registration_language) ? ent.registration_language : 'en'))
+    const sending = sendConfirmEmail(form.email.trim(), { name: event.name, date: event.date, venue: event.venue, white_label: ent.white_label === true }, link, lang ?? (isLang(ent.registration_language) ? ent.registration_language : 'en'))
       .then(async (sent) => {
         if (sent) return
         const { error } = await sb.rpc('checkin_web_send_failed', { p_code: code, p_token_hash: tokenHash })
