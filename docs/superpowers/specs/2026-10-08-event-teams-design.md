@@ -1,6 +1,6 @@
 # Event teams: per-event access, one login across organisers
 
-Status: draft for Sherif's review (8 Oct 2026). Build and release after GTR (12 Oct).
+Status: approved by Sherif (8 Oct 2026). Build and release after GTR (12 Oct).
 Evidence: `2026-10-08-event-teams-inventory.md` (same folder): every object, policy, function and screen named below is listed there with file:line.
 
 ## 1. Goal and decisions
@@ -72,11 +72,11 @@ Inviting happens from inside an event ("Team for GTR North Africa 2026"):
 - Console e2e: invite new and existing accounts, per-event role switching on event switch, Team window per event, remove keeps the login working elsewhere, plan from the owner.
 - All existing suites green; tests that pin the old model (inventory §8) updated without weakening what they protect.
 
-## 9. Open points for Sherif
+## 9. Decisions (Sherif, 8 Oct: "yes to all")
 
-1. Can an invited **director** edit the event itself (name, date, rooms) and delete sessions? Proposed: yes to editing and sessions; **no** to deleting the event, billing, and webhooks (creator only).
-2. Should people who only join other organisers' events receive the founder welcome email sequence? Proposed: **no**, only an "added to event" email.
-3. Grouping in the event switcher by organiser name: OK to show the organiser's company name to members?
+1. An invited **director** may edit the event (name, date, rooms) and add, edit and delete sessions. Only the **creator** may delete the event and see billing and webhooks.
+2. People who only join other organisers' events get an "added to event" email, **not** the founder welcome sequence.
+3. A member's event switcher groups events under the organiser's company name.
 
 ## 10. Found during the inventory, separate from this feature
 
