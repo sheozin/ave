@@ -102,29 +102,53 @@ Deno.serve(async (req) => {
   }
 
   // ── Claim one use before anything is applied ───────────────────
-  // Compare-and-swap: the row only moves from the count read above, so two
-  // redemptions at once cannot both pass max_uses. The loser is told to
-  // retry and nothing is applied for it.
+  // Compare-and-swap: the count moves only from the value just read, so two
+  // redemptions at once cannot both pass max_uses. A lost swap re-reads the
+  // count and tries again (up to 3 attempts), so simultaneous redemptions of
+  // a code with room left all succeed; only a full code refuses.
   // uses is nullable (default 0): a NULL count is matched with IS NULL.
-  const usedBefore: number = promo.uses ?? 0
-  const claim = sb.from('leod_promo_codes').update({ uses: usedBefore + 1 }).eq('code', code)
-  const { data: claimed, error: claimErr } = await (promo.uses === null || promo.uses === undefined
-    ? claim.is('uses', null) : claim.eq('uses', promo.uses)).select('code')
-  if (claimErr) {
-    return new Response(JSON.stringify({ error: 'Could not redeem the code: ' + claimErr.message }), {
-      status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
-    })
+  let seenUses: number | null = promo.uses ?? null
+  let usedBefore = 0
+  let claimedOk = false
+  for (let attempt = 1; attempt <= 3 && !claimedOk; attempt++) {
+    if (attempt > 1) {
+      const { data: fresh, error: freshErr } = await sb.from('leod_promo_codes')
+        .select('uses, max_uses').eq('code', code).maybeSingle()
+      if (freshErr || !fresh) {
+        return new Response(JSON.stringify({ error: 'Could not redeem the code: ' + (freshErr?.message ?? 'code not found') }), {
+          status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+        })
+      }
+      seenUses = fresh.uses ?? null
+      if (fresh.max_uses !== null && (fresh.uses ?? 0) >= fresh.max_uses) {
+        return new Response(JSON.stringify({ error: 'Code has reached its maximum uses' }), {
+          status: 400, headers: { ...cors, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+    usedBefore = seenUses ?? 0
+    const claim = sb.from('leod_promo_codes').update({ uses: usedBefore + 1 }).eq('code', code)
+    const { data: claimed, error: claimErr } = await (seenUses === null
+      ? claim.is('uses', null) : claim.eq('uses', seenUses)).select('code')
+    if (claimErr) {
+      return new Response(JSON.stringify({ error: 'Could not redeem the code: ' + claimErr.message }), {
+        status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+      })
+    }
+    claimedOk = !!claimed?.length
   }
-  if (!claimed?.length) {
-    return new Response(JSON.stringify({ error: 'This code was just used by someone else. Try again.' }), {
+  if (!claimedOk) {
+    return new Response(JSON.stringify({ error: 'This code is being redeemed by others right now. Try again.' }), {
       status: 409, headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  // A failed apply gives the use back (best effort, only if nobody used it since).
+  // A failed apply gives the use back, only if nobody used the code since;
+  // a give-back that matches no row is logged (the count then stays one high).
   const releaseUse = async () => {
-    const { error } = await sb.from('leod_promo_codes').update({ uses: usedBefore })
-      .eq('code', code).eq('uses', usedBefore + 1)
-    if (error) console.error('redeem-code: use not released', error.message)
+    const { data: back, error } = await sb.from('leod_promo_codes').update({ uses: usedBefore })
+      .eq('code', code).eq('uses', usedBefore + 1).select('code')
+    if (error) console.error(`redeem-code: use not given back for code ${code} (id ${promo.id ?? '?'}):`, error.message)
+    else if (!back?.length) console.error(`redeem-code: use not given back for code ${code} (id ${promo.id ?? '?'}): the count moved since the claim`)
   }
 
   // ── Apply code by type ───────────────────────────────────────────

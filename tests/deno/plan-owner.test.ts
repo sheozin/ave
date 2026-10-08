@@ -220,3 +220,48 @@ Deno.test('redeem-code: a code whose use count is NULL is claimed (NULL counts a
   const r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
   assert(r.status === 200 && promo.uses === 1 && sub(ORG2)?.plan === 'pro', JSON.stringify(r) + ' uses ' + promo.uses)
 })
+
+Deno.test('redeem-code: two redemptions at once of a code with no limit both succeed', async () => {
+  setup()
+  const promo = tables.leod_promo_codes.find(p => p.code === 'PROUNLOCK')!
+  assert(promo.max_uses === null, 'fixture')
+  const [a, b] = await Promise.all([
+    call('redeem-code', ORG2, { code: 'PROUNLOCK' }),
+    call('redeem-code', T_OWNER, { code: 'PROUNLOCK' }),
+  ])
+  assert(a.status === 200 && b.status === 200, JSON.stringify([a, b]))
+  assert(promo.uses === 2 && sub(ORG2)?.plan === 'pro' && sub(T_OWNER)?.plan === 'pro', 'uses ' + promo.uses)
+})
+
+Deno.test('redeem-code: a failed apply gives the use back; a give-back that matches nothing is logged', async () => {
+  setup()
+  const promo = tables.leod_promo_codes.find(p => p.code === 'PROUNLOCK')!
+  failOn['PATCH /rest/v1/leod_subscriptions'] = { status: 500, body: { code: 'XX000', message: 'boom' } }
+  let r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
+  assert(r.status === 500 && promo.uses === 0, 'use not given back: ' + promo.uses + ' ' + JSON.stringify(r))
+  // someone redeems between the claim and the give-back: the give-back
+  // matches no row and says so
+  setup()
+  const promo2 = tables.leod_promo_codes.find(p => p.code === 'PROUNLOCK')!
+  const origFetch = globalThis.fetch
+  globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
+    if (method === 'PATCH' && url.pathname === '/rest/v1/leod_subscriptions') {
+      promo2.uses = Number(promo2.uses) + 1   // another redemption lands
+      return new Response(JSON.stringify({ code: 'XX000', message: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
+    }
+    return origFetch(input, init)
+  }) as typeof fetch
+  const logged: string[] = []
+  const origErr = console.error
+  console.error = (...a: unknown[]) => { logged.push(a.map(String).join(' ')) }
+  try {
+    r = await call('redeem-code', ORG2, { code: 'PROUNLOCK' })
+  } finally {
+    globalThis.fetch = origFetch
+    console.error = origErr
+  }
+  assert(r.status === 500, JSON.stringify(r))
+  assert(logged.some(l => l.includes('use not given back') && l.includes('PROUNLOCK')), 'not logged: ' + JSON.stringify(logged))
+})
