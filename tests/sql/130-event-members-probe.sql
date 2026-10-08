@@ -86,6 +86,10 @@ BEGIN
   --     admin-manage-user) has no member role anywhere, even with an active
   --     membership: it reads and writes nothing of the event. The creator
   --     branch does not look at the account flag (unchanged from before 130).
+  -- Set up as the database itself: live's leod_users_guard_privileged lets
+  -- only admins and the system set active = false, and live's signup trigger
+  -- has already made the leod_users row the upsert below updates.
+  PERFORM set_config('request.jwt.claims', '', true);
   INSERT INTO auth.users (id, email, aud, role)
   SELECT u, 'probe-' || u || '@cuedeck-test.io', 'authenticated', 'authenticated' FROM unnest(ARRAY[v_banned, v_banown]) AS u;
   INSERT INTO leod_users (id, email, role, active)
