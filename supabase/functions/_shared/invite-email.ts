@@ -55,13 +55,17 @@ export function renderInviteEmail(m: InviteEmail): { subject: string; html: stri
   const inviter = flat(safeName(m.inviterName), 60)
   const date = fmtDate(m.eventDate)
   const area = m.product === 'checkin' ? 'check-in' : 'CueDeck'
+  // A console member who already has a login is told they were added (spec
+  // §4, §9.2); check-in keeps its own wording.
+  const added = !!m.existingAccount && m.product === 'console'
   const subject = event
-    ? (m.product === 'checkin' ? `You're invited to ${event} check-in` : `You're invited to ${event} on CueDeck`)
-    : `You're invited to join a team on CueDeck`
-  const who = inviter ? `${inviter} has invited you` : 'You have been invited'
+    ? (m.product === 'checkin' ? `You're invited to ${event} check-in`
+       : added ? `You've been added to ${event} on CueDeck` : `You're invited to ${event} on CueDeck`)
+    : (added ? `You've been added to a team on CueDeck` : `You're invited to join a team on CueDeck`)
+  const who = inviter ? `${inviter} has ${added ? 'added' : 'invited'} you` : `You have been ${added ? 'added' : 'invited'}`
   const lead = eventBody
-    ? `${who} to work on ${eventBody} with ${m.roleText}.`
-    : `${who} to join their CueDeck team with ${m.roleText}.`
+    ? (added ? `${who} to ${eventBody} with ${m.roleText}.` : `${who} to work on ${eventBody} with ${m.roleText}.`)
+    : (added ? `${who} to a CueDeck team with ${m.roleText}.` : `${who} to join their CueDeck team with ${m.roleText}.`)
   const next = m.existingAccount
     ? 'Sign in with your existing CueDeck login.'
     : 'Accept the invitation to set your password. The link works once; if it has expired, ask for a new invitation.'
@@ -73,7 +77,7 @@ export function renderInviteEmail(m: InviteEmail): { subject: string; html: stri
   <div style="width:100%;background-color:#f4f4f5;padding:40px 20px;">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
       <div style="padding:28px 24px;border-bottom:1px solid #eee;">
-        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;">Invitation · ${esc(area)}</div>
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#2563eb;">${added ? 'Team update' : 'Invitation'} · ${esc(area)}</div>
         <div style="font-size:22px;font-weight:700;color:#1a1a2e;margin-top:6px;">${esc(eventBody || 'Join your team on CueDeck')}</div>
         ${date ? `<div style="color:#6b7280;font-size:13px;margin-top:4px;">${esc(date)}</div>` : ''}
       </div>
