@@ -203,6 +203,13 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   const broadcast = sc.broadcast === undefined ? BROADCAST : sc.broadcast;
   const myEvents = (): MyEvent[] => sc.myEvents ?? [{ id: EVENT_ID, name: EVENT.name, role, isOwner: role === 'director' }];
   const calls: Call[] = [];
+  // Each event's team, as the server keeps it: a removal through manage-operator
+  // changes the named event only, or every event when no event is named.
+  const teams = new Map<string, any>();
+  const teamOf = (ev: string) => {
+    if (!teams.has(ev)) teams.set(ev, structuredClone((sc.team as Record<string, unknown> | undefined)?.[ev] ?? defaultTeam()));
+    return teams.get(ev);
+  };
   const ctx = await browser.newContext({
     viewport: sc.viewport ?? { width: 1440, height: 900 },
     deviceScaleFactor: Number(process.env.CONSOLE_DSF ?? 1),
@@ -320,6 +327,12 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       calls.push({ method: req.method(), path: p, body });
       const custom = sc.fnReply?.(p.split('/').pop()!, body);
       if (custom) return json(r, custom.body, custom.status);
+      if (p.endsWith('/manage-operator') && body?.action === 'remove') {
+        for (const ev of body.event_id ? [body.event_id] : myEvents().filter(m => m.isOwner).map(m => m.id)) {
+          const tm = teamOf(ev);
+          tm.members = tm.members.filter((m: any) => m.user_id !== body.user_id);
+        }
+      }
       return json(r, { ok: true, status: 'OK', version: 10 });
     }
     if (p.startsWith('/rest/v1/rpc/')) {
@@ -329,7 +342,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       if (fn === 'get_subscription_for_user') return json(r, sc.ownSub === null ? [] : [sc.ownSub ?? PRO_SUB]);
       if (fn === 'cuedeck_event_team') {
         const ev = (() => { try { return JSON.parse(req.postData() || '{}').p_event_id; } catch { return null; } })();
-        return json(r, (sc.team as Record<string, unknown> | undefined)?.[ev] ?? defaultTeam());
+        return json(r, teamOf(ev));
       }
       if (fn === 'cuedeck_my_events') return json(r, myEvents().map(m => ({
         event_id: m.id, role: m.role, is_owner: m.isOwner, owner_id: m.isOwner ? USER_ID : (m.ownerId ?? OTHER_OWNER),

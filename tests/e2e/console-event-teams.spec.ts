@@ -332,14 +332,17 @@ test('team: remove takes two presses and names this event only; the person stays
     await expect(page.locator('[data-fk="team-remove-op-1"]')).toHaveText('Press again to remove');
     expect(calls.filter(c => c.path === '/functions/v1/manage-operator')).toEqual([]);
     await page.locator('[data-fk="team-remove-op-1"]').click();
-    await expect.poll(() => calls.filter(c => c.path === '/functions/v1/manage-operator').map(c => c.body))
-      .toEqual([{ user_id: 'op-1', action: 'remove', event_id: EVENT_ID }]);
     await expect(toasts(page)).toContainText('Ahmed Fawzy was removed from this event.');
+    // The mock keeps a team per event (console-boot-mock teamOf): gone here...
+    await expect(page.locator('.team-row[data-uid="op-1"]')).toHaveCount(0);
     await evalPage(page, 'closeUsersModal(); 0');
     await switchTo(page, EV_B);
     await openTeam(page);
-    await expect(page.locator('.team-row[data-uid="op-1"]')).toHaveCount(1);
+    // ...and still on the other event.
     await expect(page.locator('#users-modal-title')).toHaveText('Team for Spring summit');
+    await expect(page.locator('.team-row[data-uid="op-1"]')).toHaveCount(1);
+    expect(calls.filter(c => c.path === '/functions/v1/manage-operator').map(c => c.body))
+      .toEqual([{ user_id: 'op-1', action: 'remove', event_id: EVENT_ID }]);
   } finally { await ctx.close(); }
 });
 
