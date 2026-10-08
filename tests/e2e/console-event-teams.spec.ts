@@ -164,3 +164,69 @@ test('teams: an organiser plan that ended is refused on switch, and members see 
       .toEqual({ member: true, shown: 'flex', title: 'This event plan has ended', plans: 'none', promo: 'none' });
   } finally { await ctx.close(); }
 });
+
+const groupsAndItems = (page: Page) => evalPage(page,
+  `[...document.querySelectorAll('#ev-pill-dd > .ev-dd-group, #ev-pill-dd > button[role="menuitemradio"]')]
+     .map(el => (el.classList.contains('ev-dd-group') ? '# ' : '') + el.textContent.trim())`);
+
+test('teams: the switcher groups events by organiser', async ({ browser }) => {
+  const NORTHWIND = '0e0e0e0e-0000-4000-8000-0000000000a1';
+  const ATLAS = '0e0e0e0e-0000-4000-8000-0000000000a2';
+  const EV_D = 'd0d0d0d0-0000-4000-8000-0000000000d4';
+  const { ctx, page } = await openConsole(browser, { role: 'director', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true },
+    { id: EV_B, name: 'Spring summit',   role: 'stage',    isOwner: false, ownerId: NORTHWIND, organiser: 'Northwind Events' },
+    { id: EV_C, name: 'Atlas awards',    role: 'av',       isOwner: false, ownerId: ATLAS,     organiser: 'Atlas Live' },
+    { id: EV_D, name: 'Northwind forum', role: 'director', isOwner: false, ownerId: NORTHWIND, organiser: 'Northwind Events' },
+  ] });
+  try {
+    expect(await groupsAndItems(page)).toEqual([
+      '# Your events', 'GTR North Africa 2026',
+      '# Atlas Live', 'Atlas awards',
+      '# Northwind Events', 'Spring summit', 'Northwind forum',
+    ]);
+  } finally { await ctx.close(); }
+});
+
+test('teams: an organiser with only their own events sees no group headings', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, {});
+  try {
+    expect(await groupsAndItems(page)).toEqual(['GTR North Africa 2026']);
+  } finally { await ctx.close(); }
+});
+
+test('teams: an invited director edits the event but cannot deactivate it; the creator can', async ({ browser }) => {
+  const invited = await openConsole(browser, { role: 'director', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: false, ownerId: OTHER_OWNER },
+  ] });
+  try {
+    await evalPage(invited.page, `openEvModal('edit', '${EVENT_ID}'); 0`);
+    await expect(invited.page.locator('#evm-deact')).toBeHidden();
+    await evalPage(invited.page, `document.getElementById('evm-name').value = 'GTR North Africa 2026 (day 2)'; submitEvModal(); 0`);
+    await expect.poll(() => invited.calls.some(c => c.method === 'PATCH' && c.path.startsWith('/rest/v1/leod_events'))).toBe(true);
+    await expect(invited.page.locator('#ev-modal')).toBeHidden();
+    await expect(invited.page.locator('#ev-pill-dd')).toContainText('Edit event');
+  } finally { await invited.ctx.close(); }
+  const creator = await openConsole(browser, {});
+  try {
+    await evalPage(creator.page, `openEvModal('edit', '${EVENT_ID}'); 0`);
+    await expect(creator.page.locator('#evm-deact')).toBeVisible();
+  } finally { await creator.ctx.close(); }
+});
+
+test('teams: a refused event edit says so instead of looking saved; crew see New event, not Edit', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser, { role: 'stage', myEvents: [
+    { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'stage', isOwner: false, ownerId: OTHER_OWNER },
+  ] });
+  try {
+    await expect(page.locator('#ev-pill-dd')).toContainText('New event');
+    await expect(page.locator('#ev-pill-dd')).not.toContainText('Edit event');
+    // Row security refuses an update by changing no row and returning no error.
+    await page.route(/\/rest\/v1\/leod_events\?/, r => r.request().method() === 'PATCH'
+      ? r.fulfill({ status: 200, contentType: 'application/json', body: '[]', headers: { 'access-control-allow-origin': '*' } })
+      : r.fallback());
+    await evalPage(page, `openEvModal('edit', '${EVENT_ID}'); submitEvModal(); 0`);
+    await expect(page.locator('#evm-error')).toHaveText('Only the directors of this event can edit it.');
+    await expect(page.locator('#ev-modal')).toBeVisible();
+  } finally { await ctx.close(); }
+});

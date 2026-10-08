@@ -1430,6 +1430,8 @@
     @media (max-width: 1439px) { #displays-btn .displays-lbl { display: none; } }
     .hdr-menu button, .ev-pill-dd button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font: 500 var(--fs-13) var(--font-sans); text-align: start; text-transform: none; letter-spacing: 0; cursor: pointer; }
     .hdr-menu button:hover, .ev-pill-dd button:hover, .hdr-menu button.active, .ev-pill-dd button.active { background: var(--raised); color: var(--text-primary); }
+    .ev-dd-group { padding: 8px 10px 4px; font: 600 var(--fs-11) var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-tertiary); }
+    .ev-dd-note { margin-inline-start: auto; font-size: var(--fs-11); color: var(--text-tertiary); }
     .ev-pill-dd .hd-sep { height: 1px; background: var(--border-divider); margin: 4px 6px; }
     .hdr-pop { display: grid; gap: 8px; padding: 12px; min-width: 260px; }
     .hdr-pop-wide { min-width: 320px; }
@@ -7052,6 +7054,22 @@ function setRole(role) {
   buildCtxPanel();
 }
 
+// Events grouped by organiser (event teams §5, §9.3): "Your events" first,
+// then each organiser by company name. With one group there are no headings,
+// so an organiser with only their own events sees the switcher as before.
+function evGroups(events) {
+  const groups = new Map();
+  for (const e of events) {
+    const m = S.myEvents.get(e.id);
+    const key = !m || m.isOwner ? '' : (m.ownerId || '');
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: key ? (m.organiser || t('cc.ev.otherOrganiser')) : t('cc.ev.yourEvents'), events: [] });
+    }
+    groups.get(key).events.push(e);
+  }
+  return [...groups.values()].sort((a, b) => a.key === '' ? -1 : b.key === '' ? 1 : a.label.localeCompare(b.label));
+}
+
 function buildEvSelect(events) {
   const cur = S.event;
   const nameEl = document.getElementById('event-name');
@@ -7061,13 +7079,17 @@ function buildEvSelect(events) {
   const dd = document.getElementById('ev-pill-dd');
   if (!dd) return;
   const isDirector = S.userRole === 'director' || S.role === 'director';
-  dd.innerHTML = events.map(e =>
-    `<button type="button" role="menuitemradio" aria-checked="${e.id === cur?.id}" class="${e.id === cur?.id ? 'active' : ''}" onclick="event.stopPropagation();switchEvent('${e.id}');closeEvDropdown()">${esc(e.name)}</button>`
-  ).join('') + (isDirector
-    ? `<div class="hd-sep"></div>`
-      + (cur ? `<button type="button" role="menuitem" onclick="event.stopPropagation();closeEvDropdown();openEvModal('edit','${cur.id}')">${icon('edit')}${esc(t('cc.hdr.editEvent'))}</button>` : '')
-      + `<button type="button" role="menuitem" class="ev-add-btn${events.length ? '' : ' rbtn-pulse'}" onclick="event.stopPropagation();closeEvDropdown();openEvModal('create')">${icon('plus')}${esc(t('cc.hdr.newEvent'))}</button>`
-    : '');
+  const item = e => `<button type="button" role="menuitemradio" aria-checked="${e.id === cur?.id}" class="${e.id === cur?.id ? 'active' : ''}" onclick="event.stopPropagation();switchEvent('${e.id}');closeEvDropdown()">${esc(e.name)}${planEnded(S.myEvents.get(e.id)) ? `<span class="ev-dd-note">${esc(t('cc.ev.planEndedShort'))}</span>` : ''}</button>`;
+  const groups = evGroups(events);
+  const list = groups.length > 1
+    ? groups.map(g => `<div class="ev-dd-group" role="presentation">${esc(g.label)}</div>` + g.events.map(item).join('')).join('')
+    : events.map(item).join('');
+  // Editing is for this event's directors (§9.1); anyone may create their own
+  // event, on their own plan (§6).
+  dd.innerHTML = list
+    + `<div class="hd-sep"></div>`
+    + (cur && isDirector ? `<button type="button" role="menuitem" onclick="event.stopPropagation();closeEvDropdown();openEvModal('edit','${cur.id}')">${icon('edit')}${esc(t('cc.hdr.editEvent'))}</button>` : '')
+    + `<button type="button" role="menuitem" class="ev-add-btn${events.length ? '' : ' rbtn-pulse'}" onclick="event.stopPropagation();closeEvDropdown();openEvModal('create')">${icon('plus')}${esc(t('cc.hdr.newEvent'))}</button>`;
   // Onboarding: with no event yet, the switcher itself pulses so "New event" is found.
   document.getElementById('ev-switch')?.classList.toggle('rbtn-pulse', isDirector && !events.length);
 }
@@ -7209,7 +7231,8 @@ function openEvModal(mode, eventId) {
     document.getElementById('evm-start').value = (ev.event_start || '').substring(0, 5);
     document.getElementById('evm-end').value   = (ev.event_end   || '').substring(0, 5);
     document.getElementById('evm-seed-row').style.display = 'none';
-    document.getElementById('evm-deact').style.display = '';
+    // Only the creator deactivates (deletes) an event (event teams §9.1).
+    document.getElementById('evm-deact').style.display = S.myEvents.get(eventId)?.isOwner ? '' : 'none';
   }
   document.getElementById('ev-modal').style.display = 'flex';
 }
@@ -7289,11 +7312,15 @@ async function submitEvModal() {
       if (typeof refreshChecklist === 'function') refreshChecklist();
 
     } else {
-      const { error } = await sb.from('leod_events')
+      // .select: row security refuses an update by changing no row, without
+      // an error; without this a refused edit looked saved.
+      const { data: saved, error } = await sb.from('leod_events')
         .update({ name, date, timezone: tz, event_start: start, event_end: end,
                   venue: venue || null })
-        .eq('id', evModalId);
+        .eq('id', evModalId)
+        .select('id');
       if (error) { errEl.textContent = error.message; return; }
+      if (!saved?.length) { errEl.textContent = t('cc.ev.editRefused'); return; }
 
       const idx = S.events.findIndex(e => e.id === evModalId);
       if (idx !== -1) {

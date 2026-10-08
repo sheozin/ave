@@ -333,6 +333,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         let body: any = null;
         try { body = JSON.parse(req.postData() || 'null'); } catch { /* not json */ }
         calls.push({ method: req.method(), path: p + url.search, body });
+        if (req.method() === 'PATCH') return json(r, [{ id: (url.searchParams.get('id') || '').replace(/^eq\./, '') }]);
         return json(r, [], 201);
       }
       const rows: Record<string, unknown[]> = {
