@@ -133,6 +133,9 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       const fn = p.split('/').pop();
       if (fn === 'get_server_clock') return json(r, [{ server_time: new Date(T0 + (Date.now() - realStart)).toISOString(), tick: 48213 }]);
       if (fn === 'get_subscription_for_user') return json(r, [{ plan: 'pro', status: 'active', trial_ends_at: null, current_period_end: '2026-11-01T00:00:00Z' }]);
+      if (fn === 'cuedeck_my_events') return json(r, [EVENT, ...(sc.extraEvents ?? [])].map((e: any) => ({
+        event_id: e.id, role, is_owner: role === 'director', owner_id: role === 'director' ? USER_ID : '0e0e0e0e-0000-4000-8000-0000000000e1',
+        organiser: 'Demo Events', plan: 'pro', plan_status: 'active', trial_ends_at: null })));
       return json(r, null);
     }
     if (p.startsWith('/rest/v1/')) {

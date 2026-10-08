@@ -2938,7 +2938,9 @@ const S = {
   retries:         0,
   ctrlChan:        null,
   user:            null,   // supabase auth user object
-  userRole:        null,   // role from leod_users table
+  userRole:        null,   // my role on the current event (applyEventRole; event teams)
+  accountRole:     null,   // leod_users.role: only pending, checkin_staff and admin mean anything now
+  myEvents:        new Map(), // event id → { role, isOwner, ownerId, organiser, plan, planStatus, trialEndsAt }
   displays:        [],     // leod_signage_displays rows
   sponsors:        [],     // leod_signage_sponsors rows
   seqMap:          {},     // PR-006: sessionId → last seen seq for gap detection
@@ -7132,7 +7134,20 @@ function clearFilters() {
 async function switchEvent(eventId) {
   const ev = S.events.find(e => e.id === eventId);
   if (!ev) return;
+  // The role is per event (event teams §5): read again on every switch, so a
+  // change, a suspension or a removal since boot counts now.
+  let mine;
+  try { mine = await loadMyEvents(); }
+  catch (e) { pushToast(t('cc.ev.roleLoadFailed'), 'error'); return; }
+  S.myEvents = mine;
+  if (!mine.has(eventId)) {
+    S.events = S.events.filter(x => mine.has(x.id));
+    buildEvSelect(S.events);
+    pushToast(t('cc.ev.noAccess'), 'warn');
+    return;
+  }
   S.event = ev;
+  applyEventRole(eventId);
   setStep(`Loading ${ev.name}…`);
   clearBatchSelection(); // a selection belongs to the event it was made in
   disarmAllBatch();
@@ -9135,18 +9150,67 @@ function showSuspendedScreen() {
   document.body.appendChild(overlay);
 }
 
+// ── Event teams (spec 2026-10-08 §5) ──────────────────────────────────────
+// cuedeck_my_events lists every event this login created or is an active
+// member of, with the role on it, its organiser and the organiser's plan.
+// Read on boot and again on every switch, so a role change, a suspension or
+// a removal since boot counts at once. A failed read throws: the role is
+// never guessed.
+async function loadMyEvents() {
+  const { data, error } = await sb.rpc('cuedeck_my_events');
+  if (error) throw error;
+  return new Map((data || []).map(r => [r.event_id, {
+    role: r.role, isOwner: !!r.is_owner, ownerId: r.owner_id, organiser: r.organiser || '',
+    plan: r.plan || null, planStatus: r.plan_status || null, trialEndsAt: r.trial_ends_at || null,
+  }]));
+}
+
+// The role on one event decides what the role decided before: the role lock
+// or View as, the director-only controls, the presence role and the crew
+// list. With no event at all, a new account directs its own (empty) account.
+function applyEventRole(eventId) {
+  const role = eventId ? S.myEvents.get(eventId)?.role : 'director';
+  if (!role) return false;
+  S.userRole = role;   // first, so setRole's role lock lets this role through
+  setRole(role);
+  const director = role === 'director';
+  const va = document.getElementById('viewas-btn');
+  if (va) va.hidden = !director;
+  const lock = document.getElementById('role-lock');
+  if (lock) { lock.textContent = t('role.' + role); lock.hidden = director; }
+  const mmRoles = document.getElementById('mm-roles');
+  if (mmRoles) mmRoles.hidden = !director;
+  const disp = document.getElementById('displays-btn');
+  if (disp) disp.hidden = !director;
+  const users = document.getElementById('users-btn');
+  if (users) users.style.display = director && eventId ? 'flex' : 'none';
+  if (director) refreshDisplaysPill();
+  renderUserChip();
+  return true;
+}
+
+// Welcome modal or role-change toast for the role the console opens on.
+function noteRoleForWelcome() {
+  if (!S.user || !S.userRole) return;
+  const key = 'cuedeck_last_role_' + S.user.id;
+  const last = localStorage.getItem(key);
+  if (last === S.userRole) return;
+  if (!last || last === 'pending') S._showWelcome = S.userRole;   // first login after joining
+  else S._showRoleChange = { from: last, to: S.userRole };
+  localStorage.setItem(key, S.userRole);
+}
+
 async function loadUserRole() {
   if (!S.user) return;
   const { data } = await sb.from('leod_users')
     .select('*')
     .eq('id', S.user.id)
     .single();
-  if (!data) {
-    // no leod_users row → implicit director (show users button)
-    document.getElementById('users-btn').style.display = 'flex';
-    loadPendingBadge();
-    return;
-  }
+  // The role is per event (event teams): it comes from cuedeck_my_events and
+  // applyEventRole sets it on boot and on every switch. leod_users.role only
+  // says what kind of account this is (pending, check-in staff, admin).
+  S.myEvents = await loadMyEvents();
+  if (!data) return;   // no leod_users row yet: an organiser account
 
   // Block access for suspended accounts
   if (data.active === false) {
@@ -9160,9 +9224,11 @@ async function loadUserRole() {
     throw new Error('pending'); // abort boot()
   }
 
-  // Check-in-only staff (migration 059). Without this the console would
-  // treat them as an account with no plan and offer a trial.
-  if (data.role === 'checkin_staff') {
+  // Check-in-only staff (migration 059) are sent to Check-in, unless the same
+  // login is also on a console event's team (event teams §7): then the
+  // console opens on those events. Without this the console would treat them
+  // as an account with no plan and offer a trial.
+  if (data.role === 'checkin_staff' && !S.myEvents.size) {
     document.getElementById('load-spinner').style.display = 'none';
     document.getElementById('load-step').style.display = 'none';
     var ckOverlay = document.createElement('div');
@@ -9215,45 +9281,15 @@ async function loadUserRole() {
     throw new Error('admin'); // abort boot()
   }
 
-  S.userRole = data.role;
-  S.userName = data.name || '';
+  S.accountRole        = data.role;
+  S.userName           = data.name || '';
   S.userOrg            = data.organization || '';
   S.userPhone          = data.phone || '';
   S.userCompanyName    = data.company_name || '';
   S.userVatId          = data.vat_id || '';
   S.userBillingAddress = data.billing_address || '';
-  setRole(data.role);
-
-  // Detect role change → schedule welcome modal or toast
-  const rlsKey = 'cuedeck_last_role_' + S.user.id;
-  const lastKnownRole = localStorage.getItem(rlsKey);
-  if (lastKnownRole !== data.role) {
-    if (!lastKnownRole || lastKnownRole === 'pending') {
-      S._showWelcome = data.role;       // first login after approval
-    } else {
-      S._showRoleChange = { from: lastKnownRole, to: data.role };
-    }
-    localStorage.setItem(rlsKey, data.role);
-  }
-
-  // Operators locked to one role see their role name, not the View as menu
-  if (data.role !== 'director') {
-    const va = document.getElementById('viewas-btn');
-    if (va) va.hidden = true;
-    const lock = document.getElementById('role-lock');
-    if (lock) { lock.textContent = t('role.' + data.role); lock.hidden = false; }
-  }
-
-  // Show Users button and pending badge for directors
-  if (data.role === 'director') {
-    const mmRoles = document.getElementById('mm-roles');
-    if (mmRoles) mmRoles.hidden = false;
-    const disp = document.getElementById('displays-btn');
-    if (disp) disp.hidden = false;
-    refreshDisplaysPill();
-    document.getElementById('users-btn').style.display = 'flex';
-    loadPendingBadge();
-  }
+  // The role, the role lock, View as, Displays and Team are applied per event
+  // by applyEventRole; the welcome check by noteRoleForWelcome (boot).
 }
 
 async function doLogout() {
@@ -9746,7 +9782,7 @@ async function boot() {
     setStep('Loading events…');
     let events;
     try {
-      events = await loadEvents();
+      events = (await loadEvents()).filter(e => S.myEvents.has(e.id));   // only events with a role here
       S.events = events;
       S.dbStatus = 'ok'; refreshDiag();
     } catch (e) {
@@ -9785,6 +9821,8 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
     }
 
     if (!events.length) {
+      applyEventRole(null);   // a new account directs its own, still empty, account
+      noteRoleForWelcome();
       const labels = ['Create event','Add sessions','Invite team','Go live'];
       const stepsHtml = labels.map((label, i) =>
         `<div style="flex:1;text-align:center;position:relative">
@@ -9813,9 +9851,11 @@ INSERT INTO leod_clock (id) VALUES ('master') ON CONFLICT DO NOTHING;</pre>
       return;
     }
 
-    // 3. Select event
+    // 3. Select event, and the role on it
     const ev = events[0];
     S.event = ev;
+    applyEventRole(ev.id);
+    noteRoleForWelcome();
     document.getElementById('event-name').textContent = `${ev.name} · ${ev.date} · ${ev.timezone}`;
     buildEvSelect(events);
 

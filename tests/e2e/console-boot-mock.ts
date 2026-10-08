@@ -125,7 +125,7 @@ export function manySessions(): Sess[] {
     planned_start: a, planned_end: b, scheduled_start: a, scheduled_end: b }))];
 }
 
-const EVENT = {
+export const EVENT = {
   id: EVENT_ID, name: 'GTR North Africa 2026', date: '2026-10-06', venue: 'Cairo', timezone: 'Africa/Cairo',
   active: true, created_via: 'console', event_start: '09:00:00', event_end: '17:00:00', created_at: '2026-09-01T08:00:00Z',
 };
@@ -153,6 +153,16 @@ const OPERATORS = Object.entries(NAMES).map(([role, name], i) => ({
   id: i ? `op-${i}` : USER_ID, name, email: `${name.split(' ')[0].toLowerCase()}@example.com`, role,
   organization: 'Nilegate Events', active: true, last_sign_in_at: iso(-i),
 }));
+// Event teams (spec 2026-10-08): what cuedeck_my_events answers. Default:
+// the demo event, with the scenario's role on it, owned when that role is
+// director, organiser Nilegate Events on Pro.
+export const OTHER_OWNER = '0e0e0e0e-0000-4000-8000-0000000000e1';
+export interface MyEvent {
+  id: string; name: string; role: string; isOwner: boolean;
+  ownerId?: string; organiser?: string | null; plan?: string | null; planStatus?: string | null; trialEndsAt?: string | null;
+}
+export const PRO_SUB = { plan: 'pro', status: 'active', trial_ends_at: null, current_period_end: '2026-11-01T00:00:00Z' };
+export interface Call { method: string; path: string; body: any }
 
 export interface Scenario {
   role?: string;
@@ -164,6 +174,10 @@ export interface Scenario {
   reducedMotion?: 'reduce' | 'no-preference';
   touch?: boolean;
   stageMessages?: unknown[];   // leod_stage_messages rows the boot read returns
+  accountRole?: string;          // leod_users.role, the account's kind; default: role
+  myEvents?: MyEvent[];          // cuedeck_my_events; read on every request, so a test may change it
+  ownSub?: Record<string, unknown> | null;   // get_subscription_for_user row; null = none
+  fnReply?: (fn: string, body: any) => { status: number; body: unknown } | undefined;   // Edge Function answers
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -172,10 +186,12 @@ const FONTS = path.resolve(__dirname, '../fixtures/fonts');
 // Supabase requests the page has sent and not yet had answered (see afterBootReread).
 const sbInFlight = new WeakMap<Page, number>();
 
-export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<{ ctx: BrowserContext; page: Page }> {
+export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<{ ctx: BrowserContext; page: Page; calls: Call[] }> {
   const role = sc.role ?? 'director';
   const sessions = sc.sessions ?? demoSessions();
   const broadcast = sc.broadcast === undefined ? BROADCAST : sc.broadcast;
+  const myEvents = (): MyEvent[] => sc.myEvents ?? [{ id: EVENT_ID, name: EVENT.name, role, isOwner: role === 'director' }];
+  const calls: Call[] = [];
   const ctx = await browser.newContext({
     viewport: sc.viewport ?? { width: 1440, height: 900 },
     deviceScaleFactor: Number(process.env.CONSOLE_DSF ?? 1),
@@ -213,6 +229,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         if (typeof raw !== 'string') return;
         const arr = raw.startsWith('[');
         const m = arr ? (() => { const [join_ref, ref, topic, event, payload] = JSON.parse(raw); return { join_ref, ref, topic, event, payload }; })() : JSON.parse(raw);
+        ((window as any).__rtSent ||= []).push(m);
         const out = (topic: string, event: string, payload: unknown, ref: string | null, join_ref: string | null) =>
           setTimeout(() => this._emit(arr ? JSON.stringify([join_ref, ref, topic, event, payload]) : JSON.stringify({ topic, event, payload, ref, join_ref })), 10);
         if (m.event === 'phx_join') {
@@ -286,11 +303,23 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
     const p = url.pathname;
     if (req.method() === 'OPTIONS') return r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' } });
     const one = /vnd\.pgrst\.object/.test(req.headers()['accept'] || '');
-    if (p.startsWith('/functions/v1/')) return json(r, { ok: true, status: 'OK', version: 10 });
+    if (p.startsWith('/functions/v1/')) {
+      let body: any = null;
+      try { body = JSON.parse(req.postData() || 'null'); } catch { /* not json */ }
+      calls.push({ method: req.method(), path: p, body });
+      const custom = sc.fnReply?.(p.split('/').pop()!, body);
+      if (custom) return json(r, custom.body, custom.status);
+      return json(r, { ok: true, status: 'OK', version: 10 });
+    }
     if (p.startsWith('/rest/v1/rpc/')) {
       const fn = p.split('/').pop();
       if (fn === 'get_server_clock') return json(r, [{ server_time: new Date(T0).toISOString(), tick: 48213 }]);
-      if (fn === 'get_subscription_for_user') return json(r, [{ plan: 'pro', status: 'active', trial_ends_at: null, current_period_end: '2026-11-01T00:00:00Z' }]);
+      if (fn === 'get_subscription_for_user') return json(r, sc.ownSub === null ? [] : [sc.ownSub ?? PRO_SUB]);
+      if (fn === 'cuedeck_my_events') return json(r, myEvents().map(m => ({
+        event_id: m.id, role: m.role, is_owner: m.isOwner, owner_id: m.isOwner ? USER_ID : (m.ownerId ?? OTHER_OWNER),
+        organiser: m.organiser === undefined ? 'Nilegate Events' : m.organiser,
+        plan: m.plan === undefined ? 'pro' : m.plan, plan_status: m.planStatus === undefined ? 'active' : m.planStatus,
+        trial_ends_at: m.trialEndsAt ?? null })));
       if (fn === 'get_operators_with_last_seen') return json(r, OPERATORS);
       return json(r, null);
     }
@@ -300,10 +329,15 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         const cnt = table === 'leod_users' ? (url.search.includes('role=eq.pending') ? 0 : 6) : 0;
         return r.fulfill({ status: 200, headers: { 'content-range': `*/${cnt}`, 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range' } });
       }
-      if (req.method() !== 'GET') return json(r, [], 201);
+      if (req.method() !== 'GET') {
+        let body: any = null;
+        try { body = JSON.parse(req.postData() || 'null'); } catch { /* not json */ }
+        calls.push({ method: req.method(), path: p + url.search, body });
+        return json(r, [], 201);
+      }
       const rows: Record<string, unknown[]> = {
-        leod_users: [{ id: USER_ID, name: NAMES[role], email, role, organization: 'Nilegate Events', phone: null, active: true, company_name: 'Nilegate Events', vat_id: null, billing_address: null }],
-        leod_config: [], leod_events: [EVENT], leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
+        leod_users: [{ id: USER_ID, name: NAMES[role], email, role: sc.accountRole ?? role, organization: 'Nilegate Events', phone: null, active: true, company_name: 'Nilegate Events', vat_id: null, billing_address: null }],
+        leod_config: [], leod_events: myEvents().map(m => ({ ...EVENT, id: m.id, name: m.name })), leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
         leod_event_log: LOG, leod_signage_displays: DISPLAYS, leod_signage_sponsors: SPONSORS,
         leod_stage_messages: sc.stageMessages ?? [],
       };
@@ -334,7 +368,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   if (!inter) throw new Error('Inter did not load: the console would be measured in a fallback font');
   if (unmocked.length) console.log('[unmocked]', [...new Set(unmocked)].join(', '));
   await freeze(page);
-  return { ctx, page };
+  return { ctx, page, calls };
 }
 
 // Stop the clock at FROZEN_AT, zero the clock offset and draw once more, so
