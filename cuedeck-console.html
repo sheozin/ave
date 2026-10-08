@@ -1760,7 +1760,9 @@
     .insp-controls { display: grid; gap: 10px; }
     .insp-controls.insp-secs { gap: 0; }   /* sections carry their own spacing and divider */
     /* Sections (5.2b): a label, then the rows; a divider line between sections */
-    .insp-sec { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--border-divider); }
+    /* minmax(0, 1fr): a row's intrinsic width (the message field is about 20 characters of its font)
+       never widens the rail's column; where text renders wider (Linux) it pushed End past the rail */
+    .insp-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 0; border-top: 1px solid var(--border-divider); }
     .insp-sec:last-child { padding-bottom: 0; }
     .insp-next { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .insp-next > .btn { width: 100%; min-width: 0; }

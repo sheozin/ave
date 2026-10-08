@@ -327,6 +327,29 @@ for (const locale of ['en', 'ar', 'pl', 'de'] as const) {
   }
 }
 
+// CI on Linux (8 Oct): the inspector's sections are grid items, and the message
+// field's intrinsic width (an <input> is about 20 characters of its font) counted
+// toward the column. Where text renders wider than on a Mac, the column outgrew the
+// 1280 rail, Hold and End stuck out past it, and arming End scrolled the rail.
+// A larger field font stands in for the wider metrics: nothing may outgrow the rail.
+for (const locale of ['en', 'de'] as const) {
+  test(`layout: ${locale} 1280: wide text in the message field never pushes the inspector past the rail`, async ({ browser }) => {
+    const { ctx, page } = await openConsole(browser, { locale, viewport: { width: 1280, height: 720 } });
+    await page.addStyleTag({ content: '#ctx-wrap .msg-in { font-size: 22px; }' });
+    const wrap = page.locator('#ctx-wrap');
+    expect(await wrap.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const railRight = await wrap.evaluate(el => el.getBoundingClientRect().right);
+    const end = page.locator('#ctx-wrap .insp-primary .btn.danger');
+    const before = (await end.boundingBox())!;
+    expect(before.x + before.width).toBeLessThanOrEqual(railRight);
+    await end.click();
+    await expect(end).toHaveClass(/confirm-pending/);
+    expect((await end.boundingBox())!.x).toBe(before.x);
+    expect(await wrap.evaluate(el => el.scrollLeft)).toBe(0);
+    await ctx.close();
+  });
+}
+
 test('log: rows read as plain words, never raw JSON or the database action name', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   const feed = page.locator('#log-feed');
