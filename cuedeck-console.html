@@ -5837,6 +5837,7 @@ function renderSignagePanel() {
   // Preserve pairing code input if user is typing
   const pairInput = document.getElementById('sp-pair-code');
   const savedPairCode = pairInput?.value || '';
+  const savedPairTarget = document.getElementById('sp-pair-target')?.value || '';
   const pairHasFocus = pairInput === document.activeElement;
 
   const now = Date.now();
@@ -5940,7 +5941,11 @@ function renderSignagePanel() {
       <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">${t('sign.pairDisplay')}</div>
       <div style="display:flex;gap:6px">
         <input id="sp-pair-code" type="text" placeholder="${t('sign.enterCode')} (e.g. A7K-3M2)" style="flex:1;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:12px;font-family:monospace;letter-spacing:2px;text-transform:uppercase">
-        <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">${icon('link')} Pair</button>
+        <select id="sp-pair-target" aria-label="Show on" title="Show on" style="max-width:45%;background:var(--input-bg);border:1px solid var(--border-control);color:var(--text-primary);padding:6px 8px;border-radius:6px;font-size:12px;font-family:inherit">
+          <option value="">New display</option>
+          ${S.displays.map(d => `<option value="${esc(d.id)}">${esc(d.name || 'Display')}</option>`).join('')}
+        </select>
+        <button onclick="pairDisplayByCode(document.getElementById('sp-pair-code').value, document.getElementById('sp-pair-target').value)" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399;border-radius:6px;padding:6px 12px;font-size:11px;font-family:inherit;font-weight:600;cursor:pointer;white-space:nowrap">${icon('link')} Pair</button>
       </div>
       <div style="margin-top:10px;padding:10px 12px;background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;font-size:11px;color:#94a3b8;line-height:1.8">
         <div style="color:#60a5fa;font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">${t('sign.howToConnect')}</div>
@@ -5990,10 +5995,12 @@ function renderSignagePanel() {
       if (pairHasFocus) newInput.focus();
     }
   }
+  const newTarget = document.getElementById('sp-pair-target');
+  if (newTarget && savedPairTarget && [...newTarget.options].some(o => o.value === savedPairTarget)) newTarget.value = savedPairTarget;
 }
 
 // ── Pair display by code ────────────────────────────────────
-async function pairDisplayByCode(code) {
+async function pairDisplayByCode(code, targetId) {
   code = (code || '').replace('-', '').toUpperCase();
   if (!code || code.length < 6) {
     pushToast(t('toast.invalidCode'), 'warn');
@@ -6001,6 +6008,24 @@ async function pairDisplayByCode(code) {
   }
   if (!S.event) {
     pushToast(t('toast.noEvent'), 'error');
+    return;
+  }
+
+  // An existing display: link the screen to it, nothing to create or undo.
+  if (targetId) {
+    const target = S.displays.find(d => d.id === targetId);
+    if (!target) { pushToast('That display no longer exists. Choose another.', 'error'); return; }
+    const { data: res, error: lErr } = await sb.rpc('display_pair_link', { p_code: code, p_display_id: targetId });
+    if (lErr || res !== 'linked') {
+      const why = { not_found: t('toast.invalidPairing'), expired: t('toast.codeExpired'), used: t('toast.codeUsed'),
+                    forbidden: 'You cannot pair a screen to this event.' }[res];
+      pushToast(why || ('Could not link the pairing code' + (lErr ? ': ' + lErr.message : '.')), 'error');
+      return;
+    }
+    pushToast('Screen linked to ' + (target.name || 'the display') + '. It shows it within a few seconds.', 'success');
+    const inp = document.getElementById('sp-pair-code'); if (inp) inp.value = '';
+    await loadDisplays(S.event.id);
+    if (S.userRole === 'signage' || S.userRole === 'director') renderSignagePanel();
     return;
   }
 

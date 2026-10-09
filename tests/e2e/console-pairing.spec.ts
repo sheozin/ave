@@ -77,6 +77,35 @@ test.describe('Console: pair a display by code', () => {
     });
   }
 
+  test('pairing onto an existing display links that display and creates nothing', async ({ page }) => {
+    const m = await mockSupabase(page);
+    const LECTERN = '00000000-0000-4000-8000-0000000000d9';
+    await page.evaluate(`S.displays = [{ id: '${LECTERN}', name: 'Lectern 43in', event_id: '${EVENT_ID}' }]`);
+    await page.evaluate(`pairDisplayByCode('abc-234', '${LECTERN}')`);
+    await expect(toastText(page)).toContainText('Screen linked to Lectern 43in');
+    expect(m.bodies['display_pair_link']).toEqual({ p_code: 'ABC234', p_display_id: LECTERN });
+    expect(m.calls.some(c => c.startsWith('POST leod_signage_displays'))).toBe(false);
+    expect(m.calls.some(c => c.startsWith('DELETE'))).toBe(false);
+    expect(m.unmocked).toEqual([]);
+  });
+
+  test('a refused code on an existing display deletes nothing and says why', async ({ page }) => {
+    const m = await mockSupabase(page, { linkAnswer: 'expired' });
+    const LECTERN = '00000000-0000-4000-8000-0000000000d9';
+    await page.evaluate(`S.displays = [{ id: '${LECTERN}', name: 'Lectern 43in', event_id: '${EVENT_ID}' }]`);
+    await page.evaluate(`pairDisplayByCode('abc-234', '${LECTERN}')`);
+    await expect(toastText(page)).toBeVisible();
+    await expect(toastText(page)).not.toContainText('Screen linked');
+    expect(m.calls.some(c => c.startsWith('DELETE') || c.startsWith('POST leod_signage_displays'))).toBe(false);
+  });
+
+  test('the pairing box offers New display and every existing display', async ({ page }) => {
+    await mockSupabase(page);
+    await page.evaluate(`S.displays = [{ id: 'd1', name: 'Lectern 43in', event_id: '${EVENT_ID}' }, { id: 'd2', name: '<b>Lobby</b>', event_id: '${EVENT_ID}' }]; renderSignagePanel();`);
+    const opts = page.locator('#sp-pair-target option');
+    await expect(opts).toHaveText(['New display', 'Lectern 43in', '<b>Lobby</b>']);
+  });
+
   test('if the cleanup delete fails, the operator is told to delete the display', async ({ page }) => {
     const m = await mockSupabase(page, { linkAnswer: 'expired' });
     await page.route(u => u.pathname.endsWith('/leod_signage_displays'), r =>
