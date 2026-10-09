@@ -64,6 +64,7 @@ interface Mock {
   startBodies: Record<string, unknown>[];
   pollBodies: Record<string, unknown>[];
   otherRest: string[];
+  reports: Record<string, unknown>[];
   hosts: string[];
 }
 
@@ -72,7 +73,7 @@ async function mockSupabase(page: Page, opts: Partial<Pick<Mock, 'feed' | 'pairS
     feed: opts.feed || (() => makeFeed()),
     pairStart: opts.pairStart || (() => true),
     pairPoll: opts.pairPoll || (() => null),
-    feedBodies: [], startBodies: [], pollBodies: [], otherRest: [], hosts: [],
+    feedBodies: [], startBodies: [], pollBodies: [], otherRest: [], hosts: [], reports: [],
   };
   const json = (route: Route, body: unknown) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body),
@@ -94,6 +95,7 @@ async function mockSupabase(page: Page, opts: Partial<Pick<Mock, 'feed' | 'pairS
     }
     if (url.includes('/rpc/display_pair_start')) { m.startBodies.push(body); return json(route, m.pairStart()); }
     if (url.includes('/rpc/display_pair_poll'))  { m.pollBodies.push(body);  return json(route, m.pairPoll()); }
+    if (url.includes('/rpc/display_report_offline')) { m.reports.push(body); return json(route, true); }
     m.otherRest.push(url);
     return route.fulfill({ status: 403, contentType: 'application/json', body: '{"message":"not mocked"}',
                            headers: { 'access-control-allow-origin': '*' } });
@@ -1735,5 +1737,52 @@ test.describe('Display: screen menu (back to pairing on touch screens and TVs)',
     await expect(page.locator('#screen-menu')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('#screen-menu')).toBeHidden();
+  });
+});
+
+
+// ── OFFLINE (135) ───────────────────────────────────────────────────────────
+test.describe('Display: offline', () => {
+  test('O1 a screen that starts without internet shows the last data it saved', async ({ page }) => {
+    let up = true;
+    await mockSupabase(page, { feed: () => up ? makeFeed() : 'fail' });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title, .d-next-title').first()).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('cuedeck-display-snap:')))).toBe(true);
+    up = false;
+    await page.reload();
+    await expect(page.getByText('Opening keynote').first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('O2 a video screen never shows the reconnecting banner', async ({ page }) => {
+    let up = true;
+    await mockSupabase(page, { feed: () => up ? makeFeed({ display: { content_mode: 'video', video_url: null } }) : 'fail' });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toBeVisible();
+    up = false;
+    await page.waitForTimeout(9000);   // several failed polls
+    await expect(page.locator('#reconnect-banner')).toBeHidden();
+  });
+
+  test('O3 the schedule screen still shows the banner after failed polls', async ({ page }) => {
+    let up = true;
+    await mockSupabase(page, { feed: () => up ? makeFeed() : 'fail' });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title, .d-next-title').first()).toBeVisible();
+    up = false;
+    await expect(page.locator('#reconnect-banner')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('O4 a video is saved on the screen in full and readiness reaches the console', async ({ page }) => {
+    const clip = await recordClip(page);
+    await serveClip(page, clip);
+    const m = await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: CLIP_URL } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect.poll(() => page.evaluate(async (u) => !!(await (await caches.open('cuedeck-display-media')).match(u)), CLIP_URL), { timeout: 20_000 }).toBe(true);
+    await expect.poll(() => m.reports.map(r => (r as { p_status: { video: string } }).p_status.video), { timeout: 20_000 }).toContain('saved');
+    const last = m.reports[m.reports.length - 1] as { p_display_id: string; p_status: Record<string, unknown> };
+    expect(last.p_display_id).toBe(FAKE_DISP_ID);
+    expect(last.p_status.data).toBe(true);
+    expect(Object.keys(last.p_status).every(k => ['shell', 'data', 'video', 'bytes', 'total'].includes(k))).toBe(true);
   });
 });

@@ -562,9 +562,17 @@ window.addEventListener('DOMContentLoaded', () => {
     startPairing();
   }
 
-  // Register service worker for PWA install
+  // (135) The offline worker, for this page only: a screen that restarts
+  // without internet still starts, and saved videos play from the screen.
+  // Its scope is this page's path, so it never handles the console. An older
+  // worker registered for the whole site by this page is removed.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/display-sw.js').catch(() => {});
+    navigator.serviceWorker.register('/display-sw.js', { scope: window.location.pathname }).catch(() => {});
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => {
+      const url = (r.active || r.waiting || r.installing)?.scriptURL || '';
+      if (new URL(r.scope).pathname === '/' && url.endsWith('/display-sw.js')) r.unregister();
+    })).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => reportOffline(true));
   }
 });
 
@@ -743,7 +751,77 @@ function unpaired() {
 
 function setBanner(on) {
   const banner = document.getElementById('reconnect-banner');
-  if (banner) banner.style.display = on ? 'block' : 'none';
+  // (135) A video screen (lectern, banner) keeps playing quietly: no banner.
+  if (banner) banner.style.display = on && activeMode() !== 'video' ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════════
+// OFFLINE (135): the last data, the video, and telling the console.
+// ═══════════════════════════════════════════════════
+const SNAP_KEY = id => 'cuedeck-display-snap:' + id;
+const MEDIA_CACHE = 'cuedeck-display-media';
+let _offline = { data: false, video: 'none', bytes: 0, total: 0 };
+let _lastReport = '', _lastReportAt = 0;
+
+function saveSnapshot(feed) {
+  try { localStorage.setItem(SNAP_KEY(_displayId), JSON.stringify({ at: Date.now(), feed })); _offline.data = true; }
+  catch (_) { _offline.data = false; }   // storage full or blocked: the console will say so
+  reportOffline();
+}
+function loadSnapshot() {
+  try {
+    const raw = localStorage.getItem(SNAP_KEY(_displayId));
+    const snap = raw ? JSON.parse(raw) : null;
+    if (!snap?.feed?.display) return null;
+    _offline.data = true;
+    return snap.feed;
+  } catch (_) { return null; }
+}
+
+// Save the display's video in full on this screen. cache.add streams it to
+// disk without holding it in memory. Videos the display no longer uses are
+// removed so the screen does not fill up.
+let _savingUrl = null;
+async function saveVideoOffline(url) {
+  if (!('caches' in window) || !url || _savingUrl === url) return;
+  try {
+    const cache = await caches.open(MEDIA_CACHE);
+    for (const req of await cache.keys()) if (req.url !== url) await cache.delete(req);
+    if (await cache.match(url)) { _offline.video = 'saved'; reportOffline(); return; }
+    if (!navigator.onLine) return;
+    _savingUrl = url;
+    let total = 0;
+    try { total = Number((await fetch(url, { method: 'HEAD' })).headers.get('content-length')) || 0; } catch (_) {}
+    if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+    if (total && navigator.storage?.estimate) {
+      const { quota = 0, usage = 0 } = await navigator.storage.estimate();
+      if (quota && quota - usage < total * 1.1) { _offline.video = 'no_space'; _offline.total = total; reportOffline(true); return; }
+    }
+    _offline = { ..._offline, video: 'saving', bytes: 0, total };
+    reportOffline(true);
+    await cache.add(url);
+    _offline = { ..._offline, video: 'saved', bytes: total, total };
+  } catch (e) {
+    _offline.video = e && e.name === 'QuotaExceededError' ? 'no_space' : 'failed';
+    // A dropped download tries again in 5 minutes while this video is still shown.
+    if (_offline.video === 'failed') setTimeout(() => { if (D?.video_url === url && activeMode() === 'video') saveVideoOffline(url); }, 300000);
+  } finally {
+    if (_savingUrl === url) _savingUrl = null;
+    reportOffline(true);
+  }
+}
+
+// Tell the console how ready this screen is, when it changes and every 5 minutes.
+function reportOffline(force) {
+  if (!_displayId || !_secret || !sb) return;
+  const status = { shell: !!navigator.serviceWorker?.controller, data: _offline.data,
+                   video: activeMode() === 'video' && D?.video_url ? _offline.video : 'none' };
+  if (status.video === 'saving' || status.video === 'no_space' || status.video === 'saved') { status.bytes = _offline.bytes; status.total = _offline.total; }
+  const key = JSON.stringify(status);
+  if (!force && key === _lastReport && Date.now() - _lastReportAt < 300000) return;
+  _lastReport = key; _lastReportAt = Date.now();
+  sb.rpc('display_report_offline', { p_display_id: _displayId, p_secret: _secret, p_status: status })
+    .then(({ error }) => { if (error) _lastReport = ''; }, () => { _lastReport = ''; });
 }
 
 async function pollFeed() {
@@ -762,6 +840,7 @@ async function pollFeed() {
 
     _pollFails = 0;
     setBanner(false);
+    saveSnapshot(data);
     // Server clock offset, corrected for half the round trip
     const serverMs = new Date(data.server_time).getTime();
     if (!isNaN(serverMs)) S.clockOffset = serverMs - t1 + (t1 - t0) / 2;
@@ -777,6 +856,11 @@ async function pollFeed() {
   } catch (e) {
     // Network or server error: keep whatever is on screen and keep polling.
     _pollFails++;
+    // (135) Started without internet: show the last data this screen saved.
+    if (!_booted) {
+      const snap = loadSnapshot();
+      if (snap) { try { await startDisplay(snap); } catch (err) { console.error('Display render failed:', err); } }
+    }
     if (_pollFails >= FAILS_FOR_BANNER) setBanner(true);
   } finally {
     _pollBusy = false;
@@ -1752,6 +1836,7 @@ function renderVideoLoop(area) {
   area.appendChild(v);
   _loopVideoEl = v;
   v.play().catch(() => {});
+  saveVideoOffline(url);   // (135)
   // Watchdog: a stalled download fires no error and leaves a black screen.
   // If the picture has not moved for 15 seconds, load it again.
   let last = -1;

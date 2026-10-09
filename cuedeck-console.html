@@ -5883,6 +5883,7 @@ function renderSignagePanel() {
               })()}
             </div>
             ${hasOverride ? `<div class="sp-override-tag">${icon('bell')} override: ${esc(d.override_content.mode)}</div>` : ''}
+            ${offlineReadiness(d, now)}
             <div class="sp-disp-actions">
               <a class="launch" href="${displayUrl}" target="_blank" rel="noopener noreferrer" onclick="markDisplayLaunched()">${icon('play')} Launch</a>
               <button class="qr-btn" onclick="showQR('${esc(displayUrl)}','${esc(d.name)}')">${icon('grid')} QR</button>
@@ -6004,6 +6005,23 @@ function renderSignagePanel() {
   }
   const newTarget = document.getElementById('sp-pair-target');
   if (newTarget && savedPairTarget && [...newTarget.options].some(o => o.value === savedPairTarget)) newTarget.value = savedPairTarget;
+}
+
+// ── Offline readiness (135) ─────────────────────────────────
+// What the screen last reported: its page saved, its last data saved and,
+// for a Video Loop display, its video saved in full. A report older than
+// 15 minutes says nothing about the screen now, so it is shown as unknown.
+function offlineReadiness(d, now) {
+  const st = d.offline_status, at = d.offline_reported_at ? new Date(d.offline_reported_at).getTime() : 0;
+  const mb = n => Math.round((Number(n) || 0) / 1048576) + ' MB';
+  const line = (color, text) => `<div class="sp-offline" style="font-size:11px;margin:4px 0 2px;color:${color}">${icon('wifi')} ${esc(text)}</div>`;
+  if (!st || !at || now - at > 15 * 60_000) return line('var(--dim)', 'Offline readiness: not reported. Open or reload the screen.');
+  if (st.video === 'no_space') return line('var(--red)', 'Not ready offline: the screen has no room for the ' + mb(st.total) + ' video.');
+  if (st.video === 'failed') return line('var(--red)', 'Not ready offline: the video did not save. It tries again every 5 minutes.');
+  if (st.video === 'saving') return line('var(--amber)', 'Saving the video on the screen' + (st.total ? ' (' + mb(st.total) + ')' : '') + '. Keep it online until this says ready.');
+  if (!st.shell) return line('var(--amber)', 'Not ready offline yet: reload the screen once while online.');
+  if (!st.data) return line('var(--amber)', 'Not ready offline yet: waiting for the first update.');
+  return line('var(--green)', 'Ready offline' + (st.video === 'saved' ? ': video saved on the screen' : ''));
 }
 
 // ── Pair display by code ────────────────────────────────────
