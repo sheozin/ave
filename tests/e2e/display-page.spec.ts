@@ -1696,3 +1696,44 @@ test.describe('Display: getting back to pairing', () => {
     expect(m.startBodies.length).toBeGreaterThan(0);
   });
 });
+
+test.describe('Display: screen menu (back to pairing on touch screens and TVs)', () => {
+  // The first tap of a page that is not full screen only asks for full screen.
+  const boot = async (page: Page) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { name: 'Lectern 43in', content_mode: 'video', video_url: null } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toBeVisible();
+    await page.mouse.click(50, 50);
+  };
+
+  test('V7 holding 2 s opens it; Disconnect shows a pairing code', async ({ page }) => {
+    await boot(page);
+    await page.mouse.move(200, 300); await page.mouse.down(); await page.waitForTimeout(2300); await page.mouse.up();
+    await expect(page.locator('#screen-menu')).toBeVisible();
+    await expect(page.locator('#sm-display-name')).toHaveText('Showing: Lectern 43in');
+    await page.waitForTimeout(800);  // a person reads the menu first; input in the first moment is ignored
+    await page.locator('#sm-disconnect').click();
+    await expect(page.locator('#pairing-code')).toHaveText(/^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{3}$/);
+  });
+
+  test('V8 five quick taps open it; one tap does not', async ({ page }) => {
+    await boot(page);
+    await page.mouse.click(200, 300);
+    await page.waitForTimeout(300);
+    await expect(page.locator('#screen-menu')).toBeHidden();
+    for (let i = 0; i < 5; i++) await page.mouse.click(200, 300);
+    await expect(page.locator('#screen-menu')).toBeVisible();
+    await page.waitForTimeout(800);
+    await page.locator('#sm-close').click();
+    await expect(page.locator('#screen-menu')).toBeHidden();
+  });
+
+  test('V9 a remote key held 2 s opens it, and Escape closes it', async ({ page }) => {
+    await boot(page);
+    for (let i = 0; i < 26; i++) { await page.keyboard.down('Enter'); await page.waitForTimeout(100); }
+    await page.keyboard.up('Enter');
+    await expect(page.locator('#screen-menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#screen-menu')).toBeHidden();
+  });
+});

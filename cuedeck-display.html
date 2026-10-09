@@ -196,6 +196,15 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 .vl-video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:1}
 .vl-empty{color:rgba(255,255,255,.35);font-size:20px;text-align:center;padding:24px}
 
+/* ── SCREEN MENU: hold 2 s, tap 5 times, or hold a remote key ── */
+#screen-menu{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72)}
+#screen-menu.open{display:flex}
+#screen-menu .sm-card{background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:24px;width:min(90vw,420px);color:#e5e7eb;font-family:inherit;text-align:center}
+#screen-menu .sm-name{font-size:13px;color:#9ca3af;margin:4px 0 18px;overflow-wrap:anywhere}
+#screen-menu button{display:block;width:100%;margin-top:10px;padding:14px;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;border:1px solid rgba(255,255,255,.15);background:#1f2937;color:#e5e7eb}
+#screen-menu button.sm-go{background:#dc2626;border-color:#dc2626;color:#fff}
+#screen-menu button:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
+
 /* ── AGENDA MODE ── */
 .ag-grid{display:grid;grid-template-columns:repeat(var(--col-count,3),1fr);
   gap:clamp(8px,1.5vw,20px);width:100%;height:100%;
@@ -2229,6 +2238,66 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') pollFeed();
 });
 window.addEventListener('online', () => pollFeed());
+
+// ═══════════════════════════════════════════════════
+// SCREEN MENU: the way back to pairing on a touch screen or a TV, where the
+// top bar's Disconnect (shown on hover) can never be reached. Opened on
+// purpose only: hold 2 s, tap 5 times within 2 s, hold a remote key 2 s, or
+// press the Menu key. Disconnecting needs a second, explicit press.
+// ═══════════════════════════════════════════════════
+(function screenMenu() {
+  const menu = document.createElement('div');
+  menu.id = 'screen-menu';
+  menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-modal', 'true'); menu.setAttribute('aria-label', 'Screen menu');
+  menu.innerHTML = '<div class="sm-card"><div style="font-size:18px;font-weight:700">This screen</div>'
+    + '<div class="sm-name" id="sm-display-name"></div>'
+    + '<button type="button" class="sm-go" id="sm-disconnect">Unpair this screen</button>'
+    + '<button type="button" id="sm-close">Close</button></div>';
+  document.body.appendChild(menu);
+  let autoClose = null, openedAt = 0;
+  const isOpen = () => menu.classList.contains('open');
+  // The gesture that opened it is still finishing (the tap's click, the held
+  // key's repeats): ignore input for a moment so it does not close it again.
+  const settling = () => Date.now() - openedAt < 700;
+  const close = () => { menu.classList.remove('open'); clearTimeout(autoClose); };
+  const open = () => {
+    if (!_booted || isOpen()) return;
+    document.getElementById('sm-display-name').textContent = D?.name ? 'Showing: ' + D.name : '';
+    openedAt = Date.now();
+    menu.classList.add('open');
+    document.getElementById('sm-close').focus();
+    clearTimeout(autoClose); autoClose = setTimeout(close, 20000);
+  };
+  window.openScreenMenu = open;
+  menu.addEventListener('click', e => { if (settling()) { e.preventDefault(); e.stopPropagation(); } }, true);
+  document.getElementById('sm-close').onclick = close;
+  document.getElementById('sm-disconnect').onclick = () => { close(); disconnectDisplay(); };
+  menu.addEventListener('click', e => { if (e.target === menu) close(); });
+  document.addEventListener('keydown', e => { if (isOpen() && (e.repeat || settling())) e.preventDefault(); }, true);
+
+  // Hold or five taps.
+  let holdTimer = null, startX = 0, startY = 0, taps = [];
+  document.addEventListener('pointerdown', e => {
+    if (isOpen()) return;
+    startX = e.clientX; startY = e.clientY;
+    clearTimeout(holdTimer); holdTimer = setTimeout(open, 2000);
+    const now = Date.now(); taps = taps.filter(t => now - t < 2000); taps.push(now);
+    if (taps.length >= 5) { taps = []; clearTimeout(holdTimer); open(); }
+  });
+  const cancelHold = () => { clearTimeout(holdTimer); holdTimer = null; };
+  document.addEventListener('pointerup', cancelHold);
+  document.addEventListener('pointercancel', cancelHold);
+  document.addEventListener('pointermove', e => { if (holdTimer && Math.hypot(e.clientX - startX, e.clientY - startY) > 20) cancelHold(); });
+  // Remote: hold any key 2 s (it repeats), or the Menu key.
+  let keyDownAt = null, keyName = null;
+  document.addEventListener('keydown', e => {
+    if (isOpen()) { if (e.key === 'Escape' || e.key === 'Backspace') close(); return; }
+    if (e.key === 'ContextMenu' || e.key === 'Menu') { e.preventDefault(); open(); return; }
+    if (!e.repeat || e.key !== keyName) { keyName = e.key; keyDownAt = Date.now(); return; }
+    if (Date.now() - keyDownAt >= 2000) { keyDownAt = Infinity; open(); }
+  });
+  document.addEventListener('keyup', () => { keyName = null; keyDownAt = null; });
+})();
 
 // ═══════════════════════════════════════════════════
 // FULL SCREEN ON THE FIRST TAP
