@@ -205,30 +205,55 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 #screen-menu button.sm-go{background:#dc2626;border-color:#dc2626;color:#fff}
 #screen-menu button:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
 
-/* ── AGENDA MODE ── */
-.ag-grid{display:grid;grid-template-columns:repeat(var(--col-count,3),1fr);
-  gap:clamp(8px,1.5vw,20px);width:100%;height:100%;
-  padding:clamp(8px,2vw,24px);box-sizing:border-box;overflow:hidden}
-.ag-col{display:flex;flex-direction:column;gap:8px;overflow:hidden}
-.ag-room-header{background:rgba(255,255,255,.06);border-radius:6px;
-  padding:8px 12px;font-size:clamp(10px,.9vw,14px);font-weight:700;
-  letter-spacing:.08em;color:rgba(255,255,255,.4);text-transform:uppercase;flex-shrink:0}
-.ag-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
-  border-radius:6px;padding:10px 12px;flex-shrink:0}
-.ag-card.live{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.35)}
-.ag-card.ready{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3)}
-.ag-card.calling{background:rgba(250,204,21,.08);border-color:rgba(250,204,21,.3)}
-.ag-card.empty{color:rgba(255,255,255,.25);font-size:11px;text-align:center;padding:20px}
-.ag-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;margin-bottom:4px}
-.ag-card.live .ag-badge{color:var(--st-live)}
-.ag-card.ready .ag-badge{color:var(--st-ready)}
-.ag-card.calling .ag-badge{color:var(--st-calling)}
-.ag-time{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.35);margin-bottom:2px}
-.ag-was{color:rgba(255,255,255,.25)}
-.ag-title{font-size:clamp(11px,1vw,16px);font-weight:600;line-height:1.3;color:#eef2f7}
-.ag-speaker{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.4);margin-top:3px}
-.ag-empty{display:flex;align-items:center;justify-content:center;
+/* ── AGENDA MODE: departures board (approved Option B, 9 Oct) ──
+   Sized from one unit, --u (1% of the width on a 16:9 screen, limited by the
+   height on wider or shorter ones), so it reads the same at 720p, 1080p and 4K. */
+.ab-wrap{--u:min(1vw,1.8vh);align-self:stretch;flex:1 1 0;min-height:0;width:100%;
+  display:flex;flex-direction:column;text-align:left}
+.ab-title{flex-shrink:0;font-size:calc(1.5*var(--u));font-weight:700;color:rgba(255,255,255,.75);
+  margin-bottom:calc(.6*var(--u));overflow-wrap:anywhere}
+.ab-th,.ab-row{display:grid;gap:calc(1.4*var(--u));align-items:center;
+  grid-template-columns:calc(12.5*var(--u)) minmax(0,1fr) calc(14*var(--u)) calc(16*var(--u))}
+.ab-wrap.no-room .ab-th,.ab-wrap.no-room .ab-row{grid-template-columns:calc(12.5*var(--u)) minmax(0,1fr) calc(16*var(--u))}
+.ab-wrap.no-room .ab-c-room,.ab-wrap.no-room .ab-rm{display:none}
+.ab-th{flex-shrink:0;font-size:calc(.85*var(--u));letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.45);font-weight:700;padding:calc(.5*var(--u)) calc(1.2*var(--u))}
+.ab-body{flex:1 1 0;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:calc(.5*var(--u))}
+.ab-row{flex-shrink:0;padding:calc(.9*var(--u)) calc(1.2*var(--u));border-radius:calc(.8*var(--u));
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)}
+.ab-row.live{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.4)}
+.ab-row.calling{background:rgba(250,204,21,.08);border-color:rgba(250,204,21,.35)}
+.ab-row.done,.ab-row.cancelled{opacity:.4}
+.ab-row.cancelled .ab-ti{text-decoration:line-through}
+.ab-tm{white-space:nowrap;font-variant-numeric:tabular-nums}
+.ab-now{font-size:calc(2.3*var(--u));font-weight:800;color:#eef2f7}
+.ab-was{font-size:calc(1.3*var(--u));font-weight:500;color:rgba(255,255,255,.45);margin-left:calc(.5*var(--u))}
+.ab-ti{font-size:calc(1.65*var(--u));font-weight:700;line-height:1.15;color:#eef2f7;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ab-sp,.ab-rm-in{font-size:calc(1.15*var(--u));color:rgba(255,255,255,.55);margin-top:calc(.2*var(--u));overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+.ab-rm-in{display:none;color:#cbd5e1}
+.ab-rm{font-size:calc(1.4*var(--u));font-weight:600;color:#cbd5e1;overflow-wrap:anywhere}
+.ab-st{font-size:calc(1.3*var(--u));font-weight:800;white-space:nowrap;color:rgba(255,255,255,.5)}
+.ab-st.live{color:var(--st-live)}
+.ab-st.calling{color:var(--st-calling)}
+.ab-st.late{color:#FB923C}
+.ab-foot{flex-shrink:0;display:flex;justify-content:space-between;gap:calc(1*var(--u));
+  font-size:calc(1*var(--u));color:rgba(255,255,255,.4);margin-top:calc(.6*var(--u));
+  padding-top:calc(.6*var(--u));border-top:1px solid rgba(255,255,255,.08)}
+.ab-empty{display:flex;align-items:center;justify-content:center;
   height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
+/* Portrait: the Room column folds under the session; the old time stacks. */
+@media (orientation:portrait){
+  .ab-wrap{--u:min(1.9vw,1.15vh)}
+  .ab-th,.ab-row,.ab-wrap.no-room .ab-th,.ab-wrap.no-room .ab-row{
+    grid-template-columns:calc(9*var(--u)) minmax(0,1fr) calc(14*var(--u))}
+  .ab-c-room,.ab-rm{display:none}
+  .ab-row .ab-rm-in{display:-webkit-box}
+  .ab-wrap.no-room .ab-rm-in{display:none}
+  .ab-was{display:block;margin-left:0}
+  .ab-st{font-size:calc(1.2*var(--u))}
+}
 
 /* ── TIMELINE MODE ── */
 .tl-wrap{width:100%;height:100%;overflow:hidden;position:relative;padding:clamp(12px,2vw,24px)}
@@ -1006,6 +1031,7 @@ function tick() {
   const mode = activeMode();
   if (mode === 'schedule' || mode === 'recall') updateTimerInPlace();
   if (mode === 'stage-timer') updateStageTimerInPlace();
+  if (mode === 'agenda') updateAgendaInPlace();
 }
 
 function updateTimerInPlace() {
@@ -1130,6 +1156,7 @@ function render() {
   if (mode !== 'timeline') { stopTimelineAnimation(); stopTimelinePaginate(); }
   // Clear programme timers if leaving programme mode
   if (mode !== 'programme') { stopProgrammePaginate(); }
+  if (mode !== 'agenda') { stopAgendaPaginate(); _abPage = 0; }
   // (134) Video mode hides the header and the progress strip; leaving it stops the video.
   document.body.classList.toggle('mode-video', mode === 'video');
   if (mode !== 'video') stopVideoLoop();
@@ -1210,7 +1237,7 @@ let _fitResizeT = null;
 window.addEventListener('resize', () => {
   clearTimeout(_fitResizeT);
   _fitResizeT = setTimeout(() => {
-    if (_booted && document.querySelector('#content-area .d-sched, #content-area .st-wrap.has-msg')) render();
+    if (_booted && document.querySelector('#content-area .d-sched, #content-area .st-wrap.has-msg, #content-area .ab-wrap')) render();
   }, 200);
 });
 
@@ -1881,47 +1908,142 @@ function startVideoSync(v) {
 }
 
 // ═══════════════════════════════════════════════════
-// AGENDA MODE — room grid view
+// AGENDA MODE — departures board: every session of the day in time order by
+// the current schedule, with the last finished one kept for context.
 // ═══════════════════════════════════════════════════
+let _abPage = 0;        // current page, kept across re-renders
+let _abPageTimer = null;
+
+function agendaSessions() {
+  let list = [...S.sessions];
+  if (D?.filter_room) list = list.filter(s => s.room === D.filter_room);
+  list.sort((a, b) => (curStart(a) || '99').localeCompare(curStart(b) || '99') || (a.sort_order || 0) - (b.sort_order || 0));
+  const upcoming = list.filter(s => !['ENDED', 'CANCELLED'].includes(s.status));
+  if (!upcoming.length) return list;   // nothing still to come: the whole day
+  const last = list.filter(s => s.status === 'ENDED').pop();
+  const cut = last ? curStart(last) : '';
+  return list.filter(s => s === last
+    || (s.status !== 'ENDED' && !(s.status === 'CANCELLED' && cut && curStart(s) < cut)));
+}
+
+function agendaLiveText(s) {
+  if (s.status === 'OVERRUN') return 'Running over';
+  let remain = null;
+  if (s.actual_start) remain = schedDurMs(s) - (correctedNow() - new Date(s.actual_start).getTime());
+  else if (curEnd(s)) remain = toMs(curEnd(s)) - toTimeMs(correctedNow());
+  if (remain == null) return 'Live now';
+  return remain <= 0 ? 'Running over' : `Live · ${Math.ceil(remain / 60000)} min left`;
+}
+
+function agendaStatus(s) {
+  switch (s.status) {
+    case 'ENDED':     return { text: 'Finished', cls: '' };
+    case 'LIVE':
+    case 'OVERRUN':   return { text: agendaLiveText(s), cls: 'live' };
+    case 'CALLING':   return { text: 'Starting soon', cls: 'calling' };
+    case 'HOLD':      return { text: 'On hold', cls: '' };
+    case 'CANCELLED': return { text: 'Cancelled', cls: '' };
+  }
+  const planned = timeStr(s.planned_start || '');
+  const diff = planned && s.scheduled_start ? Math.round((toMs(curStart(s)) - toMs(planned)) / 60000) : 0;
+  if (diff > 0) return { text: `Delayed ${diff} min`, cls: 'late' };
+  if (diff < 0) return { text: `Earlier ${-diff} min`, cls: 'late' };
+  return { text: 'On time', cls: '' };
+}
+
+function agendaTitle() {
+  const room = D?.filter_room ? ` · ${D.filter_room}` : '';
+  const date = S.event?.date ? String(S.event.date).substring(0, 10) : '';
+  let today = '';
+  try { today = new Intl.DateTimeFormat('en-CA', { timeZone: S.event?.timezone || undefined }).format(new Date(correctedNow())); } catch {}
+  if (!date || date === today) return `Today's agenda${room}`;
+  const d = new Date(`${date}T12:00:00Z`);
+  if (isNaN(d)) return `Agenda${room}`;
+  return `Agenda · ${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}${room}`;
+}
+
 function renderAgenda(area) {
   area.style.background = '';
-  const active = S.sessions.filter(s => !['CANCELLED','ENDED'].includes(s.status) && s.room);
-  const rooms  = [...new Set(active.map(s => s.room))].sort();
+  const rows = agendaSessions();
+  const noRoom = !!D?.filter_room;
+  // Rebuild only when something shown changes: a poll with the same data
+  // keeps the board, its page and its timer. Live minutes tick in place.
+  const key = JSON.stringify([agendaTitle(), noRoom, innerWidth, innerHeight, rows.map(s =>
+    [s.id, s.status, curStart(s), wasStart(s), s.title, peopleSummary(s, 4), s.room, s.status === 'LIVE' || s.status === 'OVERRUN' ? '' : agendaStatus(s).text])]);
+  const prev = area.querySelector(':scope > .ab-wrap');
+  if (prev && prev.dataset.key === key) return;
 
-  if (!rooms.length) {
-    area.innerHTML = `<div class="ag-empty fade-in">No sessions scheduled</div>`;
+  if (!rows.length) {
+    stopAgendaPaginate();
+    area.innerHTML = `<div class="ab-empty fade-in">No sessions scheduled</div>`;
     return;
   }
 
-  const colCount = Math.min(rooms.length, 4);  // max 4 cols for readability
-
-  const cols = rooms.slice(0, colCount).map(room => {
-    const roomSessions = active.filter(s => s.room === room)
-      .sort((a,b) => curStart(a).localeCompare(curStart(b)));
-
-    const cards = roomSessions.map(s => {
-      const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
-      const isReady = s.status === 'READY' || s.status === 'CALLING';
-      const isCalling = s.status === 'CALLING';
-      const badge   = isLive ? '● LIVE' : isCalling ? '◈ CALLING' : isReady ? '◈ READY' : '';
-      const cls     = `ag-card${isLive ? ' live' : isCalling ? ' calling' : isReady ? ' ready' : ''}`;
-      const time    = curStart(s).substring(0, 5);
-      const was     = wasStart(s);
-      return `<div class="${cls}">
-        ${badge ? `<div class="ag-badge">${badge}</div>` : ''}
-        <div class="ag-time">${esc(time)}${was ? ` <span class="ag-was">was ${esc(was)}</span>` : ''}</div>
-        <div class="ag-title">${esc(s.title)}</div>
-        ${peopleSummary(s) ? `<div class="ag-speaker">${esc(peopleSummary(s))}</div>` : ''}
-      </div>`;
-    }).join('') || `<div class="ag-card empty">No sessions</div>`;
-
-    return `<div class="ag-col">
-      <div class="ag-room-header">${esc(room)}</div>
-      ${cards}
+  const body = rows.map(s => {
+    const st = agendaStatus(s);
+    const live = s.status === 'LIVE' || s.status === 'OVERRUN';
+    const rowCls = live ? ' live' : s.status === 'CALLING' ? ' calling' : s.status === 'ENDED' ? ' done' : s.status === 'CANCELLED' ? ' cancelled' : '';
+    const was = wasStart(s);
+    const ppl = peopleSummary(s, 4);
+    return `<div class="ab-row${rowCls}" data-sid="${esc(s.id)}">
+      <div class="ab-tm"><span class="ab-now">${esc(curStart(s).substring(0, 5) || '--:--')}</span>${was ? `<s class="ab-was">${esc(was)}</s>` : ''}</div>
+      <div class="ab-sess"><div class="ab-ti">${esc(s.title)}</div>${ppl ? `<div class="ab-sp">${esc(ppl)}</div>` : ''}${s.room ? `<div class="ab-rm-in">${esc(s.room)}</div>` : ''}</div>
+      <div class="ab-rm">${esc(s.room || '')}</div>
+      <div class="ab-st${st.cls ? ' ' + st.cls : ''}"${live ? ' data-live="1"' : ''}>${esc(st.text)}</div>
     </div>`;
   }).join('');
 
-  area.innerHTML = `<div class="ag-grid fade-in" style="--col-count:${colCount}">${cols}</div>`;
+  const wrap = document.createElement('div');
+  wrap.className = 'ab-wrap' + (noRoom ? ' no-room' : '') + (prev ? '' : ' fade-in');
+  wrap.dataset.key = key;
+  wrap.innerHTML = `<div class="ab-title">${esc(agendaTitle())}</div>
+    <div class="ab-th"><div>Time</div><div>Session</div><div class="ab-c-room">Room</div><div>Status</div></div>
+    <div class="ab-body">${body}</div>
+    <div class="ab-foot"><span>Times update live</span><span class="ab-page"></span></div>`;
+  area.textContent = '';
+  area.appendChild(wrap);
+  paginateAgenda(wrap);
+}
+
+// Measured, so it holds for any font and screen: rows fill a page until the
+// next one would cross the bottom of the board, then a new page starts.
+function paginateAgenda(wrap) {
+  stopAgendaPaginate();
+  const bodyEl = wrap.querySelector('.ab-body');
+  const rows = [...bodyEl.querySelectorAll('.ab-row')];
+  const gap = parseFloat(getComputedStyle(bodyEl).rowGap) || 0;
+  const avail = bodyEl.clientHeight;
+  let page = 0, used = 0;
+  for (const r of rows) {
+    const h = r.offsetHeight;
+    if (used > 0 && used + h > avail + 0.5) { page++; used = 0; }
+    r.dataset.page = page;
+    used += h + gap;
+  }
+  const total = page + 1;
+  _abPage = Math.min(_abPage, total - 1);
+  const show = () => {
+    rows.forEach(r => { r.style.display = Number(r.dataset.page) === _abPage ? '' : 'none'; });
+    wrap.querySelector('.ab-page').textContent = total > 1 ? `Page ${_abPage + 1} of ${total}` : '';
+  };
+  show();
+  if (total > 1) {
+    _abPageTimer = setInterval(() => { _abPage = (_abPage + 1) % total; show(); }, (D?.paginate_seconds || 10) * 1000);
+  }
+}
+
+function stopAgendaPaginate() {
+  if (_abPageTimer) { clearInterval(_abPageTimer); _abPageTimer = null; }
+}
+
+// Called every second by tick(): only the live rows' minute counts change.
+function updateAgendaInPlace() {
+  document.querySelectorAll('#content-area .ab-st[data-live]').forEach(el => {
+    const s = S.sessions.find(x => String(x.id) === el.closest('.ab-row').dataset.sid);
+    if (!s) return;
+    const t = agendaLiveText(s);
+    if (el.textContent !== t) el.textContent = t;
+  });
 }
 
 // ═══════════════════════════════════════════════════

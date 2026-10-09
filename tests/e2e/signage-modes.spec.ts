@@ -207,12 +207,12 @@ test('PR-014 custom mode — falls back to display name when no message', async 
 
 // ── 8. AGENDA mode ───────────────────────────────────────────────────────────
 
-test('PR-014 agenda mode — shows room column header', async ({ page }) => {
+test('PR-014 agenda mode — shows the board with its column headers', async ({ page }) => {
   await bootMode(page, 'agenda');
-  await expect(page.locator('#content-area .ag-room-header').first()).toBeVisible();
+  await expect(page.locator('#content-area .ab-th')).toBeVisible();
 });
 
-test('PR-014 agenda mode — shows session titles in grid', async ({ page }) => {
+test('PR-014 agenda mode — shows session titles on the board', async ({ page }) => {
   await bootMode(page, 'agenda');
   await expect(page.locator('#content-area')).toContainText('Keynote Address');
 });
@@ -367,7 +367,6 @@ async function addCalling(page: import('@playwright/test').Page, opts: { noLive?
 
 for (const [mode, rowSel, badgeSel] of [
   ['wayfinding', 'tr:has-text("Breakout: Captions")', '.wf-status'],
-  ['agenda', '.ag-card:has-text("Breakout: Captions")', '.ag-badge'],
   ['timeline', '.tl-row:has-text("Breakout: Captions")', '.tl-badge'],
   ['programme', '.pg-cell:has-text("Breakout: Captions")', '.pg-cell-badge'],
 ] as const) {
@@ -428,19 +427,20 @@ test('delay — programme list shows the current time, the original only as "was
   await expect(page.locator('#content-area .tl-row:has-text("Panel: Future of AI") .tl-was')).toHaveCount(0);
 });
 
-test('delay — agenda card shows the current time', async ({ page }) => {
+test('delay — agenda board shows the current time, the original struck through', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'agenda');
   await delayWorkshop(page);
-  const card = page.locator(`#content-area .ag-card:has-text("${WORKSHOP}")`);
-  await expect(card.locator('.ag-time')).toContainText('11:05');
-  await expect(card.locator('.ag-was')).toHaveText('was 11:00');
+  const row = page.locator(`#content-area .ab-row:has-text("${WORKSHOP}")`);
+  await expect(row.locator('.ab-now')).toHaveText('11:05');
+  await expect(row.locator('s.ab-was')).toHaveText('11:00');
 });
 
 test('agenda — times from the DB (HH:MM:SS) are shown, not blank', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'agenda');
   await delayWorkshop(page);
-  const card = page.locator('#content-area .ag-card:has-text("Panel: Future of AI")');
-  await expect(card.locator('.ag-time')).toHaveText('10:00');
+  const row = page.locator('#content-area .ab-row:has-text("Panel: Future of AI")');
+  await expect(row.locator('.ab-now')).toHaveText('10:00');
+  await expect(row.locator('.ab-was')).toHaveCount(0);
 });
 
 test('delay — wayfinding shows the current time', async ({ page }) => {
@@ -478,3 +478,207 @@ test('delay — a session pushed past the next slot moves down the day grid', as
   }, WORKSHOP);
   expect(idx).toBe('11:30');
 });
+
+// ── 13. AGENDA mode is a departures board (approved Option B, 9 Oct) ────────
+// One list for the venue in time order by the CURRENT schedule: Time |
+// Session (title + speakers) | Room | Status. Only the last finished session
+// stays; finished and cancelled rows fade; delays show the old time struck.
+type Sess = Record<string, unknown>;
+function boardSessions(): Sess[] {
+  const at = (hm: string) => `2026-11-12T${hm}:00`;
+  const mk = (id: string, title: string, room: string, status: string, sort: number,
+    planned: [string, string], sched: [string, string] = planned, extra: Sess = {}): Sess => ({
+    id, title, speaker: `Speaker ${id}`, company: '', room, status, sort_order: sort,
+    planned_start: at(planned[0]), planned_end: at(planned[1]),
+    scheduled_start: `${sched[0]}:00`, scheduled_end: `${sched[1]}:00`, actual_start: null, ...extra,
+  });
+  // sort_order is deliberately not time order: the board orders by current start
+  return [
+    mk('doors', 'Doors open', 'Main Stage', 'ENDED', 9, ['08:30', '09:00']),
+    mk('key', 'Opening keynote', 'Main Stage', 'ENDED', 8, ['09:00', '09:45']),
+    mk('live', 'The future of hybrid events', 'Main Stage', 'LIVE', 7, ['10:00', '10:45'], ['10:00', '10:45'],
+      { actual_start: new Date(Date.now() - 31 * 60_000).toISOString() }),
+    mk('call', 'Breakout: captions', 'Hall B', 'CALLING', 6, ['10:30', '11:15'], ['10:35', '11:20']),
+    mk('panel', 'Panel: crews that scale', 'Main Stage', 'READY', 1, ['11:00', '11:45'], ['11:05', '11:50']),
+    mk('case', 'Case study: festival', 'Hall B', 'PLANNED', 2, ['11:30', '12:15'], ['11:35', '12:20']),
+    mk('early', 'Early demo', 'Hall B', 'PLANNED', 3, ['12:00', '12:30'], ['11:50', '12:20']),
+    mk('lunch', 'Networking lunch', 'Main Stage', 'PLANNED', 4, ['12:15', '13:15']),
+    mk('hold', 'Sponsor demos', 'Hall B', 'HOLD', 5, ['13:15', '14:00']),
+    mk('cxl', 'Workshop: rigging', 'Hall B', 'CANCELLED', 10, ['14:00', '15:00']),
+  ];
+}
+const BOARD_ORDER = ['Opening keynote', 'The future of hybrid events', 'Breakout: captions', 'Panel: crews that scale',
+  'Case study: festival', 'Early demo', 'Networking lunch', 'Sponsor demos', 'Workshop: rigging'];
+
+async function bootBoard(page: import('@playwright/test').Page, ov: Record<string, unknown> = {}, sessions?: Sess[]) {
+  await page.goto(DISP_URL);
+  await page.evaluate(({ ov, sessions }) => {
+    const w = window as unknown as Record<string, unknown>;
+    w.S = { sessions, sponsors: [], event: { name: 'Northwind Summit 2026' }, broadcast: null, clockOffset: 0, stageMessages: [] };
+    w.D = { id: 'disp-ab', name: 'Lobby', content_mode: 'agenda', orientation: 'landscape', filter_room: null,
+      override_content: null, sequence: null, paginate_seconds: 10, ...ov };
+    document.getElementById('setup')!.style.display = 'none';
+    document.getElementById('display')!.style.display = 'flex';
+    (w.render as () => void)();
+  }, { ov, sessions: sessions ?? boardSessions() });
+}
+const row = (page: import('@playwright/test').Page, title: string) =>
+  page.locator('#content-area .ab-row').filter({ has: page.locator('.ab-ti', { hasText: title }) });
+
+test.describe('agenda board', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('column headers Time, Session, Room, Status under a "Today\'s agenda" title', async ({ page }) => {
+    await bootBoard(page);
+    await expect(page.locator('#content-area .ab-title')).toHaveText("Today's agenda");
+    await expect(page.locator('#content-area .ab-th > *')).toHaveText(['Time', 'Session', 'Room', 'Status']);
+    await expect(page.locator('#d-clock')).toHaveCount(1);   // the display's own top bar stays
+  });
+
+  test('rows run in current-time order; only the most recent finished session stays', async ({ page }) => {
+    await bootBoard(page);
+    await expect(page.locator('#content-area .ab-row .ab-ti')).toHaveText(BOARD_ORDER);
+    await expect(page.locator('#content-area')).not.toContainText('Doors open');
+  });
+
+  test('each status reads in words, in its colour', async ({ page }) => {
+    await bootBoard(page);
+    const st = (t: string) => row(page, t).locator('.ab-st');
+    await expect(st('Opening keynote')).toHaveText('Finished');
+    await expect(st('The future of hybrid events')).toHaveText('Live · 14 min left');
+    await expect(st('Breakout: captions')).toHaveText('Starting soon');
+    await expect(st('Panel: crews that scale')).toHaveText('Delayed 5 min');
+    await expect(st('Case study: festival')).toHaveText('Delayed 5 min');
+    await expect(st('Early demo')).toHaveText('Earlier 10 min');
+    await expect(st('Networking lunch')).toHaveText('On time');
+    await expect(st('Sponsor demos')).toHaveText('On hold');
+    await expect(st('Workshop: rigging')).toHaveText('Cancelled');
+    const colour = (t: string) => st(t).evaluate(el => getComputedStyle(el).color);
+    expect(await colour('The future of hybrid events')).toBe('rgb(239, 68, 68)');
+    expect(await colour('Breakout: captions')).toBe(CALLING_RGB);
+    expect(await colour('Panel: crews that scale')).toBe('rgb(251, 146, 60)');
+    expect(await colour('Networking lunch')).not.toBe('rgb(251, 146, 60)');
+    // finished and cancelled rows fade; a cancelled title is struck through
+    expect(Number(await row(page, 'Opening keynote').evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(0.6);
+    expect(Number(await row(page, 'Workshop: rigging').evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(0.6);
+    expect(await row(page, 'Workshop: rigging').locator('.ab-ti').evaluate(el => getComputedStyle(el).textDecorationLine)).toBe('line-through');
+    expect(Number(await row(page, 'Networking lunch').evaluate(el => getComputedStyle(el).opacity))).toBe(1);
+  });
+
+  test('an overrunning session reads "Running over"', async ({ page }) => {
+    const ss = boardSessions();
+    ss.find(s => s.id === 'live')!.status = 'OVERRUN';
+    await bootBoard(page, {}, ss);
+    await expect(row(page, 'The future of hybrid events').locator('.ab-st')).toHaveText('Running over');
+  });
+
+  test('a moved session shows the new time with the old one struck through; speakers under the title', async ({ page }) => {
+    await bootBoard(page);
+    const r = row(page, 'Panel: crews that scale');
+    await expect(r.locator('.ab-now')).toHaveText('11:05');
+    await expect(r.locator('s.ab-was')).toHaveText('11:00');
+    await expect(r.locator('.ab-sp')).toHaveText('Speaker panel');
+    await expect(r.locator('.ab-rm')).toHaveText('Main Stage');
+    await expect(row(page, 'Networking lunch').locator('.ab-was')).toHaveCount(0);
+  });
+
+  test('a display with a room shows only that room and drops the Room column', async ({ page }) => {
+    await bootBoard(page, { filter_room: 'Hall B' });
+    await expect(page.locator('#content-area .ab-row .ab-ti')).toHaveText(
+      ['Breakout: captions', 'Case study: festival', 'Early demo', 'Sponsor demos', 'Workshop: rigging']);
+    await expect(page.locator('#content-area .ab-title')).toContainText('Hall B');
+    await expect(page.locator('#content-area .ab-th > *:visible')).toHaveText(['Time', 'Session', 'Status']);
+  });
+
+  test('with nothing still to come the board shows the whole day', async ({ page }) => {
+    const ss = boardSessions().map(s => ({ ...s, status: 'ENDED' }));
+    await bootBoard(page, {}, ss);
+    await expect(page.locator('#content-area .ab-row')).toHaveCount(10);
+  });
+
+  test('a live minute count updates in place, without rebuilding the board', async ({ page }) => {
+    await bootBoard(page);
+    await page.evaluate(() => { (document.querySelector('.ab-wrap') as HTMLElement & { _mark?: number })._mark = 1; });
+    await page.evaluate(() => {
+      const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; tick: () => void };
+      w.S.sessions.find(s => s.id === 'live')!.actual_start = new Date(Date.now() - 40 * 60_000).toISOString();
+      w.tick();
+    });
+    await expect(row(page, 'The future of hybrid events').locator('.ab-st')).toHaveText('Live · 5 min left');
+    // an unchanged poll re-render keeps the same board (no fade, no flicker)
+    await page.evaluate(() => (window as unknown as { render: () => void }).render());
+    expect(await page.evaluate(() => (document.querySelector('.ab-wrap') as HTMLElement & { _mark?: number })._mark)).toBe(1);
+  });
+});
+
+test.describe('agenda board at 1280x720', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+
+  test('rows that do not fit page through, with "Page 1 of N", keeping the page across re-renders', async ({ page }) => {
+    const ss = boardSessions();
+    for (let i = 0; i < 6; i++) ss.push({ ...ss[7], id: `x${i}`, title: `Extra session ${i}`,
+      planned_start: `2026-11-12T${15 + i}:00:00`, scheduled_start: `${15 + i}:00:00`, scheduled_end: `${15 + i}:45:00` });
+    await bootBoard(page, { paginate_seconds: 1 }, ss);
+    const pg = page.locator('#content-area .ab-page');
+    await expect(pg).toHaveText(/^Page 1 of [2-9]$/);
+    // every visible row sits inside the board body
+    const fits = await page.evaluate(() => {
+      const body = document.querySelector('.ab-body')!.getBoundingClientRect();
+      return [...document.querySelectorAll<HTMLElement>('.ab-row')].filter(r => r.offsetParent)
+        .every(r => r.getBoundingClientRect().bottom <= body.bottom + 0.5);
+    });
+    expect(fits).toBe(true);
+    await expect(pg).toHaveText(/^Page 2 of /, { timeout: 4000 });
+    // a poll that changes nothing must not jump back to page 1
+    await page.evaluate(() => (window as unknown as { render: () => void }).render());
+    await expect(pg).toHaveText(/^Page 2 of /);
+    // a status change re-renders but stays on the same page
+    await page.evaluate(() => {
+      const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; render: () => void };
+      w.S.sessions.find(s => s.id === 'hold')!.status = 'READY';
+      w.render();
+    });
+    await expect(pg).toHaveText(/^Page 2 of /);
+  });
+
+  test('when everything fits there is no page count', async ({ page }) => {
+    await bootBoard(page, { filter_room: 'Main Stage' });
+    await expect(page.locator('#content-area .ab-row')).toHaveCount(4);
+    await expect(page.locator('#content-area .ab-page')).toHaveText('');
+  });
+});
+
+for (const vp of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+  test.describe(`agenda board fits at ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+    test('nothing overflows sideways', async ({ page }) => {
+      const ss = boardSessions();
+      ss[4].title = 'Panel: building crews that scale across three continents and nine time zones';
+      ss[4].people = ['Priya Raman', 'Marcus Feld', 'Ines Carvalho', 'Jun Watanabe', 'Lucia Ferreira'].map(name => ({ name, role: 'panelist' }));
+      ss[3].room = 'Conference Room Alpha West';
+      await bootBoard(page, {}, ss);
+      const bad = await page.evaluate(() => {
+        const out: string[] = [];
+        if (document.documentElement.scrollWidth > innerWidth) out.push('page scrolls sideways');
+        for (const r of document.querySelectorAll<HTMLElement>('.ab-row, .ab-th')) {
+          if (!r.offsetParent) continue;
+          const box = r.getBoundingClientRect();
+          for (const el of r.querySelectorAll<HTMLElement>('*')) {
+            if (!el.offsetParent) continue;
+            const b = el.getBoundingClientRect();
+            if (b.right > box.right + 0.5 || el.scrollWidth > el.clientWidth + 1) out.push(`${el.className}: ${el.textContent}`);
+          }
+        }
+        return out;
+      });
+      expect(bad).toEqual([]);
+      if (vp.height > vp.width) {
+        // portrait: the Room column folds under the session
+        await expect(page.locator('#content-area .ab-th .ab-c-room')).toBeHidden();
+        await expect(page.locator('#content-area .ab-row:visible').first().locator('.ab-rm-in')).toBeVisible();
+      } else {
+        await expect(page.locator('#content-area .ab-row:visible').first().locator('.ab-rm')).toBeVisible();
+      }
+    });
+  });
+}
