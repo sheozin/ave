@@ -6260,7 +6260,8 @@ async function saveDisplay() {
       const ext = (vf.name.split('.').pop() || '').toLowerCase();
       const mime = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' }[ext];
       if (!mime) { err.textContent = 'Choose an MP4, WebM or MOV video.'; return; }
-      if (vf.size > 300 * 1048576) { err.textContent = 'This video is ' + Math.round(vf.size / 1048576) + ' MB. The limit is 300 MB: export it smaller, or paste the address of a video hosted elsewhere.'; return; }
+      // The storage project takes files up to 1 GB (its global file size limit).
+      if (vf.size > 1024 * 1048576) { err.textContent = 'This video is ' + Math.round(vf.size / 1048576) + ' MB. The limit is 1 GB: export it smaller, or paste the address of a video hosted elsewhere.'; return; }
       state.textContent = 'Uploading ' + Math.round(vf.size / 1048576) + ' MB. Keep this window open.';
       const path = `displays/${S.event.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await sb.storage.from('leod-assets').upload(path, vf, { contentType: mime, upsert: false });
