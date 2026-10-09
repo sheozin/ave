@@ -828,3 +828,57 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, {
     });
   });
 }
+
+// ── 16. The day grid never clips: a long day pages itself even without
+// paginate set (same "1 / N" and timing); a day that fits does not page.
+function longDay(): Sess[] {
+  const out: Sess[] = [];
+  const rooms = ['Main Stage', 'Hall B', 'Hall C'];
+  let k = 0;
+  for (let m = 8 * 60; m < 19 * 60; m += 30) {
+    const hm = (x: number) => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+    const room = rooms[k % 3];
+    out.push({ id: `L${k}`, title: `Session ${k}`, speaker: `Speaker ${k}`, company: '', room, status: 'PLANNED',
+      sort_order: k, planned_start: `2026-11-12T${hm(m)}:00`, planned_end: `2026-11-12T${hm(m + 30)}:00`,
+      scheduled_start: `${hm(m)}:00`, scheduled_end: `${hm(m + 30)}:00`, actual_start: null });
+    k++;
+  }
+  return out;
+}
+
+test.describe('day grid at 1280x720, long day, no paginate setting', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+  test('pages itself; every slot is reachable and nothing is clipped', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme', scroll_style: 'scroll' }, longDay());
+    const ind = page.locator('#pg-page-ind');
+    await expect(ind).toHaveText(/^1 \/ [2-9]$/);
+    const total = Number((await ind.textContent())!.split('/')[1]);
+    const seen = new Set<string>();
+    for (let i = 0; i < total; i++) {
+      const res = await page.evaluate((i) => {
+        const w = window as unknown as { _pgPageIdx: number; renderProgrammePage: (n: number) => void };
+        // eslint-disable-next-line no-eval
+        eval(`_pgPageIdx = ${i}`);
+        w.renderProgrammePage(Number(document.getElementById('pg-page-ind')!.textContent!.split('/')[1]));
+        const grid = document.querySelector('.pg-grid')!.getBoundingClientRect();
+        const labels = [...document.querySelectorAll<HTMLElement>('.pg-time-lbl')];
+        const clipped = [...labels, ...document.querySelectorAll<HTMLElement>('.pg-blk-ti')]
+          .filter(el => el.scrollHeight > el.clientHeight + 1).map(el => el.textContent);
+        return { labels: labels.map(l => l.textContent!), clipped, below: grid.bottom > innerHeight + 0.5,
+          ind: document.getElementById('pg-page-ind')!.textContent };
+      }, i);
+      expect(res.ind).toBe(`${i + 1} / ${total}`);
+      expect(res.clipped).toEqual([]);
+      expect(res.below).toBe(false);
+      res.labels.forEach(l => seen.add(l));
+    }
+    expect(seen.size).toBe(22);   // 08:00 .. 18:30
+    expect(seen.has('08:00') && seen.has('18:30')).toBe(true);
+  });
+
+  test('a short day that fits does not page', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme', scroll_style: 'scroll', filter_room: 'Main Stage' });
+    await expect(page.locator('#content-area .pg-time-lbl').first()).toBeVisible();
+    await expect(page.locator('#pg-page-ind')).toHaveCount(0);
+  });
+});

@@ -2111,8 +2111,19 @@ function renderProgramme(area) {
   </div>`;
   _pgModel = { rooms, labels, blocks, minT, slotsPerPage };
 
-  if (paginate) startProgrammePaginate(totalPages);
-  else pgFill(0, totalSlots);
+  if (paginate) { startProgrammePaginate(totalPages); return; }
+  pgFill(0, totalSlots);
+  // Never clip: when the whole day does not fit, page it anyway (same 1 / N
+  // and timing as paginate mode), as many slots a page as fit.
+  const grid = document.getElementById('pg-grid-inner');
+  const lbls = [...grid.querySelectorAll('.pg-time-lbl')];
+  if (!lbls.some(l => l.scrollHeight > l.clientHeight + 1)) return;
+  grid.insertAdjacentHTML('afterend', `<div class="pg-page-indicator" id="pg-page-ind"></div>`);
+  const need = Math.max(...lbls.map(l => l.scrollHeight)) * 1.15;
+  const rowsH = grid.clientHeight - grid.querySelector('.pg-corner').offsetHeight;
+  const per = Math.max(1, Math.floor(rowsH / need));
+  _pgModel.slotsPerPage = per;
+  startProgrammePaginate(Math.ceil(totalSlots / per));
 }
 
 function pgBlockHtml(blk, row, span) {
