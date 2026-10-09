@@ -1638,6 +1638,8 @@ test.describe('Display: video mode', () => {
     expect(box).toEqual({ x: 0, y: 0, width: 540, height: 960 });
     await expect(page.locator('.d-header')).toBeHidden();
     await expect(page.locator('#d-progress-bar')).toBeHidden();
+    // The whole picture shows, never cropped: a screen whose shape differs gets bands instead.
+    expect(await v.evaluate(el => getComputedStyle(el).objectFit)).toBe('contain');
   });
 
   test('V2 a feed refresh does not restart the video', async ({ page }) => {
