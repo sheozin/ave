@@ -186,6 +186,11 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
   transition:width .3s linear;border-radius:0 2px 0 0;
 }
 
+/* ── VIDEO MODE (134): one video edge to edge, on a loop, nothing else ── */
+body.mode-video .d-header, body.mode-video #d-progress-bar{display:none!important}
+.vl-video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;background:#000;z-index:1}
+.vl-empty{color:rgba(255,255,255,.35);font-size:20px;text-align:center;padding:24px}
+
 /* ── AGENDA MODE ── */
 .ag-grid{display:grid;grid-template-columns:repeat(var(--col-count,3),1fr);
   gap:clamp(8px,1.5vw,20px);width:100%;height:100%;
@@ -1005,6 +1010,9 @@ function render() {
   if (mode !== 'timeline') { stopTimelineAnimation(); stopTimelinePaginate(); }
   // Clear programme timers if leaving programme mode
   if (mode !== 'programme') { stopProgrammePaginate(); }
+  // (134) Video mode hides the header and the progress strip; leaving it stops the video.
+  document.body.classList.toggle('mode-video', mode === 'video');
+  if (mode !== 'video') stopVideoLoop();
 
   switch (mode) {
     case 'schedule':  area.innerHTML = renderSchedule(); fitSchedule(area); break;
@@ -1018,6 +1026,7 @@ function render() {
     case 'agenda':    renderAgenda(area); break;
     case 'timeline':  renderTimeline(area); break;
     case 'programme': renderProgramme(area); break;
+    case 'video':     renderVideoLoop(area); break;
     default:          area.innerHTML = renderSchedule(); fitSchedule(area);
   }
 
@@ -1657,6 +1666,59 @@ function renderCustom() {
   return `<div class="fade-in">
     <div class="custom-message">${esc(msg)}</div>
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+// VIDEO MODE (134): a lectern or logo screen. One video, edge to edge,
+// muted (so every browser autoplays it), looping until the mode changes.
+// render() runs on every data update, so the same video is never restarted.
+// ═══════════════════════════════════════════════════
+let _loopVideoEl = null;
+let _loopWatch = null;
+function stopVideoLoop() {
+  if (_loopWatch) { clearInterval(_loopWatch); _loopWatch = null; }
+  if (!_loopVideoEl) return;
+  _loopVideoEl.pause(); _loopVideoEl.removeAttribute('src'); _loopVideoEl.load();
+  _loopVideoEl = null;
+}
+function renderVideoLoop(area) {
+  const url = D?.video_url || '';
+  if (_loopVideoEl && _loopVideoEl.isConnected && _loopVideoEl.dataset.src === url) return;
+  // The sponsor carousel's own video and timers would otherwise keep running
+  // and draw over this screen.
+  _cleanupActiveVideo();
+  if (_sponsorTimer) { clearTimeout(_sponsorTimer); _sponsorTimer = null; }
+  stopVideoLoop();
+  area.style.background = '#000';
+  area.textContent = '';
+  if (!/^https:\/\/[^\s<>"]+$/.test(url)) {
+    const msg = document.createElement('div');
+    msg.className = 'vl-empty fade-in';
+    msg.textContent = 'No video chosen for this display';
+    area.appendChild(msg);
+    return;
+  }
+  const v = document.createElement('video');
+  v.className = 'vl-video';
+  v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.preload = 'auto';
+  v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+  v.dataset.src = url;
+  v.src = url;
+  // A dropped connection or a decode error: try again rather than freeze.
+  v.addEventListener('error', () => setTimeout(() => {
+    if (_loopVideoEl === v) { v.load(); v.play().catch(() => {}); }
+  }, 5000));
+  area.appendChild(v);
+  _loopVideoEl = v;
+  v.play().catch(() => {});
+  // Watchdog: a stalled download fires no error and leaves a black screen.
+  // If the picture has not moved for 15 seconds, load it again.
+  let last = -1;
+  _loopWatch = setInterval(() => {
+    if (_loopVideoEl !== v) return;
+    if (v.currentTime === last) { v.load(); v.play().catch(() => {}); last = -1; return; }
+    last = v.currentTime;
+  }, 15000);
 }
 
 // ═══════════════════════════════════════════════════

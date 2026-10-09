@@ -2520,8 +2520,19 @@
         <option value="break">Break Screen</option>
         <option value="custom">Custom Message</option>
         <option value="stage-timer">Stage Timer (speaker countdown)</option>
+        <option value="video">Video Loop (lectern or logo screen)</option>
       </select>
     </label>
+    <!-- (134) Video mode: one video, edge to edge, on a loop -->
+    <div id="dm-video-wrap" style="display:none;margin-top:4px">
+      <label>Video <span style="font-weight:400;text-transform:none;letter-spacing:0">(MP4, plays muted on a loop and fills the screen)</span>
+        <input id="dm-video-file" type="file" accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime" style="font-size:11px;color:var(--dim);margin-top:3px">
+      </label>
+      <label style="margin-top:6px">Or a video address
+        <input id="dm-video-url" type="url" placeholder="https://..." style="font-size:12px;margin-top:3px">
+      </label>
+      <div id="dm-video-state" style="color:var(--dim);font-size:11px;min-height:14px;margin-top:4px"></div>
+    </div>
     <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional: leave blank to show all)</span>
       <input id="dm-room" type="text" placeholder="e.g. Main Stage">
     </label>
@@ -5681,6 +5692,12 @@ function toggleSeqBuilder() {
   if (builder) builder.style.display = on ? '' : 'none';
 }
 
+function toggleVideoField() {
+  const wrap = document.getElementById('dm-video-wrap');
+  if (wrap) wrap.style.display = document.getElementById('dm-mode')?.value === 'video' ? '' : 'none';
+}
+document.getElementById('dm-mode')?.addEventListener('change', toggleVideoField);
+
 function togglePaginateSeconds() {
   const style = document.getElementById('dm-scroll-style')?.value;
   const wrap = document.getElementById('dm-paginate-wrap');
@@ -6155,6 +6172,7 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-scroll-style').value = d.scroll_style || 'scroll';
     document.getElementById('dm-paginate-seconds').value = d.paginate_seconds || 10;
     document.getElementById('dm-audio').checked = d.audio_enabled || false;
+    document.getElementById('dm-video-url').value = d.video_url || '';
     // Populate sequence builder
     _seqSlides = (d.sequence || []).map(s => ({ ...s }));
     document.getElementById('dm-seq-enable').checked = _seqSlides.length > 0;
@@ -6167,11 +6185,15 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-scroll-style').value = 'scroll';
     document.getElementById('dm-paginate-seconds').value = 10;
     document.getElementById('dm-audio').checked = false;
+    document.getElementById('dm-video-url').value = '';
     _seqSlides = [];
     document.getElementById('dm-seq-enable').checked = false;
   }
+  document.getElementById('dm-video-file').value = '';
+  document.getElementById('dm-video-state').textContent = '';
   toggleSeqBuilder();
   togglePaginateSeconds();
+  toggleVideoField();
   renderSeqList();
   document.getElementById('disp-modal').style.display = 'flex';
 }
@@ -6197,7 +6219,26 @@ async function saveDisplay() {
   const scrollStyle = document.getElementById('dm-scroll-style').value || 'scroll';
   const paginateSec = parseInt(document.getElementById('dm-paginate-seconds').value) || 10;
   const audioEnabled = document.getElementById('dm-audio').checked;
-  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence, scroll_style: scrollStyle, paginate_seconds: paginateSec, audio_enabled: audioEnabled };
+  // (134) Video mode: upload the chosen file, or use the pasted https address.
+  let videoUrl = document.getElementById('dm-video-url').value.trim() || null;
+  if (mode === 'video') {
+    const vf = document.getElementById('dm-video-file').files[0];
+    const state = document.getElementById('dm-video-state');
+    if (vf) {
+      const ext = (vf.name.split('.').pop() || '').toLowerCase();
+      const mime = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' }[ext];
+      if (!mime) { err.textContent = 'Choose an MP4, WebM or MOV video.'; return; }
+      state.textContent = 'Uploading ' + Math.round(vf.size / 1048576) + ' MB. Keep this window open.';
+      const path = `displays/${S.event.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('leod-assets').upload(path, vf, { contentType: mime, upsert: false });
+      if (upErr) { state.textContent = ''; err.textContent = 'Upload failed: ' + upErr.message; return; }
+      videoUrl = sb.storage.from('leod-assets').getPublicUrl(path).data.publicUrl;
+      state.textContent = '';
+    }
+    if (!videoUrl) { err.textContent = 'Choose a video for this display.'; return; }
+    if (!/^https:\/\/[^\s<>"]+$/.test(videoUrl)) { err.textContent = 'The video address must start with https://'; return; }
+  }
+  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence, scroll_style: scrollStyle, paginate_seconds: paginateSec, audio_enabled: audioEnabled, video_url: videoUrl };
   const { error } = _dispModalId
     ? await sb.from('leod_signage_displays').update(payload).eq('id', _dispModalId)
     : await sb.from('leod_signage_displays').insert(payload);

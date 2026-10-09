@@ -1578,3 +1578,96 @@ test.describe('Display: one tap for full screen and audio', () => {
     });
   }
 });
+
+// ── VIDEO MODE (134): lectern / logo screen ─────────────────────────────────
+// A neutral clip is recorded in the browser at test time (coloured frames from
+// a canvas), so no real artwork is stored in the repo.
+async function recordClip(page: Page): Promise<Buffer> {
+  await page.goto('about:blank');
+  const b64: string = await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 180; c.height = 320;
+    const g = c.getContext('2d')!;
+    const rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' });
+    const parts: Blob[] = []; rec.ondataavailable = e => parts.push(e.data);
+    rec.start();
+    for (let i = 0; i < 15; i++) { g.fillStyle = `hsl(${i * 24},70%,50%)`; g.fillRect(0, 0, 180, 320); await new Promise(r => setTimeout(r, 70)); }
+    rec.stop(); await new Promise(r => (rec.onstop = r));
+    const buf = await new Blob(parts).arrayBuffer();
+    let s = ''; new Uint8Array(buf).forEach(x => (s += String.fromCharCode(x)));
+    return btoa(s);
+  });
+  return Buffer.from(b64, 'base64');
+}
+const CLIP_URL = 'https://media.example.test/lectern.webm';
+// Answers byte ranges the way a real file server does: Chrome asks for
+// video in ranges, and a whole-file answer can leave it waiting.
+const hits = { n: 0 };
+async function serveClip(page: Page, clip: Buffer) {
+  await page.context().route(CLIP_URL, r => {
+    hits.n++;
+    const m = /bytes=(\d+)-(\d*)/.exec(r.request().headers()['range'] || '');
+    if (!m) return r.fulfill({ status: 200, contentType: 'video/webm', body: clip, headers: { 'accept-ranges': 'bytes' } });
+    const start = Number(m[1]), end = m[2] ? Math.min(Number(m[2]), clip.length - 1) : clip.length - 1;
+    return r.fulfill({ status: 206, contentType: 'video/webm', body: clip.subarray(start, end + 1),
+      headers: { 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${clip.length}` } });
+  });
+}
+
+test.describe('Display: video mode', () => {
+  test('V1 plays the video edge to edge, muted and looping, with no header or progress strip', async ({ page }) => {
+    // Up to 25 s: when the first load fails, the display tries again after 5 s.
+    test.setTimeout(45_000);
+    const clip = await recordClip(page);
+    await serveClip(page, clip);
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', orientation: 'portrait', video_url: CLIP_URL } }) });
+    await page.setViewportSize({ width: 540, height: 960 });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    const v = page.locator('video.vl-video');
+    await expect(v).toHaveCount(1);
+    await expect(v).toHaveAttribute('src', CLIP_URL);
+    expect(await v.evaluate((el: HTMLVideoElement) => [el.muted, el.loop])).toEqual([true, true]);
+    const played = await v.evaluate((el: HTMLVideoElement) => new Promise<string>(res => {
+      const t0 = Date.now();
+      const check = () => el.currentTime > 0 ? res('ok')
+        : Date.now() - t0 > 25_000 ? res(JSON.stringify({ rs: el.readyState, ns: el.networkState, err: el.error?.code, paused: el.paused, hits: (window as unknown as { __hits?: number }).__hits }))
+        : setTimeout(check, 100);
+      check();
+    }));
+    expect(played, 'video state when it gave up, route hits ' + hits.n).toBe('ok');
+    const box = await v.boundingBox();
+    expect(box).toEqual({ x: 0, y: 0, width: 540, height: 960 });
+    await expect(page.locator('.d-header')).toBeHidden();
+    await expect(page.locator('#d-progress-bar')).toBeHidden();
+  });
+
+  test('V2 a feed refresh does not restart the video', async ({ page }) => {
+    const clip = await recordClip(page);
+    await serveClip(page, clip);
+    const m = await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: CLIP_URL } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await page.locator('video.vl-video').evaluate((el: HTMLVideoElement) => { (el as unknown as { __mark: number }).__mark = 1; });
+    const polls = m.feedBodies.length;
+    await expect.poll(() => m.feedBodies.length, { timeout: 30_000 }).toBeGreaterThan(polls);
+    await page.waitForTimeout(300);
+    expect(await page.locator('video.vl-video').evaluate(el => (el as unknown as { __mark?: number }).__mark)).toBe(1);
+  });
+
+  test('V3 no video chosen says so; leaving the mode removes the video and brings the header back', async ({ page }) => {
+    let mode = 'video';
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: mode, video_url: null } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toHaveText('No video chosen for this display');
+    await expect(page.locator('.d-header')).toBeHidden();
+    mode = 'schedule';
+    await page.evaluate(() => (window as unknown as { pollFeed: () => Promise<void> }).pollFeed());
+    await expect(page.locator('video.vl-video, .vl-empty')).toHaveCount(0);
+    await expect(page.locator('.d-header')).toBeVisible();
+  });
+
+  test('V4 an address that is not https is never loaded', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: 'javascript:alert(1)' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toBeVisible();
+    await expect(page.locator('video')).toHaveCount(0);
+  });
+});
