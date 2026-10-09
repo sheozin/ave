@@ -255,70 +255,56 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
   .ab-st{font-size:calc(1.2*var(--u))}
 }
 
-/* ── TIMELINE MODE ── */
-.tl-wrap{width:100%;height:100%;overflow:hidden;position:relative;padding:clamp(12px,2vw,24px)}
-.tl-header{font-size:clamp(10px,1.2vw,14px);letter-spacing:.18em;color:rgba(255,255,255,.35);
-  text-transform:uppercase;font-weight:700;margin-bottom:clamp(8px,1.5vw,16px)}
-.tl-list{display:flex;flex-direction:column;gap:clamp(4px,.8vw,10px);will-change:transform}
-.tl-row{display:flex;align-items:flex-start;gap:clamp(10px,2vw,24px);
-  padding:clamp(8px,1vw,14px) clamp(10px,1.5vw,18px);
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);
-  border-radius:8px;transition:opacity .3s,border-color .3s}
-.tl-row.live{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.35)}
-.tl-row.ready{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3)}
-.tl-row.calling{background:rgba(250,204,21,.08);border-color:rgba(250,204,21,.3)}
-.tl-row.ended{opacity:.25}
-.tl-row.cancelled{opacity:.2;text-decoration:line-through}
-.tl-time{flex-shrink:0;width:clamp(50px,6vw,80px);font-family:'SF Mono','Fira Code',monospace;
-  font-size:clamp(12px,1.4vw,18px);font-weight:600;color:#60a5fa;padding-top:2px}
-.tl-time-now{display:block}
-.tl-was{display:block;margin-top:2px;font-size:clamp(9px,.8vw,12px);font-weight:400;color:rgba(255,255,255,.35)}
-.tl-body{flex:1;min-width:0}
-.tl-title{font-size:clamp(13px,1.5vw,20px);font-weight:600;color:#eef2f7;line-height:1.3}
-.tl-meta{font-size:clamp(10px,1vw,14px);color:rgba(255,255,255,.4);margin-top:2px;
-  display:flex;gap:clamp(8px,1vw,16px);flex-wrap:wrap}
-.tl-meta-i{display:inline-flex;align-items:center;gap:.35em}
-.tl-meta-i svg{width:1em;height:1em;flex:none}
-.tl-badge{font-size:clamp(8px,.7vw,11px);font-weight:700;letter-spacing:.06em;
-  padding:2px 8px;border-radius:3px;flex-shrink:0;align-self:flex-start;margin-top:2px}
-.tl-badge.live{background:rgba(239,68,68,.16);color:var(--st-live)}
-.tl-badge.ready{background:rgba(52,211,153,.16);color:var(--st-ready)}
-.tl-badge.calling{background:rgba(250,204,21,.16);color:var(--st-calling)}
-.tl-empty{display:flex;align-items:center;justify-content:center;
-  height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
-
-/* ── PROGRAMME MODE ── */
-.pg-wrap{width:100%;height:100%;overflow:hidden;position:relative;padding:clamp(8px,1.5vw,20px)}
-.pg-header{font-size:clamp(10px,1.2vw,14px);letter-spacing:.18em;color:rgba(255,255,255,.35);
-  text-transform:uppercase;font-weight:700;margin-bottom:clamp(6px,1vw,12px)}
-.pg-grid{display:grid;gap:1px;background:rgba(255,255,255,.04);border-radius:8px;overflow:hidden;
-  width:100%;border:1px solid rgba(255,255,255,.06)}
-.pg-corner{background:rgba(0,0,0,.3);padding:8px;font-size:clamp(8px,.7vw,10px);
-  color:rgba(255,255,255,.25);letter-spacing:.12em;text-transform:uppercase;font-weight:600}
-.pg-room-hdr{background:rgba(96,165,250,.08);padding:clamp(6px,.8vw,10px) clamp(8px,1vw,12px);
-  font-size:clamp(9px,.9vw,13px);font-weight:700;letter-spacing:.06em;color:#60a5fa;
-  text-transform:uppercase;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pg-time-lbl{background:rgba(0,0,0,.3);padding:clamp(4px,.5vw,8px) clamp(6px,.8vw,12px);
-  font-family:'SF Mono','Fira Code',monospace;font-size:clamp(10px,1vw,14px);
-  font-weight:600;color:rgba(255,255,255,.4);white-space:nowrap;display:flex;align-items:center}
-.pg-cell{background:rgba(255,255,255,.015);padding:clamp(4px,.5vw,8px) clamp(6px,.8vw,10px);
-  min-height:clamp(32px,3vw,48px);display:flex;flex-direction:column;justify-content:center;overflow:hidden}
-.pg-cell.live{background:rgba(239,68,68,.1)}
-.pg-cell.ready{background:rgba(52,211,153,.08)}
-.pg-cell.calling{background:rgba(250,204,21,.08)}
-.pg-cell-title{font-size:clamp(10px,.9vw,14px);font-weight:600;color:#eef2f7;
-  line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pg-cell-time{font-family:'SF Mono','Fira Code',monospace;font-size:clamp(8px,.7vw,11px);font-weight:600;color:#60a5fa;margin-top:1px}
-.pg-cell-speaker{font-size:clamp(8px,.7vw,11px);color:rgba(255,255,255,.4);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.pg-cell-badge{font-size:clamp(7px,.55vw,9px);font-weight:700;letter-spacing:.04em}
-.pg-cell-badge.live{color:var(--st-live)}
-.pg-cell-badge.ready{color:var(--st-ready)}
-.pg-cell-badge.calling{color:var(--st-calling)}
+/* ── PROGRAMME MODE (Day grid): time x room in the board's design language.
+   A block spans the half-hour slots it runs over; rows share the height. ── */
+.pg-wrap{--u:min(1vw,1.8vh);align-self:stretch;flex:1 1 0;min-height:0;width:100%;
+  display:flex;flex-direction:column;text-align:left;position:relative}
+.pg-title{flex-shrink:0;font-size:calc(1.5*var(--u));font-weight:700;color:rgba(255,255,255,.75);
+  margin-bottom:calc(.6*var(--u));overflow-wrap:anywhere}
+.pg-grid{flex:1 1 0;min-height:0;display:grid;column-gap:calc(.6*var(--u));overflow:hidden;position:relative}
+.pg-corner,.pg-room-hdr{font-size:calc(.85*var(--u));letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.45);font-weight:700;padding:calc(.5*var(--u)) calc(.8*var(--u))}
+.pg-room-hdr{color:#cbd5e1;font-size:calc(1.1*var(--u));letter-spacing:.1em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-line{border-top:1px solid rgba(255,255,255,.07);pointer-events:none}
+.pg-time-lbl{font-size:calc(1.3*var(--u));font-weight:700;font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,.45);padding:calc(.3*var(--u)) calc(.4*var(--u));white-space:nowrap;min-height:0;overflow:hidden}
+.pg-time-lbl.now{color:#60a5fa}
+.pg-now-row{position:relative;pointer-events:none;z-index:0}
+.pg-now{position:absolute;left:0;right:0;height:2px;margin-top:-1px;background:#60a5fa;
+  box-shadow:0 0 calc(.8*var(--u)) rgba(96,165,250,.7)}
+/* the block is the size container; its inner box holds the padding so short
+   blocks can tighten it. Opaque, so the Now line passes behind blocks. */
+.pg-blk{container-type:size;font-size:var(--u);min-height:0;margin:2px 0;overflow:hidden;z-index:1;
+  border-radius:calc(.6*var(--u));background-color:#0c0e18;border:1px solid rgba(255,255,255,.09);
+  background-image:linear-gradient(rgba(255,255,255,.04),rgba(255,255,255,.04))}
+.pg-blk-in{height:100%;display:flex;flex-direction:column;gap:.15em;padding:.45em .8em;overflow:hidden}
+.pg-blk.live{background-image:linear-gradient(rgba(239,68,68,.12),rgba(239,68,68,.12));border-color:rgba(239,68,68,.45)}
+.pg-blk.calling{background-image:linear-gradient(rgba(250,204,21,.09),rgba(250,204,21,.09));border-color:rgba(250,204,21,.4)}
+.pg-blk.done,.pg-blk.cancelled{opacity:.4}
+.pg-blk.cancelled .pg-blk-ti{text-decoration:line-through}
+.pg-blk-in>*{flex-shrink:0}
+.pg-blk-top{display:flex;flex-wrap:wrap;column-gap:.8em;align-items:baseline;min-width:0}
+.pg-blk-st{font-size:1.1em;font-weight:800;white-space:nowrap;color:rgba(255,255,255,.55)}
+.pg-blk-st.live{color:var(--st-live)}
+.pg-blk-st.calling{color:var(--st-calling)}
+.pg-blk-st.late{color:#FB923C}
+.pg-blk-ti{font-size:1.5em;font-weight:700;line-height:1.15;color:#eef2f7;overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.pg-blk-time{font-size:1.1em;font-weight:700;font-variant-numeric:tabular-nums;color:#cbd5e1;white-space:nowrap}
+.pg-blk-time s{font-weight:500;color:rgba(255,255,255,.45);margin-left:.3em}
+.pg-blk-sp{font-size:1.05em;color:rgba(255,255,255,.55);overflow-wrap:anywhere;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}
+/* short blocks keep what matters: status, then the title, then the times */
+@container (max-height: 6em){ .pg-blk-sp{display:none} }
+@container (max-height: 5.2em){ .pg-blk-ti{-webkit-line-clamp:1} }
+@container (max-height: 4.2em){ .pg-blk-time{display:none} }
+@container (max-height: 3.4em){ .pg-blk-in{padding:.15em .8em;gap:0} .pg-blk-ti{font-size:1.3em} .pg-blk-st{display:none} }
 .pg-empty{display:flex;align-items:center;justify-content:center;
   height:100%;color:rgba(255,255,255,.3);font-size:clamp(12px,1.2vw,18px)}
-.pg-page-indicator{position:absolute;bottom:8px;right:16px;font-size:10px;
-  color:rgba(255,255,255,.2);letter-spacing:.1em;font-weight:600}
+.pg-page-indicator{flex-shrink:0;text-align:right;font-size:var(--u);color:rgba(255,255,255,.4);
+  margin-top:calc(.4*var(--u))}
+@media (orientation:portrait){ .pg-wrap{--u:min(1.9vw,1.15vh)} }
 
 .sp-sponsor-name-big{
   font-size:clamp(20px,4vw,48px);font-weight:700;color:#eef2f7;
@@ -496,9 +482,6 @@ let _sponsorIdx  = 0;
 let _sponsorTimer = null;
 let _seqIdx      = 0;      // current slide index in sequence playlist
 let _seqTimer    = null;   // setTimeout handle for sequence advance
-let _tlAnimTimer = null;   // timeline scroll animation frame id
-let _tlPageTimer = null;   // timeline paginate interval
-let _tlPageIdx   = 0;      // timeline current page index
 let _pgPageTimer = null;   // programme paginate interval
 let _pgPageIdx   = 0;      // programme current page index
 
@@ -1031,7 +1014,8 @@ function tick() {
   const mode = activeMode();
   if (mode === 'schedule' || mode === 'recall') updateTimerInPlace();
   if (mode === 'stage-timer') updateStageTimerInPlace();
-  if (mode === 'agenda') updateAgendaInPlace();
+  if (mode === 'agenda' || mode === 'timeline' || mode === 'programme') updateLiveInPlace();
+  if (mode === 'programme') pgUpdateNow();
 }
 
 function updateTimerInPlace() {
@@ -1152,11 +1136,9 @@ function render() {
   if (mode !== 'sponsors' && _sponsorTimer) {
     clearInterval(_sponsorTimer); _sponsorTimer = null;
   }
-  // Clear timeline timers if leaving timeline mode
-  if (mode !== 'timeline') { stopTimelineAnimation(); stopTimelinePaginate(); }
   // Clear programme timers if leaving programme mode
   if (mode !== 'programme') { stopProgrammePaginate(); }
-  if (mode !== 'agenda') { stopAgendaPaginate(); _abPage = 0; }
+  if (mode !== 'agenda' && mode !== 'timeline') { stopAgendaPaginate(); }
   // (134) Video mode hides the header and the progress strip; leaving it stops the video.
   document.body.classList.toggle('mode-video', mode === 'video');
   if (mode !== 'video') stopVideoLoop();
@@ -1170,8 +1152,8 @@ function render() {
     case 'recall':      area.innerHTML = renderRecall(); break;
     case 'stage-timer': renderStageTimerArea(area); break;
     case 'custom':      area.innerHTML = renderCustom(); break;
-    case 'agenda':    renderAgenda(area); break;
-    case 'timeline':  renderTimeline(area); break;
+    case 'agenda':    renderBoard(area, 'agenda'); break;
+    case 'timeline':  renderBoard(area, 'list'); break;
     case 'programme': renderProgramme(area); break;
     case 'video':     renderVideoLoop(area); break;
     default:          area.innerHTML = renderSchedule(); fitSchedule(area);
@@ -1237,7 +1219,7 @@ let _fitResizeT = null;
 window.addEventListener('resize', () => {
   clearTimeout(_fitResizeT);
   _fitResizeT = setTimeout(() => {
-    if (_booted && document.querySelector('#content-area .d-sched, #content-area .st-wrap.has-msg, #content-area .ab-wrap')) render();
+    if (_booted && document.querySelector('#content-area .d-sched, #content-area .st-wrap.has-msg, #content-area .ab-wrap, #content-area .pg-wrap')) render();
   }, 200);
 });
 
@@ -1791,7 +1773,7 @@ function fitStageMessage(area) {
   }
 }
 
-// Wrapper so render() calls renderStageTimerArea(area) like renderAgenda/renderTimeline
+// Wrapper so render() calls renderStageTimerArea(area) like renderBoard/renderProgramme
 function renderStageTimerArea(area, fade = true) {
   // Only reset the HOLD freeze when transitioning away from HOLD (not on every render)
   const isCurrentlyHeld = stSessions().some(s => s.status === 'HOLD');
@@ -1908,18 +1890,19 @@ function startVideoSync(v) {
 }
 
 // ═══════════════════════════════════════════════════
-// AGENDA MODE — departures board: every session of the day in time order by
-// the current schedule, with the last finished one kept for context.
+// AGENDA and PROGRAMME LIST — one departures board: sessions in time order by
+// the current schedule. Agenda keeps only the last finished session for
+// context; the Programme List ('list') is the whole day.
 // ═══════════════════════════════════════════════════
 let _abPage = 0;        // current page, kept across re-renders
 let _abPageTimer = null;
 
-function agendaSessions() {
+function boardSessions(wholeDay) {
   let list = [...S.sessions];
   if (D?.filter_room) list = list.filter(s => s.room === D.filter_room);
   list.sort((a, b) => (curStart(a) || '99').localeCompare(curStart(b) || '99') || (a.sort_order || 0) - (b.sort_order || 0));
   const upcoming = list.filter(s => !['ENDED', 'CANCELLED'].includes(s.status));
-  if (!upcoming.length) return list;   // nothing still to come: the whole day
+  if (wholeDay || !upcoming.length) return list;   // nothing still to come: the whole day
   const last = list.filter(s => s.status === 'ENDED').pop();
   const cut = last ? curStart(last) : '';
   return list.filter(s => s === last
@@ -1962,13 +1945,14 @@ function agendaTitle() {
   return `Agenda · ${d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' })}${room}`;
 }
 
-function renderAgenda(area) {
+function renderBoard(area, kind) {
   area.style.background = '';
-  const rows = agendaSessions();
+  const rows = boardSessions(kind === 'list');
   const noRoom = !!D?.filter_room;
+  const title = kind === 'list' ? `Programme${D?.filter_room ? ` · ${D.filter_room}` : ''}` : agendaTitle();
   // Rebuild only when something shown changes: a poll with the same data
   // keeps the board, its page and its timer. Live minutes tick in place.
-  const key = JSON.stringify([agendaTitle(), noRoom, innerWidth, innerHeight, rows.map(s =>
+  const key = JSON.stringify([kind, title, noRoom, innerWidth, innerHeight, rows.map(s =>
     [s.id, s.status, curStart(s), wasStart(s), s.title, peopleSummary(s, 4), s.room, s.status === 'LIVE' || s.status === 'OVERRUN' ? '' : agendaStatus(s).text])]);
   const prev = area.querySelector(':scope > .ab-wrap');
   if (prev && prev.dataset.key === key) return;
@@ -1994,20 +1978,23 @@ function renderAgenda(area) {
   }).join('');
 
   const wrap = document.createElement('div');
-  wrap.className = 'ab-wrap' + (noRoom ? ' no-room' : '') + (prev ? '' : ' fade-in');
+  const fresh = !prev || prev.dataset.kind !== kind;
+  wrap.className = 'ab-wrap' + (noRoom ? ' no-room' : '') + (fresh ? ' fade-in' : '');
   wrap.dataset.key = key;
-  wrap.innerHTML = `<div class="ab-title">${esc(agendaTitle())}</div>
+  wrap.dataset.kind = kind;
+  wrap.innerHTML = `<div class="ab-title">${esc(title)}</div>
     <div class="ab-th"><div>Time</div><div>Session</div><div class="ab-c-room">Room</div><div>Status</div></div>
     <div class="ab-body">${body}</div>
     <div class="ab-foot"><span>Times update live</span><span class="ab-page"></span></div>`;
   area.textContent = '';
   area.appendChild(wrap);
-  paginateAgenda(wrap);
+  paginateAgenda(wrap, fresh);
 }
 
 // Measured, so it holds for any font and screen: rows fill a page until the
-// next one would cross the bottom of the board, then a new page starts.
-function paginateAgenda(wrap) {
+// next one would cross the bottom of the board, then a new page starts. A new
+// board opens on the page with the first session not yet finished.
+function paginateAgenda(wrap, fresh) {
   stopAgendaPaginate();
   const bodyEl = wrap.querySelector('.ab-body');
   const rows = [...bodyEl.querySelectorAll('.ab-row')];
@@ -2021,6 +2008,10 @@ function paginateAgenda(wrap) {
     used += h + gap;
   }
   const total = page + 1;
+  if (fresh) {
+    const first = rows.find(r => !r.classList.contains('done') && !r.classList.contains('cancelled'));
+    _abPage = first ? Number(first.dataset.page) : 0;
+  }
   _abPage = Math.min(_abPage, total - 1);
   const show = () => {
     rows.forEach(r => { r.style.display = Number(r.dataset.page) === _abPage ? '' : 'none'; });
@@ -2036,10 +2027,10 @@ function stopAgendaPaginate() {
   if (_abPageTimer) { clearInterval(_abPageTimer); _abPageTimer = null; }
 }
 
-// Called every second by tick(): only the live rows' minute counts change.
-function updateAgendaInPlace() {
-  document.querySelectorAll('#content-area .ab-st[data-live]').forEach(el => {
-    const s = S.sessions.find(x => String(x.id) === el.closest('.ab-row').dataset.sid);
+// Called every second by tick(): only the live sessions' minute counts change.
+function updateLiveInPlace() {
+  document.querySelectorAll('#content-area [data-live]').forEach(el => {
+    const s = S.sessions.find(x => String(x.id) === el.closest('[data-sid]')?.dataset.sid);
     if (!s) return;
     const t = agendaLiveText(s);
     if (el.textContent !== t) el.textContent = t;
@@ -2047,147 +2038,16 @@ function updateAgendaInPlace() {
 }
 
 // ═══════════════════════════════════════════════════
-// TIMELINE MODE — chronological session list
+// PROGRAMME MODE (Day grid) — time-slot × room grid. A block spans the
+// half-hour slots it runs over and says its status in words.
 // ═══════════════════════════════════════════════════
-function renderTimeline(area) {
-  area.style.background = '';
-  // Gather all sessions, apply room filter, sort by current start
-  let sessions = [...S.sessions];
-  if (D?.filter_room) sessions = sessions.filter(s => s.room === D.filter_room);
-  sessions.sort((a, b) => curStart(a).localeCompare(curStart(b)));
+const PG_SLOT = 30 * 60 * 1000;
+let _pgModel = null;   // { rooms, labels, blocks, minT, from, to }
+let _pgNowKey = '';
 
-  if (!sessions.length) {
-    area.innerHTML = `<div class="tl-empty fade-in">No sessions scheduled</div>`;
-    return;
-  }
-
-  const rows = sessions.map((s, i) => {
-    const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
-    const isReady = s.status === 'READY' || s.status === 'CALLING';
-    const isEnded = s.status === 'ENDED';
-    const isCancelled = s.status === 'CANCELLED';
-    const isCalling = s.status === 'CALLING';
-    const cls = isLive ? ' live' : isCalling ? ' calling' : isReady ? ' ready' : isEnded ? ' ended' : isCancelled ? ' cancelled' : '';
-    const badge = isLive ? `<div class="tl-badge live">● LIVE</div>` : isCalling ? `<div class="tl-badge calling">◈ CALLING</div>` : isReady ? `<div class="tl-badge ready">◈ READY</div>` : '';
-    const rawTime = curStart(s);
-    const time = rawTime ? rawTime.substring(0, 5) : '--:--';
-    const was = wasStart(s);
-    const durMin = curEnd(s) && rawTime
-      ? Math.round((toMs(curEnd(s)) - toMs(rawTime)) / 60000)
-      : '';
-
-    return `<div class="tl-row${cls}" data-tl-idx="${i}">
-      <div class="tl-time"><span class="tl-time-now">${esc(time)}</span>${was ? `<span class="tl-was">was ${esc(was)}</span>` : ''}</div>
-      <div class="tl-body">
-        <div class="tl-title">${esc(s.title)}</div>
-        <div class="tl-meta">
-          ${peopleSummary(s) ? `<span>${esc(peopleSummary(s))}</span>` : ''}
-          ${s.room ? `<span class="tl-meta-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>${esc(s.room)}</span>` : ''}
-          ${durMin ? `<span class="tl-meta-i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${durMin} min</span>` : ''}
-        </div>
-      </div>
-      ${badge}
-    </div>`;
-  }).join('');
-
-  area.innerHTML = `<div class="tl-wrap fade-in">
-    <div class="tl-header">PROGRAMME LIST${D?.filter_room ? ` — ${esc(D.filter_room).toUpperCase()}` : ''}</div>
-    <div class="tl-list" id="tl-list-inner">${rows}</div>
-  </div>`;
-
-  // Start scroll or paginate based on display setting
-  const scrollStyle = D?.scroll_style || 'scroll';
-  if (scrollStyle === 'paginate') {
-    startTimelinePaginate(sessions.length);
-  } else {
-    startTimelineScroll();
-  }
-}
-
-// ── Timeline: smooth auto-scroll ──
-function startTimelineScroll() {
-  stopTimelineAnimation();
-  const list = document.getElementById('tl-list-inner');
-  if (!list) return;
-  const wrap = list.parentElement;
-  if (!wrap) return;
-
-  // Only scroll if content overflows
-  const contentH = list.scrollHeight;
-  const viewH = wrap.clientHeight - 40; // subtract header
-  if (contentH <= viewH) return;
-
-  let offset = 0;
-  const speed = 0.5; // px per frame (~30px/sec at 60fps)
-  const pauseAtTopMs = 3000;
-  let pauseUntil = performance.now() + pauseAtTopMs;
-
-  function step(ts) {
-    if (ts < pauseUntil) {
-      _tlAnimTimer = requestAnimationFrame(step);
-      return;
-    }
-    offset += speed;
-    // Reset to top after scrolling through entire list + one viewport
-    if (offset >= contentH) {
-      offset = 0;
-      pauseUntil = ts + pauseAtTopMs;
-    }
-    list.style.transform = `translateY(-${offset}px)`;
-    _tlAnimTimer = requestAnimationFrame(step);
-  }
-  _tlAnimTimer = requestAnimationFrame(step);
-}
-
-function stopTimelineAnimation() {
-  if (_tlAnimTimer) { cancelAnimationFrame(_tlAnimTimer); _tlAnimTimer = null; }
-}
-
-// ── Timeline: paginate ──
-function startTimelinePaginate(totalCount) {
-  stopTimelinePaginate();
-  const pageSize = 8;
-  const totalPages = Math.ceil(totalCount / pageSize);
-  if (totalPages <= 1) return; // Everything fits on one page
-
-  _tlPageIdx = 0;
-  renderTimelinePage(pageSize, totalPages);
-  const interval = (D?.paginate_seconds || 10) * 1000;
-  _tlPageTimer = setInterval(() => {
-    _tlPageIdx = (_tlPageIdx + 1) % totalPages;
-    renderTimelinePage(pageSize, totalPages);
-  }, interval);
-}
-
-function stopTimelinePaginate() {
-  if (_tlPageTimer) { clearInterval(_tlPageTimer); _tlPageTimer = null; }
-  _tlPageIdx = 0;
-}
-
-function renderTimelinePage(pageSize, totalPages) {
-  const rows = document.querySelectorAll('.tl-row');
-  const start = _tlPageIdx * pageSize;
-  const end = start + pageSize;
-  rows.forEach((r, i) => {
-    r.style.display = (i >= start && i < end) ? '' : 'none';
-  });
-  // Show page indicator
-  let indicator = document.querySelector('.tl-page-indicator');
-  if (!indicator) {
-    indicator = document.createElement('div');
-    indicator.className = 'tl-page-indicator';
-    indicator.style.cssText = 'position:absolute;bottom:8px;right:16px;font-size:10px;color:rgba(255,255,255,.2);letter-spacing:.1em;font-weight:600';
-    const wrap = document.querySelector('.tl-wrap');
-    if (wrap) wrap.appendChild(indicator);
-  }
-  indicator.textContent = `${_tlPageIdx + 1} / ${totalPages}`;
-}
-
-// ═══════════════════════════════════════════════════
-// PROGRAMME MODE — time-slot × room grid
-// ═══════════════════════════════════════════════════
 function renderProgramme(area) {
   area.style.background = '';
+  _pgModel = null;
   let sessions = S.sessions.filter(s => s.room);
   if (D?.filter_room) sessions = sessions.filter(s => s.room === D.filter_room);
 
@@ -2198,9 +2058,8 @@ function renderProgramme(area) {
 
   // Determine rooms (max 6 columns)
   const rooms = [...new Set(sessions.map(s => s.room))].sort().slice(0, 6);
-  const colCount = rooms.length;
 
-  // Determine time range: round down earliest start to 30-min, round up latest end to 30-min
+  // Time range: earliest start down to the half hour, latest end up to it
   let minT = Infinity, maxT = 0;
   sessions.forEach(s => {
     const st = toMs(curStart(s));
@@ -2208,104 +2067,118 @@ function renderProgramme(area) {
     if (st && st < minT) minT = st;
     if (en > maxT) maxT = en;
   });
-  const slot30 = 30 * 60 * 1000;
-  minT = Math.floor(minT / slot30) * slot30;
-  maxT = Math.ceil(maxT / slot30) * slot30;
-  const totalSlots = Math.round((maxT - minT) / slot30);
+  minT = Math.floor(minT / PG_SLOT) * PG_SLOT;
+  maxT = Math.ceil(maxT / PG_SLOT) * PG_SLOT;
+  const totalSlots = Math.round((maxT - minT) / PG_SLOT);
 
   if (totalSlots <= 0 || totalSlots > 48) {
     area.innerHTML = `<div class="pg-empty fade-in">Cannot render programme grid</div>`;
     return;
   }
 
-  // Build slot labels
-  const slots = [];
+  const labels = [];
   for (let i = 0; i < totalSlots; i++) {
-    const ms = minT + i * slot30;
-    const h = Math.floor(ms / 3600000);
-    const m = Math.floor((ms % 3600000) / 60000);
-    slots.push({
-      ms,
-      label: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`,
-    });
+    const ms = minT + i * PG_SLOT;
+    labels.push(`${String(Math.floor(ms / 3600000)).padStart(2,'0')}:${String(Math.floor((ms % 3600000) / 60000)).padStart(2,'0')}`);
   }
 
-  // Map sessions to grid cells: for each session, find which slot(s) it spans
-  // sessionGrid[slotIdx][roomIdx] = { session, isFirst }
-  const grid = Array.from({ length: totalSlots }, () => Array(colCount).fill(null));
-
+  // Place each session in its room from its start slot; on overlap the first
+  // session wins its slots, as before.
+  const taken = rooms.map(() => Array(totalSlots).fill(false));
+  const blocks = [];
   sessions.forEach(s => {
-    const rIdx = rooms.indexOf(s.room);
-    if (rIdx === -1) return;
+    const r = rooms.indexOf(s.room);
+    if (r === -1) return;
     const st = toMs(curStart(s));
     const en = toMs(curEnd(s)) || (st + 2700000);
-    const startSlot = Math.max(0, Math.floor((st - minT) / slot30));
-    const endSlot = Math.min(totalSlots, Math.ceil((en - minT) / slot30));
-    for (let si = startSlot; si < endSlot; si++) {
-      if (!grid[si][rIdx]) { // don't overwrite — first session wins on overlap
-        const isLive = s.status === 'LIVE' || s.status === 'OVERRUN';
-        const isReady = s.status === 'READY' || s.status === 'CALLING';
-        grid[si][rIdx] = { session: s, isFirst: si === startSlot, isLive, isReady, isCalling: s.status === 'CALLING' };
-      }
-    }
+    const a = Math.max(0, Math.floor((st - minT) / PG_SLOT));
+    const b = Math.min(totalSlots, Math.ceil((en - minT) / PG_SLOT));
+    if (a >= b || taken[r][a]) return;
+    let end = a;
+    while (end < b && !taken[r][end]) taken[r][end++] = true;
+    blocks.push({ s, r, a, b: end });
   });
 
-  // Determine pagination
   const scrollStyle = D?.scroll_style || 'scroll';
   const slotsPerPage = 6;
   const totalPages = Math.ceil(totalSlots / slotsPerPage);
   const paginate = scrollStyle === 'paginate' && totalPages > 1;
 
-  // Build grid HTML
-  const gridCols = `auto repeat(${colCount}, 1fr)`;
-
-  // Header row: corner + room names
-  let headerHtml = `<div class="pg-corner">TIME</div>`;
-  rooms.forEach(r => {
-    headerHtml += `<div class="pg-room-hdr">${esc(r)}</div>`;
-  });
-
-  // Slot rows
-  let rowsHtml = '';
-  slots.forEach((slot, si) => {
-    const pageIdx = Math.floor(si / slotsPerPage);
-    const pageAttr = paginate ? ` data-pg-page="${pageIdx}"` : '';
-    rowsHtml += `<div class="pg-time-lbl"${pageAttr}>${slot.label}</div>`;
-    rooms.forEach((r, ri) => {
-      const cell = grid[si][ri];
-      if (!cell) {
-        rowsHtml += `<div class="pg-cell"${pageAttr}></div>`;
-      } else {
-        const cls = cell.isLive ? ' live' : cell.isCalling ? ' calling' : cell.isReady ? ' ready' : '';
-        const badgeCls = cls;
-        const badgeText = cell.isLive ? '● LIVE' : cell.isCalling ? '◈ CALLING' : cell.isReady ? '◈ READY' : '';
-        if (cell.isFirst) {
-          rowsHtml += `<div class="pg-cell${cls}"${pageAttr}>
-            ${badgeText ? `<div class="pg-cell-badge${badgeCls}">${badgeText}</div>` : ''}
-            <div class="pg-cell-title">${esc(cell.session.title)}</div>
-            ${wasStart(cell.session) ? `<div class="pg-cell-time">${esc(curStart(cell.session).substring(0, 5))}–${esc(curEnd(cell.session).substring(0, 5))}</div>` : ''}
-            ${peopleSummary(cell.session) ? `<div class="pg-cell-speaker">${esc(peopleSummary(cell.session))}</div>` : ''}
-          </div>`;
-        } else {
-          // Continuation slot — show a subtle indicator
-          rowsHtml += `<div class="pg-cell${cls}"${pageAttr} style="border-top:none"></div>`;
-        }
-      }
-    });
-  });
-
   area.innerHTML = `<div class="pg-wrap fade-in">
-    <div class="pg-header">DAY GRID${D?.filter_room ? ` — ${esc(D.filter_room).toUpperCase()}` : ''}</div>
-    <div class="pg-grid" id="pg-grid-inner" style="grid-template-columns:${gridCols}">
-      ${headerHtml}
-      ${rowsHtml}
-    </div>
+    <div class="pg-title">Day grid${D?.filter_room ? ` · ${esc(D.filter_room)}` : ''}</div>
+    <div class="pg-grid" id="pg-grid-inner" style="grid-template-columns:calc(7*var(--u)) repeat(${rooms.length}, minmax(0,1fr))"></div>
     ${paginate ? `<div class="pg-page-indicator" id="pg-page-ind"></div>` : ''}
   </div>`;
+  _pgModel = { rooms, labels, blocks, minT, slotsPerPage };
 
-  if (paginate) {
-    startProgrammePaginate(totalPages);
+  if (paginate) startProgrammePaginate(totalPages);
+  else pgFill(0, totalSlots);
+}
+
+function pgBlockHtml(blk, row, span) {
+  const s = blk.s;
+  const st = agendaStatus(s);
+  const live = s.status === 'LIVE' || s.status === 'OVERRUN';
+  const cls = live ? ' live' : s.status === 'CALLING' ? ' calling' : s.status === 'ENDED' ? ' done' : s.status === 'CANCELLED' ? ' cancelled' : '';
+  const word = st.text === 'On time' ? '' : st.text;
+  const was = wasStart(s);
+  const ppl = peopleSummary(s, 4);
+  const top = (word ? `<span class="pg-blk-st${st.cls ? ' ' + st.cls : ''}"${live ? ' data-live="1"' : ''}>${esc(word)}</span>` : '')
+    + (was ? `<span class="pg-blk-time">${esc(curStart(s).substring(0, 5))}–${esc(curEnd(s).substring(0, 5))} <s>${esc(was)}</s></span>` : '');
+  return `<div class="pg-blk${cls}" data-sid="${esc(s.id)}" style="grid-row:${row} / span ${span};grid-column:${blk.r + 2}"><div class="pg-blk-in">
+    ${top ? `<div class="pg-blk-top">${top}</div>` : ''}
+    <div class="pg-blk-ti">${esc(s.title)}</div>
+    ${ppl ? `<div class="pg-blk-sp">${esc(ppl)}</div>` : ''}
+  </div></div>`;
+}
+
+// Draw slots [from, to): header row, a line and a time label per slot, and
+// each block from its first slot in the range (clipped to the range).
+function pgFill(from, to) {
+  const grid = document.getElementById('pg-grid-inner');
+  if (!grid || !_pgModel) return;
+  const { rooms, labels, blocks } = _pgModel;
+  grid.style.gridTemplateRows = `auto repeat(${to - from}, minmax(0,1fr))`;
+  let html = `<div class="pg-corner" style="grid-row:1;grid-column:1">Time</div>`
+    + rooms.map((r, i) => `<div class="pg-room-hdr" style="grid-row:1;grid-column:${i + 2}">${esc(r)}</div>`).join('');
+  for (let i = from; i < to; i++) {
+    const row = i - from + 2;
+    html += `<div class="pg-line" style="grid-row:${row};grid-column:1 / -1"></div>`
+      + `<div class="pg-time-lbl" data-slot="${i}" style="grid-row:${row};grid-column:1">${labels[i]}</div>`;
+    for (const blk of blocks) {
+      const a = Math.max(blk.a, from);
+      if (a !== i || blk.b <= from) continue;
+      html += pgBlockHtml(blk, row, Math.min(blk.b, to) - a);
+    }
   }
+  grid.innerHTML = html;
+  _pgModel.from = from; _pgModel.to = to;
+  _pgNowKey = '';
+  pgUpdateNow();
+}
+
+// The Now line: across the grid at the current time, inside its slot. Moved
+// only when the minute changes.
+function pgUpdateNow() {
+  const grid = document.getElementById('pg-grid-inner');
+  if (!grid || !_pgModel || _pgModel.to == null) return;
+  const nowMs = toTimeMs(correctedNow());
+  const i = Math.floor((nowMs - _pgModel.minT) / PG_SLOT);
+  const inRange = i >= _pgModel.from && i < _pgModel.to;
+  const key = inRange ? `${i}|${Math.floor(nowMs / 60000)}` : 'none';
+  if (key === _pgNowKey) return;
+  _pgNowKey = key;
+  grid.querySelector('.pg-now-row')?.remove();
+  grid.querySelectorAll('.pg-time-lbl.now').forEach(el => el.classList.remove('now'));
+  if (!inRange) return;
+  grid.querySelector(`.pg-time-lbl[data-slot="${i}"]`)?.classList.add('now');
+  const frac = (nowMs - _pgModel.minT - i * PG_SLOT) / PG_SLOT;
+  const row = document.createElement('div');
+  row.className = 'pg-now-row';
+  row.style.gridRow = String(i - _pgModel.from + 2);
+  row.style.gridColumn = '1 / -1';
+  row.innerHTML = `<div class="pg-now" style="top:${(frac * 100).toFixed(2)}%"></div>`;
+  grid.appendChild(row);
 }
 
 // ── Programme: paginate ──
@@ -2326,10 +2199,9 @@ function stopProgrammePaginate() {
 }
 
 function renderProgrammePage(totalPages) {
-  const cells = document.querySelectorAll('[data-pg-page]');
-  cells.forEach(c => {
-    c.style.display = parseInt(c.dataset.pgPage) === _pgPageIdx ? '' : 'none';
-  });
+  if (!_pgModel) return;
+  const per = _pgModel.slotsPerPage;
+  pgFill(_pgPageIdx * per, Math.min(_pgModel.labels.length, (_pgPageIdx + 1) * per));
   const ind = document.getElementById('pg-page-ind');
   if (ind) ind.textContent = `${_pgPageIdx + 1} / ${totalPages}`;
 }

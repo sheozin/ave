@@ -660,7 +660,7 @@ test.describe('Display: session people', () => {
   test('46 timeline shows a one line people summary', async ({ page }) => {
     await mockSupabase(page, { feed: () => feedWithPeople(PANEL_PEOPLE, 'timeline', null) });
     await page.goto(`${DISP_URL}${makeHash()}`);
-    await expect(page.locator('.tl-row').first().locator('.tl-meta span').first())
+    await expect(page.locator('.ab-row').first().locator('.ab-sp'))
       .toHaveText('Jane Smith (moderator), Ahmed Ali, Sara Lee');
   });
 

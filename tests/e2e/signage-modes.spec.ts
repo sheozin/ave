@@ -299,12 +299,12 @@ test('timeline mode — shows time values', async ({ page }) => {
 
 test('timeline mode — LIVE session has live class', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'timeline');
-  await expect(page.locator('.tl-row.live')).toBeVisible();
+  await expect(page.locator('.ab-row.live')).toBeVisible();
 });
 
 test('timeline mode — ENDED session is dimmed', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'timeline');
-  await expect(page.locator('.tl-row.ended')).toBeVisible();
+  await expect(page.locator('.ab-row.done')).toBeVisible();
 });
 
 test('timeline mode — filter_room limits sessions', async ({ page }) => {
@@ -313,9 +313,10 @@ test('timeline mode — filter_room limits sessions', async ({ page }) => {
   await expect(page.locator('#content-area')).not.toContainText('Opening Keynote');
 });
 
-test('timeline mode — shows PROGRAMME LIST header', async ({ page }) => {
+test('timeline mode — titled Programme, as a board', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'timeline');
-  await expect(page.locator('#content-area')).toContainText('PROGRAMME LIST');
+  await expect(page.locator('#content-area .ab-title')).toHaveText('Programme');
+  await expect(page.locator('#content-area .ab-th > *')).toHaveText(['Time', 'Session', 'Room', 'Status']);
 });
 
 // ── 10. PROGRAMME mode ────────────────────────────────────────────────────────
@@ -331,9 +332,9 @@ test('programme mode — shows session titles in grid', async ({ page }) => {
   await expect(page.locator('#content-area')).toContainText('Panel: Future of AI');
 });
 
-test('programme mode — LIVE cell has live class', async ({ page }) => {
+test('programme mode — LIVE block has live class', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'programme');
-  await expect(page.locator('.pg-cell.live').first()).toBeVisible();
+  await expect(page.locator('.pg-blk.live').first()).toBeVisible();
 });
 
 test('programme mode — shows time labels', async ({ page }) => {
@@ -341,9 +342,9 @@ test('programme mode — shows time labels', async ({ page }) => {
   await expect(page.locator('.pg-time-lbl').first()).toBeVisible();
 });
 
-test('programme mode — shows DAY GRID header', async ({ page }) => {
+test('programme mode — titled Day grid', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'programme');
-  await expect(page.locator('#content-area')).toContainText('DAY GRID');
+  await expect(page.locator('#content-area .pg-title')).toHaveText('Day grid');
 });
 
 // ── 11. CALLING is not READY (owner screenshots 9 Oct) ───────────────────────
@@ -367,8 +368,6 @@ async function addCalling(page: import('@playwright/test').Page, opts: { noLive?
 
 for (const [mode, rowSel, badgeSel] of [
   ['wayfinding', 'tr:has-text("Breakout: Captions")', '.wf-status'],
-  ['timeline', '.tl-row:has-text("Breakout: Captions")', '.tl-badge'],
-  ['programme', '.pg-cell:has-text("Breakout: Captions")', '.pg-cell-badge'],
 ] as const) {
   test(`${mode} mode — a CALLING session reads CALLING in yellow, not READY`, async ({ page }) => {
     await bootModeWithTimedSessions(page, mode);
@@ -420,11 +419,12 @@ const WORKSHOP = 'Workshop: Cloud Ops';
 test('delay — programme list shows the current time, the original only as "was"', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'timeline');
   await delayWorkshop(page);
-  const row = page.locator(`#content-area .tl-row:has-text("${WORKSHOP}")`);
-  await expect(row.locator('.tl-time-now')).toHaveText('11:05');
-  await expect(row.locator('.tl-was')).toHaveText('was 11:00');
-  // an on-time session has no "was"
-  await expect(page.locator('#content-area .tl-row:has-text("Panel: Future of AI") .tl-was')).toHaveCount(0);
+  const row = page.locator(`#content-area .ab-row:has-text("${WORKSHOP}")`);
+  await expect(row.locator('.ab-now')).toHaveText('11:05');
+  await expect(row.locator('s.ab-was')).toHaveText('11:00');
+  await expect(row.locator('.ab-st')).toHaveText('Delayed 5 min');
+  // an on-time session has no old time
+  await expect(page.locator('#content-area .ab-row:has-text("Panel: Future of AI") .ab-was')).toHaveCount(0);
 });
 
 test('delay — agenda board shows the current time, the original struck through', async ({ page }) => {
@@ -454,10 +454,13 @@ test('delay — day grid places the session by its current time and labels it', 
   await delayWorkshop(page);
   // 11:05-12:05 runs into the 12:00 slot; by the original 11:00-12:00 the grid ended at 11:30
   await expect(page.locator('#content-area .pg-time-lbl', { hasText: '12:00' })).toHaveCount(1);
-  const cell = page.locator(`#content-area .pg-cell:has-text("${WORKSHOP}")`);
-  await expect(cell.locator('.pg-cell-time')).toHaveText('11:05–12:05');
-  // on-time sessions carry no extra time line
-  await expect(page.locator('#content-area .pg-cell:has-text("Panel: Future of AI") .pg-cell-time')).toHaveCount(0);
+  const cell = page.locator(`#content-area .pg-blk:has-text("${WORKSHOP}")`);
+  await expect(cell.locator('.pg-blk-time')).toHaveText('11:05–12:05 11:00');
+  await expect(cell.locator('.pg-blk-time s')).toHaveText('11:00');
+  await expect(cell.locator('.pg-blk-st')).toHaveText('Delayed 5 min');
+  // on-time sessions carry no extra time line and no status word
+  await expect(page.locator('#content-area .pg-blk:has-text("Panel: Future of AI") .pg-blk-time')).toHaveCount(0);
+  await expect(page.locator('#content-area .pg-blk:has-text("Panel: Future of AI") .pg-blk-st')).toHaveCount(0);
 });
 
 test('delay — a session pushed past the next slot moves down the day grid', async ({ page }) => {
@@ -471,7 +474,7 @@ test('delay — a session pushed past the next slot moves down the day grid', as
   });
   // the first cell of the workshop sits in the row labelled 11:30
   const idx = await page.evaluate((title) => {
-    const kids = [...document.querySelectorAll('#pg-grid-inner > *')];
+    const kids = [...document.querySelectorAll('#pg-grid-inner > *')];   // labels and blocks in slot order
     const cell = kids.findIndex(el => el.textContent!.includes(title));
     for (let i = cell; i >= 0; i--) if (kids[i].classList.contains('pg-time-lbl')) return kids[i].textContent;
     return null;
@@ -648,15 +651,16 @@ test.describe('agenda board at 1280x720', () => {
   });
 });
 
+for (const mode of ['agenda', 'timeline'])
 for (const vp of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
-  test.describe(`agenda board fits at ${vp.width}x${vp.height}`, () => {
+  test.describe(`${mode} board fits at ${vp.width}x${vp.height}`, () => {
     test.use({ viewport: vp });
     test('nothing overflows sideways', async ({ page }) => {
       const ss = boardSessions();
       ss[4].title = 'Panel: building crews that scale across three continents and nine time zones';
       ss[4].people = ['Priya Raman', 'Marcus Feld', 'Ines Carvalho', 'Jun Watanabe', 'Lucia Ferreira'].map(name => ({ name, role: 'panelist' }));
       ss[3].room = 'Conference Room Alpha West';
-      await bootBoard(page, {}, ss);
+      await bootBoard(page, { content_mode: mode }, ss);
       const bad = await page.evaluate(() => {
         const out: string[] = [];
         if (document.documentElement.scrollWidth > innerWidth) out.push('page scrolls sideways');
@@ -679,6 +683,148 @@ for (const vp of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, {
       } else {
         await expect(page.locator('#content-area .ab-row:visible').first().locator('.ab-rm')).toBeVisible();
       }
+    });
+  });
+}
+
+// ── 14. PROGRAMME LIST (mode 'timeline') is the same board for the whole day ─
+// It keeps its own purpose: every session of the day, finished ones included.
+test.describe('programme list board', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('shows the whole day in current-time order, finished sessions included', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'timeline' });
+    await expect(page.locator('#content-area .ab-title')).toHaveText('Programme');
+    await expect(page.locator('#content-area .ab-row .ab-ti')).toHaveText(['Doors open', ...BOARD_ORDER]);
+    const st = (t: string) => row(page, t).locator('.ab-st');
+    await expect(st('Doors open')).toHaveText('Finished');
+    await expect(st('The future of hybrid events')).toHaveText('Live · 14 min left');
+    await expect(st('Breakout: captions')).toHaveText('Starting soon');
+    await expect(st('Panel: crews that scale')).toHaveText('Delayed 5 min');
+    await expect(st('Sponsor demos')).toHaveText('On hold');
+    await expect(st('Workshop: rigging')).toHaveText('Cancelled');
+    await expect(row(page, 'Panel: crews that scale').locator('s.ab-was')).toHaveText('11:00');
+  });
+
+  test('a display with a room shows that room only, without the Room column', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'timeline', filter_room: 'Main Stage' });
+    await expect(page.locator('#content-area .ab-row .ab-ti')).toHaveText(
+      ['Doors open', 'Opening keynote', 'The future of hybrid events', 'Panel: crews that scale', 'Networking lunch']);
+    await expect(page.locator('#content-area .ab-th > *:visible')).toHaveText(['Time', 'Session', 'Status']);
+  });
+});
+
+test.describe('programme list board at 1280x720', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+  test('a long finished morning pages, and the board opens on the page with what is on now', async ({ page }) => {
+    const ss = boardSessions();
+    for (let i = 0; i < 8; i++) ss.push({ ...ss[0], id: `m${i}`, title: `Morning session ${i}`,
+      planned_start: `2026-11-12T07:${String(i * 5).padStart(2, '0')}:00`, scheduled_start: `07:${String(i * 5).padStart(2, '0')}:00` });
+    await bootBoard(page, { content_mode: 'timeline' }, ss);
+    await expect(page.locator('#content-area .ab-page')).toHaveText(/^Page [2-9] of [2-9]$/);
+    await expect(row(page, 'The future of hybrid events')).toBeVisible();
+  });
+});
+
+// ── 15. DAY GRID (mode 'programme'): the grid in the board's design language ─
+// Time x room; a block spans its slots, says its status in words and notes
+// the old time when moved; the current time has a Now line.
+async function nowAt(page: import('@playwright/test').Page, hm: string) {
+  await page.evaluate((hm) => {
+    const w = window as unknown as { S: { clockOffset: number }; render: () => void };
+    const [h, m] = hm.split(':').map(Number);
+    const t = new Date(); t.setHours(h, m, 0, 0);
+    w.S.clockOffset = t.getTime() - Date.now();
+    w.render();
+  }, hm);
+}
+const blk = (page: import('@playwright/test').Page, title: string) =>
+  page.locator('#content-area .pg-blk').filter({ has: page.locator('.pg-blk-ti', { hasText: title }) });
+
+test.describe('day grid', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('blocks say their status in words, in the status colours', async ({ page }) => {
+    // Early demo overlaps Case study in Hall B (first wins a slot): give it its own room here
+    const ss = boardSessions();
+    ss.find(s => s.id === 'early')!.room = 'Hall C';
+    await bootBoard(page, { content_mode: 'programme' }, ss);
+    const st = (t: string) => blk(page, t).locator('.pg-blk-st');
+    await expect(st('Opening keynote')).toHaveText('Finished');
+    await expect(st('The future of hybrid events')).toHaveText('Live · 14 min left');
+    await expect(st('Breakout: captions')).toHaveText('Starting soon');
+    await expect(st('Panel: crews that scale')).toHaveText('Delayed 5 min');
+    await expect(st('Early demo')).toHaveText('Earlier 10 min');
+    await expect(st('Sponsor demos')).toHaveText('On hold');
+    await expect(st('Workshop: rigging')).toHaveText('Cancelled');
+    await expect(st('Networking lunch')).toHaveCount(0);   // on time: no word
+    expect(await st('The future of hybrid events').evaluate(el => getComputedStyle(el).color)).toBe('rgb(239, 68, 68)');
+    expect(await st('Breakout: captions').evaluate(el => getComputedStyle(el).color)).toBe(CALLING_RGB);
+    expect(await st('Panel: crews that scale').evaluate(el => getComputedStyle(el).color)).toBe('rgb(251, 146, 60)');
+    await expect(blk(page, 'Panel: crews that scale').locator('.pg-blk-time s')).toHaveText('11:00');
+    for (const t of ['Opening keynote', 'Workshop: rigging'])
+      expect(Number(await blk(page, t).evaluate(el => getComputedStyle(el).opacity))).toBeLessThan(0.6);
+    expect(await blk(page, 'Workshop: rigging').locator('.pg-blk-ti').evaluate(el => getComputedStyle(el).textDecorationLine)).toBe('line-through');
+  });
+
+  test('a block spans the slots it runs over', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme' });
+    const lbl = await page.locator('#content-area .pg-time-lbl').first().boundingBox();
+    const b = await blk(page, 'Networking lunch').boundingBox();   // 12:15-13:15: three half-hour slots
+    expect(b!.height).toBeGreaterThan(lbl!.height * 2.2);
+  });
+
+  test('the current time has a Now line in its slot, and its time label is highlighted', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme' });
+    await nowAt(page, '10:45');
+    const now = page.locator('#content-area .pg-now');
+    await expect(now).toBeVisible();
+    await expect(page.locator('#content-area .pg-time-lbl.now')).toHaveText('10:30');
+    const lb = await page.locator('#content-area .pg-time-lbl.now').boundingBox();
+    const nb = await now.boundingBox();
+    // halfway through the 10:30 slot
+    expect(Math.abs(nb!.y - (lb!.y + lb!.height / 2))).toBeLessThan(lb!.height * 0.2);
+    // outside the day: no line
+    await nowAt(page, '23:30');
+    await expect(page.locator('#content-area .pg-now')).toHaveCount(0);
+  });
+
+  test('a display with a room shows only its room', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme', filter_room: 'Hall B' });
+    await expect(page.locator('#content-area .pg-room-hdr')).toHaveText(['Hall B']);
+    await expect(blk(page, 'Networking lunch')).toHaveCount(0);
+  });
+
+  test('paging is unchanged: six half-hour slots a page, "1 / N"', async ({ page }) => {
+    await bootBoard(page, { content_mode: 'programme', scroll_style: 'paginate' });
+    await expect(page.locator('#pg-page-ind')).toHaveText(/^1 \/ [2-9]$/);
+    await expect(page.locator('#content-area .pg-time-lbl:visible')).toHaveCount(6);
+  });
+});
+
+for (const vp of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }, { width: 1080, height: 1920 }]) {
+  test.describe(`day grid fits at ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+    test('nothing overflows its block or the screen', async ({ page }) => {
+      const ss = boardSessions();
+      ss[4].title = 'Panel: building crews that scale across three continents and nine time zones';
+      await bootBoard(page, { content_mode: 'programme' }, ss);
+      const bad = await page.evaluate(() => {
+        const out: string[] = [];
+        if (document.documentElement.scrollWidth > innerWidth) out.push('page scrolls sideways');
+        const grid = document.querySelector('.pg-grid')!.getBoundingClientRect();
+        if (grid.bottom > innerHeight + 0.5) out.push('grid below the screen');
+        for (const b of document.querySelectorAll<HTMLElement>('.pg-blk')) {
+          if (!b.offsetParent) continue;
+          const box = b.getBoundingClientRect();
+          if (box.right > grid.right + 0.5 || box.bottom > grid.bottom + 0.5) out.push('block outside grid: ' + b.textContent);
+          for (const el of b.querySelectorAll<HTMLElement>('*')) {
+            if (el.scrollWidth > el.clientWidth + 1) out.push(`${el.className}: ${el.textContent}`);
+          }
+        }
+        return out;
+      });
+      expect(bad).toEqual([]);
     });
   });
 }
