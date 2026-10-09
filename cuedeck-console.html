@@ -6228,12 +6228,18 @@ async function saveDisplay() {
       const ext = (vf.name.split('.').pop() || '').toLowerCase();
       const mime = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' }[ext];
       if (!mime) { err.textContent = 'Choose an MP4, WebM or MOV video.'; return; }
-      // The project's storage takes files up to 50 MB.
-      if (vf.size > 50 * 1048576) { err.textContent = 'This video is ' + Math.round(vf.size / 1048576) + ' MB. The limit is 50 MB: export it smaller (a logo loop compresses well), or paste the address of a video hosted elsewhere.'; return; }
+      if (vf.size > 300 * 1048576) { err.textContent = 'This video is ' + Math.round(vf.size / 1048576) + ' MB. The limit is 300 MB: export it smaller, or paste the address of a video hosted elsewhere.'; return; }
       state.textContent = 'Uploading ' + Math.round(vf.size / 1048576) + ' MB. Keep this window open.';
       const path = `displays/${S.event.id}/${Date.now()}.${ext}`;
       const { error: upErr } = await sb.storage.from('leod-assets').upload(path, vf, { contentType: mime, upsert: false });
-      if (upErr) { state.textContent = ''; err.textContent = 'Upload failed: ' + upErr.message; return; }
+      if (upErr) {
+        state.textContent = '';
+        // The storage project's own file size limit (a project setting) can be lower than 300 MB.
+        err.textContent = /maximum allowed size|too large|413/i.test(upErr.message || '')
+          ? 'Upload failed: the file storage does not accept a file this large yet. Raise the upload file size limit in the Supabase project settings, or export the video smaller.'
+          : 'Upload failed: ' + upErr.message;
+        return;
+      }
       videoUrl = sb.storage.from('leod-assets').getPublicUrl(path).data.publicUrl;
       state.textContent = '';
     }
