@@ -764,7 +764,7 @@ let _offline = { data: false, video: 'none', bytes: 0, total: 0 };
 let _lastReport = '', _lastReportAt = 0;
 
 function saveSnapshot(feed) {
-  try { localStorage.setItem(SNAP_KEY(_displayId), JSON.stringify({ at: Date.now(), feed })); _offline.data = true; }
+  try { localStorage.setItem(SNAP_KEY(_displayId), JSON.stringify({ at: Date.now(), feed, clockOffset: S.clockOffset || 0 })); _offline.data = true; }
   catch (_) { _offline.data = false; }   // storage full or blocked: the console will say so
   reportOffline();
 }
@@ -774,6 +774,8 @@ function loadSnapshot() {
     const snap = raw ? JSON.parse(raw) : null;
     if (!snap?.feed?.display) return null;
     _offline.data = true;
+    // (136) The last clock correction, so screens stay in step offline.
+    if (typeof snap.clockOffset === 'number' && !S.clockOffset) S.clockOffset = snap.clockOffset;
     return snap.feed;
   } catch (_) { return null; }
 }
@@ -1793,6 +1795,7 @@ function renderCustom() {
 // ═══════════════════════════════════════════════════
 let _loopVideoEl = null;
 let _loopWatch = null;
+let _loopSync = null;
 let _chromeTimer = null;
 ['mousemove', 'pointerdown', 'keydown'].forEach(t => document.addEventListener(t, () => {
   if (!document.body.classList.contains('mode-video')) return;
@@ -1802,13 +1805,20 @@ let _chromeTimer = null;
 }, { passive: true }));
 function stopVideoLoop() {
   if (_loopWatch) { clearInterval(_loopWatch); _loopWatch = null; }
+  if (_loopSync) { clearInterval(_loopSync); _loopSync = null; }
   if (!_loopVideoEl) return;
   _loopVideoEl.pause(); _loopVideoEl.removeAttribute('src'); _loopVideoEl.load();
   _loopVideoEl = null;
 }
 function renderVideoLoop(area) {
   const url = D?.video_url || '';
-  if (_loopVideoEl && _loopVideoEl.isConnected && _loopVideoEl.dataset.src === url) return;
+  const sync = D?.video_sync !== false;
+  if (_loopVideoEl && _loopVideoEl.isConnected && _loopVideoEl.dataset.src === url) {
+    // Same video: only the in-step setting may have changed.
+    if (sync && !_loopSync) startVideoSync(_loopVideoEl);
+    if (!sync && _loopSync) { clearInterval(_loopSync); _loopSync = null; _loopVideoEl.playbackRate = 1; }
+    return;
+  }
   // The sponsor carousel's own video and timers would otherwise keep running
   // and draw over this screen.
   _cleanupActiveVideo();
@@ -1837,6 +1847,7 @@ function renderVideoLoop(area) {
   _loopVideoEl = v;
   v.play().catch(() => {});
   saveVideoOffline(url);   // (135)
+  if (sync) startVideoSync(v);   // (136)
   // Watchdog: a stalled download fires no error and leaves a black screen.
   // If the picture has not moved for 15 seconds, load it again.
   let last = -1;
@@ -1845,6 +1856,28 @@ function renderVideoLoop(area) {
     if (v.currentTime === last) { v.load(); v.play().catch(() => {}); last = -1; return; }
     last = v.currentTime;
   }, 15000);
+}
+
+// (136) Roll in step: the video's position follows the server's clock, so
+// every screen with a video of the same length shows the same frame at the
+// same moment. Checked every 2 s: a small gap is closed by playing up to 5%
+// faster or slower (invisible), a large one (a stall, a late start) by a jump.
+function videoSyncTarget(dur) { const t = (correctedNow() / 1000) % dur; return t < 0 ? t + dur : t; }
+function startVideoSync(v) {
+  if (_loopSync) clearInterval(_loopSync);
+  const step = () => {
+    if (_loopVideoEl !== v) return;
+    const dur = v.duration;
+    if (!isFinite(dur) || dur <= 0 || v.seeking || v.paused || v.readyState < 2) return;
+    const target = videoSyncTarget(dur);
+    let diff = v.currentTime - target;               // > 0: this screen is ahead
+    if (diff > dur / 2) diff -= dur; else if (diff < -dur / 2) diff += dur;
+    if (Math.abs(diff) > 1) { v.playbackRate = 1; v.currentTime = videoSyncTarget(dur); }
+    else if (Math.abs(diff) > 0.04) v.playbackRate = 1 - Math.max(-0.05, Math.min(0.05, diff * 0.5));
+    else v.playbackRate = 1;
+  };
+  v.addEventListener('playing', step, { once: true });
+  _loopSync = setInterval(step, 2000);
 }
 
 // ═══════════════════════════════════════════════════

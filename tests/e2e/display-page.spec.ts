@@ -1584,20 +1584,20 @@ test.describe('Display: one tap for full screen and audio', () => {
 // ── VIDEO MODE (134): lectern / logo screen ─────────────────────────────────
 // A neutral clip is recorded in the browser at test time (coloured frames from
 // a canvas), so no real artwork is stored in the repo.
-async function recordClip(page: Page): Promise<Buffer> {
+async function recordClip(page: Page, frames = 15): Promise<Buffer> {
   await page.goto('about:blank');
-  const b64: string = await page.evaluate(async () => {
+  const b64: string = await page.evaluate(async (frames) => {
     const c = document.createElement('canvas'); c.width = 180; c.height = 320;
     const g = c.getContext('2d')!;
     const rec = new MediaRecorder(c.captureStream(15), { mimeType: 'video/webm' });
     const parts: Blob[] = []; rec.ondataavailable = e => parts.push(e.data);
     rec.start();
-    for (let i = 0; i < 15; i++) { g.fillStyle = `hsl(${i * 24},70%,50%)`; g.fillRect(0, 0, 180, 320); await new Promise(r => setTimeout(r, 70)); }
+    for (let i = 0; i < frames; i++) { g.fillStyle = `hsl(${i * 24},70%,50%)`; g.fillRect(0, 0, 180, 320); await new Promise(r => setTimeout(r, 70)); }
     rec.stop(); await new Promise(r => (rec.onstop = r));
     const buf = await new Blob(parts).arrayBuffer();
     let s = ''; new Uint8Array(buf).forEach(x => (s += String.fromCharCode(x)));
     return btoa(s);
-  });
+  }, frames);
   return Buffer.from(b64, 'base64');
 }
 const CLIP_URL = 'https://media.example.test/lectern.webm';
@@ -1784,5 +1784,45 @@ test.describe('Display: offline', () => {
     expect(last.p_display_id).toBe(FAKE_DISP_ID);
     expect(last.p_status.data).toBe(true);
     expect(Object.keys(last.p_status).every(k => ['shell', 'data', 'video', 'bytes', 'total'].includes(k))).toBe(true);
+  });
+});
+
+
+// ── IN STEP (136) ───────────────────────────────────────────────────────────
+test.describe('Display: video screens roll in step', () => {
+  test('S1 two screens opened at different moments play the same moment of the loop', async ({ browser }) => {
+    test.setTimeout(90_000);
+    const maker = await browser.newPage();
+    const clip = await recordClip(maker, 60);   // about 4 s
+    await maker.close();
+    const open = async () => {
+      const page = await browser.newPage();
+      await serveClip(page, clip);
+      await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: CLIP_URL, video_sync: true } }) });
+      await page.goto(`${DISP_URL}${makeHash()}`);
+      await page.waitForFunction(() => { const v = document.querySelector('video.vl-video') as HTMLVideoElement; return v && v.currentTime > 0 && isFinite(v.duration); }, null, { timeout: 30_000 });
+      return page;
+    };
+    const a = await open();
+    await a.waitForTimeout(2500);
+    const b = await open();
+    await b.waitForTimeout(6000);   // a few correction rounds
+    // Both against the shared clock, read at the same instant.
+    const read = (p: Page) => p.evaluate(() => { const v = document.querySelector('video.vl-video') as HTMLVideoElement;
+      const target = ((Date.now() + ((window as any).S.clockOffset || 0)) / 1000) % v.duration;
+      let d = v.currentTime - target; if (d > v.duration / 2) d -= v.duration; if (d < -v.duration / 2) d += v.duration; return d; });
+    const [da, db] = await Promise.all([read(a), read(b)]);
+    expect(Math.abs(da), 'screen A off the clock by ' + da.toFixed(2) + ' s').toBeLessThan(0.3);
+    expect(Math.abs(db), 'screen B off the clock by ' + db.toFixed(2) + ' s').toBeLessThan(0.3);
+  });
+
+  test('S2 a screen set to its own loop is not steered', async ({ page }) => {
+    const clip = await recordClip(page, 60);
+    await serveClip(page, clip);
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: CLIP_URL, video_sync: false } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await page.waitForFunction(() => (document.querySelector('video.vl-video') as HTMLVideoElement)?.currentTime > 0, null, { timeout: 30_000 });
+    expect(await page.evaluate('_loopSync')).toBeNull();
+    expect(await page.evaluate(() => (document.querySelector('video.vl-video') as HTMLVideoElement).playbackRate)).toBe(1);
   });
 });

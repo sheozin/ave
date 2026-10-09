@@ -2537,6 +2537,11 @@
       <label style="margin-top:6px">Or a video address
         <input id="dm-video-url" type="url" placeholder="https://..." style="font-size:12px;margin-top:3px">
       </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-size:12px;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="dm-video-sync" checked>
+        <span style="font-weight:600">Roll in step with other screens</span>
+      </label>
+      <div style="color:var(--dim);font-size:11px;margin:2px 0 0 24px">Screens with videos of the same length show the same moment together. Untick for a screen that should loop on its own.</div>
       <div id="dm-video-state" style="color:var(--dim);font-size:11px;min-height:14px;margin-top:4px"></div>
     </div>
     <label>Filter to Room <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional: leave blank to show all)</span>
@@ -5870,6 +5875,7 @@ function renderSignagePanel() {
               <span>${orientIcon} ${esc(d.orientation)}</span>
               ${d.filter_room ? `<span>${icon('door')} ${esc(d.filter_room)}</span>` : ''}
               ${d.sequence?.length ? `<span class="sp-seq-tag">${icon('refresh')} ${d.sequence.length} slides</span>` : ''}
+              ${d.content_mode === 'video' && d.video_url ? (() => { const dur = videoDuration(d.video_url); return `<span>${icon('timer')} ${dur ? 'Loop ' + fmtLoop(dur) : 'Loop'} · ${d.video_sync === false ? 'own loop' : 'in step'}</span>`; })() : ''}
               <span${online ? ' class="sp-status-on"' : ''}>${online ? 'online' : 'offline'}</span>
               ${(() => {
                 if (!d.last_seen_at) return '';
@@ -5944,6 +5950,7 @@ function renderSignagePanel() {
       <span class="sp-section-title">${t('sign.registeredDisplays')} (${S.displays.length})</span>
       <button class="abtn abtn-sm btn-blue" onclick="openDisplayModal('add')">${icon('plus')} ${t('btn.addDisplay')}</button>
     </div>
+    ${videoSyncNote()}
     <div class="sp-grid">${displayCards}</div>
     <div style="border-top:1px solid var(--border-section);margin-top:12px;padding-top:12px">
       <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:600">${t('sign.pairDisplay')}</div>
@@ -6005,6 +6012,42 @@ function renderSignagePanel() {
   }
   const newTarget = document.getElementById('sp-pair-target');
   if (newTarget && savedPairTarget && [...newTarget.options].some(o => o.value === savedPairTarget)) newTarget.value = savedPairTarget;
+}
+
+// ── Video loop length (136) ─────────────────────────────────
+// Read from the video file's own metadata, once per address, so the panel can
+// say which in-step screens line up. The panel redraws when a length arrives.
+const _videoDur = new Map();   // url -> seconds, or null while loading / unknown
+function videoDuration(url) {
+  if (!url) return null;
+  if (_videoDur.has(url)) return _videoDur.get(url);
+  _videoDur.set(url, null);
+  const v = document.createElement('video');
+  v.preload = 'metadata'; v.muted = true;
+  v.onloadedmetadata = () => { if (isFinite(v.duration) && v.duration > 0) { _videoDur.set(url, v.duration); if (S.event) renderSignagePanel(); } v.removeAttribute('src'); v.load(); };
+  v.src = url;
+  return null;
+}
+const fmtLoop = sec => Math.floor(sec / 60) + ':' + String(Math.round(sec % 60)).padStart(2, '0');
+
+// Which in-step video screens line up: grouped by length (to a tenth of a second).
+function videoSyncNote() {
+  const vids = S.displays.filter(d => d.content_mode === 'video' && d.video_sync !== false && d.video_url);
+  const groups = new Map();
+  for (const d of vids) {
+    const dur = videoDuration(d.video_url);
+    if (dur == null) continue;
+    const k = Math.round(dur * 10);
+    if (!groups.has(k)) groups.set(k, { dur, names: [] });
+    groups.get(k).names.push(d.name || 'Display');
+  }
+  if (groups.size < 2) return '';
+  const list = [...groups.values()].sort((a, b) => b.names.length - a.names.length);
+  const join = n => n.length === 1 ? n[0] : n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1];
+  const main = list[0];
+  const rest = list.slice(1).map(g => `${join(g.names)} (${fmtLoop(g.dur)})`).join('; ');
+  const lead = main.names.length > 1 ? `${join(main.names)} roll together (${fmtLoop(main.dur)}). ` : `${join(main.names)} (${fmtLoop(main.dur)}) has a different length from the others. `;
+  return `<div style="font-size:11px;color:var(--amber);margin:2px 0 10px;line-height:1.5">${icon('info')} ${esc(lead + (main.names.length > 1 ? rest + ' ' + (list.length > 2 ? 'have' : 'has') + ' a different length, so ' + (list.length > 2 ? 'they do' : 'it does') + ' not line up with them. For screens to change together, export their videos at the same length.' : rest + '.'))}</div>`;
 }
 
 // ── Offline readiness (135) ─────────────────────────────────
@@ -6223,6 +6266,7 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-paginate-seconds').value = d.paginate_seconds || 10;
     document.getElementById('dm-audio').checked = d.audio_enabled || false;
     document.getElementById('dm-video-url').value = d.video_url || '';
+    document.getElementById('dm-video-sync').checked = d.video_sync !== false;
     // Populate sequence builder
     _seqSlides = (d.sequence || []).map(s => ({ ...s }));
     document.getElementById('dm-seq-enable').checked = _seqSlides.length > 0;
@@ -6236,6 +6280,7 @@ function openDisplayModal(mode, id) {
     document.getElementById('dm-paginate-seconds').value = 10;
     document.getElementById('dm-audio').checked = false;
     document.getElementById('dm-video-url').value = '';
+    document.getElementById('dm-video-sync').checked = true;
     _seqSlides = [];
     document.getElementById('dm-seq-enable').checked = false;
   }
@@ -6297,7 +6342,7 @@ async function saveDisplay() {
     if (!videoUrl) { err.textContent = 'Choose a video for this display.'; return; }
     if (!/^https:\/\/[^\s<>"]+$/.test(videoUrl)) { err.textContent = 'The video address must start with https://'; return; }
   }
-  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence, scroll_style: scrollStyle, paginate_seconds: paginateSec, audio_enabled: audioEnabled, video_url: videoUrl };
+  const payload = { event_id: S.event.id, name, zone_type: zone, orientation: orient, content_mode: mode, filter_room: room, sequence, scroll_style: scrollStyle, paginate_seconds: paginateSec, audio_enabled: audioEnabled, video_url: videoUrl, video_sync: document.getElementById('dm-video-sync').checked };
   const { error } = _dispModalId
     ? await sb.from('leod_signage_displays').update(payload).eq('id', _dispModalId)
     : await sb.from('leod_signage_displays').insert(payload);

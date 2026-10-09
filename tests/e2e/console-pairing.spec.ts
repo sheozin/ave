@@ -204,3 +204,33 @@ test.describe('Console: push to all screens', () => {
     expect(patches[0]).toContain('id=eq.lobby-1');
   });
 });
+
+
+test.describe('Console: video screens in step', () => {
+  test('the panel says which in-step screens line up and which do not', async ({ page }) => {
+    await mockSupabase(page);
+    await page.evaluate(`
+      _videoDur.set('https://x.test/a.mp4', 46.48); _videoDur.set('https://x.test/b.mp4', 46.48); _videoDur.set('https://x.test/c.mp4', 445.18);
+      S.displays = [
+        { id: 'a', name: 'Agenda Day 1', event_id: '${EVENT_ID}', content_mode: 'video', video_url: 'https://x.test/a.mp4', video_sync: true },
+        { id: 'b', name: 'Agenda Day 2', event_id: '${EVENT_ID}', content_mode: 'video', video_url: 'https://x.test/b.mp4', video_sync: true },
+        { id: 'c', name: 'Rolling Logos', event_id: '${EVENT_ID}', content_mode: 'video', video_url: 'https://x.test/c.mp4', video_sync: true }];
+      renderSignagePanel();`);
+    const html = await page.evaluate(`document.getElementById('sessions-list').textContent`) as string;
+    expect(html).toContain('Agenda Day 1 and Agenda Day 2 roll together (0:46). Rolling Logos (7:25) has a different length');
+    expect(html).toContain('Loop 0:46 · in step');
+  });
+
+  test('no note when every in-step screen has the same length, or a screen loops on its own', async ({ page }) => {
+    await mockSupabase(page);
+    await page.evaluate(`
+      _videoDur.set('https://x.test/a.mp4', 46.48); _videoDur.set('https://x.test/c.mp4', 445.18);
+      S.displays = [
+        { id: 'a', name: 'Agenda Day 1', event_id: '${EVENT_ID}', content_mode: 'video', video_url: 'https://x.test/a.mp4', video_sync: true },
+        { id: 'c', name: 'Rolling Logos', event_id: '${EVENT_ID}', content_mode: 'video', video_url: 'https://x.test/c.mp4', video_sync: false }];
+      renderSignagePanel();`);
+    const html = await page.evaluate(`document.getElementById('sessions-list').textContent`) as string;
+    expect(html).not.toContain('roll together');
+    expect(html).toContain('Loop 7:25 · own loop');
+  });
+});
