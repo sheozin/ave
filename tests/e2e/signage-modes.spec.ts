@@ -397,3 +397,84 @@ test('header status — nothing live and a session calling reads CALLING', async
   await expect(lbl).toHaveText(/CALLING/);
   expect(await lbl.evaluate(el => getComputedStyle(el).color)).toBe(CALLING_RGB);
 });
+
+// ── 12. A delay shows the current times, not the original ones ───────────────
+// A director's delay moves scheduled_start/end; planned_* keep the original.
+// The day grid, programme list and agenda placed and labelled sessions by
+// planned_*, so lobby screens showed times that were no longer true.
+// Times arrive as the DB's TIME(0) strings ('HH:MM:SS').
+async function delayWorkshop(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; render: () => void };
+    for (const s of w.S.sessions) {
+      s.planned_start = String(s.scheduled_start);
+      s.planned_end = String(s.scheduled_end);
+    }
+    const ws = w.S.sessions.find(s => s.id === 's3')!;   // Workshop: Cloud Ops, planned 11:00-12:00
+    ws.scheduled_start = '11:05:00';
+    ws.scheduled_end = '12:05:00';
+    w.render();
+  });
+}
+const WORKSHOP = 'Workshop: Cloud Ops';
+
+test('delay — programme list shows the current time, the original only as "was"', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await delayWorkshop(page);
+  const row = page.locator(`#content-area .tl-row:has-text("${WORKSHOP}")`);
+  await expect(row.locator('.tl-time-now')).toHaveText('11:05');
+  await expect(row.locator('.tl-was')).toHaveText('was 11:00');
+  // an on-time session has no "was"
+  await expect(page.locator('#content-area .tl-row:has-text("Panel: Future of AI") .tl-was')).toHaveCount(0);
+});
+
+test('delay — agenda card shows the current time', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'agenda');
+  await delayWorkshop(page);
+  const card = page.locator(`#content-area .ag-card:has-text("${WORKSHOP}")`);
+  await expect(card.locator('.ag-time')).toContainText('11:05');
+  await expect(card.locator('.ag-was')).toHaveText('was 11:00');
+});
+
+test('agenda — times from the DB (HH:MM:SS) are shown, not blank', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'agenda');
+  await delayWorkshop(page);
+  const card = page.locator('#content-area .ag-card:has-text("Panel: Future of AI")');
+  await expect(card.locator('.ag-time')).toHaveText('10:00');
+});
+
+test('delay — wayfinding shows the current time', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'wayfinding');
+  await delayWorkshop(page);
+  await expect(page.locator(`#content-area tr:has-text("${WORKSHOP}") .wf-time`)).toHaveText('11:05');
+});
+
+test('delay — day grid places the session by its current time and labels it', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await delayWorkshop(page);
+  // 11:05-12:05 runs into the 12:00 slot; by the original 11:00-12:00 the grid ended at 11:30
+  await expect(page.locator('#content-area .pg-time-lbl', { hasText: '12:00' })).toHaveCount(1);
+  const cell = page.locator(`#content-area .pg-cell:has-text("${WORKSHOP}")`);
+  await expect(cell.locator('.pg-cell-time')).toHaveText('11:05–12:05');
+  // on-time sessions carry no extra time line
+  await expect(page.locator('#content-area .pg-cell:has-text("Panel: Future of AI") .pg-cell-time')).toHaveCount(0);
+});
+
+test('delay — a session pushed past the next slot moves down the day grid', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'programme');
+  await page.evaluate(() => {
+    const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; render: () => void };
+    const ws = w.S.sessions.find(s => s.id === 's3')!;
+    ws.planned_start = '11:00:00'; ws.planned_end = '12:00:00';
+    ws.scheduled_start = '11:30:00'; ws.scheduled_end = '12:30:00';
+    w.render();
+  });
+  // the first cell of the workshop sits in the row labelled 11:30
+  const idx = await page.evaluate((title) => {
+    const kids = [...document.querySelectorAll('#pg-grid-inner > *')];
+    const cell = kids.findIndex(el => el.textContent!.includes(title));
+    for (let i = cell; i >= 0; i--) if (kids[i].classList.contains('pg-time-lbl')) return kids[i].textContent;
+    return null;
+  }, WORKSHOP);
+  expect(idx).toBe('11:30');
+});

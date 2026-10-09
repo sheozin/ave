@@ -224,6 +224,7 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 .ag-card.ready .ag-badge{color:var(--st-ready)}
 .ag-card.calling .ag-badge{color:var(--st-calling)}
 .ag-time{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.35);margin-bottom:2px}
+.ag-was{color:rgba(255,255,255,.25)}
 .ag-title{font-size:clamp(11px,1vw,16px);font-weight:600;line-height:1.3;color:#eef2f7}
 .ag-speaker{font-size:clamp(9px,.75vw,12px);color:rgba(255,255,255,.4);margin-top:3px}
 .ag-empty{display:flex;align-items:center;justify-content:center;
@@ -245,6 +246,8 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 .tl-row.cancelled{opacity:.2;text-decoration:line-through}
 .tl-time{flex-shrink:0;width:clamp(50px,6vw,80px);font-family:'SF Mono','Fira Code',monospace;
   font-size:clamp(12px,1.4vw,18px);font-weight:600;color:#60a5fa;padding-top:2px}
+.tl-time-now{display:block}
+.tl-was{display:block;margin-top:2px;font-size:clamp(9px,.8vw,12px);font-weight:400;color:rgba(255,255,255,.35)}
 .tl-body{flex:1;min-width:0}
 .tl-title{font-size:clamp(13px,1.5vw,20px);font-weight:600;color:#eef2f7;line-height:1.3}
 .tl-meta{font-size:clamp(10px,1vw,14px);color:rgba(255,255,255,.4);margin-top:2px;
@@ -280,6 +283,7 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 .pg-cell.calling{background:rgba(250,204,21,.08)}
 .pg-cell-title{font-size:clamp(10px,.9vw,14px);font-weight:600;color:#eef2f7;
   line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-cell-time{font-family:'SF Mono','Fira Code',monospace;font-size:clamp(8px,.7vw,11px);font-weight:600;color:#60a5fa;margin-top:1px}
 .pg-cell-speaker{font-size:clamp(8px,.7vw,11px);color:rgba(255,255,255,.4);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .pg-cell-badge{font-size:clamp(7px,.55vw,9px);font-weight:700;letter-spacing:.04em}
@@ -1775,7 +1779,7 @@ function renderAgenda(area) {
 
   const cols = rooms.slice(0, colCount).map(room => {
     const roomSessions = active.filter(s => s.room === room)
-      .sort((a,b) => (a.planned_start||'').localeCompare(b.planned_start||''));
+      .sort((a,b) => curStart(a).localeCompare(curStart(b)));
 
     const cards = roomSessions.map(s => {
       const isLive  = s.status === 'LIVE' || s.status === 'OVERRUN';
@@ -1783,10 +1787,11 @@ function renderAgenda(area) {
       const isCalling = s.status === 'CALLING';
       const badge   = isLive ? '● LIVE' : isCalling ? '◈ CALLING' : isReady ? '◈ READY' : '';
       const cls     = `ag-card${isLive ? ' live' : isCalling ? ' calling' : isReady ? ' ready' : ''}`;
-      const time    = (s.planned_start || s.scheduled_start || '').slice(11, 16);
+      const time    = curStart(s).substring(0, 5);
+      const was     = wasStart(s);
       return `<div class="${cls}">
         ${badge ? `<div class="ag-badge">${badge}</div>` : ''}
-        <div class="ag-time">${esc(time)}</div>
+        <div class="ag-time">${esc(time)}${was ? ` <span class="ag-was">was ${esc(was)}</span>` : ''}</div>
         <div class="ag-title">${esc(s.title)}</div>
         ${peopleSummary(s) ? `<div class="ag-speaker">${esc(peopleSummary(s))}</div>` : ''}
       </div>`;
@@ -1806,10 +1811,10 @@ function renderAgenda(area) {
 // ═══════════════════════════════════════════════════
 function renderTimeline(area) {
   area.style.background = '';
-  // Gather all sessions, apply room filter, sort by planned_start
+  // Gather all sessions, apply room filter, sort by current start
   let sessions = [...S.sessions];
   if (D?.filter_room) sessions = sessions.filter(s => s.room === D.filter_room);
-  sessions.sort((a, b) => (a.planned_start || '').localeCompare(b.planned_start || ''));
+  sessions.sort((a, b) => curStart(a).localeCompare(curStart(b)));
 
   if (!sessions.length) {
     area.innerHTML = `<div class="tl-empty fade-in">No sessions scheduled</div>`;
@@ -1824,16 +1829,15 @@ function renderTimeline(area) {
     const isCalling = s.status === 'CALLING';
     const cls = isLive ? ' live' : isCalling ? ' calling' : isReady ? ' ready' : isEnded ? ' ended' : isCancelled ? ' cancelled' : '';
     const badge = isLive ? `<div class="tl-badge live">● LIVE</div>` : isCalling ? `<div class="tl-badge calling">◈ CALLING</div>` : isReady ? `<div class="tl-badge ready">◈ READY</div>` : '';
-    const rawTime = timeStr(s.planned_start || s.scheduled_start || '');
+    const rawTime = curStart(s);
     const time = rawTime ? rawTime.substring(0, 5) : '--:--';
-    const rawEnd = timeStr(s.planned_end || s.scheduled_end || '');
-    const endTime = rawEnd ? rawEnd.substring(0, 5) : '';
-    const durMin = s.scheduled_end && s.scheduled_start
-      ? Math.round((toMs(s.scheduled_end) - toMs(s.scheduled_start)) / 60000)
+    const was = wasStart(s);
+    const durMin = curEnd(s) && rawTime
+      ? Math.round((toMs(curEnd(s)) - toMs(rawTime)) / 60000)
       : '';
 
     return `<div class="tl-row${cls}" data-tl-idx="${i}">
-      <div class="tl-time">${esc(time)}</div>
+      <div class="tl-time"><span class="tl-time-now">${esc(time)}</span>${was ? `<span class="tl-was">was ${esc(was)}</span>` : ''}</div>
       <div class="tl-body">
         <div class="tl-title">${esc(s.title)}</div>
         <div class="tl-meta">
@@ -1959,8 +1963,8 @@ function renderProgramme(area) {
   // Determine time range: round down earliest start to 30-min, round up latest end to 30-min
   let minT = Infinity, maxT = 0;
   sessions.forEach(s => {
-    const st = toMs(timeStr(s.planned_start || s.scheduled_start || ''));
-    const en = toMs(timeStr(s.planned_end || s.scheduled_end || '')) || (st + 2700000);
+    const st = toMs(curStart(s));
+    const en = toMs(curEnd(s)) || (st + 2700000);
     if (st && st < minT) minT = st;
     if (en > maxT) maxT = en;
   });
@@ -1993,8 +1997,8 @@ function renderProgramme(area) {
   sessions.forEach(s => {
     const rIdx = rooms.indexOf(s.room);
     if (rIdx === -1) return;
-    const st = toMs(timeStr(s.planned_start || s.scheduled_start || ''));
-    const en = toMs(timeStr(s.planned_end || s.scheduled_end || '')) || (st + 2700000);
+    const st = toMs(curStart(s));
+    const en = toMs(curEnd(s)) || (st + 2700000);
     const startSlot = Math.max(0, Math.floor((st - minT) / slot30));
     const endSlot = Math.min(totalSlots, Math.ceil((en - minT) / slot30));
     for (let si = startSlot; si < endSlot; si++) {
@@ -2039,6 +2043,7 @@ function renderProgramme(area) {
           rowsHtml += `<div class="pg-cell${cls}"${pageAttr}>
             ${badgeText ? `<div class="pg-cell-badge${badgeCls}">${badgeText}</div>` : ''}
             <div class="pg-cell-title">${esc(cell.session.title)}</div>
+            ${wasStart(cell.session) ? `<div class="pg-cell-time">${esc(curStart(cell.session).substring(0, 5))}–${esc(curEnd(cell.session).substring(0, 5))}</div>` : ''}
             ${peopleSummary(cell.session) ? `<div class="pg-cell-speaker">${esc(peopleSummary(cell.session))}</div>` : ''}
           </div>`;
         } else {
@@ -2142,6 +2147,15 @@ function timeStr(t) {
   if (!t) return '';
   const idx = t.indexOf('T');
   return idx >= 0 ? t.substring(idx + 1) : t;
+}
+
+// Current schedule first: a delay moves scheduled_*, planned_* keep the original.
+function curStart(s) { return timeStr(s.scheduled_start || s.planned_start || ''); }
+function curEnd(s)   { return timeStr(s.scheduled_end || s.planned_end || ''); }
+// The original start as HH:MM when the session has moved, else ''.
+function wasStart(s) {
+  const p = timeStr(s.planned_start || '').substring(0, 5);
+  return p && s.scheduled_start && p !== curStart(s).substring(0, 5) ? p : '';
 }
 
 function toTimeMs(epochMs) {
