@@ -1673,3 +1673,26 @@ test.describe('Display: video mode', () => {
     await expect(page.locator('video')).toHaveCount(0);
   });
 });
+
+test.describe('Display: getting back to pairing', () => {
+  test('V5 in video mode a mouse move shows the top bar with Disconnect, and it hides again', async ({ page }) => {
+    await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: null } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toBeVisible();
+    await expect(page.locator('.d-header')).toBeHidden();
+    await page.mouse.move(200, 200);
+    await expect(page.locator('#disconnect-btn')).toBeVisible();
+    await expect(page.locator('.d-header')).toBeHidden({ timeout: 8000 });
+  });
+
+  test('V6 /display#pair forgets the saved display and shows a pairing code', async ({ page }) => {
+    const m = await mockSupabase(page, { feed: () => makeFeed({ display: { content_mode: 'video', video_url: null } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.vl-empty')).toBeVisible();
+    await page.goto(`${DISP_URL}#pair`);
+    await page.reload();
+    await expect(page.locator('#pairing-code')).toHaveText(/^[A-HJ-NP-Z2-9]{3}-[A-HJ-NP-Z2-9]{3}$/);
+    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => /id|secret/i.test(k)).map(k => localStorage.getItem(k)).filter(Boolean).length)).toBe(0);
+    expect(m.startBodies.length).toBeGreaterThan(0);
+  });
+});

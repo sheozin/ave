@@ -188,6 +188,9 @@ video.sp-sponsor-logo.sp-ready{opacity:1}
 
 /* ── VIDEO MODE (134): one video edge to edge, on a loop, nothing else ── */
 body.mode-video .d-header, body.mode-video #d-progress-bar{display:none!important}
+/* A mouse move or a tap shows the top bar (and its Disconnect) for a few seconds. */
+body.mode-video.vl-chrome .d-header{display:flex!important;position:fixed;top:0;left:0;right:0;z-index:5}
+body.mode-video.vl-chrome #disconnect-btn{opacity:1}
 .vl-video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:1}
 .vl-empty{color:rgba(255,255,255,.35);font-size:20px;text-align:center;padding:24px}
 
@@ -486,8 +489,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const fromQuery = new URLSearchParams(window.location.search);
   const get = k => fromHash.get(k) || fromQuery.get(k);
 
-  const id     = get('id');
-  const secret = get('s');
+  // /display#pair: forget this screen's display and show a pairing code. The
+  // way back for a screen with no mouse, or one whose top bar is hidden.
+  if (fromHash.has('pair') || fromQuery.has('pair')) {
+    forgetCreds();
+    history.replaceState(null, '', window.location.pathname);
+  }
+  const id     = fromHash.has('pair') || fromQuery.has('pair') ? null : get('id');
+  const secret = fromHash.has('pair') || fromQuery.has('pair') ? null : get('s');
   // Always the built-in project. A url/key in the link is ignored: a crafted
   // link could otherwise send this screen's saved key to another host.
   const url = SUPABASE_URL;
@@ -1675,6 +1684,13 @@ function renderCustom() {
 // ═══════════════════════════════════════════════════
 let _loopVideoEl = null;
 let _loopWatch = null;
+let _chromeTimer = null;
+['mousemove', 'pointerdown', 'keydown'].forEach(t => document.addEventListener(t, () => {
+  if (!document.body.classList.contains('mode-video')) return;
+  document.body.classList.add('vl-chrome');
+  clearTimeout(_chromeTimer);
+  _chromeTimer = setTimeout(() => document.body.classList.remove('vl-chrome'), 4000);
+}, { passive: true }));
 function stopVideoLoop() {
   if (_loopWatch) { clearInterval(_loopWatch); _loopWatch = null; }
   if (!_loopVideoEl) return;
