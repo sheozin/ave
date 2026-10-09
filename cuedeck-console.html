@@ -5925,6 +5925,7 @@ function renderSignagePanel() {
     </div>
     <div class="sp-global-bar">
       <label>${esc(t('sign.pushAll'))}</label>
+      ${S.displays.some(d => d.content_mode === 'video') ? `<div style="font-size:11px;color:var(--dim);margin:2px 0 6px">Video Loop displays (lectern, logo screens) keep playing their video.</div>` : ''}
       <div class="sp-override-btns">
         ${overrideModes.map(m => `<button class="sp-override-btn" onclick="sendGlobalOverride('${m.key}')">${icon(m.ico)} ${esc(m.label)}</button>`).join('')}
       </div>
@@ -6308,21 +6309,29 @@ async function sendGlobalOverride(mode) {
   if (!S.event) return;
   if (!S.displays.length) { pushLog('SIGNAGE', 'no displays registered', null); return; }
   const overrideContent = { mode, pushed_at: new Date().toISOString() };
-  await Promise.all(S.displays.map(d =>
+  // (134) A Video Loop display (a lectern or logo screen) is independent: a
+  // push to all screens passes it by. Its own card can still override it.
+  const targets = S.displays.filter(d => d.content_mode !== 'video');
+  const skipped = S.displays.length - targets.length;
+  const results = await Promise.all(targets.map(d =>
     sb.from('leod_signage_displays').update({ override_content: overrideContent }).eq('id', d.id)
   ));
+  const failed = results.filter(r => r.error).length;
   await loadDisplays(S.event.id);
   renderSignagePanel();
-  pushLog('SIGNAGE', `global override → ${mode} (${S.displays.length} displays)`, null);
+  if (failed) pushToast(failed + ' display' + (failed === 1 ? '' : 's') + ' did not take the change. Try again.', 'error');
+  pushLog('SIGNAGE', `global override → ${mode} (${targets.length - failed} displays${skipped ? `, ${skipped} video loop left as is` : ''})`, null);
 }
 
 async function clearGlobalOverride() {
   if (!S.event || !S.displays.length) return;
-  await Promise.all(S.displays.map(d =>
+  const results = await Promise.all(S.displays.map(d =>
     sb.from('leod_signage_displays').update({ override_content: null }).eq('id', d.id)
   ));
+  const failed = results.filter(r => r.error).length;
   await loadDisplays(S.event.id);
   renderSignagePanel();
+  if (failed) pushToast(failed + ' display' + (failed === 1 ? '' : 's') + ' did not clear. Try again.', 'error');
   pushLog('SIGNAGE', 'global override cleared', null);
 }
 

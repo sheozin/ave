@@ -37,6 +37,7 @@ async function mockSupabase(page: Page, over: Partial<Pick<Mock, 'linkAnswer' | 
     if (path.endsWith('/leod_signage_displays')) {
       if (req.method() === 'POST')   return reply(route, 201, { id: NEW_DISP, event_id: EVENT_ID, name: 'Paired Display ABC' });
       if (req.method() === 'DELETE') return reply(route, 204);
+      if (req.method() === 'PATCH')  return reply(route, 204);
       if (req.method() === 'GET')    return reply(route, 200, []);
     }
     m.unmocked.push(key);
@@ -189,4 +190,17 @@ test.describe('Console: reset a display key', () => {
     expect(m.unmocked).toEqual([]);
   });
 
+});
+
+test.describe('Console: push to all screens', () => {
+  test('a Video Loop display is left out of a push to all screens', async ({ page }) => {
+    const m = await mockSupabase(page);
+    await page.evaluate(`S.displays = [
+      { id: 'lobby-1', name: 'Lobby', event_id: '${EVENT_ID}', content_mode: 'schedule' },
+      { id: 'lect-1', name: 'Lectern', event_id: '${EVENT_ID}', content_mode: 'video' }]`);
+    await page.evaluate(`sendGlobalOverride('sponsors')`);
+    const patches = m.calls.filter(c => c.startsWith('PATCH leod_signage_displays'));
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toContain('id=eq.lobby-1');
+  });
 });
