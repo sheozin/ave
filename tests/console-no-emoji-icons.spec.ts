@@ -23,9 +23,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const RAW = readFileSync(resolve(__dirname, '../cuedeck-console.html'), 'utf8');
 const cp = (n: number) => { try { return String.fromCodePoint(n); } catch { return ''; } };
-const SRC = RAW
+const strip = (raw: string) => raw
   // Comments go, their line breaks stay, so a hit reports its real line number.
   .replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ''))
   .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ''))
@@ -34,6 +33,7 @@ const SRC = RAW
   .replace(/&#([0-9]+);/g, (_, d) => cp(parseInt(d, 10)))
   .replace(/\\{1,2}u\{([0-9a-f]+)\}/gi, (_, h) => cp(parseInt(h, 16)))
   .replace(/\\{1,2}u([0-9a-f]{4})/gi, (_, h) => cp(parseInt(h, 16)));
+const SRC = strip(readFileSync(resolve(__dirname, '../cuedeck-console.html'), 'utf8'));
 
 const ICON_GLYPHS = '✕✖✎✏▲▼▶◀▸▾▴◂◉◈●○▯▭☰⟳★☆⬆⬇⏻⊡⊞＋❚\uFE0F';
 const GLYPHS = new RegExp(`\\p{Extended_Pictographic}|[${ICON_GLYPHS}]`, 'gu');
@@ -48,6 +48,20 @@ describe('no emoji icons in the console', () => {
     const hits: string[] = [];
     SRC.split('\n').forEach((line, i) => {
       for (const m of line.matchAll(GLYPHS)) hits.push(`${i + 1}: ${m[0]} U+${m[0].codePointAt(0)!.toString(16).toUpperCase()}  ${line.trim().slice(0, 80)}`);
+    });
+    expect(hits).toEqual([]);
+  });
+});
+
+// The signage display (owner screenshots 9 Oct): 🗓 and 📜 headings drew as grey squares on
+// screens without an emoji font, as did 📍 ⏱ ☕ 📶. Every emoji goes; the display's own text
+// glyphs (● LIVE, ◈ READY, ⟳ reconnecting) are not Extended_Pictographic and stay.
+const DISPLAY = strip(readFileSync(resolve(__dirname, '../cuedeck-display.html'), 'utf8'));
+describe('no emoji icons on the display', () => {
+  it('finds none', () => {
+    const hits: string[] = [];
+    DISPLAY.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(/\p{Extended_Pictographic}|\uFE0F/gu)) hits.push(`${i + 1}: ${m[0]} U+${m[0].codePointAt(0)!.toString(16).toUpperCase()}  ${line.trim().slice(0, 80)}`);
     });
     expect(hits).toEqual([]);
   });

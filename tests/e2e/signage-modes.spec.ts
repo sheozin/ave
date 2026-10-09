@@ -345,3 +345,55 @@ test('programme mode — shows DAY GRID header', async ({ page }) => {
   await bootModeWithTimedSessions(page, 'programme');
   await expect(page.locator('#content-area')).toContainText('DAY GRID');
 });
+
+// ── 11. CALLING is not READY (owner screenshots 9 Oct) ───────────────────────
+// A session being called showed "READY" in wayfinding, the day grid and the
+// programme list. Every mode that badges a status now says CALLING, in the
+// console's CALLING yellow (--st-calling #FACC15).
+const CALLING_RGB = 'rgb(250, 204, 21)';
+async function addCalling(page: import('@playwright/test').Page, opts: { noLive?: boolean } = {}) {
+  await page.evaluate(({ noLive }) => {
+    const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; render: () => void };
+    if (noLive) w.S.sessions = w.S.sessions.filter(s => s.status !== 'LIVE');
+    w.S.sessions.push({
+      id: 's5', title: 'Breakout: Captions', speaker: 'Eve Park', company: '',
+      room: 'Room C', status: 'CALLING', sort_order: 5,
+      planned_start: '2026-03-10T10:30:00', planned_end: '2026-03-10T11:15:00',
+      scheduled_start: '10:30:00', scheduled_end: '11:15:00', actual_start: null,
+    });
+    w.render();
+  }, opts);
+}
+
+for (const [mode, rowSel, badgeSel] of [
+  ['wayfinding', 'tr:has-text("Breakout: Captions")', '.wf-status'],
+  ['agenda', '.ag-card:has-text("Breakout: Captions")', '.ag-badge'],
+  ['timeline', '.tl-row:has-text("Breakout: Captions")', '.tl-badge'],
+  ['programme', '.pg-cell:has-text("Breakout: Captions")', '.pg-cell-badge'],
+] as const) {
+  test(`${mode} mode — a CALLING session reads CALLING in yellow, not READY`, async ({ page }) => {
+    await bootModeWithTimedSessions(page, mode);
+    await addCalling(page);
+    const badge = page.locator(`#content-area ${rowSel} ${badgeSel}`);
+    await expect(badge).toHaveText(/CALLING/);
+    await expect(badge).not.toHaveText(/READY/);
+    expect(await badge.evaluate(el => getComputedStyle(el).color)).toBe(CALLING_RGB);
+    // READY stays READY, in green
+    const ready = page.locator(`#content-area ${rowSel.replace('Breakout: Captions', 'Panel: Future of AI')} ${badgeSel}`);
+    await expect(ready).toHaveText(/READY/);
+    expect(await ready.evaluate(el => getComputedStyle(el).color)).toBe('rgb(52, 211, 153)');
+  });
+}
+
+test('header status — nothing live and a session calling reads CALLING', async ({ page }) => {
+  await bootModeWithTimedSessions(page, 'timeline');
+  await page.evaluate(() => {
+    const w = window as unknown as { S: { sessions: Record<string, unknown>[] }; render: () => void };
+    w.S.sessions = w.S.sessions.filter(s => s.status !== 'LIVE' && s.status !== 'READY');
+  });
+  await addCalling(page);
+  await page.evaluate(() => (window as unknown as { tick: () => void }).tick());   // tick() paints the header
+  const lbl = page.locator('#d-status-lbl');
+  await expect(lbl).toHaveText(/CALLING/);
+  expect(await lbl.evaluate(el => getComputedStyle(el).color)).toBe(CALLING_RGB);
+});
