@@ -154,6 +154,43 @@ test('list: a 140-character title and nine speakers stay inside the row', async 
   await ctx.close();
 });
 
+// Owner screenshot 9 Oct: "1 · rec · stream |". The note squeezed to a few pixels showed
+// only the left edge of its icon. At every width, an item on the speaker line is either
+// shown whole (the note: its icon and some text) or not shown at all.
+test('list: the speaker line never shows a sliver of a flag or the note', async ({ browser }) => {
+  const { ctx, page } = await openConsole(browser);
+  const bad: string[] = [];
+  for (let w = 1000; w <= 1700; w += 6) {
+    await page.setViewportSize({ width: w, height: 900 });
+    bad.push(...await page.evaluate((w) => {
+      const out: string[] = [];
+      document.querySelectorAll('#sessions-list .sc-extra').forEach(box => {
+        const b = box.getBoundingClientRect();
+        for (const el of Array.from(box.children) as HTMLElement[]) {
+          const r = el.getBoundingClientRect();
+          const visW = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+          const visH = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+          if (visW <= 0 || visH <= 0) continue;                        // not shown at all
+          const id = `${w}px ${box.closest('.sc')!.id} ${el.className} ${Math.round(visW)}x${Math.round(visH)}`;
+          if (visH < r.height - 0.5) out.push(id + ' cut vertically');
+          if (el.classList.contains('sc-notefirst')) { if (visW < 40) out.push(id + ' note squeezed'); }
+          else if (visW < r.width - 0.5 || r.width < el.scrollWidth - 0.5) out.push(id + ' flag cut');
+        }
+      });
+      return out;
+    }, w));
+  }
+  expect(bad).toEqual([]);
+  // With room, the flags and the note still show on the line.
+  await page.setViewportSize({ width: 1920, height: 900 });
+  const extra = page.locator(`#card-${PANEL_ID} .sc-extra`);
+  const eb = (await extra.boundingBox())!;
+  const nb = (await extra.locator('.sc-notefirst').boundingBox())!;
+  expect(nb.y).toBeLessThan(eb.y + eb.height);
+  expect(nb.width).toBeGreaterThan(100);
+  await ctx.close();
+});
+
 test('list: type matches the approved demo (14 px semibold title, 12 px speaker line, 6 px between rows)', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser);
   const row = page.locator(`#card-${ID(6)}`);

@@ -1540,9 +1540,15 @@
     .sc-who > * { flex: none; }
     .sc-who > .sc-flag { margin-inline-start: 8px; }
     .sc-spk-rest { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .sc-extra { flex: 1 1 0 !important; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
-    .sc-extra > * { flex: none; }
-    .sc-notefirst { flex: 0 1 auto !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    /* Owner bug 9 Oct ("stream |"): an item that does not fit wraps to a second line that the
+       one-line height hides, so a flag or the note shows whole or not at all, never a sliver. The
+       note stays on the line only with room for its icon and a few letters, then ellipsizes. The
+       empty ::before holds the first line, so even the first item wraps away when it is too wide. */
+    .sc-extra { flex: 1 1 0 !important; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; height: 1lh; overflow: hidden; }
+    .sc-extra::before { content: ''; width: 0; height: 1lh; }
+    .sc-extra > * { flex: none; margin-inline-start: 8px; }
+    .sc-extra > :first-child { margin-inline-start: 0; }
+    .sc-notefirst { flex: 1 1 48px !important; min-width: 48px; overflow: hidden; text-overflow: ellipsis; }
     .sc-notefirst > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .sc-flag { display: inline-flex; align-items: center; gap: 3px; }
     .sc-flag .ico { width: 14px; height: 14px; }
