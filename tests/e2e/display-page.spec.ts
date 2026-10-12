@@ -1826,3 +1826,86 @@ test.describe('Display: video screens roll in step', () => {
     expect(await page.evaluate(() => (document.querySelector('video.vl-video') as HTMLVideoElement).playbackRate)).toBe(1);
   });
 });
+
+// ── TURNED SCREEN (137) ─────────────────────────────────────────────────────
+// A TV on its side whose player sends a landscape picture: the page turns
+// itself by running in a portrait frame turned a quarter.
+test.describe('Display: TV on its side', () => {
+  // A worker's own fetches bypass page.route; the reload in R3 would otherwise
+  // reach the real project.
+  test.use({ serviceWorkers: 'block' });
+  const LAND = { width: 1280, height: 720 };
+  const frame = (page: Page) => page.frameLocator('#rot-frame');
+
+  test('R1 turn right: one frame, portrait inside, turned to cover the screen', async ({ page }) => {
+    await page.setViewportSize(LAND);
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation: 'portrait_right' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(frame(page).locator('.d-big-title')).toHaveText('Opening keynote');
+    await expect(page.locator('html')).toHaveClass(/rot-right/);
+    const inner = page.frame({ name: 'cuedeck-rotated' })!;
+    expect(await inner.evaluate(() => [innerWidth, innerHeight, document.body.classList.contains('portrait'),
+      matchMedia('(orientation: portrait)').matches])).toEqual([720, 1280, true, true]);
+    // The turned frame covers the landscape screen exactly.
+    const box = await page.locator('#rot-frame').evaluate(el => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); });
+    expect(box).toEqual([0, 0, 1280, 720]);
+    // Only the frame polls: the shell never boots the display itself.
+    expect(await page.evaluate('_booted')).toBe(false);
+    expect(await inner.evaluate('_booted')).toBe(true);
+  });
+
+  test('R2 turn left uses the other quarter turn and still covers the screen', async ({ page }) => {
+    await page.setViewportSize(LAND);
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation: 'portrait_left' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(frame(page).locator('.d-big-title')).toHaveText('Opening keynote');
+    await expect(page.locator('html')).toHaveClass(/rot-left/);
+    const box = await page.locator('#rot-frame').evaluate(el => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round); });
+    expect(box).toEqual([0, 0, 1280, 720]);
+  });
+
+  test('R3 set back to landscape: the screen drops the frame and forgets the turn', async ({ page }) => {
+    await page.setViewportSize(LAND);
+    let orientation = 'portrait_right';
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(frame(page).locator('.d-big-title')).toHaveText('Opening keynote');
+    orientation = 'landscape';
+    await expect(page.locator('#rot-frame')).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote');
+    expect(await page.evaluate(() => localStorage.getItem('cuedeck_display_rotate'))).toBeNull();
+  });
+
+  test('R4 a screen that is already portrait is not turned', async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 1280 });
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation: 'portrait_right' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote');
+    await page.waitForTimeout(2500);
+    await expect(page.locator('#rot-frame')).toHaveCount(0);
+    expect(await page.evaluate(() => document.body.classList.contains('portrait'))).toBe(true);
+  });
+
+  test('R5 plain Portrait on a landscape screen keeps today\'s behaviour (no turn)', async ({ page }) => {
+    await page.setViewportSize(LAND);
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation: 'portrait' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(page.locator('.d-big-title')).toHaveText('Opening keynote');
+    await page.waitForTimeout(2500);
+    await expect(page.locator('#rot-frame')).toHaveCount(0);
+  });
+
+  test('R6 the first tap makes the shell full screen, never the frame', async ({ page }) => {
+    await page.setViewportSize(LAND);
+    await page.addInitScript(() => {
+      (window as any).__fs = 0;
+      Element.prototype.requestFullscreen = function () { (window as any).__fs++; return Promise.resolve(); } as any;
+    });
+    await mockSupabase(page, { feed: () => makeFeed({ display: { orientation: 'portrait_right' } }) });
+    await page.goto(`${DISP_URL}${makeHash()}`);
+    await expect(frame(page).locator('.d-big-title')).toHaveText('Opening keynote');
+    await page.mouse.click(640, 360);
+    await expect.poll(() => page.evaluate('__fs')).toBe(1);
+    expect(await page.frame({ name: 'cuedeck-rotated' })!.evaluate('__fs')).toBe(0);
+  });
+});

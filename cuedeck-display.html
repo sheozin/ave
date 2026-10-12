@@ -335,6 +335,14 @@ body.mode-video.vl-chrome #disconnect-btn{opacity:1}
   letter-spacing:.01em;max-width:80vw;
 }
 
+/* ── TURNED SCREEN (137) ── a TV on its side that still sends a landscape
+   picture: the page runs in a portrait frame turned a quarter turn. */
+#rot-frame{position:fixed;top:0;left:0;width:100vh;height:100vw;border:0;
+  background:#000;transform-origin:0 0;z-index:2147483647}
+html.rot-right #rot-frame{transform:rotate(90deg) translateY(-100%)}
+html.rot-left  #rot-frame{transform:rotate(-90deg) translateX(-100%)}
+html.rot-shell body>*:not(#rot-frame){display:none!important}
+
 /* ── PORTRAIT ADJUSTMENTS ── */
 body.portrait .d-header{height:52px}
 body.portrait .d-big-title{font-size:clamp(28px,7vw,60px)}
@@ -513,9 +521,71 @@ function forgetCreds() {
 }
 
 // ═══════════════════════════════════════════════════
+// TURNED SCREEN (137)
+// ═══════════════════════════════════════════════════
+// A TV mounted on its side whose player still sends a landscape picture
+// (most TVs cannot turn it). The display's orientation says which way to turn
+// the picture. This page then becomes a shell holding one frame, sized
+// portrait and turned a quarter, and the real display runs inside it: there
+// every vw, vh, portrait rule and size check sees a portrait screen. The
+// choice is kept on the screen so the next start goes straight to the frame.
+const ROT_KEY = 'cuedeck_display_rotate';
+const ROT_FRAME_NAME = 'cuedeck-rotated';
+const IN_ROT_FRAME = window.name === ROT_FRAME_NAME && (() => {
+  try { return window.parent !== window && window.parent.location.origin === location.origin; }
+  catch (_) { return false; }
+})();
+let _parentFull = false;   // in the frame: is the shell full screen
+const rotFor = o => o === 'portrait_right' ? 'right' : o === 'portrait_left' ? 'left' : null;
+const savedRot = () => { try { return localStorage.getItem(ROT_KEY); } catch (_) { return null; } };
+
+// Called on every data update: switch to (or out of) the turned frame.
+function applyRotation(orientation) {
+  const want = rotFor(orientation);
+  const host = IN_ROT_FRAME ? window.parent : window;
+  const landscape = host.innerWidth > host.innerHeight;
+  const have = IN_ROT_FRAME ? savedRot() : null;
+  if (want === have) return;
+  if (!IN_ROT_FRAME && (!want || !landscape)) return;   // upright already
+  try {
+    if (want) localStorage.setItem(ROT_KEY, want); else localStorage.removeItem(ROT_KEY);
+  } catch (_) {}
+  if (savedRot() !== want) return;   // storage refused: never reload in a loop
+  host.location.reload();
+}
+
+// At start: become the shell when this screen was turned last time.
+function startRotatedShell() {
+  if (IN_ROT_FRAME) return false;
+  const rot = savedRot();
+  if ((rot !== 'right' && rot !== 'left') || window.innerWidth <= window.innerHeight) return false;
+  const root = document.documentElement;
+  root.classList.add('rot-shell', 'rot-' + rot);
+  const f = document.createElement('iframe');
+  f.id = 'rot-frame';
+  f.name = ROT_FRAME_NAME;
+  f.allow = 'autoplay; fullscreen';
+  f.src = location.pathname + location.search + location.hash;
+  document.body.appendChild(f);
+  f.addEventListener('load', () => { try { f.focus(); } catch (_) {} tell(); });
+  // Full screen must be the shell's: a full screen frame loses its turn.
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const tell = () => { try { f.contentWindow.postMessage({ cd: 'fs-state', on: isFull() }, location.origin); } catch (_) {} };
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || e.source !== f.contentWindow || e.data?.cd !== 'fs') return;
+    const req = root.requestFullscreen || root.webkitRequestFullscreen;
+    try { const p = req && req.call(root); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+  });
+  document.addEventListener('fullscreenchange', tell);
+  document.addEventListener('webkitfullscreenchange', tell);
+  return true;
+}
+
+// ═══════════════════════════════════════════════════
 // BOOT FROM URL PARAMS / SAVED PAIRING
 // ═══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
+  if (startRotatedShell()) return;
   // Try hash params first (works with file://), then query params (works with http://)
   const fromHash  = new URLSearchParams(window.location.hash.slice(1));
   const fromQuery = new URLSearchParams(window.location.search);
@@ -905,7 +975,8 @@ function applyFeed(feed) {
   S.stageMessages = stageMessages;
 
   if (S.event?.brand_color) document.documentElement.style.setProperty('--brand', S.event.brand_color);
-  document.body.classList.toggle('portrait', D?.orientation === 'portrait');
+  document.body.classList.toggle('portrait', !!D?.orientation?.startsWith('portrait'));
+  applyRotation(D?.orientation);
 
   if (!_booted || !prevD) return;  // first render happens in startDisplay
 
@@ -2456,7 +2527,9 @@ window.addEventListener('online', () => pollFeed());
 
   makeTapHint('fs-hint');
 
-  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  // (137) In the turned frame the shell goes full screen, and says so.
+  const isFull = () => IN_ROT_FRAME ? _parentFull
+    : !!(document.fullscreenElement || document.webkitFullscreenElement);
   let eatKeyUp = null;
   const arm = on => { _fsArmed = on; updateTapHints(); };
   // Only a paired screen showing content swallows the tap.
@@ -2464,7 +2537,8 @@ window.addEventListener('online', () => pollFeed());
   const swallow = e => { e.preventDefault(); e.stopImmediatePropagation(); };
   const go = () => {
     arm(false);
-    try { const p = request.call(root); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    if (IN_ROT_FRAME) window.parent.postMessage({ cd: 'fs' }, location.origin);
+    else try { const p = request.call(root); if (p && p.catch) p.catch(() => {}); } catch (_) {}
     if (_audioUnlockHandler) _audioUnlockHandler();
   };
 
@@ -2499,6 +2573,10 @@ window.addEventListener('online', () => pollFeed());
   }, true);
 
   const onChange = () => arm(!isFull());
+  window.addEventListener('message', e => {
+    if (!IN_ROT_FRAME || e.source !== window.parent || e.data?.cd !== 'fs-state') return;
+    _parentFull = !!e.data.on; onChange();
+  });
   document.addEventListener('fullscreenchange', onChange);
   document.addEventListener('webkitfullscreenchange', onChange);
   arm(!isFull());

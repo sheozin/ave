@@ -2512,6 +2512,8 @@
         <select id="dm-orient">
           <option value="landscape">Landscape (16:9)</option>
           <option value="portrait">Portrait (9:16)</option>
+          <option value="portrait_right">Portrait, TV on its side, turn right</option>
+          <option value="portrait_left">Portrait, TV on its side, turn left</option>
         </select>
       </label>
     </div>
@@ -5854,6 +5856,7 @@ function renderSignagePanel() {
   const now = Date.now();
   const ONLINE_MS = 60_000;
 
+  const ORIENT_LABEL = { portrait_right: 'portrait, turned right', portrait_left: 'portrait, turned left' };
   const displayCards = S.displays.length
     ? S.displays.map(d => {
         const lastSeen = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
@@ -5872,7 +5875,7 @@ function renderSignagePanel() {
             </div>
             <div class="sp-disp-meta">
               <span class="sp-disp-mode">${esc(d.content_mode)}</span>
-              <span>${orientIcon} ${esc(d.orientation)}</span>
+              <span>${orientIcon} ${esc(ORIENT_LABEL[d.orientation] || d.orientation)}</span>
               ${d.filter_room ? `<span>${icon('door')} ${esc(d.filter_room)}</span>` : ''}
               ${d.sequence?.length ? `<span class="sp-seq-tag">${icon('refresh')} ${d.sequence.length} slides</span>` : ''}
               ${d.content_mode === 'video' && d.video_url ? (() => { const dur = videoDuration(d.video_url); return `<span>${icon('timer')} ${dur ? 'Loop ' + fmtLoop(dur) : 'Loop'} · ${d.video_sync === false ? 'own loop' : 'in step'}</span>`; })() : ''}
@@ -9931,6 +9934,8 @@ function renderWizStep() {
       <label>Orientation<select id="wiz-disp-orient">
         <option value="landscape">Landscape</option>
         <option value="portrait">Portrait</option>
+        <option value="portrait_right">Portrait, TV on its side, turn right</option>
+        <option value="portrait_left">Portrait, TV on its side, turn left</option>
       </select></label>
       <div class="wiz-hint">Launch the display URL on any screen: TV, tablet or monitor.</div>`;
   }

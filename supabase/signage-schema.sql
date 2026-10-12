@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS leod_signage_displays (
   name            TEXT          NOT NULL,                          -- e.g. "Lobby Screen A"
   zone_type       TEXT          NOT NULL DEFAULT 'lobby'           -- lobby | registration | prefunction | breakroom | stage | custom
                   CHECK (zone_type IN ('lobby','registration','prefunction','breakroom','stage','custom')),
-  orientation     TEXT          NOT NULL DEFAULT 'landscape'       -- landscape | portrait
-                  CHECK (orientation IN ('landscape','portrait')),
+  orientation     TEXT          NOT NULL DEFAULT 'landscape'       -- landscape | portrait | portrait_right | portrait_left (137)
+                  CHECK (orientation IN ('landscape','portrait','portrait_right','portrait_left')),
   content_mode    TEXT          NOT NULL DEFAULT 'schedule'        -- schedule | wayfinding | sponsors | break | wifi | recall | custom
                   CHECK (content_mode IN ('schedule','wayfinding','sponsors','break','wifi','recall','custom')),
   filter_room     TEXT,                                            -- NULL = show all rooms; set = filter to specific room
