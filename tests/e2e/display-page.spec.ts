@@ -1806,14 +1806,15 @@ test.describe('Display: video screens roll in step', () => {
     const a = await open();
     await a.waitForTimeout(2500);
     const b = await open();
-    await b.waitForTimeout(6000);   // a few correction rounds
     // Both against the shared clock, read at the same instant.
     const read = (p: Page) => p.evaluate(() => { const v = document.querySelector('video.vl-video') as HTMLVideoElement;
       const target = ((Date.now() + ((window as any).S.clockOffset || 0)) / 1000) % v.duration;
       let d = v.currentTime - target; if (d > v.duration / 2) d -= v.duration; if (d < -v.duration / 2) d += v.duration; return d; });
-    const [da, db] = await Promise.all([read(a), read(b)]);
-    expect(Math.abs(da), 'screen A off the clock by ' + da.toFixed(2) + ' s').toBeLessThan(0.3);
-    expect(Math.abs(db), 'screen B off the clock by ' + db.toFixed(2) + ' s').toBeLessThan(0.3);
+    // A gap under 1 s is closed by playing at most 5% faster or slower, so a
+    // screen that starts 0.9 s off needs about 18 s. A fixed 6 s wait failed
+    // whenever a screen started 0.3-1 s off; wait for the design's bound.
+    await expect.poll(async () => (await Promise.all([read(a), read(b)])).map(d => Math.abs(d) < 0.3),
+      { timeout: 30_000, intervals: [500], message: 'screens A and B within 0.3 s of the shared clock' }).toEqual([true, true]);
   });
 
   test('S2 a screen set to its own loop is not steered', async ({ page }) => {

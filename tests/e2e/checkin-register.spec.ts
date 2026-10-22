@@ -448,7 +448,7 @@ test('embedded: the form card only, sized by embed.js, and links from emails nev
   const sent = await setup(page);
   // A host page on another origin would be the organizer's site; here the
   // local server plays both, which is enough for the height handshake.
-  await page.route('http://127.0.0.1:7271/host.html', r => r.fulfill({ contentType: 'text/html', body:
+  await page.route('**/host.html', r => r.fulfill({ contentType: 'text/html', body:
     '<!doctype html><body style="margin:0"><iframe id="f" src="/cuedeck-register.html?code=' + CODE + '&embed=1#t=' + 'T'.repeat(43) + '" style="width:420px;border:0;height:150px"></iframe>'
     + '<script src="/embed.js"></script></body>' }));
   await page.goto('/host.html');

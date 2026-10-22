@@ -656,7 +656,9 @@ test('registration tab: the automatic waitlist switch shows with the waitlist an
 });
 
 test('reports tab: registration analytics show visitors, conversion, sources and sales', async ({ page }) => {
-  const day = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  // The page's clock is FIXED_NOW; days counted from the real date fall out of
+  // its 30-day chart once the calendar passes FIXED_NOW.
+  const day = (n: number) => new Date(FIXED_NOW.getTime() - n * 864e5).toISOString().slice(0, 10);
   await page.setViewportSize({ width: 1280, height: 1400 });
   await open(page, { role: 'organizer', status: 'live' }, 'reports', STAFF, async () => {
     await rpc(page, 'checkin_registration_analytics', { test: false, visitors: 400,
@@ -675,7 +677,7 @@ test('reports tab: registration analytics show visitors, conversion, sources and
   await expect(page.locator('#an-more')).toContainText('12 paid');
   await expect(page.locator('#an-more')).toContainText('4 left before paying');
   await expect(page.locator('#an-chart rect')).toHaveCount(4);
-  await page.locator('#an-box').screenshot({ path: '/private/tmp/claude-501/-Users-sheriff/c9550fac-82d8-442e-9240-0a373142a028/scratchpad/tix/analytics.png' });
+  await page.locator('#an-box').screenshot({ path: test.info().outputPath('analytics.png') });
 });
 
 test('settings tab: a webhook is added, its secret shown once, and tested', async ({ page }) => {
