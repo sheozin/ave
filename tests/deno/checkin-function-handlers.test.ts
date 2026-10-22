@@ -1731,6 +1731,28 @@ Deno.test(`${WH}: a name resolving to a private address is never called`, async 
   } finally { globalThis.fetch = real }
 })
 
+Deno.test(`${WH}: a silent receiver gets one attempt a run and does not hold up other organizers`, async () => {
+  whSetup(['93.184.216.34'])
+  const slow = 'https://slow.example.com/in', fast = 'https://hooks.example.com/in'
+  world.rpcResult.checkin_webhooks_due = [1, 2, 3].map(id => ({ id, topic: 'guest.created', payload: {}, url: slow, secret: 's' }))
+    .concat([4, 5].map(id => ({ id, topic: 'guest.created', payload: {}, url: fast, secret: 's' })))
+  const hits: string[] = []
+  const real = globalThis.fetch
+  globalThis.fetch = (async (i: Request | URL | string, init?: RequestInit) => {
+    const u = String(i instanceof Request ? i.url : i)
+    if (u.startsWith(slow)) { hits.push('slow'); throw new DOMException('timed out', 'TimeoutError') }
+    if (u.startsWith(fast)) { hits.push('fast'); return new Response('ok') }
+    return real(i, init)
+  }) as typeof fetch
+  try {
+    await call(WH, {})
+    const results = world.rpcCalls.filter(c => c.name === 'checkin_webhook_result').map(c => c.args)
+    assert(hits.filter(h => h === 'slow').length === 1, 'slow receiver called ' + hits.filter(h => h === 'slow').length + ' times')
+    assert(results.filter(a => a.p_ok === true).map(a => a.p_id).sort().join() === '4,5', JSON.stringify(results))
+    assert(results.filter(a => a.p_ok === false).map(a => a.p_id).join() === '1', 'only the first slow delivery is marked: ' + JSON.stringify(results))
+  } finally { globalThis.fetch = real }
+})
+
 // (128) White label: every guest email drops CueDeck when it is on, and
 // keeps the credit when it is off.
 Deno.test('white label: guest emails carry no CueDeck credit when on', async () => {

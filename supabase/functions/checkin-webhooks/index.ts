@@ -19,6 +19,7 @@ import { isPrivateIp }  from '../_shared/net-guard.ts'
 
 const JOB = 'checkin-webhooks'
 const BUDGET_MS = 45_000
+const PER_URL_PER_RUN = 50   // one receiver's share of a run's 200
 
 async function checkTarget(raw: string): Promise<string | null> {
   let u: URL
@@ -65,32 +66,44 @@ Deno.serve(async (req) => {
   try {
     const { data: due, error } = await sb.rpc('checkin_webhooks_due', { p_limit: 200 })
     if (error) throw new Error('due: ' + error.message)
-    const targets = new Map<string, string | null>()   // url -> problem, checked once a run
-    for (const d of (due ?? []) as { id: number; topic: string; payload: unknown; url: string; secret: string }[]) {
-      if (Date.now() - started > BUDGET_MS) break     // the rest go next minute
-      let ok = false, detail = ''
-      try {
-        if (!targets.has(d.url)) targets.set(d.url, await checkTarget(d.url))
-        const problem = targets.get(d.url)
-        if (problem) throw new Error('refused: ' + problem)
-        const payload = JSON.stringify(d.payload)
-        const t = Math.floor(Date.now() / 1000)
-        const r = await fetch(d.url, {
-          method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10_000),
-          headers: { 'Content-Type': 'application/json', 'User-Agent': 'CueDeck-Webhooks/1', 'X-CueDeck-Event': d.topic,
-                     'X-CueDeck-Delivery': String(d.id), 'X-CueDeck-Signature': 't=' + t + ',v1=' + await sign(d.secret, t, payload) },
-          body: payload,
-        })
-        await r.body?.cancel()
-        ok = r.status >= 200 && r.status < 300
-        detail = 'HTTP ' + r.status
-      } catch (e) {
-        detail = (e as Error).name === 'TimeoutError' ? 'timed out after 10 s' : (e as Error).message.slice(0, 200)
-      }
-      const { data: res, error: rErr } = await sb.rpc('checkin_webhook_result', { p_id: d.id, p_ok: ok, p_detail: detail })
-      if (rErr) { problems.push('result ' + d.id + ': ' + rErr.message); continue }
-      if (res === 'sent') counts.sent++; else if (res === 'failed') counts.failed++; else if (res === 'retry') counts.retry++
+    // One lane per receiver URL, run side by side, so a slow or silent
+    // receiver only ever holds up its own deliveries: it gets one 10 s
+    // attempt per run, the rest of its queue waits for the next minute,
+    // and every other organizer's webhooks go out meanwhile.
+    type Due = { id: number; topic: string; payload: unknown; url: string; secret: string }
+    const lanes = new Map<string, Due[]>()
+    for (const d of (due ?? []) as Due[]) {
+      const lane = lanes.get(d.url)
+      if (lane) { if (lane.length < PER_URL_PER_RUN) lane.push(d) } else lanes.set(d.url, [d])
     }
+    await Promise.all([...lanes.entries()].map(async ([url, lane]) => {
+      const problem = await checkTarget(url)   // checked once a run per URL
+      for (const d of lane) {
+        if (Date.now() - started > BUDGET_MS) return     // the rest go next minute
+        let ok = false, detail = '', stalled = false
+        try {
+          if (problem) throw new Error('refused: ' + problem)
+          const payload = JSON.stringify(d.payload)
+          const t = Math.floor(Date.now() / 1000)
+          const r = await fetch(d.url, {
+            method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(10_000),
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'CueDeck-Webhooks/1', 'X-CueDeck-Event': d.topic,
+                       'X-CueDeck-Delivery': String(d.id), 'X-CueDeck-Signature': 't=' + t + ',v1=' + await sign(d.secret, t, payload) },
+            body: payload,
+          })
+          await r.body?.cancel()
+          ok = r.status >= 200 && r.status < 300
+          detail = 'HTTP ' + r.status
+        } catch (e) {
+          stalled = (e as Error).name === 'TimeoutError'
+          detail = stalled ? 'timed out after 10 s' : (e as Error).message.slice(0, 200)
+        }
+        const { data: res, error: rErr } = await sb.rpc('checkin_webhook_result', { p_id: d.id, p_ok: ok, p_detail: detail })
+        if (rErr) { problems.push('result ' + d.id + ': ' + rErr.message); continue }
+        if (res === 'sent') counts.sent++; else if (res === 'failed') counts.failed++; else if (res === 'retry') counts.retry++
+        if (stalled) return                              // this receiver is not answering: try it again next run
+      }
+    }))
   } catch (e) { problems.push((e as Error).message) }
 
   // A receiver that refuses is the organizer's to fix (shown in Event
