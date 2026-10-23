@@ -94,27 +94,27 @@ export function founderWelcomeEmail(user: UserData) {
 
   const content = `
     <div class="content">
-      <h1>Welcome to CueDeck, ${firstName}! 🎉</h1>
+      <h1>Welcome to CueDeck, ${firstName}!</h1>
 
-      <p>I noticed you just logged into CueDeck for the first time – welcome aboard!</p>
+      <p>I noticed you just signed in to CueDeck for the first time. Welcome aboard!</p>
 
       <p>I'm ${BRAND.founder.name}, the founder of CueDeck. I built this because I've seen too many live events fall apart due to miscommunication between directors, stage managers, and AV teams. CueDeck is the command center I wish I had.</p>
 
       <p>Here's how to get the most out of your first session:</p>
 
       <ul>
-        <li><strong>1. Create your first event</strong> – Takes about 2 minutes. Just name it and set the date.</li>
-        <li><strong>2. Invite your team</strong> – They'll each get role-specific dashboards (Director, Stage, AV, etc.)</li>
-        <li><strong>3. Run a test session</strong> – See how the 8-state session machine keeps everyone in sync.</li>
+        <li><strong>1. Create your first event.</strong> It takes about 2 minutes: name it and set the date.</li>
+        <li><strong>2. Invite your team.</strong> Each person gets the view for their role (Director, Stage, AV and more).</li>
+        <li><strong>3. Run a test session.</strong> See how every screen stays in step as it goes live.</li>
       </ul>
 
       <a href="${BRAND.app}" class="cta-button">Open CueDeck Dashboard →</a>
 
       <div class="tip-box">
-        <strong>💡 Pro tip:</strong> Press <code style="background:#e5e7eb;padding:2px 6px;border-radius:4px;">Ctrl+K</code> anywhere in the app for the command palette. It's the fastest way to navigate.
+        <strong>Tip:</strong> Press <code style="background:#e5e7eb;padding:2px 6px;border-radius:4px;">Ctrl+K</code> anywhere in the app for the command palette. It's the fastest way to navigate.
       </div>
 
-      <p>Reply to this email anytime – it comes directly to me, and I read every single one. I'd love to hear what brought you to CueDeck.</p>
+      <p>Reply to this email anytime: I read every one, and I'd love to hear what brought you to CueDeck.</p>
 
       <div class="signature">
         <p class="signature-name">${BRAND.founder.name}</p>
@@ -129,21 +129,21 @@ export function founderWelcomeEmail(user: UserData) {
     text: `
 Welcome to CueDeck, ${firstName}!
 
-I noticed you just logged into CueDeck for the first time – welcome aboard!
+I noticed you just signed in to CueDeck for the first time. Welcome aboard!
 
 I'm ${BRAND.founder.name}, the founder of CueDeck. I built this because I've seen too many live events fall apart due to miscommunication between directors, stage managers, and AV teams.
 
 Here's how to get the most out of your first session:
 
-1. Create your first event – Takes about 2 minutes
-2. Invite your team – They'll get role-specific dashboards
-3. Run a test session – See how the 8-state machine works
+1. Create your first event: it takes about 2 minutes
+2. Invite your team: each person gets the view for their role
+3. Run a test session: see every screen stay in step
 
-Pro tip: Press Ctrl+K anywhere for the command palette.
+Tip: press Ctrl+K anywhere for the command palette.
 
 Open Dashboard: ${BRAND.app}
 
-Reply to this email anytime – I read every one.
+Reply to this email anytime: I read every one.
 
 ${BRAND.founder.name}
 ${BRAND.founder.title}, CueDeck
