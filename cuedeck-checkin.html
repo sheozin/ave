@@ -1597,6 +1597,7 @@ const rolesReady = KIOSK ? Promise.resolve() : loadRoles();
 // ═══════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  cdAuth.watch(sb, onSignInExpired);
 
   // The kiosk must NOT ask for a session, and must not be reachable by
   // signing in either — a public touchscreen holding a live crew session
@@ -1638,6 +1639,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     await showPicker();
   } else {
     showScreen('signin');
+    const expired = cdAuth.expiredNotice();
+    if (expired) document.getElementById('si-err').textContent = expired;
     document.getElementById('si-email').focus();
   }
 });
@@ -1762,9 +1765,20 @@ async function handleSignIn(e) {
 
 async function signOut() {
   stopHeartbeat();   // before the await: no beat may go out mid sign-out
-  await sb.auth.signOut();
+  await cdAuth.signOut(sb);
+  leaveToSignIn();
+}
+function leaveToSignIn() {
   S.user = null; S.event = null; S.role = null; S.roster = []; S.party = null; S.own = new Map();
   showScreen('signin');
+}
+// A sign-in that expires on the desk (12 h unused, or 7 days old) lands on
+// the sign-in card with the reason. Check-ins waiting to sync stay in this
+// browser's outbox and go out once someone signs in again.
+function onSignInExpired() {
+  stopHeartbeat();
+  leaveToSignIn();
+  document.getElementById('si-err').textContent = cdAuth.expiredNotice() + ' Check-ins waiting to sync are kept on this device.';
 }
 
 // ═══════════════════════════════════════════════════

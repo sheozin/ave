@@ -190,6 +190,7 @@ export interface Scenario {
   rpcFail?: string[];            // RPC names that answer 500; read on every request, so a test may change it
   tableFail?: string[];          // tables whose GET answers 500; read on every request, so a test may change it
   waitBoot?: boolean;            // false: return once the page has loaded, boot may stop on a screen
+  sessionOnce?: boolean;         // seed the signed-in session on the first load only, so a sign-out survives a reload
 }
 
 const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -225,8 +226,10 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
   const token = b64url({ alg: 'HS256', typ: 'JWT' }) + '.' + b64url({ sub: USER_ID, role: 'authenticated', exp, email }) + '.c2ln';
   const session = { access_token: token, token_type: 'bearer', expires_in: 3600, expires_at: exp, refresh_token: 'demo-refresh',
     user: { id: USER_ID, email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-06-01T00:00:00Z' } };
-  await ctx.addInitScript(([k, v, uid, r, loc]) => {
+  await ctx.addInitScript(([k, v, uid, r, loc, once]) => {
     try {
+      if (once && sessionStorage.getItem('__seeded')) return;
+      if (once) sessionStorage.setItem('__seeded', '1');
       localStorage.setItem(k, v);
       localStorage.setItem('cuedeck_last_role_' + uid, r);
       localStorage.setItem('cuedeck_ck_' + uid + '_dismissed', '1');
@@ -292,7 +295,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
       return String(url).includes('supabase.co') ? new FakeWS(url) : new Native(url, p);
     } as any;
     Object.assign((window as any).WebSocket, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
-  }, ['sb-sawekpguemzvuvvulfbc-auth-token', JSON.stringify(session), USER_ID, role, sc.locale ?? 'en']);
+  }, ['sb-sawekpguemzvuvvulfbc-auth-token', JSON.stringify(session), USER_ID, role, sc.locale ?? 'en', !!sc.sessionOnce] as const);
 
   // External CDNs: deterministic and offline.
   await ctx.route('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2', r =>

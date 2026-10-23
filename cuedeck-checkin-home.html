@@ -203,7 +203,7 @@ function navUser(text, withSignOut) {
     acct.onclick = openAccount;
     nav.appendChild(acct);
     const out = el('button', 'link', 'Sign out');
-    out.onclick = async () => { pwFlag('clear'); await sb.auth.signOut(); location.href = '/checkin'; };
+    out.onclick = async () => { pwFlag('clear'); await cdAuth.signOut(sb); location.href = '/checkin'; };
     nav.appendChild(out);
   }
 }
@@ -442,7 +442,7 @@ function openAccount() {
 $('ac-close').onclick = () => $('dlg-acct').close();
 $('ac-all').onclick = async () => {
   busy($('ac-all'), true, 'Signing out…');
-  const { error } = await sb.auth.signOut({ scope: 'global' });
+  const { error } = await cdAuth.signOut(sb, { scope: 'global' });
   if (error) { busy($('ac-all'), false, 'Sign out on all devices'); $('ac-err').textContent = cdAuth.message(error); return; }
   pwFlag('clear'); location.href = '/checkin';
 };
@@ -568,7 +568,9 @@ if (session && NEEDS_PASSWORD) {
   show('v-pass'); $('pw-1').focus();
 }
 else if (session) await enter(session.user);
-else { show('v-out'); tab('in'); cap(); }
+else { show('v-out'); tab('in'); cap(); const expired = cdAuth.expiredNotice(); if (expired) $('in-err').textContent = expired; }
+// An expired sign-in comes back here, where the sign-in tab says why.
+cdAuth.watch(sb, () => { location.href = '/checkin'; });
 </script>
 </body>
 </html>

@@ -1399,7 +1399,17 @@
 
   async function doLogout() {
     stopInactivityWatcher();
-    await sb.auth.signOut();
+    await cdAuth.signOut(sb);
+    showLoginScreen();
+  }
+  // An expired sign-in returns to the sign-in screen with the reason.
+  cdAuth.watch(sb, function () {
+    stopInactivityWatcher();
+    showLoginScreen();
+    $('login-error').textContent = cdAuth.expiredNotice();
+  });
+
+  function showLoginScreen() {
     currentUser = null;
     adminProfile = null;
     $('app-shell').classList.remove('visible');

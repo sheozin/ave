@@ -8250,6 +8250,8 @@ function showLoginForm() {
   document.getElementById('reset-form').style.display             = 'none';
   document.getElementById('confirm-email-screen').style.display   = 'none';
   document.getElementById('login-form').style.display             = 'flex';
+  const expired = cdAuth.expiredNotice();
+  if (expired) document.getElementById('lf-error').textContent = expired;
   document.getElementById('lf-email').focus();
 }
 function showResetForm() {
@@ -9597,7 +9599,7 @@ async function loadUserRole() {
 }
 
 async function doLogout() {
-  await sb.auth.signOut();
+  await cdAuth.signOut(sb);
   location.reload();
 }
 
@@ -9627,12 +9629,13 @@ async function initAuth() {
   }
 }
 
-// Handle auth state changes — sign-out reloads, sign-in (from email
+// Handle auth state changes — sign-in (from email
 // confirmation in another tab) cancels polling and boots directly.
+// An expired sign-in reloads to the sign-in form, which says why; the
+// person's own sign-out (doLogout) reloads itself.
+cdAuth.watch(sb, () => location.reload());
 sb.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_OUT') {
-    location.reload();
-  } else if (event === 'SIGNED_IN' && session) {
+  if (event === 'SIGNED_IN' && session) {
     // Only act if we are currently on the confirm-email screen (polling).
     // This fires when the user clicks the confirmation link in any tab.
     const confirmScreen = document.getElementById('confirm-email-screen');
