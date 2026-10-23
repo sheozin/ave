@@ -1772,13 +1772,15 @@ function leaveToSignIn() {
   S.user = null; S.event = null; S.role = null; S.roster = []; S.party = null; S.own = new Map();
   showScreen('signin');
 }
-// A sign-in that expires on the desk (12 h unused, or 7 days old) lands on
-// the sign-in card with the reason. Check-ins waiting to sync stay in this
+// Any sign-out on the desk (here, in another tab, or a sign-in that ended
+// after 12 h unused or 7 days) lands on the sign-in card, with the reason
+// when it was not asked for. Check-ins waiting to sync stay in this
 // browser's outbox and go out once someone signs in again.
 function onSignInExpired() {
   stopHeartbeat();
   leaveToSignIn();
-  document.getElementById('si-err').textContent = cdAuth.expiredNotice() + ' Check-ins waiting to sync are kept on this device.';
+  const why = cdAuth.expiredNotice();
+  if (why) document.getElementById('si-err').textContent = why + ' Check-ins waiting to sync are kept on this device.';
 }
 
 // ═══════════════════════════════════════════════════

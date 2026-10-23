@@ -1402,7 +1402,7 @@
     await cdAuth.signOut(sb);
     showLoginScreen();
   }
-  // An expired sign-in returns to the sign-in screen with the reason.
+  // Any sign-out returns to the sign-in screen; the reason shows when it was not asked for.
   cdAuth.watch(sb, function () {
     stopInactivityWatcher();
     showLoginScreen();

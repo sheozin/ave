@@ -44,17 +44,18 @@ describe('session expiry', () => {
     expect(cd.expiredNotice()).toMatch(/signed out: sign-ins end after 12 hours without use, and 7 days after you signed in/);
     expect(cd.expiredNotice()).toBe('');
   });
-  it('the person\'s own sign-out is not an expiry, in this tab or another', async () => {
-    const sb = fakeSb(); const onExpired = vi.fn();
-    cd.watch(sb, onExpired);
+  it('the person\'s own sign-out still leaves the page (every tab), with no expiry message', async () => {
+    const sb = fakeSb(); const onSignedOut = vi.fn();
+    cd.watch(sb, onSignedOut);
     await cd.signOut(sb);
     sb.fire('SIGNED_OUT');
     expect(sb.auth.signOut).toHaveBeenCalledTimes(1);
-    expect(onExpired).not.toHaveBeenCalled();
+    expect(onSignedOut).toHaveBeenCalledTimes(1);   // another open tab leaves too
     expect(cd.expiredNotice()).toBe('');
-    vi.advanceTimersByTime(61e3);   // a minute later the same event is an expiry again
+    vi.advanceTimersByTime(61e3);   // a minute later the same event counts as an expiry
     sb.fire('SIGNED_OUT');
-    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(onSignedOut).toHaveBeenCalledTimes(2);
+    expect(cd.expiredNotice()).not.toBe('');
   });
   it('warns only in the last 24 hours of the 7-day sign-in', () => {
     const now = Date.parse('2026-10-23T09:00:00Z');

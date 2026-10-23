@@ -160,13 +160,17 @@
     return 'Your sign-in ends ' + day + ' at ' + hm + '. Sign out and back in before then, so it does not end in the middle of your event.';
   }
 
-  // Call once per page. onExpired runs when the sign-in ends without the
-  // person asking (the page shows its sign-in screen; expiredNotice() says why).
-  function watch(sb, onExpired) {
+  // Call once per page. onSignedOut runs on every sign-out, in this tab or
+  // another: the page shows its sign-in screen, and expiredNotice() says why
+  // when the person did not ask for it.
+  function watch(sb, onSignedOut) {
     sb.auth.onAuthStateChange(function (event) {
       if (event === 'SIGNED_OUT') {
         banner('');
-        if (!wasOwn()) { store(EXPIRED_KEY, '1'); if (onExpired) onExpired(); }
+        // Every sign-out leaves the page (another tab's included); only the
+        // message on the sign-in screen depends on whether it was asked for.
+        if (!wasOwn()) store(EXPIRED_KEY, '1');
+        if (onSignedOut) onSignedOut();
       }
     });
     function check() {

@@ -9631,8 +9631,8 @@ async function initAuth() {
 
 // Handle auth state changes — sign-in (from email
 // confirmation in another tab) cancels polling and boots directly.
-// An expired sign-in reloads to the sign-in form, which says why; the
-// person's own sign-out (doLogout) reloads itself.
+// Any sign-out (here, in another tab, or one that ended by itself) reloads
+// to the sign-in form, which says why when it was not asked for.
 cdAuth.watch(sb, () => location.reload());
 sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' && session) {
