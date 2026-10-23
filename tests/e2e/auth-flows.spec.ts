@@ -38,6 +38,18 @@ test.describe('Auth: login form structure', () => {
     await expect(page.locator('#login-form')).toBeAttached();
   });
 
+  // 2026-10-23: Retry showed on every sign-in screen (.btn beat [hidden]) and,
+  // clicked with nobody signed in, opened an empty console as a "??" user.
+  test('01b the sign-in screen has no Retry, and Retry without a login goes to sign in', async ({ page }) => {
+    await page.goto(`${BASE}/cuedeck-console.html`);
+    await expect(page.locator('#lf-email')).toBeVisible();
+    await expect(page.locator('#boot-retry')).toBeHidden();
+    await page.evaluate(() => (window as any).retryBoot());
+    await expect(page.locator('#lf-email')).toBeVisible();
+    await expect(page.locator('#loading-overlay')).toBeVisible();
+    expect(await page.evaluate('S.booted')).toBeFalsy();
+  });
+
   test('02 login form has email input', async ({ page }) => {
     await page.goto(`${BASE}/cuedeck-console.html`);
     await expect(page.locator('#lf-email')).toBeAttached();

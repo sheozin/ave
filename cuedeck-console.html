@@ -135,6 +135,8 @@
     .load-logo { display: flex; align-items: center; justify-content: center; }
     .load-logo svg { height: 40px; width: auto; }
     .load-step { font-size: var(--fs-12); color: var(--dim); min-height: 18px; }
+    /* .btn's display beat the hidden attribute, so Retry showed on every sign-in screen. */
+    #boot-retry[hidden], #boot-who[hidden] { display: none; }
     .spinner {
       width: 22px; height: 22px;
       border: 2px solid var(--border);
@@ -10317,6 +10319,8 @@ function showBootRetry(msg) {
 }
 function retryBoot() {
   document.getElementById('boot-retry').hidden = true;
+  // Nobody signed in: Retry is a sign-in, never a console without a user.
+  if (!S.user) { document.getElementById('boot-who').hidden = true; showLoginForm(); return; }
   document.getElementById('boot-who').hidden = true;
   document.getElementById('load-spinner').style.display = '';
   setStep('Connecting…');
