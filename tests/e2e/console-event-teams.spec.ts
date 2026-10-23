@@ -501,6 +501,25 @@ test('boot: a failed events read with nothing of your own keeps a clear message 
   } finally { await ctx.close(); }
 });
 
+// A failed profile read opened the console with a nameless "??" user, and
+// Retry then carried on as whatever login the browser had saved (2026-10-23).
+test('boot: a failed profile read stops with Retry, says who is signed in, and offers Sign out', async ({ browser }) => {
+  const fail = ['leod_users'];
+  const { ctx, page } = await openConsole(browser, { role: 'director', tableFail: fail, waitBoot: false });
+  try {
+    await expect(page.locator('#load-step').first()).toHaveText('Could not start the console. Check your connection and try again.', { timeout: 30_000 });
+    await expect(page.locator('#boot-retry')).toBeVisible();
+    await expect(page.locator('#boot-who-text')).toHaveText(/^Signed in as \S+@\S+$/);
+    await expect(page.locator('#boot-signout')).toBeVisible();
+    expect(await evalPage(page, 'S.event')).toBeNull();
+    fail.length = 0;                   // the connection is back
+    await page.locator('#boot-retry').click();
+    await expect(page.locator('#loading-overlay')).toBeHidden({ timeout: 30_000 });
+    await expect(page.locator('#boot-who')).toBeHidden();
+    expect(await evalPage(page, 'S.userName')).not.toBe('');
+  } finally { await ctx.close(); }
+});
+
 test('boot: a failed events read never locks the creator out of their own events', async ({ browser }) => {
   const { ctx, page } = await openConsole(browser, { role: 'director', rpcFail: ['cuedeck_my_events'], myEvents: [
     { id: EVENT_ID, name: 'GTR North Africa 2026', role: 'director', isOwner: true },

@@ -2068,6 +2068,7 @@
   <div class="spinner" id="load-spinner"></div>
   <div class="load-step" id="load-step">Connecting…</div>
   <button type="button" id="boot-retry" class="btn primary" hidden onclick="retryBoot()">Retry</button>
+  <div id="boot-who" class="load-step" hidden><span id="boot-who-text"></span> <button type="button" class="btn sm ghost" onclick="doLogout()" id="boot-signout">Sign out</button></div>
   <form id="login-form" onsubmit="handleLoginSubmit(event)">
     <div class="lf-title">Operator sign in</div>
     <input id="lf-email"    type="email"    placeholder="Email"    autocomplete="username"         required>
@@ -9491,10 +9492,13 @@ function showRoleNotice() {
 
 async function loadUserRole() {
   if (!S.user) return;
-  const { data } = await sb.from('leod_users')
+  const { data, error } = await sb.from('leod_users')
     .select('*')
     .eq('id', S.user.id)
     .single();
+  // No row (PGRST116) is an organiser account; any other failure is not, and
+  // opening the console anyway showed a nameless "??" user: stop and offer Retry.
+  if (error && error.code !== 'PGRST116') throw new Error('profile_failed');
   // The role is per event (event teams): it comes from cuedeck_my_events and
   // applyEventRole sets it on boot and on every switch. leod_users.role only
   // says what kind of account this is (pending, check-in staff, admin).
@@ -10301,10 +10305,19 @@ function showBootRetry(msg) {
   const b = document.getElementById('boot-retry');
   b.textContent = t('cc.boot.retry');
   b.hidden = false;
+  // Say which login Retry will continue as, with a way out: a saved login
+  // from another account otherwise looks like a stranger's console.
+  const who = document.getElementById('boot-who');
+  if (S.user?.email) {
+    document.getElementById('boot-who-text').textContent = tf('cc.boot.signedInAs', { email: S.user.email });
+    document.getElementById('boot-signout').textContent = t('cc.boot.signOut');
+    who.hidden = false;
+  }
   b.focus();
 }
 function retryBoot() {
   document.getElementById('boot-retry').hidden = true;
+  document.getElementById('boot-who').hidden = true;
   document.getElementById('load-spinner').style.display = '';
   setStep('Connecting…');
   boot();

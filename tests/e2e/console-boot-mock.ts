@@ -188,6 +188,7 @@ export interface Scenario {
   fnReply?: (fn: string, body: any) => { status: number; body: unknown } | undefined;   // Edge Function answers
   team?: Record<string, unknown>;   // cuedeck_event_team answer per event id (default: defaultTeam)
   rpcFail?: string[];            // RPC names that answer 500; read on every request, so a test may change it
+  tableFail?: string[];          // tables whose GET answers 500; read on every request, so a test may change it
   waitBoot?: boolean;            // false: return once the page has loaded, boot may stop on a screen
 }
 
@@ -365,6 +366,7 @@ export async function openConsole(browser: Browser, sc: Scenario = {}): Promise<
         if (req.method() === 'PATCH') return json(r, [{ id: (url.searchParams.get('id') || '').replace(/^eq\./, '') }]);
         return json(r, [], 201);
       }
+      if (sc.tableFail?.includes(table)) return json(r, { code: 'PGRST000', message: `${table} failed` }, 500);
       const rows: Record<string, unknown[]> = {
         leod_users: [{ id: USER_ID, name: NAMES[role], email, role: sc.accountRole ?? role, organization: 'Nilegate Events', phone: null, active: true, company_name: 'Nilegate Events', vat_id: null, billing_address: null }],
         leod_config: [], leod_events: myEvents().map(m => ({ ...EVENT, id: m.id, name: m.name, created_by: m.isOwner ? USER_ID : (m.ownerId ?? OTHER_OWNER) })), leod_sessions: sessions, leod_broadcast: broadcast ? [broadcast] : [],
