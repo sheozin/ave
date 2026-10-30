@@ -1838,6 +1838,8 @@ Deno.test('checkin-kiosk-pair: approving a station code needs a desk lead and ca
   assert(r.status === 403, 'crew cannot pair: ' + JSON.stringify(r))
   setup('lead', { ent: { checkin_core: true, status: 'test' } })
   world.rpcResult.checkin_approve_device_request = [{ device_id: DEV, info: { model: 'brother-ql' } }]
+  // Asked from this same network (the stub has no x-forwarded-for: 'unknown').
+  world.tables.leod_checkin_device_requests = [{ code: 'ABCDEFGH', ip_hash: await sha256('unknown') }]
   r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'abcd-efgh', label: 'Desk printer' })
   assert(r.status === 200 && r.body.device_id === DEV, JSON.stringify(r))
   const c = world.rpcCalls.find(x => x.name === 'checkin_approve_device_request')
@@ -1849,4 +1851,21 @@ Deno.test('checkin-print-station: the station reports what printer it drives', a
   const r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY, info: { model: 'brother-ql', dpi: 300, width_mm: 62, junk: 1 } })
   assert(r.status === 200, JSON.stringify(r))
   assert(JSON.stringify(world.tables.leod_checkin_devices[0].printer_info) === JSON.stringify({ model: 'brother-ql', dpi: 300, width_mm: 62 }), JSON.stringify(world.tables.leod_checkin_devices[0]))
+})
+
+Deno.test('checkin-kiosk-pair: a code asked from another network pairs only when typed (device-code phishing, migration 144)', async () => {
+  setup('lead', { ent: { checkin_core: true, status: 'test' } })
+  world.rpcResult.checkin_approve_device_request = [{ device_id: DEV, info: null }]
+  world.rpcResult.checkin_kiosk_pair_rate_check = true
+  world.tables.leod_checkin_device_requests = [{ code: 'ABCDEFGH', ip_hash: 'a'.repeat(64), info: { model: 'zebra' }, created_at: '2026-10-30T12:00:00Z', expires_at: '2099-01-01T00:00:00Z', approved_at: null }]
+  let r = await call('checkin-kiosk-pair', { action: 'request_info', code: 'ABCD-EFGH' })
+  assert(r.status === 200 && r.body.same_network === false, JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'ABCDEFGH', label: 'Stranger' })
+  assert(r.status === 409 && r.body.error === 'different_network', 'a link alone must not pair: ' + JSON.stringify(r))
+  assert(!world.rpcCalls.some(x => x.name === 'checkin_approve_device_request'), 'nothing approved')
+  r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'ABCDEFGH', label: 'Hall printer', code_typed: true })
+  assert(r.status === 200, JSON.stringify(r))
+  world.tables.leod_checkin_device_requests = []
+  r = await call('checkin-kiosk-pair', { action: 'request_info', code: 'ZZZZ2222' })
+  assert(r.status === 404, JSON.stringify(r))
 })

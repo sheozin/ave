@@ -3522,7 +3522,7 @@ function ksAsk(prefill, problem) {
   p.textContent = scanner
     ? 'Choose where the phone will scan and name it, then read the code to whoever is holding the phone.'
     : printer && !ksPrinterTerminal
-    ? 'A print station is a computer or box on the venue network next to a Brother or Zebra label printer. Once paired, every desk and kiosk, on any device, prints badges to it. Type the code it shows, or prints on its first label.'
+    ? 'A print station is a computer or box on the venue network next to a Brother or Zebra label printer. Once paired, every desk and kiosk, on any device, prints badges to it. Type the code it shows, or prints on its first label. Only pair a station you can see: it receives every badge printed for this event, with names and check-in QR codes.'
     : printer
     ? 'Name the printer, then run the command on the computer next to it.'
     : 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
@@ -3966,7 +3966,7 @@ async function approveStationCode() {
   btn.textContent = 'Pairing…';
   let data = null, error = null;
   try {
-    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: S.event.id, code, label } }));
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: S.event.id, code, label, code_typed: true } }));
   } catch (thrown) { error = thrown; }
   if (error || !data || data.ok !== true) {
     const status = kioskErrorStatus(error);

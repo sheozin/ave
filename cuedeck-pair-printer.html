@@ -18,6 +18,9 @@
 .pp label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
 .pp select,.pp input{width:100%;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--bd2);border-radius:10px;background:#fff}
 .pp .done{font-size:15px;line-height:1.5}
+.pp .who{font-size:13.5px;color:var(--t2);margin:-8px 0 16px;text-align:center}
+.pp .warn{background:var(--amsf);border:1px solid var(--ambd);color:var(--am);border-radius:12px;padding:12px 14px;font-size:13.5px;line-height:1.5;margin-bottom:16px}
+.pp .note{font-size:12.5px;color:var(--t2);line-height:1.5;margin:12px 0 0}
 </style>
 </head>
 <body>
@@ -29,10 +32,14 @@
     <h1>Pair a print station</h1>
     <p class="sub">Every desk and kiosk of the event you choose, on any device, will print badges to it.</p>
     <div class="code" id="pp-code"></div>
+    <div class="who" id="pp-who" hidden></div>
+    <div class="warn" id="pp-warn" hidden>This code was requested from a different network than the one you are on. Only pair a print station you can see: it will receive every badge printed for the event, with names and check-in QR codes. If someone sent you this link, do not pair it.</div>
     <form id="pp-form" hidden>
+      <div class="field" id="pp-typed-f" hidden><label for="pp-typed">Type the code shown on the print station</label><input id="pp-typed" maxlength="12" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" style="text-transform:uppercase;letter-spacing:2px"></div>
       <div class="field"><label for="pp-event">Event</label><select id="pp-event"></select></div>
       <div class="field"><label for="pp-name">Name of this printer</label><input id="pp-name" maxlength="60" autocomplete="off" placeholder="Desk printer"></div>
       <button class="btn btn-p full" id="pp-go">Pair print station</button>
+      <p class="note">Only pair a print station you can see. It receives every badge printed for the event.</p>
     </form>
     <div class="err" id="pp-err"></div>
     <div class="done" id="pp-done" hidden></div>
@@ -47,6 +54,7 @@ const sb = supabase.createClient('https://sawekpguemzvuvvulfbc.supabase.co', 'sb
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search);
 const code = String(q.get('code') || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+let SAME = false;
 $('pp-name').value = String(q.get('name') || '').slice(0, 60);
 
 if (code.length !== 8) {
@@ -68,7 +76,23 @@ if (code.length !== 8) {
         $('pp-event').replaceChildren(...rows.map(r => { const o = document.createElement('option'); o.value = r.event_id; o.textContent = r.name + (r.date ? ' · ' + r.date : ''); return o; }));
         const soon = rows.find(r => String(r.date) >= new Date().toISOString().slice(0, 10));
         if (soon) $('pp-event').value = soon.event_id;
-        $('pp-form').hidden = false;
+        // What is asking, and is it on this network (migration 144)? From
+        // another network the code must be typed off the station: a link
+        // alone must never pair a stranger's station to an event.
+        const { data: ri, error: riErr } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'request_info', code } });
+        if (riErr || !ri || ri.ok !== true) {
+          let msg = 'This code is not waiting to be paired. Check it on the print station.';
+          try { const b = await riErr.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+          $('pp-err').textContent = msg;
+        } else {
+          const p = ri.printer || {};
+          const mins = Math.max(0, Math.round((Date.now() - Date.parse(ri.requested_at)) / 60000));
+          $('pp-who').hidden = false;
+          $('pp-who').textContent = (p.name || (p.model === 'zebra' ? 'Zebra printer' : 'Brother label printer')) + (p.host ? ' at ' + p.host : '') + ', asked ' + (mins < 1 ? 'just now' : mins + ' min ago');
+          SAME = ri.same_network === true;
+          if (!SAME) { $('pp-warn').hidden = false; $('pp-typed-f').hidden = false; $('pp-code').hidden = true; }
+          $('pp-form').hidden = false;
+        }
       }
     }
   }
@@ -79,15 +103,20 @@ $('pp-form').addEventListener('submit', async (e) => {
   $('pp-err').textContent = '';
   const label = $('pp-name').value.trim();
   if (!label) { $('pp-err').textContent = 'Give the printer a name, so desks can tell it apart.'; $('pp-name').focus(); return; }
+  // Same network: the code from the app's link. Otherwise only what was typed.
+  const typed = $('pp-typed').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!SAME && typed.length !== 8) { $('pp-err').textContent = 'Type the 8-character code shown on the print station.'; $('pp-typed').focus(); return; }
   $('pp-go').disabled = true;
-  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: $('pp-event').value, code, label } });
+  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: SAME
+    ? { action: 'approve', event_id: $('pp-event').value, code, label }
+    : { action: 'approve', event_id: $('pp-event').value, code: typed, label, code_typed: true } });
   $('pp-go').disabled = false;
   if (error || !data || data.ok !== true) {
     let msg = 'Could not pair it.';
-    try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+    try { const b = await error.context.json(); if (b && (b.message || b.error)) msg = b.message || b.error; } catch (_) {}
     $('pp-err').textContent = msg; return;
   }
-  $('pp-form').hidden = true;
+  $('pp-form').hidden = true; $('pp-warn').hidden = true;
   $('pp-done').hidden = false;
   $('pp-done').textContent = 'Paired. "' + label + '" prints badges for ' + $('pp-event').selectedOptions[0].textContent + ' now. You can close this page; the print station shows it is ready.';
 });

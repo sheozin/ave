@@ -853,7 +853,7 @@ test('a lead pairs a print station by typing the code it shows', async ({ page }
   await page.locator('#ks-label').fill('Desk printer');
   await page.locator('#ks-approve').click();
   await expect(page.locator('#ks-body')).toContainText('Paired. "Desk printer" now prints badges for this event');
-  expect(sent).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'ABCDEFGH', label: 'Desk printer' });
+  expect(sent).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'ABCDEFGH', label: 'Desk printer', code_typed: true });
 });
 
 test('the Terminal route is still one click away for a print station', async ({ page }) => {

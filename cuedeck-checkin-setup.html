@@ -481,7 +481,7 @@
     </form>
     <div id="ps-section" hidden>
       <h3 class="sc-h">Print stations</h3>
-      <p class="sc-p">Print badges from any desk or kiosk, on any device, to a Brother or Zebra label printer at the right size, with no print dialog. A print station is a computer or small box on the venue network next to the printer. Start it, then type the code it shows or prints.</p>
+      <p class="sc-p">Print badges from any desk or kiosk, on any device, to a Brother or Zebra label printer at the right size, with no print dialog. A print station is a computer or small box on the venue network next to the printer. Start it, then type the code it shows or prints. Only pair a station you can see: it receives every badge printed for this event, with names and check-in QR codes.</p>
       <table class="tbl sc-tbl"><thead><tr><th>Printer</th><th class="hide-sm">Prints on</th><th>Status</th><th class="hide-sm">Last badge</th><th></th></tr></thead><tbody id="ps-body"></tbody></table>
       <p class="small" id="ps-empty" hidden>No print stations yet.</p>
       <form id="ps-add" class="sc-add">
@@ -1921,7 +1921,7 @@ $('ps-add').addEventListener('submit', async (e) => {
   if (code.length !== 8) { $('ps-err').textContent = 'Type the 8-character code the print station shows, like ABCD-EFGH.'; $('ps-code').focus(); return; }
   if (!label) { $('ps-err').textContent = 'Give the printer a name, so desks can tell it apart.'; $('ps-name').focus(); return; }
   $('ps-add-btn').disabled = true;
-  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: EVENT_ID, code, label } });
+  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: EVENT_ID, code, label, code_typed: true } });
   $('ps-add-btn').disabled = false;
   if (error || !data || data.ok !== true) {
     let msg = 'Could not pair it.';

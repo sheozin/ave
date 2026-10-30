@@ -264,7 +264,7 @@ test('an organizer sees the print stations, pairs one by its code and removes on
   await page.fill('#ps-name', 'Lobby printer');
   await page.click('#ps-add-btn');
   await expect(page.locator('#ps-ok')).toContainText('"Lobby printer" is paired');
-  expect(approved).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'WXYZ2345', label: 'Lobby printer' });
+  expect(approved).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'WXYZ2345', label: 'Lobby printer', code_typed: true });
   const rm = rows.nth(1).getByRole('button');
   await rm.click();
   await expect(rm).toHaveText('Click again to remove');
