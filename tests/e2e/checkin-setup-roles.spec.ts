@@ -599,6 +599,63 @@ test('badges tab: the designer previews at the stock size and saves the design',
   expect(saved[0]).toMatchObject({ p_event_id: EVENT_ID, p_design: { w: 148, h: 105, qr: true, name: 'split', colors: { VIP: '#C9A227' } } });
 });
 
+test('badges tab: stock presets, turn, lanyard keep-out, job title and delegate tag ribbons', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [{ id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', role_title: 'Head of Production', company: 'Contoso', ticket_type: 'Speaker', is_test: true, source: 'web', created_at: FIXED_NOW.toISOString() }]);
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 0, payout: { connected: false, charges_enabled: false, details_submitted: false }, types: [], revenue: {} });
+    await rpc(page, 'checkin_orders_list', []);
+    await rpc(page, 'checkin_set_badge_design', (a) => { saved.push(a); return a.p_design; });
+  });
+  const badge = page.locator('#bd-prev .badge').first();
+  await expect(page.locator('#bd-size optgroup')).toHaveCount(2);
+  await page.selectOption('#bd-size', '105x148');
+  await expect(page.locator('#bd-size-hint')).toContainText('A6 holder');
+  await page.click('#bd-turn');
+  await expect(page.locator('#bd-size')).toHaveValue('148x105');
+  await expect(badge).toHaveAttribute('style', /width: 148mm; height: 105mm/);
+  // Custom stays picked even when its size matches a preset.
+  await page.selectOption('#bd-size', 'custom');
+  await expect(page.locator('#bd-custom')).toBeVisible();
+  await page.locator('#bd-slot button[data-v="holes"]').click();
+  await expect(badge.locator('div[style*="dashed"]')).toHaveCount(2);
+  await page.locator('#bd-title').evaluate((e: HTMLInputElement) => e.click());
+  await expect(badge).toContainText('Head of Production');
+  const row = page.locator('#bd-colors .row', { hasText: 'Speaker' });
+  await row.locator('input[type=color]').fill('#1f4ed8');
+  await row.locator('input[type=text]').fill('Speaker');
+  await expect(badge.locator('div', { hasText: /^Speaker$/ }).last()).toHaveCSS('background-color', 'rgb(31, 78, 216)');
+  await page.click('#bd-save');
+  await expect(page.locator('#bd-ok')).toContainText('Saved.');
+  expect(saved[0]).toMatchObject({ p_design: { w: 148, h: 105, slot: 'holes', title: true, colors: { Speaker: '#1F4ED8' }, tags: { Speaker: 'Speaker' } } });
+});
+
+test('badges tab: the visa-next-full template previews, downloads an 898 x 696 PNG and saves', async ({ page }) => {
+  const saved: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [{ id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso', ticket_type: 'VIP', is_test: true, source: 'web', created_at: FIXED_NOW.toISOString() }]);
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 0, payout: { connected: false, charges_enabled: false, details_submitted: false }, types: [], revenue: {} });
+    await rpc(page, 'checkin_orders_list', []);
+    await rpc(page, 'checkin_set_badge_design', (a) => { saved.push(a); return a.p_design; });
+  });
+  await page.selectOption('#bd-tpl', 'visa-next-full');
+  await expect(page.locator('#bd-std')).toBeHidden();
+  await expect(page.locator('#bd-tpl-hint')).toContainText('DK-22205');
+  const badge = page.locator('#bd-prev .badge').first();
+  await expect(badge).toHaveAttribute('style', /width: 76mm; height: 62mm/);
+  await expect(badge.locator('img')).toHaveAttribute('alt', 'Maya Lindqvist Contoso');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#bd-png')]);
+  expect(dl.suggestedFilename()).toBe('visa-next-full-sample.png');
+  const buf = await (await dl.createReadStream()).toArray().then(c => Buffer.concat(c));
+  expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([898, 696]);
+  expect(await page.evaluate(() => document.fonts.check('800 40px Montserrat', 'Ł'))).toBe(true);
+  await page.click('#bd-save');
+  await expect(page.locator('#bd-ok')).toContainText('Saved.');
+  expect(saved[0]).toMatchObject({ p_design: { template: 'visa-next-full', w: 76, h: 62 } });
+  await page.selectOption('#bd-tpl', '');
+  await expect(page.locator('#bd-std')).toBeVisible();
+});
+
 test('guests tab: speakers from the run of show show who is on the list and who arrived', async ({ page }) => {
   const set: Record<string, unknown>[] = [];
   await open(page, { role: 'organizer' }, 'attendees', STAFF, async () => {

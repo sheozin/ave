@@ -895,9 +895,9 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
   import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
-  import { normalizeDesign, badgeElement, pageCss } from '/checkin-badge.js';
+  import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts } from '/checkin-badge.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
-  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss };
+  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
 <script>
@@ -996,7 +996,7 @@ async function idbClearOtherEvents(eventId) {
 async function loadRoster(eventId) {
   const { data, error } = await sb
     .from('leod_checkin_attendees')
-    .select('id,event_id,first_name,last_name,email,company,ticket_type,qr_token,checked_in_at,badge_printed_at')
+    .select('id,event_id,first_name,last_name,email,company,role_title,ticket_type,qr_token,checked_in_at,badge_printed_at')
     .eq('event_id', eventId);
   if (error) {
     // Offline or fetch failed: fall back to the cached copy, scoped to
@@ -2205,6 +2205,8 @@ function setBadgeDesign(ent) {
   if (!st) { st = document.createElement('style'); st.id = 'badge-page'; st.media = 'print'; document.head.appendChild(st); }
   st.textContent = window.CK_BADGE.pageCss(design);
   if (design.logo && logoUrl) new Image().src = logoUrl;
+  // A template draws with the bundled font: load it now, while online.
+  if (design.template) window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
 }
 
 function badgeNode(attendee) {
@@ -2290,7 +2292,10 @@ async function stampBadgePrinted(ids, when) {
 async function printBadges(attendees) {
   if (!attendees.length) return;
 
+  if (S.badge && S.badge.design.template) await window.CK_BADGE.loadBadgeFonts().catch(() => {});
   document.getElementById('badge-sheet').replaceChildren(...attendees.map(badgeNode));
+  // A template badge is an image; print once it is decoded, never blank.
+  await Promise.all([...document.querySelectorAll('#badge-sheet img')].map(i => i.decode().catch(() => {})));
 
   window.print();
 

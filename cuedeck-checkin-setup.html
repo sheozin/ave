@@ -133,7 +133,9 @@
 .seg button[aria-pressed=true]{background:var(--acsf);color:var(--ac)}
 .bd-colors{display:grid;gap:8px}
 .bd-colors .row{display:flex;align-items:center;gap:10px}
-.bd-colors .row b{flex:1;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.bd-colors .row b{flex:1;font-size:14px;font-weight:600;overflow-wrap:anywhere;min-width:0}
+.bd-colors .row input[type=text]{width:130px;flex:none;text-transform:uppercase}
+@media (max-width:480px){.bd-colors .row{flex-wrap:wrap}.bd-colors .row input[type=text]{width:100%}}
 #badge-sheet{display:none}
 @media print{body>*:not(#badge-sheet){display:none!important}#badge-sheet{display:block!important}#badge-sheet .badge{page-break-after:always}#badge-sheet .badge:last-child{page-break-after:auto}}
 </style>
@@ -380,26 +382,36 @@
     <div class="ph"><div><h2>Badges</h2><p>What the desk and the kiosk print for each guest. The preview is the real badge, drawn at its printed size.</p></div></div>
     <div class="bd-wrap">
       <div style="display:grid;gap:14px">
-        <div class="field"><label for="bd-size">Badge stock</label><select id="bd-size"></select></div>
+        <div class="field"><label for="bd-tpl">Template</label><select id="bd-tpl"></select>
+          <p class="sc-p" id="bd-tpl-hint" style="margin:6px 0 0" hidden></p></div>
+        <div id="bd-std" style="display:grid;gap:14px">
+        <div class="field"><label for="bd-size">Badge stock</label>
+          <div style="display:flex;gap:8px"><select id="bd-size" style="flex:1;min-width:0"></select><button class="btn btn-s" id="bd-turn" type="button" title="Swap width and height">Turn</button></div>
+          <p class="sc-p" id="bd-size-hint" style="margin:6px 0 0"></p></div>
         <div class="row2" id="bd-custom" hidden style="gap:12px">
           <div class="field"><label for="bd-w">Width (mm)</label><input id="bd-w" type="number" min="50" max="200" inputmode="numeric"></div>
           <div class="field"><label for="bd-h">Height (mm)</label><input id="bd-h" type="number" min="40" max="200" inputmode="numeric"></div>
         </div>
         <div class="field"><label>Name</label><div class="seg" id="bd-name"><button type="button" data-v="full">Full name</button><button type="button" data-v="split">First name large</button></div></div>
+        <div class="field"><label>Lanyard</label><div class="seg" id="bd-slot"><button type="button" data-v="none">None</button><button type="button" data-v="slot">Slot</button><button type="button" data-v="holes">Two holes</button></div>
+          <p class="sc-p" style="margin:6px 0 0">Keeps text clear of the top of the badge, where the lanyard goes. The preview shows it dashed; it is not printed.</p></div>
         <div class="field"><label>Layout</label><div class="seg" id="bd-align"><button type="button" data-v="center">Centred</button><button type="button" data-v="left">Left</button></div></div>
         <div class="toggle"><div><b>Colour band</b><p>A band across the top in your brand colour.</p></div><label class="sw"><input type="checkbox" id="bd-band"><span></span></label></div>
         <div class="toggle"><div><b>Logo</b><p id="bd-logo-p">Your logo from Branding.</p></div><label class="sw"><input type="checkbox" id="bd-logo"><span></span></label></div>
+        <div class="toggle"><div><b>Job title</b><p>From the Title or Position column of your guest list.</p></div><label class="sw"><input type="checkbox" id="bd-title"><span></span></label></div>
         <div class="toggle"><div><b>Company</b><p>Under the name.</p></div><label class="sw"><input type="checkbox" id="bd-company"><span></span></label></div>
         <div class="toggle"><div><b>Ticket type</b><p>Such as VIP, Speaker or Press.</p></div><label class="sw"><input type="checkbox" id="bd-ticket"><span></span></label></div>
         <div class="toggle"><div><b>QR code</b><p>The guest's own code, so door and session scanners can read the badge.</p></div><label class="sw"><input type="checkbox" id="bd-qr"><span></span></label></div>
         <div id="bd-colors-box" hidden>
-          <h3 class="sc-h" style="margin-top:6px">Colours by ticket type</h3>
-          <p class="sc-p">Give a ticket type its own band colour, so staff see VIPs and speakers across the room.</p>
+          <h3 class="sc-h" style="margin-top:6px">Colours and delegate tags by ticket type</h3>
+          <p class="sc-p">Give a ticket type its own colour, so staff see VIPs and speakers across the room. Add a tag such as SPEAKER or PRESS and it prints as a ribbon across the bottom in that colour.</p>
           <div class="bd-colors" id="bd-colors"></div>
+        </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-p" id="bd-save" type="button">Save badge</button>
           <button class="btn btn-s" id="bd-print" type="button">Print a test badge</button>
+          <button class="btn btn-s" id="bd-png" type="button" hidden>Download sample PNG</button>
           <button class="link" id="bd-reset" type="button">Back to the standard badge</button>
         </div>
         <div class="ok" id="bd-ok"></div><div class="err" id="bd-err"></div>
@@ -543,7 +555,7 @@
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
-import { BADGE_SIZES, normalizeDesign, badgeElement, pageCss } from '/checkin-badge.js';
+import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas } from '/checkin-badge.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -589,7 +601,7 @@ async function loadAttendees() {
   const all = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb.from('leod_checkin_attendees')
-      .select('id,first_name,last_name,email,company,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at,custom_fields')
+      .select('id,first_name,last_name,email,company,role_title,ticket_type,checked_in_at,badge_printed_at,qr_email_sent_at,is_test,source,created_at,custom_fields')
       .eq('event_id', EVENT_ID).order('last_name').order('first_name').order('id').range(from, from + 999);
     if (error) throw new Error(error.message);
     all.push(...data);
@@ -1328,10 +1340,10 @@ $('rg-plus').onchange = async () => {
 // ── badge designer (migration 111) ──
 // BD is the design being edited; the preview redraws on every change and
 // Save stores it (checkin_set_badge_design rebuilds it from known keys).
-let BD = null;
+let BD = null, BD_CUSTOM = false; // BD_CUSTOM: Custom size picked, even if it matches a preset
 const SAMPLE_GUESTS = [
-  { first_name: 'Alexandra', last_name: 'Kowalczyk-Lindqvist', company: 'Northwind Traders', ticket_type: 'Speaker', qr_token: 'sample-qr-1' },
-  { first_name: 'Sam', last_name: 'Lee', company: 'Contoso', ticket_type: 'Attendee', qr_token: 'sample-qr-2' },
+  { first_name: 'Alexandra', last_name: 'Kowalczyk-Lindqvist', role_title: 'Head of Partnerships', company: 'Northwind Traders', ticket_type: 'Speaker', qr_token: 'sample-qr-1' },
+  { first_name: 'Sam', last_name: 'Lee', role_title: 'Event Manager', company: 'Contoso', ticket_type: 'Attendee', qr_token: 'sample-qr-2' },
 ];
 function badgeGuests() {
   const real = ATT.filter(a => !a.is_test || !isLive()).slice(0, 2);
@@ -1341,25 +1353,39 @@ const badgeLogo = () => ENT.registration_logo_path ? rgPublicUrl(ENT.registratio
 function badgeTicketTypes() {
   const names = new Set(ATT.map(a => (a.ticket_type || '').trim()).filter(Boolean));
   if (TIX) for (const t of TIX.types) names.add(t.name);
-  for (const k of Object.keys(BD.colors)) names.add(k);
-  return [...names].filter(n => n.toLowerCase() !== 'attendee' || BD.colors[n]).slice(0, 12);
+  for (const k of [...Object.keys(BD.colors), ...Object.keys(BD.tags)]) names.add(k);
+  return [...names].filter(n => n.toLowerCase() !== 'attendee' || BD.colors[n] || BD.tags[n]).slice(0, 12);
 }
 function renderBadges() {
-  BD = normalizeDesign(ENT.badge_design);
-  $('bd-size').replaceChildren(...BADGE_SIZES.map(z => { const o = el('option', null, z.label); o.value = z.id; return o; }),
-    (() => { const o = el('option', null, 'Custom size'); o.value = 'custom'; return o; })());
+  BD = normalizeDesign(ENT.badge_design); BD_CUSTOM = false;
+  $('bd-size').replaceChildren(...Object.entries(BADGE_GROUPS).map(([g, name]) => {
+    const og = document.createElement('optgroup'); og.label = name;
+    og.append(...BADGE_SIZES.filter(z => z.group === g).map(z => { const o = el('option', null, z.label); o.value = z.id; return o; }));
+    return og;
+  }), (() => { const o = el('option', null, 'Custom size'); o.value = 'custom'; return o; })());
+  $('bd-tpl').replaceChildren(el('option', null, 'Standard (design it below)'),
+    ...BADGE_TEMPLATES.map(t => { const o = el('option', null, t.label); o.value = t.id; return o; }));
+  $('bd-tpl').firstChild.value = '';
   $('bd-ok').textContent = ''; $('bd-err').textContent = '';
   if (!TIX) loadTickets().then(() => { if (!$('p-badges').hidden) drawBadgeForm(); }).catch(() => {});
   drawBadgeForm();
 }
 function drawBadgeForm() {
-  const z = BADGE_SIZES.find(x => x.w === BD.w && x.h === BD.h);
+  const tpl = BADGE_TEMPLATES.find(t => t.id === BD.template);
+  $('bd-tpl').value = tpl ? tpl.id : '';
+  $('bd-tpl-hint').hidden = !tpl; $('bd-tpl-hint').textContent = tpl ? tpl.hint : '';
+  $('bd-std').hidden = !!tpl; $('bd-png').hidden = !tpl;
+  // The template draws with the bundled font; redraw once it has loaded.
+  if (tpl) loadBadgeFonts().then(() => { if (BD && BD.template && !$('p-badges').hidden) drawBadgePreview(); }).catch(() => {});
+  const z = BD_CUSTOM ? null : BADGE_SIZES.find(x => x.w === BD.w && x.h === BD.h);
   $('bd-size').value = z ? z.id : 'custom';
   $('bd-custom').hidden = !!z; $('bd-w').value = BD.w; $('bd-h').value = BD.h;
-  for (const k of ['band', 'logo', 'company', 'ticket', 'qr']) $('bd-' + k).checked = !!BD[k];
+  $('bd-size-hint').textContent = z ? z.hint : 'Any size from 50 × 40 to 200 × 200 mm.';
+  $('bd-turn').disabled = !(BD.h >= 50 && BD.w >= 40);
+  for (const k of ['band', 'logo', 'company', 'title', 'ticket', 'qr']) $('bd-' + k).checked = !!BD[k];
   $('bd-logo').disabled = !ENT.registration_logo_path;
   $('bd-logo-p').textContent = ENT.registration_logo_path ? 'Your logo from Branding.' : 'Upload a logo under Branding first.';
-  for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align']]) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v === BD[key]));
+  for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align'], ['bd-slot', 'slot']]) for (const b of $(id).children) b.setAttribute('aria-pressed', String(b.dataset.v === BD[key]));
   const types = badgeTicketTypes();
   $('bd-colors-box').hidden = !types.length;
   $('bd-colors').replaceChildren(...types.map(t => {
@@ -1369,7 +1395,10 @@ function drawBadgeForm() {
     const clear = el('button', 'link', BD.colors[t] ? 'Clear' : 'No colour'); clear.type = 'button'; clear.disabled = !BD.colors[t];
     pick.oninput = () => { BD.colors[t] = pick.value.toUpperCase(); clear.textContent = 'Clear'; clear.disabled = false; drawBadgePreview(); };
     clear.onclick = () => { delete BD.colors[t]; drawBadgeForm(); };
-    row.append(pick, el('b', null, t), clear);
+    const tag = el('input'); tag.type = 'text'; tag.maxLength = 24; tag.placeholder = 'Tag, e.g. ' + (t.length <= 12 ? t.toUpperCase() : 'SPEAKER');
+    tag.value = BD.tags[t] || ''; tag.setAttribute('aria-label', 'Delegate tag for ' + t);
+    tag.oninput = () => { const v = tag.value.trim(); if (v) BD.tags[t] = v; else delete BD.tags[t]; drawBadgePreview(); };
+    row.append(pick, el('b', null, t), tag, clear);
     return row;
   }));
   drawBadgePreview();
@@ -1379,7 +1408,7 @@ function drawBadgePreview() {
   const width = Math.max(200, box.clientWidth - 36);
   box.replaceChildren(...badgeGuests().map(g => {
     const card = el('div', 'bd-card');
-    const b = badgeElement(g, { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: false });
+    const b = badgeElement(g, { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: false, preview: true });
     card.append(b);
     // mm on screen is 96/25.4 px; scale down a badge wider than the column.
     const px = BD.w * 96 / 25.4, k = Math.min(1, width / px);
@@ -1390,16 +1419,24 @@ function drawBadgePreview() {
 }
 $('bd-size').onchange = () => {
   const z = BADGE_SIZES.find(x => x.id === $('bd-size').value);
+  BD_CUSTOM = !z;
   if (z) { BD.w = z.w; BD.h = z.h; }
-  $('bd-custom').hidden = !!z; $('bd-w').value = BD.w; $('bd-h').value = BD.h;
-  drawBadgePreview();
+  drawBadgeForm();
 };
+$('bd-tpl').onchange = () => { BD = normalizeDesign({ ...BD, template: $('bd-tpl').value || null }); drawBadgeForm(); };
+// The client's check: the exact 898 x 696 px bitmap that goes to the printer.
+$('bd-png').onclick = async () => {
+  await loadBadgeFonts().catch(() => {});
+  const c = visaNextCanvas({ first_name: 'Adam', last_name: 'Kowalski', company: 'ProfIT GmbH' });
+  const a = document.createElement('a'); a.download = BD.template + '-sample.png'; a.href = c.toDataURL('image/png'); a.click();
+};
+$('bd-turn').onclick = () => { [BD.w, BD.h] = [BD.h, BD.w]; drawBadgeForm(); };
 for (const k of ['w', 'h']) $('bd-' + k).oninput = () => {
   const v = parseInt($('bd-' + k).value, 10), lo = k === 'w' ? 50 : 40;
   if (v >= lo && v <= 200) { BD[k] = v; drawBadgePreview(); }
 };
-for (const k of ['band', 'logo', 'company', 'ticket', 'qr']) $('bd-' + k).onchange = () => { BD[k] = $('bd-' + k).checked; drawBadgePreview(); };
-for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align']]) for (const b of $(id).children) b.onclick = () => { BD[key] = b.dataset.v; drawBadgeForm(); };
+for (const k of ['band', 'logo', 'company', 'title', 'ticket', 'qr']) $('bd-' + k).onchange = () => { BD[k] = $('bd-' + k).checked; drawBadgePreview(); };
+for (const [id, key] of [['bd-name', 'name'], ['bd-align', 'align'], ['bd-slot', 'slot']]) for (const b of $(id).children) b.onclick = () => { BD[key] = b.dataset.v; drawBadgeForm(); };
 $('bd-save').onclick = async () => {
   $('bd-ok').textContent = ''; $('bd-err').textContent = '';
   const { data, error } = await sb.rpc('checkin_set_badge_design', { p_event_id: EVENT_ID, p_design: BD });
@@ -1415,11 +1452,13 @@ $('bd-reset').onclick = async () => {
   $('bd-ok').textContent = 'Back to the standard badge.';
 };
 // The test badge prints from this page with the same @page size the desk uses.
-$('bd-print').onclick = () => {
+$('bd-print').onclick = async () => {
+  if (BD.template) await loadBadgeFonts().catch(() => {});
   let st = document.getElementById('badge-page');
   if (!st) { st = document.createElement('style'); st.id = 'badge-page'; st.media = 'print'; document.head.appendChild(st); }
   st.textContent = pageCss(BD);
   $('badge-sheet').replaceChildren(badgeElement(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }));
+  await Promise.all([...$('badge-sheet').querySelectorAll('img')].map(i => i.decode().catch(() => {})));
   window.print();
 };
 window.addEventListener('resize', () => { if (BD && !$('p-badges').hidden) drawBadgePreview(); });

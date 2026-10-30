@@ -706,3 +706,16 @@ test('the desk prints the badge design of the event: stock size, ticket colour a
   expect(html).toContain('>Ben<');
   expect(await page.locator('#badge-page').textContent()).toBe('@page { size: 148mm 105mm; margin: 0; }');
 });
+
+test('the desk prints the visa-next-full template: a 76 x 62 mm page with the rendered label image', async ({ page }) => {
+  await page.addInitScript(() => { (window as unknown as { __prints: string[] }).__prints = []; window.print = () => {
+    const img = document.querySelector('#badge-sheet img') as HTMLImageElement | null;
+    (window as unknown as { __prints: string[] }).__prints.push(img && img.complete && img.naturalWidth === 898 && img.naturalHeight === 696 ? img.alt : 'not ready'); }; });
+  await open(page, { role: 'crew', roster: [ANA, { ...BEN, role_title: 'CTO' }], badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: string[] }).__prints.length)).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as { __prints: string[] }).__prints[0])).toContain('Ben');
+  expect(await page.locator('#badge-page').textContent()).toBe('@page { size: 76mm 62mm; margin: 0; }');
+});
