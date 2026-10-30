@@ -186,7 +186,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -1776,4 +1776,36 @@ Deno.test('white label: guest emails carry no CueDeck credit when on', async () 
     const credits = html.map(h => h.replace(/https:\/\/app\.cuedeck\.io[^"'\s<]*/g, '').includes('CueDeck'))
     assert(JSON.stringify(credits) === JSON.stringify(html.map(() => !wl)), 'white_label=' + wl + ': ' + JSON.stringify(credits))
   }
+})
+
+// ── print stations (migration 142) ──
+Deno.test('checkin-kiosk-pair: a print station pairs without self-registration and becomes a printer device', async () => {
+  setup('lead', { ent: { checkin_core: true, status: 'test', self_registration: false } })
+  let r = await call('checkin-kiosk-pair', { action: 'mint', event_id: EVENT, label: 'Desk printer', device_kind: 'printer' })
+  assert(r.status === 200 && r.body.device_kind === 'printer', JSON.stringify(r))
+  world.rpcResult.checkin_kiosk_pair_rate_check = true
+  world.rpcResult.checkin_kiosk_claim_pairing = [{ event_id: EVENT, label: 'Desk printer', device_kind: 'printer', scan_point_id: null }]
+  r = await call('checkin-kiosk-pair', { action: 'claim', code: 'ABCD-EFGH', device_kind: 'printer' })
+  assert(r.status === 200 && r.body.device_kind === 'printer' && typeof r.body.device_key === 'string', JSON.stringify(r))
+  const dev = world.tables.leod_checkin_devices.at(-1)!
+  assert(dev.kind === 'printer' && dev.scan_point_id === null, JSON.stringify(dev))
+})
+Deno.test('checkin-print-station: only a printer key gets jobs; done reports each one', async () => {
+  await setupScanner({ kind: 'scanner' })
+  let r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 401, 'a scanner key is not a printer key: ' + JSON.stringify(r))
+  world.tables.leod_checkin_devices[0].kind = 'printer'
+  world.rpcResult.checkin_print_claim = [{ id: ATT, label_png: 'data:image/png;base64,AAAA', cut_mm: '76.0' }]
+  r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 200 && JSON.stringify(r.body.jobs) === JSON.stringify([{ id: ATT, png: 'data:image/png;base64,AAAA', cut_mm: 76 }]), JSON.stringify(r))
+  const claim = world.rpcCalls.find(x => x.name === 'checkin_print_claim')
+  assert(claim && claim.args.p_device_id === DEV, JSON.stringify(claim))
+  world.rpcResult.checkin_print_finish = true
+  r = await call('checkin-print-station', { action: 'done', event_id: EVENT, device_key: SCAN_KEY, job_id: ATT, ok: false, error: 'Cover open' })
+  assert(r.status === 200 && r.body.recorded === true, JSON.stringify(r))
+  const fin = world.rpcCalls.find(x => x.name === 'checkin_print_finish')
+  assert(fin && fin.args.p_ok === false && fin.args.p_error === 'Cover open' && fin.args.p_device_id === DEV, JSON.stringify(fin))
+  world.tables.leod_checkin_devices[0].revoked_at = '2026-10-01T00:00:00Z'
+  r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY })
+  assert(r.status === 401, 'revoked: ' + JSON.stringify(r))
 })

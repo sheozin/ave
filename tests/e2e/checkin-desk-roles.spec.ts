@@ -9,8 +9,8 @@ const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'B
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
   heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string;
-  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown; badgeDesign?: Record<string, unknown> };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow, badgeDesign }: Opts) {
+  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown; badgeDesign?: Record<string, unknown>; before?: () => Promise<void> };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow, badgeDesign, before }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
@@ -23,6 +23,7 @@ async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], 
     ok: true, errors: [],
     results: Object.fromEntries((b.items as { client_id: string; action: string }[]).map(i => [i.client_id, scanResult(i)])),
   } }));
+  if (before) await before();
   await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
   await expect(page.locator('#station')).toBeVisible();
 }
@@ -755,11 +756,12 @@ test('a printer error from the helper is shown and the badge is not marked print
   expect(stamps).toEqual([]);
 });
 
-test('without the helper switched on, the desk never contacts this computer and offers it once', async ({ page }) => {
+test('without the helper switched on, the desk never contacts this computer and points to print stations', async ({ page }) => {
   let contacted = false;
   await page.route('http://127.0.0.1:7841/**', r => { contacted = true; return r.abort(); });
   await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
-  await expect(page.locator('#ck-printer')).toContainText('Print straight to a Brother label printer?');
+  await expect(page.locator('#ck-print-to')).toHaveValue('browser');
+  await expect(page.locator('#ck-printer')).toContainText('pair a print station');
   expect(contacted).toBe(false);
 });
 
@@ -788,4 +790,53 @@ test('a badge wider than the roll says so and prints through the browser', async
   await page.locator('#primary').click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(1);
   expect(posted).toBe(false);
+});
+
+// Print stations (migration 142): any device sends the badge through CueDeck.
+async function withStation(page, jobStatus: () => { status: string; error?: string | null }) {
+  await page.addInitScript(() => { (window as unknown as { __prints: number }).__prints = 0; window.print = () => { (window as unknown as { __prints: number }).__prints++; }; });
+  const queued: Record<string, unknown>[] = [];
+  return { queued, setup: async () => {
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online: true }]);
+    await rpc(page, 'checkin_queue_print', (a) => { queued.push(a); return ['bbbbbbbb-0000-4000-8000-0000000000f1']; });
+    await table(page, 'leod_checkin_print_jobs', [{ id: 'bbbbbbbb-0000-4000-8000-0000000000f1', ...jobStatus() }]);
+  } };
+}
+
+test('with one print station paired, the desk sends the badge to it and says when it printed', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup });
+  await expect(page.locator('#ck-print-to')).toHaveValue('station:aaaaaaaa-0000-4000-8000-0000000000d1');
+  await expect(page.locator('#ck-print-msg')).toContainText('Ready: badges go to Desk printer.');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer.', { timeout: 10000 });
+  const q = st.queued[0] as { p_device_id: string; p_labels: { png: string; cut_mm: number }[] };
+  expect(q.p_device_id).toBe('aaaaaaaa-0000-4000-8000-0000000000d1');
+  expect(q.p_labels[0].cut_mm).toBe(76);
+  expect(q.p_labels[0].png).toMatch(/^data:image\/png;base64,/);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('a print the station could not make is shown, and the desk never falls back to the print dialog', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'failed', error: 'Cover open' }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: Cover open', { timeout: 10000 });
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('choosing Print dialog is remembered on this device and prints through the browser', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'done' }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup });
+  await page.selectOption('#ck-print-to', 'browser');
+  expect(await page.evaluate((id) => localStorage.getItem('ck_print_to:' + id), EVENT_ID)).toBe('browser');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(1);
+  expect(st.queued).toEqual([]);
 });

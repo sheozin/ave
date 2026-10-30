@@ -2207,52 +2207,131 @@ function setBadgeDesign(ent) {
   if (design.logo && logoUrl) new Image().src = logoUrl;
   // A template draws with the bundled font: load it now, while online.
   if (design.template) window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
-  probePrintHelper();
+  initPrinting();
 }
 
-// ── CueDeck print helper (print-helper/, runs on this laptop) ──
-// Any badge whose short side fits the 62 mm roll goes to the Brother as a
-// 300 dpi image (badgePng): no print dialog, no driver, cut at the badge
-// length. Without the helper, or for bigger stock, the browser prints.
+// ── where badges print ─────────────────────────────────────────────
+// Three routes, chosen per device and event (bottom-right picker):
+//   station:<id>  a print station on the venue network (migration 142):
+//                 the badge goes to CueDeck and the station prints it, so
+//                 this works from any device and browser
+//   local         the print helper on this computer (127.0.0.1:7841)
+//   browser       the print dialog, as always
+// Station and helper print a 300 dpi image (badgePng) on the 62 mm Brother
+// roll, cut at the badge length; a badge wider than the roll always uses
+// the print dialog. With exactly one station and no choice made, the desk
+// uses that station.
 const PRINT_HELPER = 'http://127.0.0.1:7841';
-// Opt-in per laptop: Chrome asks before a page may reach this computer,
-// and a desk without the helper should never see that question.
-const helperWanted = () => { try { return localStorage.getItem('ck_print_helper') === '1'; } catch (_) { return false; } };
+const printPrefKey = () => 'ck_print_to:' + (S.event ? S.event.id : '');
+function printPref() {
+  try { return localStorage.getItem(printPrefKey()) || (localStorage.getItem('ck_print_helper') === '1' ? 'local' : ''); } catch (_) { return ''; }
+}
+S.stations = []; S.printTo = 'browser'; S.printMsg = null; S.helper = null;
+
+async function initPrinting() {
+  await loadPrintStations();
+  const pref = printPref();
+  if (pref.startsWith('station:') && S.stations.some(st => 'station:' + st.id === pref)) S.printTo = pref;
+  else if (pref === 'local' || pref === 'browser') S.printTo = pref;
+  else S.printTo = S.stations.length === 1 ? 'station:' + S.stations[0].id : 'browser';
+  if (S.printTo === 'local') await probePrintHelper(); else renderPrinterChip();
+  if (!S.stationTimer) S.stationTimer = setInterval(() => { loadPrintStations().then(renderPrinterChip); }, 30000);
+}
+async function loadPrintStations() {
+  if (!S.event || !navigator.onLine) return;
+  const { data, error } = await sb.rpc('checkin_print_stations', { p_event_id: S.event.id });
+  if (error) { console.warn('checkin: print stations not loaded', error.message); return; }
+  S.stations = Array.isArray(data) ? data : [];
+}
+// Chrome asks before a page may reach this computer, so the helper is
+// only contacted once someone picks it.
 async function probePrintHelper() {
-  if (!helperWanted()) { S.helper = null; renderPrinterChip(); return; }
   try {
     const r = await fetch(PRINT_HELPER + '/status', { signal: AbortSignal.timeout(3000) });
     S.helper = await r.json();
   } catch (_) { S.helper = null; }
   renderPrinterChip();
 }
-function renderPrinterChip(error) {
+const stationOf = (route) => route && route.startsWith('station:') ? S.stations.find(st => 'station:' + st.id === route) || null : null;
+
+function renderPrinterChip() {
+  const d = S.badge && S.badge.design;
+  const fits = !!d && window.CK_BADGE.fitsRoll(d);
   let chip = document.getElementById('ck-printer');
-  const fits = S.badge && window.CK_BADGE.fitsRoll(S.badge.design);
-  if (!fits && !(S.helper && helperWanted())) { if (chip) chip.remove(); return; }
+  if (!S.stations.length && !fits && S.printTo === 'browser') { if (chip) chip.remove(); return; }
   if (!chip) {
-    chip = document.createElement('div'); chip.id = 'ck-printer'; chip.setAttribute('role', 'status');
-    chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;max-width:340px;padding:8px 12px;border-radius:10px;font:600 12.5px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.12)';
+    chip = document.createElement('div'); chip.id = 'ck-printer';
+    chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;width:300px;max-width:calc(100vw - 28px);padding:10px 12px;border-radius:12px;background:#fff;'
+      + 'font:500 12.5px/1.4 system-ui,sans-serif;color:#1D1D1F;box-shadow:0 4px 18px rgba(0,0,0,.14)';
+    const lbl = document.createElement('label'); lbl.htmlFor = 'ck-print-to'; lbl.textContent = 'Badges print on';
+    lbl.style.cssText = 'display:block;font-weight:700;margin-bottom:4px';
+    const sel = document.createElement('select'); sel.id = 'ck-print-to';
+    sel.style.cssText = 'width:100%;font:inherit;padding:6px 8px;border:1px solid #D2D2D7;border-radius:8px;background:#fff';
+    sel.addEventListener('change', () => {
+      S.printTo = sel.value; S.printMsg = null;
+      try { localStorage.setItem(printPrefKey(), sel.value); } catch (_) {}
+      if (sel.value === 'local') probePrintHelper(); else renderPrinterChip();
+    });
+    const msg = document.createElement('div'); msg.id = 'ck-print-msg'; msg.setAttribute('role', 'status');
+    msg.style.cssText = 'margin-top:6px;font-weight:600';
+    chip.append(lbl, sel, msg);
     document.body.appendChild(chip);
   }
-  chip.onclick = null; chip.style.cursor = '';
-  if (!S.helper && !error) {
-    chip.style.background = '#fff'; chip.style.color = '#1D1D1F'; chip.style.cursor = 'pointer';
-    chip.textContent = helperWanted() ? 'Print helper not found on this laptop. Start it, then click to retry.' : 'Print straight to a Brother label printer? Click to use the CueDeck print helper.';
-    chip.onclick = () => { try { localStorage.setItem('ck_print_helper', '1'); } catch (_) {} probePrintHelper(); };
+  const sel = document.getElementById('ck-print-to');
+  const opts = S.stations.map(st => ['station:' + st.id, st.label + (st.online ? '' : ' (offline)')]);
+  if (fits || S.printTo === 'local') opts.push(['local', 'Print helper on this computer']);
+  opts.push(['browser', 'Print dialog']);
+  sel.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; }));
+  if (!opts.some(([v]) => v === S.printTo)) S.printTo = 'browser';
+  sel.value = S.printTo;
+
+  const st = stationOf(S.printTo);
+  let tone = 'ok', text;
+  if (S.printMsg) ({ tone, text } = S.printMsg);
+  else if (S.printTo === 'browser') { tone = 'muted'; text = fits && !S.stations.length ? 'Any device can print to a Brother label printer: pair a print station under Kiosk or scanner.' : 'Badges open the print dialog.'; }
+  else if (!fits) { tone = 'warn'; text = 'This badge (' + d.w + ' x ' + d.h + ' mm) is wider than the 62 mm label roll, so it opens the print dialog.'; }
+  else if (st) { tone = st.online ? 'ok' : 'warn'; text = st.online ? 'Ready: badges go to ' + st.label + '.' : st.label + ' is offline. Is the print station running?'; }
+  else if (S.printTo === 'local') {
+    const h = S.helper;
+    tone = !h || h.error ? 'warn' : 'ok';
+    text = !h ? 'Print helper not found on this computer. Start it, then pick it again.'
+      : h.error ? 'Print helper is running, but ' + h.error
+      : 'Printing straight to the Brother at ' + h.printer + (h.warning ? '. ' + h.warning : '');
+  }
+  const msg = document.getElementById('ck-print-msg');
+  msg.textContent = text || '';
+  msg.style.color = { ok: '#1D8348', warn: '#9A5B00', err: '#B3261E', muted: '#6E6E73' }[tone];
+}
+const printNote = (tone, text) => { S.printMsg = { tone, text }; renderPrinterChip(); };
+
+// Marks badges printed: optimistic locally, then on the server.
+async function markPrinted(attendees) {
+  if (!attendees.length) return;
+  const now = deskNowIso();
+  for (const a of attendees) {
+    a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
+    badgeStale.delete(a.id);       // this badge carries the current spelling
+    await idbPutAll(STORE_ROSTER, [a]);
+  }
+  await stampBadgePrinted(attendees.map(a => a.id), now);
+}
+
+// Station jobs are watched in the background: the desk moves on to the next
+// guest while the badge travels. Only a confirmed print is marked printed.
+async function watchPrintJobs(ids, attendees, label) {
+  const until = Date.now() + 45000;
+  while (Date.now() < until) {
+    await new Promise(r => setTimeout(r, 1200));
+    const { data, error } = await sb.from('leod_checkin_print_jobs').select('id, status, error').in('id', ids);
+    if (error || !Array.isArray(data)) continue;
+    if (data.some(j => j.status === 'queued' || j.status === 'printing')) continue;
+    const done = attendees.filter((_, i) => (data.find(j => j.id === ids[i]) || {}).status === 'done');
+    const failed = data.find(j => j.status === 'failed');
+    await markPrinted(done);
+    printNote(failed ? 'err' : 'ok', failed ? 'Badge not printed: ' + (failed.error || 'the printer did not print') : (done.length === 1 ? 'Printed on ' : done.length + ' badges printed on ') + label + '.');
     return;
   }
-  if (!fits && !error) {
-    chip.style.background = '#FEF6E7'; chip.style.color = '#9A5B00';
-    chip.textContent = 'This badge (' + S.badge.design.w + ' x ' + S.badge.design.h + ' mm) is wider than the 62 mm label roll, so it prints through the browser.';
-    return;
-  }
-  const h = S.helper, bad = error || (h && (h.error || h.warning));
-  chip.style.background = error || (h && h.error) ? '#FDECEA' : bad ? '#FEF6E7' : '#E8F6EE';
-  chip.style.color = error || (h && h.error) ? '#B3261E' : bad ? '#9A5B00' : '#1D8348';
-  chip.textContent = error ? 'Badge not printed: ' + error
-    : h.error ? 'Print helper is running, but ' + h.error
-    : 'Printing straight to the Brother at ' + h.printer + (h.warning ? '. ' + h.warning : '');
+  printNote('warn', 'Still waiting for ' + label + '. Is the print station running?');
 }
 
 function badgeNode(attendee) {
@@ -2343,33 +2422,41 @@ async function printBadges(attendees) {
   // A template badge is an image; print once it is decoded, never blank.
   await Promise.all([...document.querySelectorAll('#badge-sheet img')].map(i => i.decode().catch(() => {})));
 
-  let viaHelper = false;
-  if (S.badge && S.helper && window.CK_BADGE.fitsRoll(S.badge.design)) {
+  const route = S.printTo;
+  if (route !== 'browser' && S.badge && window.CK_BADGE.fitsRoll(S.badge.design)) {
     let labels;
     try {
       labels = await Promise.all(attendees.map(a => window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' })));
-    } catch (e) { renderPrinterChip('could not draw the badge (' + (e && e.message) + ')'); return; }
-    try {
-      const r = await fetch(PRINT_HELPER + '/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ labels: labels.map(l => l.png), cut_mm: labels[0].cut_mm }) });
-      const j = await r.json().catch(() => ({}));
-      // The helper answered but the printer did not print: say so, and do
-      // not mark the badge printed. Never fall back to a wrong-size print.
-      if (!r.ok) { renderPrinterChip(j.error || 'the printer refused the job'); return; }
-      viaHelper = true; renderPrinterChip();
-    } catch (_) {
-      S.helper = null; renderPrinterChip();   // helper closed: print through the browser
+    } catch (e) { printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
+    const st = stationOf(route);
+    if (st) {
+      const { data: ids, error } = await sb.rpc('checkin_queue_print', { p_event_id: S.event.id, p_device_id: st.id,
+        p_labels: labels.map(l => ({ attendee_id: null, png: l.png, cut_mm: l.cut_mm })) });
+      // Never fall back to the print dialog here: on this printer that is
+      // a wrong-size badge. The guest is checked in either way.
+      if (error || !Array.isArray(ids)) { printNote('err', 'Badge not printed: ' + (navigator.onLine ? (error && error.message) || 'CueDeck did not take it' : 'this device is offline')); return; }
+      printNote('muted', (ids.length === 1 ? 'Sent to ' : ids.length + ' badges sent to ') + st.label + '…');
+      watchPrintJobs(ids, attendees, st.label);
+      return;
+    }
+    if (route === 'local') {
+      try {
+        const r = await fetch(PRINT_HELPER + '/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ labels: labels.map(l => l.png), cut_mm: labels[0].cut_mm }) });
+        const j = await r.json().catch(() => ({}));
+        // The helper answered but the printer did not print: say so, and do
+        // not mark the badge printed. Never fall back to a wrong-size print.
+        if (!r.ok) { printNote('err', 'Badge not printed: ' + (j.error || 'the printer refused the job')); return; }
+        S.printMsg = null; renderPrinterChip();
+        await markPrinted(attendees);
+        return;
+      } catch (_) {
+        S.helper = null; renderPrinterChip();   // helper closed: print through the browser
+      }
     }
   }
-  if (!viaHelper) window.print();
-
-  const now = deskNowIso();
-  for (const a of attendees) {
-    a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
-    badgeStale.delete(a.id);       // this badge carries the current spelling
-    await idbPutAll(STORE_ROSTER, [a]);
-  }
-  await stampBadgePrinted(attendees.map(a => a.id), now);
+  window.print();
+  await markPrinted(attendees);
 }
 
 // A check-in is durable the moment it is queued, not when the server
@@ -3397,8 +3484,8 @@ let ksPoint = '';
 
 function ksAsk(prefill, problem) {
   ksStopTimer();
-  const scanner = ksKind === 'scanner';
-  document.getElementById('ks-title').textContent = scanner ? 'Set up a door scanner' : 'Set up a kiosk';
+  const scanner = ksKind === 'scanner', printer = ksKind === 'printer';
+  document.getElementById('ks-title').textContent = scanner ? 'Set up a door scanner' : printer ? 'Set up a print station' : 'Set up a kiosk';
 
   const body = document.getElementById('ks-body');
   body.replaceChildren();
@@ -3407,7 +3494,7 @@ function ksAsk(prefill, problem) {
   kinds.className = 'ks-kinds';
   kinds.setAttribute('role', 'group');
   kinds.setAttribute('aria-label', 'What are you pairing?');
-  for (const [k, text] of [['kiosk', 'Kiosk tablet'], ['scanner', 'Door scanner phone']]) {
+  for (const [k, text] of [['kiosk', 'Kiosk tablet'], ['scanner', 'Door scanner phone'], ['printer', 'Print station']]) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'ks-kind';
@@ -3422,6 +3509,8 @@ function ksAsk(prefill, problem) {
   p.className = 'ks-p';
   p.textContent = scanner
     ? 'Choose where the phone will scan and name it, then read the code to whoever is holding the phone.'
+    : printer
+    ? 'A print station is a computer on the venue network next to a Brother label printer. Every desk and kiosk, on any device, can then print badges to it. Name the printer, then run the code on the station.'
     : 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
   body.appendChild(p);
 
@@ -3442,7 +3531,7 @@ function ksAsk(prefill, problem) {
   const lbl = document.createElement('label');
   lbl.className = 'ks-lbl';
   lbl.setAttribute('for', 'ks-label');
-  lbl.textContent = scanner ? 'Name this phone' : 'Name this kiosk';
+  lbl.textContent = scanner ? 'Name this phone' : printer ? 'Name this printer' : 'Name this kiosk';
   body.appendChild(lbl);
 
   const input = document.createElement('input');
@@ -3452,7 +3541,7 @@ function ksAsk(prefill, problem) {
   input.maxLength = KIOSK_LABEL_MAX;
   input.autocomplete = 'off';
   input.spellcheck = false;
-  input.placeholder = scanner ? 'Main door phone' : 'Lobby left';
+  input.placeholder = scanner ? 'Main door phone' : printer ? 'Desk printer' : 'Lobby left';
   input.value = prefill;
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); mintPairingCode(); }
@@ -3461,8 +3550,8 @@ function ksAsk(prefill, problem) {
 
   const hint = document.createElement('div');
   hint.className = 'ks-hint';
-  hint.textContent = scanner
-    ? 'This shows on the phone and in the list below, so use something you would say out loud.'
+  hint.textContent = scanner || printer
+    ? 'This shows ' + (printer ? 'in every desk\'s printer list' : 'on the phone') + ' and in the list below, so use something you would say out loud.'
     : 'This shows across the top of the kiosk screen, so use something you would say out loud. "Main entrance", "Lobby left".';
   body.appendChild(hint);
 
@@ -3558,7 +3647,7 @@ async function ksDevices(host) {
   wrap.className = 'ks-devs';
   const h = document.createElement('div');
   h.className = 'ks-devs-h';
-  h.textContent = 'Kiosks and scanners paired to this event';
+  h.textContent = 'Kiosks, scanners and print stations paired to this event';
   wrap.appendChild(h);
   const list = document.createElement('div');
   list.id = 'ks-dev-list';
@@ -3572,7 +3661,7 @@ async function ksDevices(host) {
       .select(KIOSK_DEV_COLS)
       .eq('event_id', S.event.id)
       // Scanners too: a phone left on a chair has to be revocable from here.
-      .in('kind', ['kiosk', 'scanner'])
+      .in('kind', ['kiosk', 'scanner', 'printer'])
       .order('created_at', { ascending: false }));
   } catch (thrown) {
     error = thrown;
@@ -3629,12 +3718,12 @@ function ksDeviceRow(row) {
   // A label is NOT NULL in the table, but this row came off the wire and
   // an empty string would render as a nameless card the organizer cannot
   // tell from the next one.
-  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : (row.kind === 'scanner' ? 'Unnamed scanner' : 'Unnamed kiosk');
+  name.textContent = (typeof row.label === 'string' && row.label.trim()) ? row.label : (row.kind === 'scanner' ? 'Unnamed scanner' : row.kind === 'printer' ? 'Unnamed print station' : 'Unnamed kiosk');
   main.appendChild(name);
 
   const meta = document.createElement('div');
   meta.className = 'ks-dev-meta';
-  meta.textContent = (row.kind === 'scanner' ? 'Scanner, paired ' : 'Kiosk, paired ') + ksWhen(row.created_at);
+  meta.textContent = (row.kind === 'scanner' ? 'Scanner, paired ' : row.kind === 'printer' ? 'Print station, paired ' : 'Kiosk, paired ') + ksWhen(row.created_at);
   main.appendChild(meta);
   el.appendChild(main);
 
@@ -3820,10 +3909,11 @@ async function mintPairingCode() {
   if (!input || !btn || btn.disabled) return;
 
   const label = input.value.trim().slice(0, KIOSK_LABEL_MAX);
-  const scanner = ksKind === 'scanner';
+  const scanner = ksKind === 'scanner', printer = ksKind === 'printer';
   err.textContent = '';
   if (!label) {
     err.textContent = scanner ? 'Give the phone a name first, so you can tell it apart from the next one.'
+      : printer ? 'Give the printer a name first, so desks can tell it apart from the next one.'
       : 'Give the kiosk a name first, so you can tell it apart from the next one.';
     input.focus();
     return;
@@ -3848,6 +3938,7 @@ async function mintPairingCode() {
     ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', {
       body: scanner
         ? { action: 'mint', event_id: S.event.id, label, device_kind: 'scanner', scan_point_id: ksPoint }
+        : printer ? { action: 'mint', event_id: S.event.id, label, device_kind: 'printer' }
         : { action: 'mint', event_id: S.event.id, label },
     }));
   } catch (thrown) {
@@ -3929,8 +4020,8 @@ function ksFailureMessage(status, reason) {
 function ksCode(code, expiresAt, label) {
   ksStopTimer();
   ksLabel = label;
-  const scanner = ksKind === 'scanner';
-  document.getElementById('ks-title').textContent = scanner ? 'Enter this code on the phone' : 'Read this code to the kiosk';
+  const scanner = ksKind === 'scanner', printer = ksKind === 'printer';
+  document.getElementById('ks-title').textContent = scanner ? 'Enter this code on the phone' : printer ? 'Pair the print station' : 'Read this code to the kiosk';
 
   const body = document.getElementById('ks-body');
   body.replaceChildren();
@@ -3963,16 +4054,20 @@ function ksCode(code, expiresAt, label) {
 
   const facts = document.createElement('div');
   facts.className = 'ks-facts';
-  ksFact(facts, 'Once only. ', scanner
+  ksFact(facts, 'Once only. ', printer
+    ? 'The first print station that uses it is paired and the code is spent.'
+    : scanner
     ? 'The first phone that enters it is paired and the code is spent. It will not work on a second phone.'
     : 'The first screen that enters it is paired and the code is spent. It will not work on a second tablet.');
   ksFact(facts, 'Nothing is stuck if you lose it. ',
     'The code cannot be looked up again by anyone, including us. If it is gone or it runs out, create another and read that one out instead.');
-  ksFact(facts, scanner ? 'On the phone: ' : 'On the tablet: ',
-    'open this address, then type the code into the box.');
+  ksFact(facts, printer ? 'On the computer next to the printer (Mac or Linux, with Node.js): ' : scanner ? 'On the phone: ' : 'On the tablet: ',
+    printer ? 'open Terminal and run this. It downloads the print station, finds the Brother printer and pairs it.' : 'open this address, then type the code into the box.');
   const url = document.createElement('div');
   url.className = 'ks-url';
-  url.textContent = scanner ? location.origin + '/checkin/scan' : location.origin + location.pathname + '?mode=kiosk';
+  url.textContent = printer
+    ? 'curl -fsSL ' + location.origin + '/print-helper/install.sh | sh -s -- ' + code
+    : scanner ? location.origin + '/checkin/scan' : location.origin + location.pathname + '?mode=kiosk';
   facts.appendChild(url);
   body.appendChild(facts);
 

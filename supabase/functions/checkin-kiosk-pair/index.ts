@@ -49,8 +49,10 @@ import { scanPointRefusal } from '../_shared/checkin-scanner.ts'
 // to one scan point. The scan point must belong to the event and its kind
 // must be switched on, checked at mint AND at claim: pairing a scanner to a
 // room whose scanning is off must fail now, not at the first guest.
-type DeviceKind = 'kiosk' | 'scanner'
-const asKind = (v: unknown): DeviceKind | null => (v === undefined || v === null || v === '' || v === 'kiosk') ? 'kiosk' : v === 'scanner' ? 'scanner' : null
+// 'printer': a venue print station (migration 142), checked like a kiosk
+// minus self-registration: it prints badges, it registers nobody.
+type DeviceKind = 'kiosk' | 'scanner' | 'printer'
+const asKind = (v: unknown): DeviceKind | null => (v === undefined || v === null || v === '' || v === 'kiosk') ? 'kiosk' : v === 'scanner' ? 'scanner' : v === 'printer' ? 'printer' : null
 const ENT_COLS = 'checkin_core, self_registration, multi_point_scanning, entrance_scanning, session_scanning'
 
 // ── Pairing code ──────────────────────────────────────────────────
@@ -175,7 +177,7 @@ Deno.serve(async (req) => {
       return json({ error: 'Missing event_id or label' }, 400)
     }
     const device_kind = asKind(body.device_kind)
-    if (!device_kind) return json({ error: 'device_kind must be kiosk or scanner' }, 400)
+    if (!device_kind) return json({ error: 'device_kind must be kiosk, scanner or printer' }, 400)
     const scan_point_id = device_kind === 'scanner' ? String(body.scan_point_id || '') : null
     if (device_kind === 'scanner' && !scan_point_id) {
       return json({ error: 'Choose the door or room this scanner is for' }, 400)

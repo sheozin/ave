@@ -19,7 +19,7 @@ export type DeviceAuth =
   | { ok: true; device: PairedDevice }
   | { ok: false; status: number; error: string }
 
-export async function authDevice(sb: Client, eventId: string, deviceKey: string, kind: 'scanner' | 'kiosk'): Promise<DeviceAuth> {
+export async function authDevice(sb: Client, eventId: string, deviceKey: string, kind: 'scanner' | 'kiosk' | 'printer'): Promise<DeviceAuth> {
   if (!deviceKey || deviceKey.length < 32 || deviceKey.length > 200) return { ok: false, status: 401, error: 'Unauthorized device' }
   const { data: device, error } = await sb.from('leod_checkin_devices')
     .select('id, event_id, kind, scan_point_id, revoked_at')

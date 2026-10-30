@@ -66,14 +66,14 @@ describe('print helper server', () => {
     });
     await new Promise<void>(r => printer.listen(0, '127.0.0.1', () => r()));
     const pport = (printer.address() as net.AddressInfo).port;
-    helper = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String(pport), '--port', String(PORT)]);
+    helper = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String(pport), '--port', String(PORT), '--config', '/nonexistent/cuedeck-station.json']);
     for (let i = 0; i < 50; i++) { try { await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } }); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
   });
   afterAll(() => { helper?.kill(); printer?.close(); });
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.0.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.1.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });
@@ -100,11 +100,46 @@ describe('print helper server', () => {
     expect(job.includes(Buffer.from([0x1b, 0x69, 0x4d, 0x40]))).toBe(true);
   });
   it('says so when the printer cannot be reached', async () => {
-    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17842']);
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17842', '--config', '/nonexistent/cuedeck-station.json']);
     await new Promise(r => setTimeout(r, 600));
     const r = await fetch('http://127.0.0.1:17842/print', { method: 'POST', headers: { Origin: 'https://app.cuedeck.io', 'Content-Type': 'application/json' }, body: JSON.stringify({ png: PNG.toString('base64') }) });
     h.kill();
     expect(r.status).toBe(502);
     expect((await r.json()).error).toMatch(/cannot reach the printer/);
+  });
+});
+
+describe('print station (badges through CueDeck)', () => {
+  it('pairs, takes a queued badge, prints it and reports it done', async () => {
+    const { mkdtempSync, readFileSync: rf } = await import('fs');
+    const os = await import('os'); const path = await import('path'); const http = await import('http');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cdps-'));
+    const calls: Record<string, unknown>[] = [];
+    let served = false;
+    const api = http.createServer((req, res) => {
+      let b = ''; req.on('data', c => b += c); req.on('end', () => {
+        const body = JSON.parse(b || '{}'); calls.push({ path: req.url, ...body, apikey: req.headers.apikey });
+        res.setHeader('Content-Type', 'application/json');
+        if (req.url!.endsWith('/checkin-kiosk-pair')) return res.end(JSON.stringify({ ok: true, event_id: 'e1', device_id: 'd1', label: 'Desk printer', device_key: 'k'.repeat(64), device_kind: 'printer' }));
+        if (body.action === 'next') {
+          if (!served) { served = true; return res.end(JSON.stringify({ jobs: [{ id: 'j1', png: 'data:image/png;base64,' + PNG.toString('base64'), cut_mm: 76 }] })); }
+          return setTimeout(() => res.end(JSON.stringify({ jobs: [] })), 300);
+        }
+        res.end(JSON.stringify({ ok: true, recorded: true }));
+      });
+    });
+    await new Promise<void>(r => api.listen(0, '127.0.0.1', () => r()));
+    const got: Buffer[] = [];
+    const prn = net.createServer(s => { const b: Buffer[] = []; s.on('data', d => b.push(d)); s.on('end', () => { got.push(Buffer.concat(b)); s.end(); }); });
+    await new Promise<void>(r => prn.listen(0, '127.0.0.1', () => r()));
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String((prn.address() as net.AddressInfo).port),
+      '--port', '17843', '--pair', 'ABCD-EFGH', '--config', path.join(dir, 'station.json'), '--supabase-url', `http://127.0.0.1:${(api.address() as net.AddressInfo).port}`]);
+    for (let i = 0; i < 60 && !calls.some(c => c.action === 'done'); i++) await new Promise(r => setTimeout(r, 100));
+    h.kill(); api.close(); prn.close();
+    expect(calls[0]).toMatchObject({ path: '/functions/v1/checkin-kiosk-pair', action: 'claim', code: 'ABCD-EFGH', device_kind: 'printer' });
+    expect(JSON.parse(rf(path.join(dir, 'station.json'), 'utf8'))).toMatchObject({ event_id: 'e1', label: 'Desk printer' });
+    expect(calls.find(c => c.action === 'next')).toMatchObject({ event_id: 'e1', device_key: 'k'.repeat(64) });
+    expect(calls.find(c => c.action === 'done')).toMatchObject({ job_id: 'j1', ok: true });
+    expect(got.some(b => b[b.length - 1] === 0x1a && b.length > 50000)).toBe(true);
   });
 });
