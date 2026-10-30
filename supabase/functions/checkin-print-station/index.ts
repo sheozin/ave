@@ -4,14 +4,14 @@
 // authenticates the key itself (checkin-device.ts), which also stamps
 // last_seen_at: that stamp is what makes the station show as online.
 //
-//   { action: 'next', event_id, device_key }
+//   { action: 'next', event_id, device_key, info? }
 //     Long-polls up to WAIT_MS for queued badges, claims up to 5 and returns
 //     { jobs: [{ id, png, cut_mm }] }. An empty list after the wait is normal.
 //   { action: 'done', event_id, device_key, job_id, ok, error? }
 //     Reports one job. The image is cleared either way.
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
-import { authDevice } from '../_shared/checkin-device.ts'
+import { authDevice, printerInfo } from '../_shared/checkin-device.ts'
 
 const WAIT_MS = 20_000
 const STEP_MS = 700
@@ -33,6 +33,13 @@ Deno.serve(async (req) => {
   const deviceId = auth.device.id
 
   if (body.action === 'next') {
+    // What the station drives (model, dpi, width), so desks size badges for
+    // it. Best effort: a failed write must not stop the station printing.
+    const info = printerInfo(body.info)
+    if (info) {
+      const { error: infoErr } = await sb.from('leod_checkin_devices').update({ printer_info: info }).eq('id', deviceId)
+      if (infoErr) console.warn('checkin-print-station: printer_info not saved', infoErr.code)
+    }
     const until = Date.now() + WAIT_MS
     for (;;) {
       const { data, error } = await sb.rpc('checkin_print_claim', { p_device_id: deviceId, p_limit: 5 })

@@ -235,6 +235,45 @@ test('a failed alert save shows the server message', async ({ page }) => {
   await expect(page.locator('#al-err')).toHaveText('Only the event owner or an organizer can choose alert ticket types');
 });
 
+// ── Print stations in Setup (migrations 142, 143) ──
+test('an organizer sees the print stations, pairs one by its code and removes one', async ({ page }) => {
+  let approved: Record<string, unknown> = {};
+  const patched: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer' }, 'kiosk', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', multi_point_scanning: false, entrance_scanning: false, session_scanning: false }]);
+    await table(page, 'leod_checkin_scan_points', []);
+    await rpc(page, 'checkin_scan_point_counts', []);
+    await rpc(page, 'checkin_print_stations', [
+      { id: 'd1', label: 'Desk printer', online: true, last_seen_at: FIXED_NOW.toISOString(), printer_info: { model: 'brother-ql', host: '192.168.1.130' }, last_printed_at: new Date(FIXED_NOW.getTime() - 120000).toISOString(), printed_today: 12 },
+      { id: 'd2', label: 'Hall Zebra', online: false, last_seen_at: new Date(FIXED_NOW.getTime() - 3600000).toISOString(), printer_info: { model: 'zebra', name: 'ZD621', width_mm: 104, dpi: 300 }, last_printed_at: null, printed_today: 0 },
+    ]);
+    await fn(page, 'checkin-kiosk-pair', (b) => { approved = b; return { body: { ok: true, device_id: 'd3', label: b.label } }; });
+    await page.route(/\/rest\/v1\/leod_checkin_devices/, async (r) => {
+      if (r.request().method() === 'PATCH') { patched.push({ url: r.request().url(), body: r.request().postDataJSON() }); return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'd2' }]) }); }
+      return r.fallback();
+    });
+  });
+  const rows = page.locator('#ps-body tr');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('Brother QL, 62 mm roll (192.168.1.130)');
+  await expect(rows.nth(0)).toContainText('Online');
+  await expect(rows.nth(0)).toContainText('2 min ago · 12 today');
+  await expect(rows.nth(1)).toContainText('ZD621, 104 mm, 300 dpi');
+  await expect(rows.nth(1)).toContainText('Offline, seen 1 h ago');
+  await page.fill('#ps-code', 'wxyz 2345');
+  await page.fill('#ps-name', 'Lobby printer');
+  await page.click('#ps-add-btn');
+  await expect(page.locator('#ps-ok')).toContainText('"Lobby printer" is paired');
+  expect(approved).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'WXYZ2345', label: 'Lobby printer' });
+  const rm = rows.nth(1).getByRole('button');
+  await rm.click();
+  await expect(rm).toHaveText('Click again to remove');
+  expect(patched).toEqual([]);
+  await rm.click();
+  await expect(page.locator('#ps-ok')).toContainText('"Hall Zebra" removed');
+  expect(String((patched[0] as { url: string }).url)).toMatch(/id=eq\.d2/);
+});
+
 // ── Door and session scanners in Setup (scanner Build A) ──
 test('an organizer turns door scanning on and adds a door; session scanning says it is not included', async ({ page }) => {
   let setArgs: Record<string, unknown> = {};

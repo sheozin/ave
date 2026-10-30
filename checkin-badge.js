@@ -324,6 +324,14 @@ function visaNextElement(attendee, ctx, doc) {
 // printable width. Returns { png, cut_mm }.
 export const ROLL_MM = 62;
 export const fitsRoll = (d) => !!d.template || Math.min(d.w, d.h) <= ROLL_MM;
+// printer: a station's printer_info (migration 143). A Zebra prints the
+// badge at full size across its head (turned a quarter if that fits
+// better); anything else is the Brother 62 mm roll.
+export const isZebra = (printer) => !!printer && printer.model === 'zebra';
+export function fitsPrinter(d, printer) {
+  if (!isZebra(printer)) return fitsRoll(d);
+  return Math.min(d.w, d.h) <= (Number(printer.width_mm) || 104);
+}
 
 async function inlineImages(node) {
   for (const img of node.querySelectorAll('img')) {
@@ -335,10 +343,10 @@ async function inlineImages(node) {
   }
 }
 
-export async function badgePng(attendee, ctx) {
-  const doc = ctx.doc || document, d = ctx.design;
+export async function badgePng(attendee, ctx, { printer = null } = {}) {
+  const doc = ctx.doc || document, d = ctx.design, zebra = isZebra(printer);
   if (d.template === 'visa-next-full') return { png: visaNextCanvas(attendee, doc, { test: !!ctx.test }).toDataURL('image/png'), cut_mm: d.w };
-  if (!fitsRoll(d)) throw new Error(`a ${d.w} x ${d.h} mm badge does not fit the ${ROLL_MM} mm roll`);
+  if (!fitsPrinter(d, printer)) throw new Error(zebra ? `a ${d.w} x ${d.h} mm badge is wider than this printer` : `a ${d.w} x ${d.h} mm badge does not fit the ${ROLL_MM} mm roll`);
   const node = badgeElement(attendee, { ...ctx, test: false, preview: false, doc });
   await inlineImages(node);
   const cssPx = 96 / 25.4, wCss = d.w * cssPx, hCss = d.h * cssPx;
@@ -349,10 +357,13 @@ export async function badgePng(attendee, ctx) {
   await im.decode();
 
   const dpmm = 300 / 25.4, rollPx = VISA_NEXT_PX.h, short = Math.min(d.w, d.h);
-  const k = Math.min(dpmm, rollPx / short);          // px per mm, scaled down only if wider than printable
+  // Brother: px per mm, scaled down only if wider than the printable roll.
+  // Zebra: the badge as designed, at 300 dpi; the station fits it to the head.
+  const k = zebra ? dpmm : Math.min(dpmm, rollPx / short);
   const landscape = d.w >= d.h;
   const c = doc.createElement('canvas');
-  c.width = landscape ? Math.round(d.w * k) : rollPx; c.height = landscape ? rollPx : Math.round(d.h * k);
+  if (zebra) { c.width = Math.round(d.w * k); c.height = Math.round(d.h * k); }
+  else { c.width = landscape ? Math.round(d.w * k) : rollPx; c.height = landscape ? rollPx : Math.round(d.h * k); }
   const g = c.getContext('2d');
   g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
   const bw = d.w * k, bh = d.h * k;

@@ -895,9 +895,9 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
   import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
-  import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll } from '/checkin-badge.js';
+  import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
-  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll };
+  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll, fitsPrinter };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
 <script>
@@ -2253,10 +2253,18 @@ async function probePrintHelper() {
   renderPrinterChip();
 }
 const stationOf = (route) => route && route.startsWith('station:') ? S.stations.find(st => 'station:' + st.id === route) || null : null;
+// What the chosen route prints on (migration 143): a station's printer_info,
+// or the local helper's model. null means the Brother 62 mm roll.
+function routePrinter(route) {
+  const st = stationOf(route);
+  if (st) return st.printer_info || null;
+  return route === 'local' && S.helper && S.helper.model === 'zebra' ? { model: 'zebra' } : null;
+}
+const routeFits = (route) => !!(S.badge && window.CK_BADGE.fitsPrinter(S.badge.design, routePrinter(route)));
 
 function renderPrinterChip() {
   const d = S.badge && S.badge.design;
-  const fits = !!d && window.CK_BADGE.fitsRoll(d);
+  const fits = S.printTo === 'browser' ? !!d && window.CK_BADGE.fitsRoll(d) : routeFits(S.printTo);
   let chip = document.getElementById('ck-printer');
   if (!S.stations.length && !fits && S.printTo === 'browser') { if (chip) chip.remove(); return; }
   if (!chip) {
@@ -2289,7 +2297,7 @@ function renderPrinterChip() {
   let tone = 'ok', text;
   if (S.printMsg) ({ tone, text } = S.printMsg);
   else if (S.printTo === 'browser') { tone = 'muted'; text = fits && !S.stations.length ? 'Any device can print to a Brother label printer: pair a print station under Kiosk or scanner.' : 'Badges open the print dialog.'; }
-  else if (!fits) { tone = 'warn'; text = 'This badge (' + d.w + ' x ' + d.h + ' mm) is wider than the 62 mm label roll, so it opens the print dialog.'; }
+  else if (!fits) { tone = 'warn'; text = 'This badge (' + d.w + ' x ' + d.h + ' mm) is wider than ' + ((routePrinter(S.printTo) || {}).model === 'zebra' ? 'this printer' : 'the 62 mm label roll') + ', so it opens the print dialog.'; }
   else if (st) { tone = st.online ? 'ok' : 'warn'; text = st.online ? 'Ready: badges go to ' + st.label + '.' : st.label + ' is offline. Is the print station running?'; }
   else if (S.printTo === 'local') {
     const h = S.helper;
@@ -2423,10 +2431,10 @@ async function printBadges(attendees) {
   await Promise.all([...document.querySelectorAll('#badge-sheet img')].map(i => i.decode().catch(() => {})));
 
   const route = S.printTo;
-  if (route !== 'browser' && S.badge && window.CK_BADGE.fitsRoll(S.badge.design)) {
+  if (route !== 'browser' && routeFits(route)) {
     let labels;
     try {
-      labels = await Promise.all(attendees.map(a => window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' })));
+      labels = await Promise.all(attendees.map(a => window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' }, { printer: routePrinter(route) })));
     } catch (e) { printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
     const st = stationOf(route);
     if (st) {
@@ -3481,6 +3489,10 @@ function closeKioskSetup() {
 // Kept across "Create another code" so a run of door phones stays quick.
 let ksKind = 'kiosk';
 let ksPoint = '';
+// Print stations pair the other way round (migration 143): the station
+// shows a code and it is typed here. ksPrinterTerminal is the older route,
+// a code made here for a station started from Terminal.
+let ksPrinterTerminal = false;
 
 function ksAsk(prefill, problem) {
   ksStopTimer();
@@ -3509,8 +3521,10 @@ function ksAsk(prefill, problem) {
   p.className = 'ks-p';
   p.textContent = scanner
     ? 'Choose where the phone will scan and name it, then read the code to whoever is holding the phone.'
+    : printer && !ksPrinterTerminal
+    ? 'A print station is a computer or box on the venue network next to a Brother or Zebra label printer. Once paired, every desk and kiosk, on any device, prints badges to it. Type the code it shows, or prints on its first label.'
     : printer
-    ? 'A print station is a computer on the venue network next to a Brother label printer. Every desk and kiosk, on any device, can then print badges to it. Name the printer, then run the code on the station.'
+    ? 'Name the printer, then run the command on the computer next to it.'
     : 'Name the screen, then read the code it gives you to whoever is standing at the tablet.';
   body.appendChild(p);
 
@@ -3526,6 +3540,25 @@ function ksAsk(prefill, problem) {
     sel.addEventListener('change', () => { ksPoint = sel.value; });
     body.appendChild(sel);
     ksLoadPoints(sel);
+  }
+
+  if (printer && !ksPrinterTerminal) {
+    const clbl = document.createElement('label');
+    clbl.className = 'ks-lbl';
+    clbl.setAttribute('for', 'ks-scode');
+    clbl.textContent = 'Code on the print station';
+    body.appendChild(clbl);
+    const cin = document.createElement('input');
+    cin.className = 'ck-input';
+    cin.id = 'ks-scode';
+    cin.type = 'text';
+    cin.maxLength = 12;
+    cin.autocomplete = 'off';
+    cin.spellcheck = false;
+    cin.placeholder = 'ABCD-EFGH';
+    cin.style.textTransform = 'uppercase';
+    cin.style.letterSpacing = '2px';
+    body.appendChild(cin);
   }
 
   const lbl = document.createElement('label');
@@ -3544,7 +3577,7 @@ function ksAsk(prefill, problem) {
   input.placeholder = scanner ? 'Main door phone' : printer ? 'Desk printer' : 'Lobby left';
   input.value = prefill;
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); mintPairingCode(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (ksKind === 'printer' && !ksPrinterTerminal) approveStationCode(); else mintPairingCode(); }
   });
   body.appendChild(input);
 
@@ -3566,11 +3599,26 @@ function ksAsk(prefill, problem) {
   const go = document.createElement('button');
   go.className = 'ck-btn';
   go.type = 'button';
-  go.id = 'ks-mint';
-  go.textContent = 'Create a pairing code';
-  go.addEventListener('click', mintPairingCode);
+  if (printer && !ksPrinterTerminal) {
+    go.id = 'ks-approve';
+    go.textContent = 'Pair print station';
+    go.addEventListener('click', approveStationCode);
+  } else {
+    go.id = 'ks-mint';
+    go.textContent = 'Create a pairing code';
+    go.addEventListener('click', mintPairingCode);
+  }
   acts.appendChild(go);
   body.appendChild(acts);
+  if (printer) {
+    const alt = document.createElement('button');
+    alt.type = 'button';
+    alt.className = 'ks-link';
+    alt.style.cssText = 'background:none;border:0;padding:0;margin-top:12px;color:var(--ac,#0071E3);font:inherit;font-size:13px;cursor:pointer';
+    alt.textContent = ksPrinterTerminal ? 'The station shows a code? Type it instead.' : 'Setting it up from Terminal? Create a code here instead.';
+    alt.addEventListener('click', () => { ksPrinterTerminal = !ksPrinterTerminal; ksAsk(input.value, ''); });
+    body.appendChild(alt);
+  }
 
   ksDevices(body);
 }
@@ -3899,6 +3947,52 @@ function ksSince(iso) {
   if (hours < 24) return hours === 1 ? '1 hour ago' : hours + ' hours ago';
   const days = Math.floor(hours / 24);
   return days === 1 ? '1 day ago' : days + ' days ago';
+}
+
+// ── APPROVE A PRINT STATION'S CODE (migration 143) ─────────────────
+async function approveStationCode() {
+  const codeIn = document.getElementById('ks-scode');
+  const input = document.getElementById('ks-label');
+  const btn = document.getElementById('ks-approve');
+  const err = document.getElementById('ks-err');
+  if (!codeIn || !input || !btn || btn.disabled) return;
+  const code = codeIn.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const label = input.value.trim().slice(0, KIOSK_LABEL_MAX);
+  err.textContent = '';
+  if (code.length !== 8) { err.textContent = 'Type the 8-character code the print station shows, like ABCD-EFGH.'; codeIn.focus(); return; }
+  if (!label) { err.textContent = 'Give the printer a name first, so desks can tell it apart from the next one.'; input.focus(); return; }
+  if (!navigator.onLine) { err.textContent = 'This desk is offline, and pairing has to reach the server. Reconnect, then try again.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Pairing…';
+  let data = null, error = null;
+  try {
+    ({ data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: S.event.id, code, label } }));
+  } catch (thrown) { error = thrown; }
+  if (error || !data || data.ok !== true) {
+    const status = kioskErrorStatus(error);
+    const reason = await ksReason(error);
+    btn.disabled = false;
+    btn.textContent = 'Pair print station';
+    err.textContent = status === 404 && ksLastReason ? ksLastReason : ksFailureMessage(status, reason);
+    return;
+  }
+  const body = document.getElementById('ks-body');
+  body.replaceChildren();
+  const ok = document.createElement('div');
+  ok.className = 'ks-p';
+  ok.textContent = 'Paired. "' + label + '" now prints badges for this event, from any desk or kiosk. The station starts by itself within a few seconds.';
+  body.appendChild(ok);
+  const acts = document.createElement('div');
+  acts.className = 'ks-acts';
+  const done = document.createElement('button');
+  done.className = 'ck-btn';
+  done.type = 'button';
+  done.textContent = 'Done';
+  done.addEventListener('click', () => { const x = document.getElementById('ks-close'); if (x) x.click(); else ksAsk('', ''); });
+  acts.appendChild(done);
+  body.appendChild(acts);
+  ksDevices(body);
+  loadPrintStations().then(renderPrinterChip);
 }
 
 // ── MINT ───────────────────────────────────────────────────────────

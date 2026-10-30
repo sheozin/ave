@@ -82,6 +82,7 @@
 .sc-h{margin:26px 0 4px;font-size:15px;letter-spacing:-.2px}
 .sc-p{margin:0 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
 .sc-tbl{margin-top:12px}
+.tbl .hide-lg{display:none}
 .sc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .sc-add .search{flex:1;min-width:160px}
 .al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -120,7 +121,7 @@
 @media (max-width:900px){.layout{grid-template-columns:1fr;padding:16px}
   .steps{position:sticky;top:0;z-index:4;display:flex;gap:2px;overflow-x:auto;padding:6px;border-radius:14px;-webkit-overflow-scrolling:touch}
   .steps .ttl{display:none}.st{width:auto;flex:none;padding:9px 12px}.st small{margin-left:4px}.st.golive{margin:0;border:0;padding-top:9px;border-radius:11px}
-  .stats,.src{grid-template-columns:repeat(2,minmax(0,1fr))}.ov-grid,.br-grid,.rep-grid{grid-template-columns:1fr}.bp{position:static}.gl,.inc{grid-template-columns:1fr}.banner{margin:16px 16px 0}.tbl .hide-sm{display:none}}
+  .stats,.src{grid-template-columns:repeat(2,minmax(0,1fr))}.ov-grid,.br-grid,.rep-grid{grid-template-columns:1fr}.bp{position:static}.gl,.inc{grid-template-columns:1fr}.banner{margin:16px 16px 0}.tbl .hide-sm{display:none}.tbl .hide-lg{display:block}}
 #page-err:empty{display:none}
 .roles{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:6px;font-size:13px;color:var(--t2)}.roles b{color:var(--t1);font-weight:600}
 @media (max-width:600px){#f-inv{grid-template-columns:1fr!important}.nav{padding:14px 16px}.crumb{display:none}}
@@ -478,6 +479,19 @@
       <select class="search" id="sc-kind" aria-label="Kind" style="flex:none"><option value="entrance">Door</option><option value="interior">Session room</option></select>
       <button class="btn btn-s" id="sc-add-btn">Add</button>
     </form>
+    <div id="ps-section" hidden>
+      <h3 class="sc-h">Print stations</h3>
+      <p class="sc-p">Print badges from any desk or kiosk, on any device, to a Brother or Zebra label printer at the right size, with no print dialog. A print station is a computer or small box on the venue network next to the printer. Start it, then type the code it shows or prints.</p>
+      <table class="tbl sc-tbl"><thead><tr><th>Printer</th><th class="hide-sm">Prints on</th><th>Status</th><th class="hide-sm">Last badge</th><th></th></tr></thead><tbody id="ps-body"></tbody></table>
+      <p class="small" id="ps-empty" hidden>No print stations yet.</p>
+      <form id="ps-add" class="sc-add">
+        <input class="search" id="ps-code" maxlength="12" placeholder="ABCD-EFGH" aria-label="Code on the print station" autocomplete="off" spellcheck="false" style="flex:0 1 150px;text-transform:uppercase;letter-spacing:1px">
+        <input class="search" id="ps-name" maxlength="60" placeholder="Desk printer" aria-label="Name of the printer" autocomplete="off">
+        <button class="btn btn-s" id="ps-add-btn">Add print station</button>
+      </form>
+      <div class="err" id="ps-err"></div><div class="ok" id="ps-ok"></div>
+      <p class="small">Starting a station on a Mac or Linux computer: open Terminal and run <code>curl -fsSL https://app.cuedeck.io/print-helper/install.sh | sh</code></p>
+    </div>
   </section>
 
   <section class="panel" id="p-qr" hidden>
@@ -1849,7 +1863,75 @@ function renderKiosk() {
   document.querySelectorAll('[data-set]').forEach(i => i.checked = !!ENT[i.dataset.set]);
   renderScanning();
   loadScanPoints();
+  loadStations();
 }
+
+// ── print stations (migrations 142, 143) ──
+// Pairing is by the code the station shows or prints; removing revokes its
+// key (057), so a station that walks off cannot print again.
+let PS_TIMER = null;
+const psAgo = (iso) => {
+  const m = Math.floor((Date.now() - Date.parse(iso)) / 60000);
+  return !iso ? '' : m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.floor(m / 60) + ' h ago' : Math.floor(m / 1440) + ' d ago';
+};
+function psPrints(info) {
+  if (!info) return 'Not reported yet';
+  if (info.model === 'zebra') return (info.name || 'Zebra') + ', ' + (info.width_mm || '?') + ' mm, ' + (info.dpi || '?') + ' dpi';
+  return 'Brother QL, 62 mm roll';
+}
+async function loadStations() {
+  const allowed = can(ROLE, 'kiosk');
+  $('ps-section').hidden = !allowed;
+  if (!allowed) return;
+  const { data, error } = await sb.rpc('checkin_print_stations', { p_event_id: EVENT_ID });
+  if (error) { $('ps-err').textContent = 'Could not load the print stations: ' + error.message; return; }
+  const rows = data || [];
+  $('ps-empty').hidden = rows.length > 0;
+  $('ps-body').replaceChildren(...rows.map(st => {
+    const tr = el('tr');
+    const name = el('td'); name.append(el('b', null, st.label), el('div', 'small hide-lg', psPrints(st.printer_info)));
+    const prints = el('td', 'hide-sm', psPrints(st.printer_info) + (st.printer_info && st.printer_info.host ? ' (' + st.printer_info.host + ')' : ''));
+    const stat = el('td', null, st.online ? 'Online' : 'Offline' + (st.last_seen_at ? ', seen ' + psAgo(st.last_seen_at) : ''));
+    stat.style.color = st.online ? 'var(--gn)' : 'var(--am)'; stat.style.fontWeight = '600';
+    const last = el('td', 'hide-sm', st.last_printed_at ? psAgo(st.last_printed_at) + (st.printed_today ? ' · ' + st.printed_today + ' today' : '') : 'None yet');
+    const act = el('td'); act.style.textAlign = 'right';
+    const rm = el('button', 'link', 'Remove'); rm.type = 'button';
+    // Two clicks, not a confirm dialog: the second says what it does.
+    rm.onclick = async () => {
+      if (rm.dataset.armed !== '1') { rm.dataset.armed = '1'; rm.textContent = 'Click again to remove'; return; }
+      rm.disabled = true;
+      const { data: gone, error: e2 } = await sb.from('leod_checkin_devices').update({ revoked_at: new Date().toISOString() })
+        .eq('id', st.id).eq('event_id', EVENT_ID).select('id');
+      if (e2 || !gone || !gone.length) { $('ps-err').textContent = 'Could not remove it' + (e2 ? ': ' + e2.message : '. Only organizers and desk leads can.'); rm.disabled = false; return; }
+      $('ps-ok').textContent = '"' + st.label + '" removed. It can no longer print for this event.';
+      loadStations();
+    };
+    act.append(rm);
+    tr.append(name, prints, stat, last, act);
+    return tr;
+  }));
+  clearTimeout(PS_TIMER);
+  PS_TIMER = setTimeout(() => { if (!$('p-kiosk').hidden) loadStations(); }, 20000);
+}
+$('ps-add').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('ps-err').textContent = ''; $('ps-ok').textContent = '';
+  const code = $('ps-code').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const label = $('ps-name').value.trim();
+  if (code.length !== 8) { $('ps-err').textContent = 'Type the 8-character code the print station shows, like ABCD-EFGH.'; $('ps-code').focus(); return; }
+  if (!label) { $('ps-err').textContent = 'Give the printer a name, so desks can tell it apart.'; $('ps-name').focus(); return; }
+  $('ps-add-btn').disabled = true;
+  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: { action: 'approve', event_id: EVENT_ID, code, label } });
+  $('ps-add-btn').disabled = false;
+  if (error || !data || data.ok !== true) {
+    let msg = 'Could not pair it.';
+    try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+    $('ps-err').textContent = msg; return;
+  }
+  $('ps-code').value = ''; $('ps-name').value = '';
+  $('ps-ok').textContent = '"' + label + '" is paired. Every desk and kiosk of this event can print to it now.';
+  loadStations();
+});
 
 // ── door and session scanners (scanner Build A, migrations 097, 098) ──
 // Settings go through checkin_set_scanning: clients cannot write the

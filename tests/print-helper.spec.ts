@@ -10,6 +10,8 @@ import { createHash } from 'crypto';
 import net from 'net';
 import { spawn, ChildProcess } from 'child_process';
 import { decodePng, toLines, fitLength, rasterJob, parseStatus, QL } from '../print-helper/brother-raster.mjs';
+import { zplLabel, zplText, parseZebraInfo } from '../print-helper/zebra-zpl.mjs';
+import { textImage } from '../print-helper/label-text.mjs';
 
 const PNG = readFileSync('tests/fixtures/visa-next-sample.png');
 
@@ -66,14 +68,14 @@ describe('print helper server', () => {
     });
     await new Promise<void>(r => printer.listen(0, '127.0.0.1', () => r()));
     const pport = (printer.address() as net.AddressInfo).port;
-    helper = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String(pport), '--port', String(PORT), '--config', '/nonexistent/cuedeck-station.json']);
+    helper = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String(pport), '--port', String(PORT), '--config', '/nonexistent/cuedeck-station.json', '--no-station']);
     for (let i = 0; i < 50; i++) { try { await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } }); break; } catch { await new Promise(r => setTimeout(r, 100)); } }
   });
   afterAll(() => { helper?.kill(); printer?.close(); });
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.1.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.2.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });
@@ -100,7 +102,7 @@ describe('print helper server', () => {
     expect(job.includes(Buffer.from([0x1b, 0x69, 0x4d, 0x40]))).toBe(true);
   });
   it('says so when the printer cannot be reached', async () => {
-    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17842', '--config', '/nonexistent/cuedeck-station.json']);
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17842', '--config', '/nonexistent/cuedeck-station.json', '--no-station']);
     await new Promise(r => setTimeout(r, 600));
     const r = await fetch('http://127.0.0.1:17842/print', { method: 'POST', headers: { Origin: 'https://app.cuedeck.io', 'Content-Type': 'application/json' }, body: JSON.stringify({ png: PNG.toString('base64') }) });
     h.kill();
@@ -141,5 +143,105 @@ describe('print station (badges through CueDeck)', () => {
     expect(calls.find(c => c.action === 'next')).toMatchObject({ event_id: 'e1', device_key: 'k'.repeat(64) });
     expect(calls.find(c => c.action === 'done')).toMatchObject({ job_id: 'j1', ok: true });
     expect(got.some(b => b[b.length - 1] === 0x1a && b.length > 50000)).toBe(true);
+  });
+});
+
+describe('zebra and text labels', () => {
+  const field = (zpl: string) => { const m = zpl.match(/\^PW(\d+)\^LL(\d+)\^LH0,0\^FO(\d+),0\^GFA,(\d+),\d+,(\d+),([0-9A-F]+)\^FS/)!; return { pw: +m[1], ll: +m[2], x0: +m[3], total: +m[4], row: +m[5], hex: m[6] }; };
+  it('a 300 dpi badge on a 203 dpi Zebra is scaled, kept whole and centred', () => {
+    const img = { w: 1205, h: 898, gray: new Uint8Array(1205 * 898).fill(0) };   // 102 x 76 mm at 300 dpi
+    const f = field(zplLabel(img, { dpi: 203, widthDots: 832 }));
+    expect([f.pw, f.ll, f.row]).toEqual([832, 608, Math.ceil(815 / 8)]);
+    expect(f.x0).toBe(Math.floor((832 - 815) / 2));
+    expect(f.hex.length).toBe(f.total * 2);
+  });
+  it('a badge wider than the head is turned a quarter, not cut', () => {
+    const img = { w: 1800, h: 1200, gray: new Uint8Array(1800 * 1200).fill(255) };   // 152 x 102 mm at 300 dpi
+    const f = field(zplLabel(img, { dpi: 300, widthDots: 1248 }));
+    expect([f.ll, f.row]).toEqual([1800, 150]);
+  });
+  it('refuses a badge that fits neither way', () => {
+    expect(() => zplLabel({ w: 2400, h: 2400, gray: new Uint8Array(2400 * 2400) }, { dpi: 300, widthDots: 1248 })).toThrow(/mm wide/);
+  });
+  it('reads what a Zebra says about itself, and nothing else', () => {
+    expect(parseZebraInfo('"300""1248""ZD621-300dpi"')).toEqual({ dpi: 300, widthDots: 1248, name: 'ZD621-300dpi' });
+    expect(parseZebraInfo('"?"')).toBe(null);
+  });
+  it('prints text a printer cannot misread as commands', () => {
+    expect(zplText([{ text: 'A^XZ~JR', size: 0.1 }])).toContain('^FDA XZ JR^FS');
+  });
+  it('draws the pairing code across the 62 mm roll', () => {
+    const img = textImage([{ text: 'ABCD-EFGH', scale: 9 }]);
+    expect(img.w).toBe(696);
+    expect(img.gray.some(v => v === 0)).toBe(true);
+    expect(toLines(img)).toHaveLength(img.h);
+  });
+});
+
+describe('print station pairs by showing its own code', () => {
+  it('asks for a code with its key hash, prints the code, waits for approval, then takes badges', async () => {
+    const { mkdtempSync, readFileSync: rf } = await import('fs');
+    const os = await import('os'); const path = await import('path'); const http = await import('http'); const { createHash } = await import('crypto');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cdps-'));
+    const calls: Record<string, unknown>[] = [];
+    let polls = 0;
+    const api = http.createServer((req, res) => {
+      let b = ''; req.on('data', c => b += c); req.on('end', () => {
+        const body = JSON.parse(b || '{}'); calls.push(body);
+        res.setHeader('Content-Type', 'application/json');
+        if (body.action === 'request') return res.end(JSON.stringify({ ok: true, code: 'ABCD-EFGH', expires_at: new Date(Date.now() + 60000).toISOString() }));
+        if (body.action === 'request_status') {
+          const req0 = calls.find(c => c.action === 'request')!;
+          if (createHash('sha256').update(String(body.device_key)).digest('hex') !== req0.key_hash) { res.statusCode = 404; return res.end('{}'); }
+          return res.end(JSON.stringify(++polls < 2 ? { approved: false } : { approved: true, event_id: 'e1', device_id: 'd1', label: 'Hall printer' }));
+        }
+        if (body.action === 'next') return setTimeout(() => res.end(JSON.stringify({ jobs: [] })), 200);
+        res.end('{}');
+      });
+    });
+    await new Promise<void>(r => api.listen(0, '127.0.0.1', () => r()));
+    const got: Buffer[] = [];
+    const prn = net.createServer(s => { const b: Buffer[] = []; s.on('data', d => b.push(d)); s.on('end', () => { got.push(Buffer.concat(b)); s.end(); }); });
+    await new Promise<void>(r => prn.listen(0, '127.0.0.1', () => r()));
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String((prn.address() as net.AddressInfo).port),
+      '--port', '17844', '--config', path.join(dir, 'station.json'), '--supabase-url', `http://127.0.0.1:${(api.address() as net.AddressInfo).port}`]);
+    for (let i = 0; i < 150 && !calls.some(c => c.action === 'next'); i++) await new Promise(r => setTimeout(r, 100));
+    h.kill(); api.close(); prn.close();
+    const req0 = calls.find(c => c.action === 'request')!;
+    expect(req0).toMatchObject({ device_kind: 'printer', info: { model: 'brother-ql', dpi: 300, width_mm: 59 } });
+    expect(String(req0.key_hash)).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(calls)).not.toContain('"key":');
+    const saved = JSON.parse(rf(path.join(dir, 'station.json'), 'utf8'));
+    expect(saved).toMatchObject({ event_id: 'e1', label: 'Hall printer' });
+    expect(createHash('sha256').update(saved.device_key).digest('hex')).toBe(req0.key_hash);
+    expect(calls.find(c => c.action === 'next')).toMatchObject({ device_key: saved.device_key, info: { model: 'brother-ql' } });
+    expect(got.some(b => b[b.length - 1] === 0x1a)).toBe(true);   // the code label was printed
+  }, 20000);
+
+  it('as a Zebra station, asks the printer what it is and sends ZPL', async () => {
+    const os = await import('os'); const path = await import('path'); const http = await import('http'); const { mkdtempSync, writeFileSync } = await import('fs');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cdps-'));
+    writeFileSync(path.join(dir, 'station.json'), JSON.stringify({ event_id: 'e1', device_id: 'd1', label: 'Zebra', device_key: 'k'.repeat(64) }));
+    const calls: Record<string, unknown>[] = []; let served = false;
+    const api = http.createServer((req, res) => {
+      let b = ''; req.on('data', c => b += c); req.on('end', () => {
+        const body = JSON.parse(b || '{}'); calls.push(body); res.setHeader('Content-Type', 'application/json');
+        if (body.action === 'next' && !served) { served = true; return res.end(JSON.stringify({ jobs: [{ id: 'j1', png: 'data:image/png;base64,' + PNG.toString('base64'), cut_mm: 76 }] })); }
+        if (body.action === 'next') return setTimeout(() => res.end(JSON.stringify({ jobs: [] })), 200);
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+    await new Promise<void>(r => api.listen(0, '127.0.0.1', () => r()));
+    const got: string[] = [];
+    const prn = net.createServer(s => { let b = ''; s.on('data', d => { b += d.toString('latin1'); if (b.includes('getvar')) { s.write('"300""1248""ZD621-300dpi"'); b = ''; } }); s.on('end', () => { if (b) got.push(b); s.end(); }); });
+    await new Promise<void>(r => prn.listen(0, '127.0.0.1', () => r()));
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String((prn.address() as net.AddressInfo).port), '--model', 'zebra',
+      '--port', '17845', '--config', path.join(dir, 'station.json'), '--supabase-url', `http://127.0.0.1:${(api.address() as net.AddressInfo).port}`]);
+    for (let i = 0; i < 120 && !calls.some(c => c.action === 'done'); i++) await new Promise(r => setTimeout(r, 100));
+    h.kill(); api.close(); prn.close();
+    expect(calls.find(c => c.action === 'next')).toMatchObject({ info: { model: 'zebra', dpi: 300, width_mm: 106, name: 'ZD621-300dpi' } });
+    expect(calls.find(c => c.action === 'done')).toMatchObject({ job_id: 'j1', ok: true });
+    const zpl = got.find(z => z.startsWith('^XA'))!;
+    expect(zpl).toMatch(/^\^XA\^PW1248\^LL\d+\^LH0,0\^FO\d+,0\^GFA,/);
   });
 });

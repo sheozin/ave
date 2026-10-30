@@ -37,3 +37,16 @@ export async function authDevice(sb: Client, eventId: string, deviceKey: string,
   if (seenErr) console.warn('checkin-device: last_seen_at not updated', seenErr.message)
   return { ok: true, device: { id: device.id, scan_point_id: device.scan_point_id } }
 }
+
+// What a print station says it drives. Only known keys, short strings, so a
+// station cannot put anything else into a row desks read.
+export function printerInfo(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  if (o.model === 'brother-ql' || o.model === 'zebra') out.model = o.model
+  if (typeof o.name === 'string') out.name = o.name.slice(0, 80)
+  if (typeof o.host === 'string' && /^[0-9a-zA-Z.:-]{1,64}$/.test(o.host)) out.host = o.host
+  for (const k of ['dpi', 'width_mm']) { const n = Number(o[k]); if (Number.isFinite(n) && n > 0 && n < 1000) out[k] = Math.round(n) }
+  return Object.keys(out).length ? out : null
+}

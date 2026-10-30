@@ -42,6 +42,7 @@ import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { loadCallerRole } from '../_shared/checkin-roles.ts'
 import { functionGate } from '../_shared/checkin-gates.ts'
+import { printerInfo } from '../_shared/checkin-device.ts'
 import { scanPointRefusal } from '../_shared/checkin-scanner.ts'
 
 // Scanner Build A (migration 098): a code pairs either a kiosk (default,
@@ -249,6 +250,72 @@ Deno.serve(async (req) => {
   // ════════════════════════════════════════════════════════════════
   // CLAIM — kiosk, unauthenticated
   // ════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
+  // PRINT STATION, REVERSE PAIRING (migration 143): the station shows a
+  // code, the organizer types it. The station makes its own key and sends
+  // only its SHA-256, so no secret is ever stored or sent back.
+  // ════════════════════════════════════════════════════════════════
+  if (action === 'request') {
+    const ipHash = await sha256Hex(sourceAddress(req))
+    const { data: allowed, error: rateErr } = await sb.rpc('checkin_kiosk_pair_rate_check', { p_ip_hash: ipHash })
+    if (rateErr || allowed !== true) return json({ error: 'Too many pairing attempts. Please wait a few minutes and try again.' }, 429)
+    const keyHash = String(body.key_hash || '')
+    if (!/^[0-9a-f]{64}$/.test(keyHash)) return json({ error: 'key_hash must be the SHA-256 of the station key' }, 400)
+    if (body.device_kind !== 'printer') return json({ error: 'Only print stations pair this way' }, 400)
+    const info = printerInfo(body.info)
+    const expires_at = new Date(Date.now() + 30 * 60_000).toISOString()
+    for (let i = 0; i < 3; i++) {
+      const code = generatePairingCode()
+      const { error } = await sb.from('leod_checkin_device_requests').insert({ code, key_hash: keyHash, kind: 'printer', info, expires_at })
+      if (!error) return json({ ok: true, code: formatPairingCode(code), expires_at })
+      if (error.code !== '23505' || String(error.message).includes('key_hash')) {
+        console.error('checkin-kiosk-pair: request insert failed', error.code)
+        return json({ error: 'Could not create a code' }, error.code === '23505' ? 409 : 500)
+      }
+    }
+    return json({ error: 'Could not create a code' }, 500)
+  }
+
+  if (action === 'request_status') {
+    const code = normalizeCode(String(body.code || ''))
+    const key = String(body.device_key || '')
+    if (!code || key.length < 32 || key.length > 200) return json({ error: 'Unknown code' }, 404)
+    const { data: r, error } = await sb.from('leod_checkin_device_requests')
+      .select('key_hash, expires_at, approved_at, event_id, device_id').eq('code', code).maybeSingle()
+    if (error) return json({ error: 'Could not read the code' }, 500)
+    // Only the station that made the code learns anything about it.
+    if (!r || r.key_hash !== await sha256Hex(key)) return json({ error: 'Unknown code' }, 404)
+    if (!r.approved_at) return json({ approved: false, expired: Date.parse(r.expires_at) < Date.now() })
+    const { data: dev, error: devErr } = await sb.from('leod_checkin_devices').select('label, revoked_at').eq('id', r.device_id).maybeSingle()
+    if (devErr) return json({ error: 'Could not read the device' }, 500)
+    return json({ approved: true, event_id: r.event_id, device_id: r.device_id, label: dev?.label ?? null, revoked: !!dev?.revoked_at })
+  }
+
+  if (action === 'approve') {
+    const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
+    if (!jwt) return json({ error: 'Unauthorized' }, 401)
+    const { data: { user }, error: authErr } = await sb.auth.getUser(jwt)
+    if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
+    const event_id = String(body.event_id || '')
+    const label = String(body.label || '').trim().slice(0, MAX_LABEL)
+    const code = normalizeCode(String(body.code || ''))
+    if (!event_id || !label || code.length !== CODE_LENGTH) return json({ error: 'Type the 8-character code the print station shows, and a name' }, 400)
+    const gate = functionGate('checkin-kiosk-pair', await loadCallerRole(sb, event_id, user.id))
+    if (!gate.ok) return json(gate.body, gate.status)
+    const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements').select(ENT_COLS).eq('event_id', event_id).maybeSingle()
+    if (entErr) return json({ error: entErr.message }, 500)
+    if (!entRow?.checkin_core) return json({ error: 'Check-in is not enabled for this event' }, 403)
+    const { data, error } = await sb.rpc('checkin_approve_device_request', { p_code: code, p_event_id: event_id, p_label: label, p_user: user.id })
+    if (error) {
+      if (error.code === 'P0002') return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
+      console.error('checkin-kiosk-pair: approve failed', error.code)
+      return json({ error: 'Pairing failed' }, 500)
+    }
+    const row = Array.isArray(data) ? data[0] : data
+    console.log('checkin-kiosk-pair: printer paired by code, device', row?.device_id)
+    return json({ ok: true, device_id: row?.device_id, label, info: row?.info ?? null })
+  }
+
   if (action === 'claim') {
     // Charged before anything is looked up, so a source over budget
     // never reaches the claim at all. Fails closed: a limiter that
@@ -384,5 +451,5 @@ Deno.serve(async (req) => {
     })
   }
 
-  return json({ error: 'Invalid action — must be mint or claim' }, 400)
+  return json({ error: 'Invalid action — must be mint, claim, request, request_status or approve' }, 400)
 })

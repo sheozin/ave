@@ -1809,3 +1809,44 @@ Deno.test('checkin-print-station: only a printer key gets jobs; done reports eac
   r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY })
   assert(r.status === 401, 'revoked: ' + JSON.stringify(r))
 })
+
+// ── reverse pairing (migration 143) ──
+Deno.test('checkin-kiosk-pair: a print station asks for a code with its key hash, and only it can read the answer', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test' } })
+  world.rpcResult.checkin_kiosk_pair_rate_check = true
+  const key = 'f'.repeat(64), hash = await sha256(key)
+  let r = await call('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: 'nothex' })
+  assert(r.status === 400, JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: hash,
+    info: { model: 'zebra', dpi: 300, width_mm: 104, name: 'ZD621', host: '192.168.1.40', evil: '<script>' } })
+  assert(r.status === 200 && /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(String(r.body.code)), JSON.stringify(r))
+  const row = world.tables.leod_checkin_device_requests[0]
+  assert(row.key_hash === hash && row.kind === 'printer' && JSON.stringify(row.info) === JSON.stringify({ model: 'zebra', name: 'ZD621', host: '192.168.1.40', dpi: 300, width_mm: 104 }), JSON.stringify(row))
+  const code = String(r.body.code)
+  r = await call('checkin-kiosk-pair', { action: 'request_status', code, device_key: 'e'.repeat(64) })
+  assert(r.status === 404, 'another key learns nothing: ' + JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'request_status', code, device_key: key })
+  assert(r.status === 200 && r.body.approved === false, JSON.stringify(r))
+  Object.assign(row, { approved_at: '2026-10-30T12:00:00Z', event_id: EVENT, device_id: DEV })
+  world.tables.leod_checkin_devices = [{ id: DEV, event_id: EVENT, label: 'Desk printer', kind: 'printer', revoked_at: null }]
+  r = await call('checkin-kiosk-pair', { action: 'request_status', code: code.toLowerCase(), device_key: key })
+  assert(r.status === 200 && r.body.approved === true && r.body.event_id === EVENT && r.body.label === 'Desk printer', JSON.stringify(r))
+})
+Deno.test('checkin-kiosk-pair: approving a station code needs a desk lead and calls the one-shot approve', async () => {
+  setup('crew', { ent: { checkin_core: true, status: 'test' } })
+  let r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'abcd-efgh', label: 'Desk printer' })
+  assert(r.status === 403, 'crew cannot pair: ' + JSON.stringify(r))
+  setup('lead', { ent: { checkin_core: true, status: 'test' } })
+  world.rpcResult.checkin_approve_device_request = [{ device_id: DEV, info: { model: 'brother-ql' } }]
+  r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'abcd-efgh', label: 'Desk printer' })
+  assert(r.status === 200 && r.body.device_id === DEV, JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_approve_device_request')
+  assert(c && c.args.p_code === 'ABCDEFGH' && c.args.p_event_id === EVENT && c.args.p_label === 'Desk printer' && c.args.p_user === USER, JSON.stringify(c))
+})
+Deno.test('checkin-print-station: the station reports what printer it drives', async () => {
+  await setupScanner({ kind: 'printer' })
+  world.rpcResult.checkin_print_claim = [{ id: ATT, label_png: 'data:image/png;base64,AAAA', cut_mm: 76 }]
+  const r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY, info: { model: 'brother-ql', dpi: 300, width_mm: 62, junk: 1 } })
+  assert(r.status === 200, JSON.stringify(r))
+  assert(JSON.stringify(world.tables.leod_checkin_devices[0].printer_info) === JSON.stringify({ model: 'brother-ql', dpi: 300, width_mm: 62 }), JSON.stringify(world.tables.leod_checkin_devices[0]))
+})

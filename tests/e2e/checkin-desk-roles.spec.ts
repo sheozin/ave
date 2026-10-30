@@ -840,3 +840,50 @@ test('choosing Print dialog is remembered on this device and prints through the 
   await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(1);
   expect(st.queued).toEqual([]);
 });
+
+test('a lead pairs a print station by typing the code it shows', async ({ page }) => {
+  let sent: Record<string, unknown> = {};
+  await open(page, { role: 'lead' });
+  await table(page, 'leod_checkin_devices', []);
+  await fn(page, 'checkin-kiosk-pair', (b) => { sent = b; return { body: { ok: true, device_id: 'dev-p', label: 'Desk printer', info: { model: 'brother-ql' } } }; });
+  await page.locator('#st-kiosk').click();
+  await page.locator('.ks-kind', { hasText: 'Print station' }).click();
+  await expect(page.locator('#ks-title')).toHaveText('Set up a print station');
+  await page.locator('#ks-scode').fill('abcd efgh');
+  await page.locator('#ks-label').fill('Desk printer');
+  await page.locator('#ks-approve').click();
+  await expect(page.locator('#ks-body')).toContainText('Paired. "Desk printer" now prints badges for this event');
+  expect(sent).toEqual({ action: 'approve', event_id: EVENT_ID, code: 'ABCDEFGH', label: 'Desk printer' });
+});
+
+test('the Terminal route is still one click away for a print station', async ({ page }) => {
+  let minted: Record<string, unknown> = {};
+  await open(page, { role: 'lead' });
+  await table(page, 'leod_checkin_devices', []);
+  await fn(page, 'checkin-kiosk-pair', (b) => { minted = b; return { body: { ok: true, code: 'WXYZ-2345', expires_at: new Date(FIXED_NOW.getTime() + 600000).toISOString(), device_kind: 'printer' } }; });
+  await page.locator('#st-kiosk').click();
+  await page.locator('.ks-kind', { hasText: 'Print station' }).click();
+  await page.getByRole('button', { name: /Setting it up from Terminal/ }).click();
+  await page.locator('#ks-label').fill('Desk printer');
+  await page.locator('#ks-mint').click();
+  expect(minted).toEqual({ action: 'mint', event_id: EVENT_ID, label: 'Desk printer', device_kind: 'printer' });
+  await expect(page.locator('.ks-url')).toHaveText(/install\.sh \| sh -s -- WXYZ-2345$/);
+});
+
+test('a Zebra station gets the badge at full size, not squeezed to the Brother roll', async ({ page }) => {
+  const queued: { p_labels: { png: string; cut_mm: number }[] }[] = [];
+  await page.addInitScript(() => { window.print = () => {}; });
+  await open(page, { role: 'crew', badgeDesign: { w: 102, h: 76, company: true, ticket: true, name: 'full', align: 'center', colors: {} }, before: async () => {
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d2', label: 'Zebra', online: true, printer_info: { model: 'zebra', dpi: 203, width_mm: 104 } }]);
+    await rpc(page, 'checkin_queue_print', (a) => { queued.push(a as never); return ['bbbbbbbb-0000-4000-8000-0000000000f2']; });
+    await table(page, 'leod_checkin_print_jobs', [{ id: 'bbbbbbbb-0000-4000-8000-0000000000f2', status: 'done' }]);
+  } });
+  await expect(page.locator('#ck-print-msg')).toContainText('Ready: badges go to Zebra.');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => queued.length).toBe(1);
+  const size = await page.evaluate(async (src) => { const i = new Image(); i.src = src; await i.decode(); return [i.naturalWidth, i.naturalHeight]; }, queued[0].p_labels[0].png);
+  expect(size).toEqual([1205, 898]);   // 102 x 76 mm at 300 dpi
+  expect(queued[0].p_labels[0].cut_mm).toBe(102);
+});
