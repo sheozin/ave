@@ -1,4 +1,5 @@
-// process-welcome-triggers: sends the founder welcome email to new accounts.
+// process-welcome-triggers: sends the founder welcome email to new accounts,
+// or the check-in welcome to accounts made on /checkin (signup_source).
 // handle_first_login queues a row in welcome_email_trigger; pg_cron calls
 // this every 10 minutes (migration 140) with the x-cron-secret from the vault.
 // Each run is a row in leod_checkin_job_runs (job 'welcome-emails').
@@ -14,7 +15,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { sendEmail } from '../_shared/resend.ts'
-import { founderWelcomeEmail, type UserData } from '../_shared/email-templates.ts'
+import { founderWelcomeEmail, checkinWelcomeEmail, type UserData } from '../_shared/email-templates.ts'
 
 const JOB = 'welcome-emails'
 
@@ -53,8 +54,12 @@ Deno.serve(async (req) => {
         continue
       }
 
+      // Check-in sign-ups get the check-in welcome, not the command center one.
+      const { data: au, error: auErr } = await sb.auth.admin.getUserById(t.user_id)
+      if (auErr) { failed++; problems.push('user ' + t.user_id + ': ' + auErr.message); continue }
+      const isCheckin = au.user?.user_metadata?.signup_source === 'checkin'
       const user: UserData = { email: t.email, name: t.name, firstName: t.name?.split(' ')[0] }
-      const mail = founderWelcomeEmail(user)
+      const mail = isCheckin ? checkinWelcomeEmail(user) : founderWelcomeEmail(user)
       const result = await sendEmail({
         to: t.email, subject: mail.subject, html: mail.html, text: mail.text,
         fromName: 'Sherif from CueDeck', replyTo: 'support@cuedeck.io',

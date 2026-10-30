@@ -152,6 +152,64 @@ ${BRAND.founder.title}, CueDeck
 }
 
 // Email 2: Feature Deep Dive (Day 3)
+// For accounts made on /checkin (signup_source 'checkin'). The founder
+// welcome above is about the command center, which they never asked for.
+export function checkinWelcomeEmail(user: UserData) {
+  const raw = user.firstName || user.name?.split(' ')[0] || 'there'
+  const firstName = raw.replace(/[<>&"]/g, '')
+  const url = `${BRAND.app}/checkin`
+
+  const content = `
+    <div class="content">
+      <h1>Welcome to CueDeck Check-in, ${firstName}</h1>
+
+      <p>I'm ${BRAND.founder.name}, the founder of CueDeck. I have worked in live event production for twenty years, and I built Check-in for the ten minutes before doors open.</p>
+
+      <p>Your event is free to set up and test. Here is the quickest way in:</p>
+
+      <ul>
+        <li><strong>1. Create your event.</strong> Name, date and venue.</li>
+        <li><strong>2. Import your guest list.</strong> Upload a CSV file, or open a registration page.</li>
+        <li><strong>3. Set up the desk.</strong> Choose your badge layout and printer, and add a self check-in kiosk if you want one.</li>
+        <li><strong>4. Try it.</strong> Up to 25 test check-ins are free, so you can scan and print before the day.</li>
+      </ul>
+
+      <a href="${url}" class="cta-button">Open Check-in</a>
+
+      <p>Reply to this email anytime. I read every one, and if you tell me about your event I can help you set it up.</p>
+
+      <div class="signature">
+        <p class="signature-name">${BRAND.founder.name}</p>
+        <p class="signature-title">${BRAND.founder.title}, CueDeck</p>
+      </div>
+    </div>
+  `
+
+  return {
+    subject: `Welcome to CueDeck Check-in, ${firstName}`,
+    html: emailWrapper(content, 'Set up your event, import your guests and test the desk for free.'),
+    text: `
+Welcome to CueDeck Check-in, ${firstName}
+
+I'm ${BRAND.founder.name}, the founder of CueDeck. I have worked in live event production for twenty years, and I built Check-in for the ten minutes before doors open.
+
+Your event is free to set up and test. Here is the quickest way in:
+
+1. Create your event: name, date and venue.
+2. Import your guest list: upload a CSV file, or open a registration page.
+3. Set up the desk: choose your badge layout and printer, and add a self check-in kiosk if you want one.
+4. Try it: up to 25 test check-ins are free, so you can scan and print before the day.
+
+Open Check-in: ${url}
+
+Reply to this email anytime. I read every one, and if you tell me about your event I can help you set it up.
+
+${BRAND.founder.name}
+${BRAND.founder.title}, CueDeck
+    `.trim()
+  }
+}
+
 export function featureDeepDiveEmail(user: UserData) {
   const firstName = user.firstName || user.name?.split(' ')[0] || 'there'
 

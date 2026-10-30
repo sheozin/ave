@@ -141,6 +141,8 @@ const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
 // Read before createClient: supabase-js consumes and clears the hash.
 const NEEDS_PASSWORD_HASH = /type=(invite|recovery)/.test(location.hash);
+// cuedeck.io links here as /checkin#signup to open on Create account.
+const WANTS_SIGNUP = location.hash === '#signup';
 // Kept across a reload: once the hash is consumed it is the only trace that
 // this session came from an invite or recovery link.
 function pwFlag(op) {
@@ -358,6 +360,12 @@ async function enter(user) {
   const nxt = safeNext();
   if (nxt) { location.replace(nxt); return; }
   ME = user;
+  // Queues the check-in welcome email on the first sign-in, as the console
+  // does for its own sign-ups. Never for staff someone else invited.
+  if (user.user_metadata?.signup_source === 'checkin') {
+    sb.rpc('handle_first_login', { p_user_id: user.id })
+      .then(({ error: flErr }) => { if (flErr) console.warn('checkin home: first login not recorded', flErr.message); });
+  }
   const { data: me, error } = await sb.from('leod_users').select('role, name').eq('id', user.id).maybeSingle();
   if (error) console.error('checkin home: profile read failed', error.message);
   MY_ROLE = me?.role || 'director';
@@ -568,7 +576,7 @@ if (session && NEEDS_PASSWORD) {
   show('v-pass'); $('pw-1').focus();
 }
 else if (session) await enter(session.user);
-else { show('v-out'); tab('in'); cap(); const expired = cdAuth.expiredNotice(); if (expired) $('in-err').textContent = expired; }
+else { show('v-out'); tab(WANTS_SIGNUP ? 'up' : 'in'); cap(); const expired = cdAuth.expiredNotice(); if (expired) $('in-err').textContent = expired; }
 // An expired sign-in comes back here, where the sign-in tab says why.
 cdAuth.watch(sb, () => { location.href = '/checkin'; });
 </script>

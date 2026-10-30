@@ -14,12 +14,12 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // A stored supabase-js session that is valid until 2031, so a page clock
 // fixed to any 2026 date never tries to refresh it.
-export async function signedIn(page: Page, userId = USER_ID, email = 'probe@cuedeck-test.io') {
+export async function signedIn(page: Page, userId = USER_ID, email = 'probe@cuedeck-test.io', userMeta: Record<string, unknown> = {}) {
   const exp = 1924992000;
   const token = b64url({ alg: 'HS256', typ: 'JWT' }) + '.' + b64url({ sub: userId, role: 'authenticated', exp, email }) + '.c2ln';
   const session = {
     access_token: token, token_type: 'bearer', expires_in: 3600, expires_at: exp, refresh_token: 'probe-refresh',
-    user: { id: userId, email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: '2026-10-01T00:00:00Z' },
+    user: { id: userId, email, aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: userMeta, created_at: '2026-10-01T00:00:00Z' },
   };
   await page.addInitScript(([k, v]) => { localStorage.setItem(k, v); }, ['sb-sawekpguemzvuvvulfbc-auth-token', JSON.stringify(session)]);
   await page.route(new RegExp('^' + esc(SB) + '/'), (r: Route) =>
