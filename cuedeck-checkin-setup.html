@@ -555,7 +555,7 @@
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
-import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas } from '/checkin-badge.js';
+import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll } from '/checkin-badge.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -1460,13 +1460,15 @@ $('bd-print').onclick = async () => {
   $('badge-sheet').replaceChildren(badgeElement(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }));
   await Promise.all([...$('badge-sheet').querySelectorAll('img')].map(i => i.decode().catch(() => {})));
   $('bd-ok').textContent = ''; $('bd-err').textContent = '';
-  // Same path as the desk: a template goes to the print helper when this
-  // laptop uses one (the desk's "Print straight to a Brother" switch).
+  // Same path as the desk: a badge that fits the 62 mm roll goes to the
+  // print helper when this laptop uses one (the desk's "Print straight to
+  // a Brother" switch).
   let helperOn = false; try { helperOn = localStorage.getItem('ck_print_helper') === '1'; } catch (_) {}
-  if (BD.template && helperOn) {
+  if (helperOn && fitsRoll(BD)) {
     try {
+      const l = await badgePng(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() });
       const r = await fetch('http://127.0.0.1:7841/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ labels: [...$('badge-sheet').querySelectorAll('img')].map(i => i.src) }) });
+        body: JSON.stringify({ labels: [l.png], cut_mm: l.cut_mm }) });
       const j = await r.json().catch(() => ({}));
       if (r.ok) { $('bd-ok').textContent = 'Sent to the Brother printer through the print helper.'; return; }
       $('bd-err').textContent = 'The print helper could not print: ' + (j.error || r.status); return;

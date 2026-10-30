@@ -895,9 +895,9 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <script type="module">
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
   import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
-  import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts } from '/checkin-badge.js';
+  import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll } from '/checkin-badge.js';
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
-  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts };
+  window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
 <script>
@@ -2206,16 +2206,14 @@ function setBadgeDesign(ent) {
   st.textContent = window.CK_BADGE.pageCss(design);
   if (design.logo && logoUrl) new Image().src = logoUrl;
   // A template draws with the bundled font: load it now, while online.
-  if (design.template) {
-    window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
-    probePrintHelper();
-  }
+  if (design.template) window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
+  probePrintHelper();
 }
 
 // ── CueDeck print helper (print-helper/, runs on this laptop) ──
-// A template badge is an image, so it can go straight to a Brother QL
-// through the helper: no print dialog, no driver, cut at the label length.
-// Without the helper the desk prints through the browser as before.
+// Any badge whose short side fits the 62 mm roll goes to the Brother as a
+// 300 dpi image (badgePng): no print dialog, no driver, cut at the badge
+// length. Without the helper, or for bigger stock, the browser prints.
 const PRINT_HELPER = 'http://127.0.0.1:7841';
 // Opt-in per laptop: Chrome asks before a page may reach this computer,
 // and a desk without the helper should never see that question.
@@ -2230,7 +2228,8 @@ async function probePrintHelper() {
 }
 function renderPrinterChip(error) {
   let chip = document.getElementById('ck-printer');
-  if (!(S.badge && S.badge.design.template)) { if (chip) chip.remove(); return; }
+  const fits = S.badge && window.CK_BADGE.fitsRoll(S.badge.design);
+  if (!fits && !(S.helper && helperWanted())) { if (chip) chip.remove(); return; }
   if (!chip) {
     chip = document.createElement('div'); chip.id = 'ck-printer'; chip.setAttribute('role', 'status');
     chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;max-width:340px;padding:8px 12px;border-radius:10px;font:600 12.5px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.12)';
@@ -2241,6 +2240,11 @@ function renderPrinterChip(error) {
     chip.style.background = '#fff'; chip.style.color = '#1D1D1F'; chip.style.cursor = 'pointer';
     chip.textContent = helperWanted() ? 'Print helper not found on this laptop. Start it, then click to retry.' : 'Print straight to a Brother label printer? Click to use the CueDeck print helper.';
     chip.onclick = () => { try { localStorage.setItem('ck_print_helper', '1'); } catch (_) {} probePrintHelper(); };
+    return;
+  }
+  if (!fits && !error) {
+    chip.style.background = '#FEF6E7'; chip.style.color = '#9A5B00';
+    chip.textContent = 'This badge (' + S.badge.design.w + ' x ' + S.badge.design.h + ' mm) is wider than the 62 mm label roll, so it prints through the browser.';
     return;
   }
   const h = S.helper, bad = error || (h && (h.error || h.warning));
@@ -2340,10 +2344,14 @@ async function printBadges(attendees) {
   await Promise.all([...document.querySelectorAll('#badge-sheet img')].map(i => i.decode().catch(() => {})));
 
   let viaHelper = false;
-  if (S.badge && S.badge.design.template && S.helper) {
+  if (S.badge && S.helper && window.CK_BADGE.fitsRoll(S.badge.design)) {
+    let labels;
+    try {
+      labels = await Promise.all(attendees.map(a => window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' })));
+    } catch (e) { renderPrinterChip('could not draw the badge (' + (e && e.message) + ')'); return; }
     try {
       const r = await fetch(PRINT_HELPER + '/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ labels: [...document.querySelectorAll('#badge-sheet img')].map(i => i.src) }) });
+        body: JSON.stringify({ labels: labels.map(l => l.png), cut_mm: labels[0].cut_mm }) });
       const j = await r.json().catch(() => ({}));
       // The helper answered but the printer did not print: say so, and do
       // not mark the badge printed. Never fall back to a wrong-size print.

@@ -282,21 +282,24 @@ export function visaNextCanvas(attendee, doc = document, { test = false } = {}) 
       if ((xx + yy) % 2 === 0) { const i = (yy * W + xx) * 4; px[i] = px[i + 1] = px[i + 2] = 0; }
     }
   }
-  // Test mode: a diagonal TEST in a sparse dot pattern, so the name still reads.
-  if (test) {
-    const m = doc.createElement('canvas'); m.width = W; m.height = H;
-    const mg = m.getContext('2d');
-    mg.translate(W / 2, H / 2); mg.rotate(-0.32);
-    mg.font = '900 300px Montserrat'; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillStyle = '#000';
-    mg.fillText('TEST', 0, 0);
-    const mask = mg.getImageData(0, 0, W, H).data;
-    for (let i = 0; i < W * H; i++) {
-      const x = i % W, yy = (i / W) | 0;
-      if (mask[i * 4 + 3] > 128 && x % 3 === 0 && yy % 3 === 0) px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = 0;
-    }
-  }
+  if (test) stampTest(doc, px, W, H, 'Montserrat');
   g.putImageData(img, 0, 0);
   return c;
+}
+
+// Test mode on a black-and-white label: a diagonal TEST in a sparse dot
+// pattern over the pixels, so the name still reads underneath.
+function stampTest(doc, px, W, H, family) {
+  const m = doc.createElement('canvas'); m.width = W; m.height = H;
+  const mg = m.getContext('2d');
+  mg.translate(W / 2, H / 2); mg.rotate(-0.32);
+  mg.font = `900 ${Math.round(Math.min(W, H) * 0.43)}px ${family}`; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillStyle = '#000';
+  mg.fillText('TEST', 0, 0);
+  const mask = mg.getImageData(0, 0, W, H).data;
+  for (let i = 0; i < W * H; i++) {
+    const x = i % W, yy = (i / W) | 0;
+    if (mask[i * 4 + 3] > 128 && x % 3 === 0 && yy % 3 === 0) px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = 0;
+  }
 }
 
 function visaNextElement(attendee, ctx, doc) {
@@ -310,4 +313,54 @@ function visaNextElement(attendee, ctx, doc) {
   if (!fontsReady(doc)) img.dataset.fontPending = '1';
   badge.append(img);
   return badge;
+}
+
+// ── any badge as a label-printer bitmap ─────────────────────────────────
+// For the print helper: the badge as a 300 dpi PNG, 696 px across the 62 mm
+// roll (its printable 58.9 mm). A Designer badge is the same element the
+// preview shows, drawn through an SVG foreignObject, so there is one
+// renderer for screen, browser print and label printer. A badge whose short
+// side is up to 62 mm fits; one a little over 58.9 mm is scaled to the
+// printable width. Returns { png, cut_mm }.
+export const ROLL_MM = 62;
+export const fitsRoll = (d) => !!d.template || Math.min(d.w, d.h) <= ROLL_MM;
+
+async function inlineImages(node) {
+  for (const img of node.querySelectorAll('img')) {
+    if (img.src.startsWith('data:')) continue;
+    try {
+      const blob = await (await fetch(img.src, { mode: 'cors' })).blob();
+      img.src = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = no; r.readAsDataURL(blob); });
+    } catch (_) { img.remove(); }   // a logo that cannot be fetched is left off, not a blank label
+  }
+}
+
+export async function badgePng(attendee, ctx) {
+  const doc = ctx.doc || document, d = ctx.design;
+  if (d.template === 'visa-next-full') return { png: visaNextCanvas(attendee, doc, { test: !!ctx.test }).toDataURL('image/png'), cut_mm: d.w };
+  if (!fitsRoll(d)) throw new Error(`a ${d.w} x ${d.h} mm badge does not fit the ${ROLL_MM} mm roll`);
+  const node = badgeElement(attendee, { ...ctx, test: false, preview: false, doc });
+  await inlineImages(node);
+  const cssPx = 96 / 25.4, wCss = d.w * cssPx, hCss = d.h * cssPx;
+  const xml = new XMLSerializer().serializeToString(node);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${wCss}" height="${hCss}"><foreignObject x="0" y="0" width="${wCss}" height="${hCss}">${xml}</foreignObject></svg>`;
+  const im = new Image();
+  im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  await im.decode();
+
+  const dpmm = 300 / 25.4, rollPx = VISA_NEXT_PX.h, short = Math.min(d.w, d.h);
+  const k = Math.min(dpmm, rollPx / short);          // px per mm, scaled down only if wider than printable
+  const landscape = d.w >= d.h;
+  const c = doc.createElement('canvas');
+  c.width = landscape ? Math.round(d.w * k) : rollPx; c.height = landscape ? rollPx : Math.round(d.h * k);
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  const bw = d.w * k, bh = d.h * k;
+  g.drawImage(im, (c.width - bw) / 2, (c.height - bh) / 2, bw, bh);
+  if (ctx.test) {
+    const img = g.getImageData(0, 0, c.width, c.height);
+    stampTest(doc, img.data, c.width, c.height, 'system-ui, sans-serif');
+    g.putImageData(img, 0, 0);
+  }
+  return { png: c.toDataURL('image/png'), cut_mm: Math.max(d.w, d.h) };
 }

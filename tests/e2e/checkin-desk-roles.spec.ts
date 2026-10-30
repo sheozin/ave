@@ -762,3 +762,30 @@ test('without the helper switched on, the desk never contacts this computer and 
   await expect(page.locator('#ck-printer')).toContainText('Print straight to a Brother label printer?');
   expect(contacted).toBe(false);
 });
+
+test('with the print helper on, a Designer badge that fits the 62 mm roll goes to the Brother, cut at its length', async ({ page }) => {
+  const jobs: { labels: string[]; cut_mm: number }[] = [];
+  await withHelper(page, (b) => { jobs.push(b as { labels: string[]; cut_mm: number }); return { status: 200, body: { ok: true, labels: 1, cut_mm: 100 } }; });
+  await open(page, { role: 'crew', badgeDesign: { w: 100, h: 62, qr: true, company: true, ticket: true, name: 'full', align: 'left', colors: {} } });
+  await expect(page.locator('#ck-printer')).toContainText('Printing straight to the Brother');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => jobs.length).toBe(1);
+  expect(jobs[0].cut_mm).toBe(100);
+  const size = await page.evaluate(async (src) => { const i = new Image(); i.src = src; await i.decode(); return [i.naturalWidth, i.naturalHeight]; }, jobs[0].labels[0]);
+  expect(size).toEqual([1123, 696]);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('a badge wider than the roll says so and prints through the browser', async ({ page }) => {
+  let posted = false;
+  await withHelper(page, () => { posted = true; return { status: 200, body: { ok: true } }; });
+  await open(page, { role: 'crew', badgeDesign: { w: 148, h: 105, company: true, ticket: true, name: 'full', align: 'center', colors: {} } });
+  await expect(page.locator('#ck-printer')).toContainText('wider than the 62 mm label roll');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(1);
+  expect(posted).toBe(false);
+});
