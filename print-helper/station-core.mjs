@@ -15,7 +15,7 @@ import { decodePng, toLines, fitLength, rasterJob, parseStatus, STATUS_REQUEST, 
 import { zplLabel, zplText, ZEBRA_QUERY, parseZebraInfo } from './zebra-zpl.mjs';
 import { textImage } from './label-text.mjs';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 export const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const PUBLIC_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';   // the app's public key, same as the pages
 const ALLOWED = [/^https:\/\/app\.cuedeck\.io$/, /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/];
@@ -26,7 +26,7 @@ export function createStation(opts) {
   const o = { printerPort: 9100, model: 'brother-ql', cutMm: 76, marginDots: 35, supabaseUrl: SUPABASE_URL, dpi: 203, onEvent: () => {}, ...given };
   const emit = (type, data) => { try { o.onEvent(type, data); } catch (_) {} };
   const log = (msg) => emit('log', msg);
-  const state = { cfg: null, code: null, stopped: false, printedToday: 0, lastPrinted: null, online: false };
+  const state = { cfg: null, code: null, proof: null, stopped: false, printedToday: 0, lastPrinted: null, online: false };
 
   // One job on the wire at a time, so two badges never interleave.
   let chain = Promise.resolve();
@@ -103,6 +103,14 @@ export function createStation(opts) {
         return res.end();
       }
       try {
+        // The pairing page asks this station, on this computer only, to prove
+        // it is the one showing the code (migration 144). Only CueDeck pages
+        // get it (the Origin check above), and only while a code is shown.
+        if (req.method === 'GET' && req.url === '/pair-proof') {
+          if (!origin) return send(res, 403, { error: 'CueDeck pages only' });
+          if (!state.code || !state.proof) return send(res, 404, { error: 'no code waiting' }, origin);
+          return send(res, 200, { code: state.code.replace(/-/g, ''), proof: state.proof }, origin);
+        }
         if (req.method === 'GET' && req.url === '/status') {
           let printer = null, error = null;
           try { printer = await status(); } catch (e) { error = e.message; }
@@ -162,12 +170,16 @@ export function createStation(opts) {
   async function pairWithStationCode({ printCode = true } = {}) {
     const key = crypto.randomBytes(32).toString('hex');
     const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+    // A second secret, served only on 127.0.0.1, proves to the pairing page
+    // that this station runs on the computer approving it.
+    const proof = crypto.randomBytes(32).toString('hex');
+    const proofHash = crypto.createHash('sha256').update(proof).digest('hex');
     while (!state.stopped) {
       let r;
-      try { r = await fn('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: keyHash, info: info() }); }
+      try { r = await fn('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: keyHash, proof_hash: proofHash, info: info() }); }
       catch (e) { emit('offline', e.message); await sleep(5000); continue; }
       if (r.status !== 200) { log('Could not get a pairing code: ' + (r.body.error || r.status)); await sleep(10000); continue; }
-      state.code = r.body.code;
+      state.code = r.body.code; state.proof = proof;
       emit('code', { code: state.code, expires_at: r.body.expires_at });
       if (printCode) {
         try { await printText([{ text: 'CUEDECK PRINT STATION', scale: 4 }, { text: 'PAIRING CODE', scale: 4 }, { text: state.code, scale: 9 }, { text: 'TYPE IT IN CUEDECK', scale: 4 }]); }
@@ -179,7 +191,7 @@ export function createStation(opts) {
         let s;
         try { s = await fn('checkin-kiosk-pair', { action: 'request_status', code: state.code, device_key: key }); } catch (_) { continue; }
         if (s.status === 200 && s.body.approved) {
-          state.code = null;
+          state.code = null; state.proof = null;
           state.cfg = saveConfig({ event_id: s.body.event_id, device_id: s.body.device_id, label: s.body.label, device_key: key });
           emit('paired', { label: state.cfg.label });
           return state.cfg;

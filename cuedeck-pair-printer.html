@@ -33,7 +33,7 @@
     <p class="sub">Every desk and kiosk of the event you choose, on any device, will print badges to it.</p>
     <div class="code" id="pp-code"></div>
     <div class="who" id="pp-who" hidden></div>
-    <div class="warn" id="pp-warn" hidden>This code was requested from a different network than the one you are on. Only pair a print station you can see: it will receive every badge printed for the event, with names and check-in QR codes. If someone sent you this link, do not pair it.</div>
+    <div class="warn" id="pp-warn" hidden>This print station is not running on this computer. Only pair a print station you can see: it will receive every badge printed for the event, with names and check-in QR codes. If someone sent you this link, do not pair it.</div>
     <form id="pp-form" hidden>
       <div class="field" id="pp-typed-f" hidden><label for="pp-typed">Type the code shown on the print station</label><input id="pp-typed" maxlength="12" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" style="text-transform:uppercase;letter-spacing:2px"></div>
       <div class="field"><label for="pp-event">Event</label><select id="pp-event"></select></div>
@@ -54,7 +54,7 @@ const sb = supabase.createClient('https://sawekpguemzvuvvulfbc.supabase.co', 'sb
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search);
 const code = String(q.get('code') || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-let SAME = false;
+let PROOF = null;   // from the station on this computer's 127.0.0.1, never from the link
 $('pp-name').value = String(q.get('name') || '').slice(0, 60);
 
 if (code.length !== 8) {
@@ -89,8 +89,15 @@ if (code.length !== 8) {
           const mins = Math.max(0, Math.round((Date.now() - Date.parse(ri.requested_at)) / 60000));
           $('pp-who').hidden = false;
           $('pp-who').textContent = (p.name || (p.model === 'zebra' ? 'Zebra printer' : 'Brother label printer')) + (p.host ? ' at ' + p.host : '') + ', asked ' + (mins < 1 ? 'just now' : mins + ' min ago');
-          SAME = ri.same_network === true;
-          if (!SAME) { $('pp-warn').hidden = false; $('pp-typed-f').hidden = false; $('pp-code').hidden = true; }
+          // Is the station that shows this code running on this computer?
+          // Only it can answer on 127.0.0.1 (migration 144).
+          try {
+            const r = await fetch('http://127.0.0.1:7841/pair-proof', { signal: AbortSignal.timeout(2500) });
+            const j = r.ok ? await r.json() : null;
+            if (j && j.code === code && /^[0-9a-f]{64}$/.test(j.proof || '')) PROOF = j.proof;
+          } catch (_) { /* not on this computer, or the browser would not ask it */ }
+          if (!PROOF) { $('pp-warn').hidden = false; $('pp-typed-f').hidden = false; $('pp-code').hidden = true; }
+          else $('pp-who').textContent += ' · running on this computer';
           $('pp-form').hidden = false;
         }
       }
@@ -103,12 +110,12 @@ $('pp-form').addEventListener('submit', async (e) => {
   $('pp-err').textContent = '';
   const label = $('pp-name').value.trim();
   if (!label) { $('pp-err').textContent = 'Give the printer a name, so desks can tell it apart.'; $('pp-name').focus(); return; }
-  // Same network: the code from the app's link. Otherwise only what was typed.
+  // Proven on this computer: the code from the app's link. Otherwise only what was typed.
   const typed = $('pp-typed').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-  if (!SAME && typed.length !== 8) { $('pp-err').textContent = 'Type the 8-character code shown on the print station.'; $('pp-typed').focus(); return; }
+  if (!PROOF && typed.length !== 8) { $('pp-err').textContent = 'Type the 8-character code shown on the print station.'; $('pp-typed').focus(); return; }
   $('pp-go').disabled = true;
-  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: SAME
-    ? { action: 'approve', event_id: $('pp-event').value, code, label }
+  const { data, error } = await sb.functions.invoke('checkin-kiosk-pair', { body: PROOF
+    ? { action: 'approve', event_id: $('pp-event').value, code, label, local_proof: PROOF }
     : { action: 'approve', event_id: $('pp-event').value, code: typed, label, code_typed: true } });
   $('pp-go').disabled = false;
   if (error || !data || data.ok !== true) {

@@ -75,7 +75,7 @@ describe('print helper server', () => {
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.3.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.4.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });
@@ -205,11 +205,21 @@ describe('print station pairs by showing its own code', () => {
     await new Promise<void>(r => prn.listen(0, '127.0.0.1', () => r()));
     const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', String((prn.address() as net.AddressInfo).port),
       '--port', '17844', '--config', path.join(dir, 'station.json'), '--supabase-url', `http://127.0.0.1:${(api.address() as net.AddressInfo).port}`]);
+    // While the code is up, the station proves itself on 127.0.0.1 to CueDeck pages only.
+    for (let i = 0; i < 50 && !calls.some(c => c.action === 'request'); i++) await new Promise(r => setTimeout(r, 100));
+    await new Promise(r => setTimeout(r, 300));
+    const noOrigin = await fetch('http://127.0.0.1:17844/pair-proof');
+    const evil = await fetch('http://127.0.0.1:17844/pair-proof', { headers: { Origin: 'https://evil.example' } });
+    const pr = await (await fetch('http://127.0.0.1:17844/pair-proof', { headers: { Origin: 'https://app.cuedeck.io' } })).json();
     for (let i = 0; i < 150 && !calls.some(c => c.action === 'next'); i++) await new Promise(r => setTimeout(r, 100));
     h.kill(); api.close(); prn.close();
     const req0 = calls.find(c => c.action === 'request')!;
     expect(req0).toMatchObject({ device_kind: 'printer', info: { model: 'brother-ql', dpi: 300, width_mm: 59 } });
     expect(String(req0.key_hash)).toMatch(/^[0-9a-f]{64}$/);
+    expect([noOrigin.status, evil.status]).toEqual([403, 403]);
+    expect(pr.code).toBe('ABCDEFGH');
+    expect(createHash('sha256').update(pr.proof).digest('hex')).toBe(req0.proof_hash);
+    expect(req0.proof_hash).not.toBe(req0.key_hash);
     expect(JSON.stringify(calls)).not.toContain('"key":');
     const saved = JSON.parse(rf(path.join(dir, 'station.json'), 'utf8'));
     expect(saved).toMatchObject({ event_id: 'e1', label: 'Hall printer' });

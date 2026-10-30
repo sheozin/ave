@@ -16,10 +16,12 @@ test('the app link fills the code; only events where you may pair are offered; p
     myEventsRow({ event_id: E3, name: 'Led event', date: '2026-10-01', role: 'lead' }),
   ]);
   await fn(page, 'checkin-kiosk-pair', (b) => b.action === 'request_info'
-    ? { body: { ok: true, same_network: true, requested_at: FIXED_NOW.toISOString(), printer: { model: 'brother-ql', name: 'Brother QL-820NWB', host: '192.168.1.130' } } }
+    ? { body: { ok: true, requested_at: FIXED_NOW.toISOString(), printer: { model: 'brother-ql', name: 'Brother QL-820NWB', host: '192.168.1.130' } } }
     : (sent = b, { body: { ok: true, device_id: 'd1', label: b.label } }));
+  // The station on this computer answers with its proof (migration 144).
+  await page.route('http://127.0.0.1:7841/pair-proof', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ code: '2ZCZPR4J', proof: 'a'.repeat(64) }) }));
   await page.goto('/cuedeck-pair-printer.html?code=2ZCZPR4J&name=Brother%20QL-820NWB');
-  await expect(page.locator('#pp-who')).toHaveText('Brother QL-820NWB at 192.168.1.130, asked just now');
+  await expect(page.locator('#pp-who')).toHaveText('Brother QL-820NWB at 192.168.1.130, asked just now · running on this computer');
   await expect(page.locator('#pp-warn')).toBeHidden();
   await expect(page.locator('#pp-code')).toHaveText('2ZCZ-PR4J');
   await expect(page.locator('#pp-event option')).toHaveText(['Led event · 2026-10-01', 'Visa Next · 2026-11-03']);
@@ -28,7 +30,7 @@ test('the app link fills the code; only events where you may pair are offered; p
   await page.fill('#pp-name', 'Desk printer');
   await page.click('#pp-go');
   await expect(page.locator('#pp-done')).toContainText('Paired. "Desk printer" prints badges for Visa Next');
-  expect(sent).toEqual({ action: 'approve', event_id: E1, code: '2ZCZPR4J', label: 'Desk printer' });
+  expect(sent).toEqual({ action: 'approve', event_id: E1, code: '2ZCZPR4J', label: 'Desk printer', local_proof: 'a'.repeat(64) });
 });
 
 test('a link without a code says where to pair instead', async ({ page }) => {
@@ -48,16 +50,18 @@ test('a code the server no longer has waiting is explained', async ({ page }) =>
   await expect(page.locator('#pp-form')).toBeHidden();
 });
 
-test('a link to a station on another network cannot pair in one click: the code must be typed off the station', async ({ page }) => {
+test('a link to a station that is not on this computer cannot pair in one click: the code must be typed off the station', async ({ page }) => {
   const sent: Record<string, unknown>[] = [];
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_my_events', [myEventsRow({ event_id: E1, name: 'Visa Next', date: '2026-11-03', is_owner: true })]);
   await fn(page, 'checkin-kiosk-pair', (b) => b.action === 'request_info'
-    ? { body: { ok: true, same_network: false, requested_at: new Date(FIXED_NOW.getTime() - 300000).toISOString(), printer: { model: 'zebra', name: 'Zebra' } } }
+    ? { body: { ok: true, requested_at: new Date(FIXED_NOW.getTime() - 300000).toISOString(), printer: { model: 'zebra', name: 'Zebra' } } }
     : (sent.push(b), { body: { ok: true, device_id: 'd1', label: b.label } }));
-  await page.goto('/cuedeck-pair-printer.html?code=2ZCZPR4J&name=Desk');
-  await expect(page.locator('#pp-warn')).toContainText('requested from a different network');
+  // A station is running here, but it shows a different code: no proof for this one.
+  await page.route('http://127.0.0.1:7841/pair-proof', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ code: 'QQQQ2222', proof: 'b'.repeat(64) }) }));
+  await page.goto('/cuedeck-pair-printer.html?code=2ZCZPR4J&name=Desk&proof=' + 'c'.repeat(64));
+  await expect(page.locator('#pp-warn')).toContainText('not running on this computer');
   await expect(page.locator('#pp-warn')).toContainText('If someone sent you this link, do not pair it');
   await expect(page.locator('#pp-code')).toBeHidden();
   await expect(page.locator('#pp-who')).toHaveText('Zebra, asked 5 min ago');
@@ -68,4 +72,20 @@ test('a link to a station on another network cannot pair in one click: the code 
   await page.click('#pp-go');
   await expect(page.locator('#pp-done')).toContainText('Paired.');
   expect(sent).toEqual([{ action: 'approve', event_id: E1, code: 'WXYZ2345', label: 'Desk', code_typed: true }]);
+});
+
+test('with no station on this computer the page still works, by typing the code', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ event_id: E1, name: 'Visa Next', date: '2026-11-03', is_owner: true })]);
+  await fn(page, 'checkin-kiosk-pair', (b) => b.action === 'request_info' ? { body: { ok: true, requested_at: FIXED_NOW.toISOString(), printer: null } } : (sent.push(b), { body: { ok: true } }));
+  await page.route('http://127.0.0.1:7841/**', r => r.abort());
+  await page.goto('/cuedeck-pair-printer.html?code=2ZCZPR4J');
+  await expect(page.locator('#pp-typed')).toBeVisible();
+  await page.fill('#pp-name', 'Desk');
+  await page.fill('#pp-typed', '2ZCZ-PR4J');
+  await page.click('#pp-go');
+  await expect(page.locator('#pp-done')).toContainText('Paired.');
+  expect(sent[0]).toEqual({ action: 'approve', event_id: E1, code: '2ZCZPR4J', label: 'Desk', code_typed: true });
 });

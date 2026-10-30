@@ -263,10 +263,12 @@ Deno.serve(async (req) => {
     if (!/^[0-9a-f]{64}$/.test(keyHash)) return json({ error: 'key_hash must be the SHA-256 of the station key' }, 400)
     if (body.device_kind !== 'printer') return json({ error: 'Only print stations pair this way' }, 400)
     const info = printerInfo(body.info)
+    // The station's local proof (migration 144): only its hash comes here.
+    const proofHash = /^[0-9a-f]{64}$/.test(String(body.proof_hash || '')) ? String(body.proof_hash) : null
     const expires_at = new Date(Date.now() + 30 * 60_000).toISOString()
     for (let i = 0; i < 3; i++) {
       const code = generatePairingCode()
-      const { error } = await sb.from('leod_checkin_device_requests').insert({ code, key_hash: keyHash, kind: 'printer', info, expires_at, ip_hash: ipHash })
+      const { error } = await sb.from('leod_checkin_device_requests').insert({ code, key_hash: keyHash, kind: 'printer', info, expires_at, proof_hash: proofHash })
       if (!error) return json({ ok: true, code: formatPairingCode(code), expires_at })
       if (error.code !== '23505' || String(error.message).includes('key_hash')) {
         console.error('checkin-kiosk-pair: request insert failed', error.code)
@@ -291,9 +293,8 @@ Deno.serve(async (req) => {
     return json({ approved: true, event_id: r.event_id, device_id: r.device_id, label: dev?.label ?? null, revoked: !!dev?.revoked_at })
   }
 
-  // What is asking to be paired, for the person about to approve it, and
-  // whether they are on the network it asked from (migration 144). Signed-in
-  // only and rate limited, so codes cannot be walked from outside.
+  // What is asking to be paired, for the person about to approve it.
+  // Signed-in only and rate limited, so codes cannot be walked from outside.
   if (action === 'request_info') {
     const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
     const { data: { user } } = jwt ? await sb.auth.getUser(jwt) : { data: { user: null } }
@@ -303,10 +304,10 @@ Deno.serve(async (req) => {
     if (rateErr || allowed !== true) return json({ error: 'Too many pairing attempts. Please wait a few minutes and try again.' }, 429)
     const code = normalizeCode(String(body.code || ''))
     const { data: r, error } = await sb.from('leod_checkin_device_requests')
-      .select('info, created_at, expires_at, approved_at, ip_hash').eq('code', code).maybeSingle()
+      .select('info, created_at, expires_at, approved_at').eq('code', code).maybeSingle()
     if (error) return json({ error: 'Could not read the code' }, 500)
     if (!r || r.approved_at || Date.parse(r.expires_at) < Date.now()) return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
-    return json({ ok: true, printer: r.info ?? null, requested_at: r.created_at, same_network: !!r.ip_hash && r.ip_hash === ipHash })
+    return json({ ok: true, printer: r.info ?? null, requested_at: r.created_at })
   }
 
   if (action === 'approve') {
@@ -323,14 +324,17 @@ Deno.serve(async (req) => {
     const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements').select(ENT_COLS).eq('event_id', event_id).maybeSingle()
     if (entErr) return json({ error: entErr.message }, 500)
     if (!entRow?.checkin_core) return json({ error: 'Check-in is not enabled for this event' }, 403)
-    // One click only from the network that asked for the code; from anywhere
-    // else the code must have been typed off the station (migration 144).
-    const { data: req0, error: reqErr } = await sb.from('leod_checkin_device_requests').select('ip_hash').eq('code', code).maybeSingle()
+    // One click only with the proof the station serves on this computer's
+    // 127.0.0.1; otherwise the code must have been typed off the station
+    // (migration 144). Never a network or address check: a caller can set
+    // X-Forwarded-For.
+    const { data: req0, error: reqErr } = await sb.from('leod_checkin_device_requests').select('proof_hash').eq('code', code).maybeSingle()
     if (reqErr) return json({ error: 'Could not read the code' }, 500)
     if (!req0) return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
-    const sameNetwork = !!req0.ip_hash && req0.ip_hash === await sha256Hex(sourceAddress(req))
-    if (!sameNetwork && body.code_typed !== true) {
-      return json({ error: 'different_network', message: 'This print station asked for its code from a different network. Type the code shown on the station itself to pair it.' }, 409)
+    const proof = String(body.local_proof || '')
+    const proven = !!req0.proof_hash && proof.length === 64 && req0.proof_hash === await sha256Hex(proof)
+    if (!proven && body.code_typed !== true) {
+      return json({ error: 'needs_code', message: 'Type the code shown on the print station itself to pair it.' }, 409)
     }
     const { data, error } = await sb.rpc('checkin_approve_device_request', { p_code: code, p_event_id: event_id, p_label: label, p_user: user.id })
     if (error) {
