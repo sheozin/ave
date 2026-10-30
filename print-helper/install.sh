@@ -13,7 +13,7 @@ DIR="$HOME/cuedeck-print-station"
 command -v node >/dev/null 2>&1 || { echo "Install Node.js first (https://nodejs.org), then run this again."; exit 1; }
 mkdir -p "$DIR"
 cd "$DIR"
-for f in cuedeck-print-helper.mjs brother-raster.mjs zebra-zpl.mjs label-text.mjs; do curl -fsSL "$BASE/$f" -o "$f"; done
+for f in cuedeck-print-helper.mjs station-core.mjs brother-raster.mjs zebra-zpl.mjs label-text.mjs; do curl -fsSL "$BASE/$f" -o "$f"; done
 if [ -z "$IP" ]; then
   echo "Looking for label printers on this network..."
   FOUND=$(node cuedeck-print-helper.mjs --find 2>/dev/null | grep -E ': [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || true)

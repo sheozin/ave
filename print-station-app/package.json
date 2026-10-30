@@ -1,0 +1,62 @@
+{
+  "name": "cuedeck-print-station",
+  "productName": "CueDeck Print Station",
+  "version": "0.1.0",
+  "description": "Prints CueDeck badges from any desk or kiosk to a Brother or Zebra label printer.",
+  "author": "CueDeck",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "sync": "mkdir -p core && cp ../print-helper/station-core.mjs ../print-helper/brother-raster.mjs ../print-helper/zebra-zpl.mjs ../print-helper/label-text.mjs core/",
+    "start": "npm run sync && electron .",
+    "dist:mac": "npm run sync && electron-builder --mac dmg --arm64 --x64",
+    "dist:win": "npm run sync && electron-builder --win nsis --x64"
+  },
+  "build": {
+    "appId": "io.cuedeck.printstation",
+    "productName": "CueDeck Print Station",
+    "files": [
+      "main.mjs",
+      "preload.cjs",
+      "ui.html",
+      "core/**",
+      "build/tray*.png",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "build/icon.png",
+      "identity": null,
+      "target": "dmg",
+      "extendInfo": {
+        "LSUIElement": false,
+        "NSLocalNetworkUsageDescription": "CueDeck Print Station finds and prints to label printers on this network.",
+        "NSBonjourServices": [
+          "_pdl-datastream._tcp"
+        ]
+      }
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "dmg": {
+      "title": "CueDeck Print Station"
+    },
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.4"
+  }
+}

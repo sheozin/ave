@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>CueDeck Print Station</title>
+<style>
+:root{--pg:#F5F5F7;--t1:#1D1D1F;--t2:#6E6E73;--bd:#E8E8ED;--bd2:#D2D2D7;--ac:#0071E3;--acsf:#EAF3FE;--gn:#1D8348;--gnsf:#E8F6EE;--am:#9A5B00;--amsf:#FEF6E7;--rd:#B3261E;--rdsf:#FDECEA}
+*{box-sizing:border-box}
+body{margin:0;background:var(--pg);color:var(--t1);font:14px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+header{display:flex;align-items:center;gap:10px;padding:20px 24px 8px}
+header .mk{width:30px;height:30px;border-radius:8px;background:var(--ac);display:grid;place-items:center}
+header b{font-size:16px;letter-spacing:-.2px}
+header span{color:var(--t2);font-size:12px;margin-left:auto}
+main{padding:8px 24px 24px}
+.card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06)}
+h1{font-size:19px;margin:0 0 6px;letter-spacing:-.3px}
+p{margin:0 0 14px;color:var(--t2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:38px;padding:0 16px;border-radius:10px;font:600 13.5px inherit;font-family:inherit;border:0;cursor:pointer}
+.btn-p{background:var(--ac);color:#fff}.btn-s{background:#fff;color:var(--t1);border:1px solid var(--bd2)}
+.btn:disabled{opacity:.5;cursor:default}
+.full{width:100%}
+.list{display:grid;gap:8px;margin:0 0 14px}
+.pr{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--bd);border-radius:12px;background:#fff;cursor:pointer;text-align:left;font:inherit;width:100%}
+.pr:hover{border-color:var(--ac)}
+.pr b{display:block}.pr small{color:var(--t2)}
+.muted{color:var(--t2);font-size:13px}
+.code{font:700 34px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:4px;text-align:center;background:var(--pg);border-radius:12px;padding:16px;margin:4px 0 16px;user-select:text}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
+.ok{background:var(--gn)}.warn{background:var(--am)}.bad{background:var(--rd)}
+.state{font-size:16px;font-weight:700;margin-bottom:4px}
+.facts{margin:14px 0;display:grid;gap:6px;font-size:13px}
+.facts div{display:flex;justify-content:space-between;gap:12px}.facts span{color:var(--t2)}
+.err{background:var(--rdsf);color:var(--rd);border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row .btn{flex:1}
+input,select{font:inherit;padding:9px 10px;border:1px solid var(--bd2);border-radius:10px;width:100%;background:#fff}
+details{margin-top:10px}summary{cursor:pointer;color:var(--ac);font-weight:600;font-size:13px}
+label.chk{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--t2)}
+label.chk input{width:auto}
+</style>
+</head>
+<body>
+<header><span class="mk"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/></svg></span><b>CueDeck Print Station</b><span id="ver"></span></header>
+<main><div class="card" id="card"></div>
+<label class="chk"><input type="checkbox" id="login"> Start when this computer starts</label></main>
+<script>
+const card = document.getElementById('card');
+const h = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v); } e.append(...kids.filter(k => k != null)); return e; };
+let S = null, found = null, searching = false;
+const put = (...kids) => card.replaceChildren(...kids.filter(k => k != null));
+
+function render() {
+  if (!S) return;
+  document.getElementById('ver').textContent = 'v' + S.version;
+  document.getElementById('login').checked = !!S.openAtLogin;
+  const err = S.error ? h('div', { class: 'err' }, S.error) : null;
+  if (S.phase === 'setup') return setup(err);
+  if (S.phase === 'code') {
+    put(
+      h('h1', {}, 'Pair with your event'),
+      h('p', {}, 'Printing to ' + S.printer.name + '. The code below is also printed on the printer.'),
+      err,
+      h('div', { class: 'code' }, S.code || '…'),
+      h('button', { class: 'btn btn-p full', onclick: () => ps.openPair() }, 'Pair in CueDeck'),
+      h('p', { class: 'muted', style: 'margin:12px 0 0' }, 'Opens CueDeck in your browser with this code filled in: pick the event and confirm. Or type the code in Event admin, Kiosk & scanners, Print stations.'),
+      h('div', { class: 'row', style: 'margin-top:16px' }, h('button', { class: 'btn btn-s', onclick: () => ps.changePrinter() }, 'Change printer')));
+    return;
+  }
+  if (S.phase === 'ready') {
+    const tone = S.error ? 'bad' : S.online ? 'ok' : 'warn';
+    const last = S.lastPrinted ? new Date(S.lastPrinted).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'None yet';
+    put(
+      h('div', { class: 'state' }, h('span', { class: 'dot ' + tone }), S.error ? 'Badge not printed' : S.online ? 'Ready' : 'Cannot reach CueDeck'),
+      h('p', {}, S.online ? 'Badges from every desk and kiosk of "' + S.label + '" print here. You can close this window; it keeps printing from the menu bar.' : 'Check the internet connection. Badges wait in CueDeck and print when it is back.'),
+      err,
+      h('div', { class: 'facts' },
+        h('div', {}, h('span', {}, 'Paired as'), S.label || ''),
+        h('div', {}, h('span', {}, 'Printer'), S.printer.name + ' (' + S.printer.host + ')'),
+        h('div', {}, h('span', {}, 'Printed this session'), String(S.printedToday)),
+        h('div', {}, h('span', {}, 'Last badge'), last)),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn btn-s', onclick: () => ps.test() }, 'Print a test label'),
+        h('button', { class: 'btn btn-s', onclick: () => ps.changePrinter() }, 'Change printer')),
+      h('details', {}, h('summary', {}, 'Pair with another event'),
+        h('p', { class: 'muted', style: 'margin:8px 0' }, 'Unpairing stops this station printing for "' + S.label + '" and shows a new code.'),
+        h('button', { class: 'btn btn-s full', onclick: () => ps.unpair() }, 'Unpair and show a new code')));
+    return;
+  }
+  put(h('h1', {}, 'Starting…'), h('p', {}, 'Connecting to ' + (S.printer ? S.printer.name : 'the printer') + '.'), err);
+}
+
+function setup(err) {
+  const list = h('div', { class: 'list' });
+  if (searching) list.append(h('p', { class: 'muted' }, 'Looking for Brother and Zebra printers on this network…'));
+  else if (found && !found.length) list.append(h('p', { class: 'muted' }, 'No label printer found. Is it switched on and on the same Wi-Fi as this computer?'));
+  for (const p of found || []) list.append(h('button', { class: 'pr', onclick: () => ps.choose(p) },
+    h('div', {}, h('b', {}, p.name), h('small', {}, p.host + ' · ' + (p.model === 'zebra' ? 'Zebra' : 'Brother QL, 62 mm roll')))));
+  const ip = h('input', { placeholder: '192.168.1.50', 'aria-label': 'Printer address' });
+  const model = h('select', { 'aria-label': 'Printer kind' }, h('option', { value: 'brother-ql' }, 'Brother QL'), h('option', { value: 'zebra' }, 'Zebra'));
+  put(
+    h('h1', {}, 'Choose your label printer'),
+    h('p', {}, 'Badges print on it at the right size, with no print dialog.'),
+    err, list,
+    h('button', { class: 'btn btn-s full', onclick: search, ...(searching ? { disabled: '' } : {}) }, searching ? 'Searching…' : 'Search again'),
+    h('details', {}, h('summary', {}, 'Type the printer address instead'),
+      h('div', { style: 'display:grid;gap:8px;margin-top:10px' }, ip, model,
+        h('button', { class: 'btn btn-p', onclick: () => ip.value.trim() && ps.choose({ host: ip.value.trim(), name: (model.value === 'zebra' ? 'Zebra' : 'Brother QL') + ' at ' + ip.value.trim(), model: model.value }) }, 'Use this printer'))));
+}
+
+async function search() { searching = true; render(); found = await ps.discover(); searching = false; render(); }
+document.getElementById('login').addEventListener('change', (e) => ps.login(e.target.checked));
+ps.onState((s) => { const was = S && S.phase; S = s; if (s.phase === 'setup' && was !== 'setup') search(); else render(); });
+ps.state().then((s) => { S = s; if (s.phase === 'setup') search(); else render(); });
+</script>
+</body>
+</html>

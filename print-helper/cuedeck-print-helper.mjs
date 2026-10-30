@@ -1,44 +1,24 @@
 #!/usr/bin/env node
-// CueDeck print station: prints CueDeck badges straight to a label printer
-// on the venue network (Brother QL on a 62 mm roll, or a Zebra), with no
-// print dialog, no driver and no paper-size setup.
+// CueDeck print station, command line. The same station as the desktop app
+// (print-station-app/); both run station-core.mjs.
 //
 //   node cuedeck-print-helper.mjs --printer 192.168.1.50 [--model brother|zebra]
 //
 // The first time, it shows a pairing code and prints it on the printer;
-// type that code in CueDeck (Event admin > Devices, or the desk's Kiosk or
-// scanner > Print station) and every desk and kiosk of the event, on any
-// device, can print to it. After that it just starts.
-// Find printers on this network (Mac): node cuedeck-print-helper.mjs --find
+// type that code in CueDeck (Event admin > Kiosk & scanners > Print
+// stations, or the desk's Kiosk or scanner > Print station). After that it
+// just starts. Find printers on this network (Mac): --find
 // The older route still works: --pair CODE with a code made on the desk.
-//
-// It also listens on 127.0.0.1:7841 for a desk in Chrome on this same
-// computer. That port takes jobs only from CueDeck pages (the Origin check
-// below) and is unreachable from the network.
-import http from 'node:http';
-import net from 'node:net';
+// --no-station: only the local route for a desk in Chrome on this computer.
 import os from 'node:os';
-import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { decodePng, toLines, fitLength, rasterJob, parseStatus, STATUS_REQUEST, QL } from './brother-raster.mjs';
-import { zplLabel, zplText, ZEBRA_QUERY, parseZebraInfo } from './zebra-zpl.mjs';
-import { textImage } from './label-text.mjs';
+import { createStation, VERSION } from './station-core.mjs';
 
-const VERSION = '1.2.0';
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : (process.env['CUEDECK_' + k.toUpperCase().replace(/-/g, '_')] ?? d); };
 const flag = (k) => process.argv.includes('--' + k);
-const SUPABASE = arg('supabase-url', 'https://sawekpguemzvuvvulfbc.supabase.co');
-const PUBLIC_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';   // the app's public key, same as the pages
-const CONFIG = arg('config', path.join(os.homedir(), '.cuedeck-print-station.json'));
-const PRINTER = arg('printer', '');
-const PRINTER_PORT = Number(arg('printer-port', 9100));
-const MODEL = /zebra/i.test(arg('model', '')) ? 'zebra' : 'brother-ql';
-const PORT = Number(arg('port', 7841));
-const CUT_MM = Number(arg('cut-mm', 76));
-const MARGIN = Number(arg('margin-dots', 35));
 if (flag('find')) await findPrinters();
+const PRINTER = arg('printer', '');
 if (!PRINTER) { console.error('Give the printer address: node cuedeck-print-helper.mjs --printer 192.168.1.50   (or --find to look for it)'); process.exit(2); }
 
 // Label printers announce themselves over Bonjour. macOS has dns-sd;
@@ -57,200 +37,34 @@ async function findPrinters() {
   process.exit(0);
 }
 
-const ALLOWED = [/^https:\/\/app\.cuedeck\.io$/, /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/];
-const allowed = (o) => !o || ALLOWED.some(r => r.test(o));
-
-// One job on the wire at a time, so two badges never interleave.
-let chain = Promise.resolve();
-const serial = (fn) => { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; };
-
-// reply: bytes to wait for; collectMs: or gather whatever arrives in that time.
-function talk(payload, { reply = 0, collectMs = 0, timeoutMs = 8000 } = {}) {
-  return new Promise((resolve, reject) => {
-    const s = net.createConnection({ host: PRINTER, port: PRINTER_PORT });
-    const got = [];
-    let n = 0;
-    const done = (err, v) => { clearTimeout(t); s.destroy(); err ? reject(err) : resolve(v); };
-    const t = setTimeout(() => collectMs ? done(null, Buffer.concat(got)) : done(new Error(reply ? 'the printer did not answer' : 'timed out sending to the printer')), collectMs || timeoutMs);
-    s.on('error', (e) => done(new Error('cannot reach the printer at ' + PRINTER + ' (' + e.code + ')')));
-    s.on('data', (d) => { got.push(d); n += d.length; if (reply && n >= reply) done(null, Buffer.concat(got)); });
-    s.on('connect', () => s.write(payload, () => { if (!reply && !collectMs) s.end(); }));
-    s.on('close', () => { if (!reply && !collectMs) done(null, null); });
-  });
-}
-
-// ── what this printer is ───────────────────────────────────────────
-// Brother QL: 62 mm roll, 300 dpi. Zebra: asks the printer (SGD); if it
-// does not say, 203 dpi and 4 in, the common ZD421/ZD621 setup, and a
-// warning, because a 300 dpi printer would then print badges too small.
-let profile = MODEL === 'zebra'
-  ? { model: 'zebra', dpi: Number(arg('dpi', 203)), widthDots: 832, name: 'Zebra' }
-  : { model: 'brother-ql', dpi: 300, widthDots: QL.rollDots, name: 'Brother QL' };
-async function detect() {
-  if (MODEL !== 'zebra') return;
-  try {
-    const info = parseZebraInfo((await serial(() => talk(ZEBRA_QUERY, { collectMs: 2500 }))).toString('latin1'));
-    if (info) profile = { model: 'zebra', ...info };
-    else console.log(`The Zebra did not report its resolution; assuming ${profile.dpi} dpi. Start with --dpi 300 if it is a 300 dpi printer.`);
-  } catch (e) { console.log('printer:', e.message); }
-}
-const info = () => ({ model: profile.model, dpi: profile.dpi, width_mm: Math.round(profile.widthDots / profile.dpi * 25.4), name: profile.name, host: PRINTER });
-
-// PNGs (300 dpi, from checkin-badge.js badgePng) to one job for this printer.
-function jobFor(pngs, cutMm) {
-  const imgs = pngs.map(p => decodePng(Buffer.from(String(p).replace(/^data:image\/png;base64,/, ''), 'base64')));
-  if (profile.model === 'zebra') return Buffer.from(imgs.map(i => zplLabel(i, profile)).join(''), 'latin1');
-  return rasterJob(imgs.map(i => fitLength(toLines(i), cutMm, MARGIN)), { marginDots: MARGIN });
-}
-function textJob(lines) {
-  if (profile.model === 'zebra') return Buffer.from(zplText(lines.map(l => ({ text: l.text, size: l.scale / 60 })), profile), 'latin1');
-  return rasterJob([toLines(textImage(lines))], { marginDots: MARGIN });
-}
-
-// Not every network setup answers the status request; a printer that
-// accepts the connection but stays silent is reachable, roll unknown.
-const status = () => serial(async () => {
-  if (profile.model === 'zebra') { await talk(Buffer.alloc(0), { collectMs: 300 }); return { errors: [], media: null }; }
-  try { return parseStatus(await talk(STATUS_REQUEST, { reply: 32, timeoutMs: 4000 })); }
-  catch (e) { if (/did not answer/.test(e.message)) return { errors: [], media: null }; throw e; }
+const st = createStation({
+  printer: PRINTER, printerPort: Number(arg('printer-port', 9100)),
+  model: /zebra/i.test(arg('model', '')) ? 'zebra' : 'brother-ql', dpi: Number(arg('dpi', 203)),
+  cutMm: Number(arg('cut-mm', 76)), marginDots: Number(arg('margin-dots', 35)),
+  configPath: arg('config', path.join(os.homedir(), '.cuedeck-print-station.json')),
+  supabaseUrl: arg('supabase-url', undefined),
+  onEvent: (type, d) => {
+    const t = new Date().toISOString();
+    if (type === 'code') console.log(`\n  Pairing code:  ${d.code}\n  Type it in CueDeck: Event admin > Kiosk & scanners > Print stations\n  (or on the desk: Kiosk or scanner > Print station).\n`);
+    else if (type === 'paired') console.log(d.resumed ? `Print station "${d.label}": waiting for badges from CueDeck.` : `Paired as "${d.label}".`);
+    else if (type === 'printed') console.log(t, 'printed a badge from CueDeck at', d.cut_mm, 'mm');
+    else if (type === 'failed') console.error(t, 'badge not printed:', d);
+    else if (type === 'offline') console.log('Cannot reach CueDeck (' + d + '); retrying.');
+    else if (type === 'unpaired') console.error('This print station was removed from the event. Pairing again.');
+    else if (type === 'log') console.log(d);
+  },
 });
+if (!st.profile().model) process.exit(1);
+st.listen(Number(arg('port', 7841)));
+const p = await st.detect();
+console.log(`CueDeck print station ${VERSION}: ${p.name} at ${PRINTER} (${p.dpi} dpi${p.model === 'brother-ql' ? ', 62 mm roll' : ', ' + st.info().width_mm + ' mm wide'})`);
+st.status().then(s => console.log('printer:', s.errors.length ? s.errors.join(', ') : 'reachable', s.media ? `(${s.media.width_mm} mm ${s.media.type})` : ''),
+                 e => console.log('printer:', e.message));
 
-function send(res, code, body, origin) {
-  res.writeHead(code, {
-    'Content-Type': 'application/json',
-    ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}),
-  });
-  res.end(JSON.stringify(body));
-}
-
-const server = http.createServer(async (req, res) => {
-  const origin = req.headers.origin;
-  if (!allowed(origin)) return send(res, 403, { error: 'not a CueDeck page' });
-  if (req.method === 'OPTIONS') {
-    // Chrome asks before a public page may call a local service.
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': origin || '*', 'Access-Control-Allow-Methods': 'GET, POST',
-      'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Max-Age': '600', Vary: 'Origin',
-    });
-    return res.end();
-  }
-  try {
-    if (req.method === 'GET' && req.url === '/status') {
-      let printer = null, error = null;
-      try { printer = await status(); } catch (e) { error = e.message; }
-      const media = printer && printer.media;
-      const wrongRoll = media && !(media.width_mm === 62 && media.type === 'continuous');
-      return send(res, 200, { ok: !error && !wrongRoll && !printer.errors.length, version: VERSION, printer: PRINTER, model: profile.model, cut_mm: CUT_MM, status: printer, error,
-        warning: wrongRoll ? `Loaded: ${media.width_mm} mm ${media.type}. This label needs the 62 mm continuous roll (DK-22205).`
-          : printer && !media ? 'Printer connected; it did not report which roll is loaded.' : null }, origin);
-    }
-    if (req.method === 'POST' && req.url === '/print') {
-      if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'send JSON' }, origin);
-      const chunks = []; let size = 0;
-      for await (const c of req) { size += c.length; if (size > 8e6) return send(res, 413, { error: 'too large' }, origin); chunks.push(c); }
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-      const pngs = (Array.isArray(body.labels) ? body.labels : [body.png]).filter(Boolean).slice(0, 20);
-      if (!pngs.length) return send(res, 400, { error: 'no label' }, origin);
-      const copies = Math.min(Math.max(1, Number(body.copies) || 1), 10);
-      const cutMm = Number(body.cut_mm) > 20 && Number(body.cut_mm) <= 300 ? Number(body.cut_mm) : CUT_MM;
-      const all = pngs.flatMap(p => Array(copies).fill(p));
-      await serial(() => talk(jobFor(all, cutMm)));
-      console.log(new Date().toISOString(), 'printed', all.length, 'label(s) at', cutMm, 'mm');
-      return send(res, 200, { ok: true, labels: all.length, cut_mm: cutMm }, origin);
-    }
-    send(res, 404, { error: 'not found' }, origin);
-  } catch (e) {
-    console.error(new Date().toISOString(), e.message);
-    send(res, /reach|answer|timed out/.test(e.message) ? 502 : 400, { error: e.message }, origin);
-  }
-});
-
-// ── print station: badges sent through CueDeck ─────────────────────
-async function fn(name, body) {
-  const r = await fetch(`${SUPABASE}/functions/v1/${name}`, { method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: PUBLIC_KEY, Authorization: `Bearer ${PUBLIC_KEY}` }, body: JSON.stringify(body) });
-  let j = {}; try { j = await r.json(); } catch (_) {}
-  return { status: r.status, body: j };
-}
-const saveConfig = (cfg) => { fs.writeFileSync(CONFIG, JSON.stringify(cfg, null, 2), { mode: 0o600 }); return cfg; };
-
-// Older route: a code made on the desk, typed here.
-async function pairWithDeskCode(code) {
-  const r = await fn('checkin-kiosk-pair', { action: 'claim', code, device_kind: 'printer' });
-  if (r.status !== 200 || !r.body.device_key) { console.error('Pairing failed:', r.body.error || r.status); process.exit(1); }
-  console.log(`Paired as "${r.body.label}".`);
-  return saveConfig({ event_id: r.body.event_id, device_id: r.body.device_id, label: r.body.label, device_key: r.body.device_key });
-}
-
-// The station makes its own key and sends only its hash; CueDeck shows the
-// code to nobody but this station. The code is printed on the printer, so
-// a box with no screen pairs too.
-async function pairWithStationCode() {
-  const key = crypto.randomBytes(32).toString('hex');
-  const keyHash = crypto.createHash('sha256').update(key).digest('hex');
-  for (;;) {
-    let r;
-    try { r = await fn('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: keyHash, info: info() }); }
-    catch (e) { console.log('Cannot reach CueDeck (' + e.message + '); retrying.'); await sleep(5000); continue; }
-    if (r.status !== 200) { console.log('Could not get a pairing code:', r.body.error || r.status); await sleep(10000); continue; }
-    const code = r.body.code;
-    console.log(`\n  Pairing code:  ${code}\n  Type it in CueDeck: Event admin > Devices > Add a print station\n  (or on the desk: Kiosk or scanner > Print station).\n`);
-    try {
-      await serial(() => talk(textJob([{ text: 'CUEDECK PRINT STATION', scale: 4 }, { text: 'PAIRING CODE', scale: 4 }, { text: code, scale: 9 }, { text: 'TYPE IT IN CUEDECK', scale: 4 }])));
-    } catch (e) { console.log('Could not print the code (' + e.message + '); use the one above.'); }
-    const until = Date.parse(r.body.expires_at) || Date.now() + 30 * 60_000;
-    while (Date.now() < until) {
-      await sleep(3000);
-      let s;
-      try { s = await fn('checkin-kiosk-pair', { action: 'request_status', code, device_key: key }); } catch (_) { continue; }
-      if (s.status === 200 && s.body.approved) {
-        console.log(`Paired as "${s.body.label}".`);
-        return saveConfig({ event_id: s.body.event_id, device_id: s.body.device_id, label: s.body.label, device_key: key });
-      }
-    }
-    console.log('That code ran out; here is a new one.');
-  }
-}
-
-async function station(cfg) {
-  console.log(`Print station "${cfg.label}": waiting for badges from CueDeck.`);
-  let quiet = 0;
-  for (;;) {
-    let r;
-    try { r = await fn('checkin-print-station', { action: 'next', event_id: cfg.event_id, device_key: cfg.device_key, info: info() }); }
-    catch (e) { if (quiet++ % 10 === 0) console.log('Cannot reach CueDeck (' + e.message + '); retrying.'); await sleep(3000); continue; }
-    if (r.status === 401) {
-      console.error('This print station was removed from the event. Pairing again.');
-      try { fs.unlinkSync(CONFIG); } catch (_) {}
-      return station(await pairWithStationCode());
-    }
-    if (r.status !== 200) { console.log('CueDeck answered', r.status, r.body.error || ''); await sleep(3000); continue; }
-    quiet = 0;
-    for (const job of r.body.jobs || []) {
-      let ok = true, error = null;
-      try {
-        await serial(() => talk(jobFor([job.png], Number(job.cut_mm) || CUT_MM)));
-        console.log(new Date().toISOString(), 'printed a badge from CueDeck at', job.cut_mm, 'mm');
-      } catch (e) { ok = false; error = e.message; console.error(new Date().toISOString(), 'badge not printed:', e.message); }
-      // Reported even when the report itself has to be retried: a job left
-      // "printing" is failed by the server after two minutes, never reprinted.
-      for (let i = 0; i < 3; i++) { try { await fn('checkin-print-station', { action: 'done', event_id: cfg.event_id, device_key: cfg.device_key, job_id: job.id, ok, error }); break; } catch (_) { await sleep(1000); } }
-    }
-  }
-}
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-server.on('error', (e) => { if (e.code === 'EADDRINUSE') console.log(`Port ${PORT} is in use (another helper running?); the local route is off, the print station still works.`); else throw e; });
-server.listen(PORT, '127.0.0.1');
-await detect();
-console.log(`CueDeck print station ${VERSION}: ${profile.name} at ${PRINTER} (${profile.dpi} dpi${profile.model === 'brother-ql' ? ', 62 mm roll' : ', ' + info().width_mm + ' mm wide'})`);
-status().then(s => console.log('printer:', s.errors.length ? s.errors.join(', ') : 'reachable', s.media ? `(${s.media.width_mm} mm ${s.media.type})` : ''),
-              e => console.log('printer:', e.message));
-
-// --pair CODE: a desk-made code. --pair alone, or never paired: show a code.
 const pairArg = arg('pair', '');
-let cfg = null;
-if (flag('pair') && pairArg && !pairArg.startsWith('--')) cfg = await pairWithDeskCode(pairArg);
-else if (!flag('pair') && fs.existsSync(CONFIG)) { try { cfg = JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch (_) { console.error('Could not read', CONFIG, '- pairing again.'); } }
 if (flag('no-station')) console.log('Station off (--no-station): only this computer\'s desk prints.');
-else station(cfg || await pairWithStationCode());
+else if (flag('pair') && pairArg && !pairArg.startsWith('--')) st.run({ deskCode: pairArg }).catch(e => { console.error(e.message); process.exit(1); });
+else {
+  if (flag('pair')) st.forget();
+  st.run();
+}

@@ -75,7 +75,7 @@ describe('print helper server', () => {
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.2.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.3.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });

@@ -11,6 +11,7 @@
     { "source": "/checkin/dashboard", "destination": "/cuedeck-checkin-dashboard.html" },
     { "source": "/checkin/report",    "destination": "/cuedeck-checkin-report.html" },
     { "source": "/checkin/scan",      "destination": "/cuedeck-scanner.html" },
+    { "source": "/checkin/pair-printer", "destination": "/cuedeck-pair-printer.html" },
     { "source": "/r/:code",           "destination": "/cuedeck-register.html" },
     { "source": "/e/:code",           "destination": "/cuedeck-register.html" }
   ],

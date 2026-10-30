@@ -369,7 +369,9 @@ $('f-pass').addEventListener('submit', async (e) => {
 // send anyone off-site or to an arbitrary path.
 function safeNext() {
   const n = new URLSearchParams(location.search).get('next');
-  return n && /^\/checkin\/(report|dashboard|setup|desk)\?event=[0-9a-f-]{36}$/i.test(n) ? n : null;
+  // The print station app's pairing link (cuedeck-pair-printer.html) too.
+  return n && (/^\/checkin\/(report|dashboard|setup|desk)\?event=[0-9a-f-]{36}$/i.test(n)
+    || /^\/checkin\/pair-printer\?code=[A-Za-z0-9]{8}(&name=[A-Za-z0-9%._~-]{1,180})?$/.test(n)) ? n : null;
 }
 
 async function enter(user) {
