@@ -54,16 +54,27 @@
         <div class="err" id="up-err"></div>
       </form>
       <div id="up-done" hidden>
-        <h3>Check your inbox</h3><p class="s" id="up-done-t"></p>
-        <ol class="next">
-          <li><b>Confirm your email.</b> The link comes from noreply@cuedeck.io and signs you straight in.</li>
-          <li><b>Create your event</b> and import your guest list.</li>
-          <li><b>Try the desk for free</b> with up to <span id="up-cap"></span> test check-ins.</li>
-          <li><b>Go live</b> <span data-price-line hidden>for <span data-price></span> per event, excl. VAT,</span> when you are ready.</li>
-        </ol>
-        <p class="small">Nothing after a few minutes? Check your spam folder, then <button type="button" class="link" id="up-resend">send it again</button>. <span id="up-resend-msg"></span></p>
-        <p class="small">Already have a CueDeck account with this email? Then no new email is sent: <button type="button" class="link" id="up-to-in">sign in</button> or <button type="button" class="link" id="up-to-reset">reset your password</button>.</p>
-        <p class="small"><button type="button" class="link" id="up-again">Use a different email</button></p>
+        <div class="done-ic" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg></div>
+        <h3 class="done-h">Check your inbox</h3>
+        <p class="done-t">Confirm <b id="up-done-email"></b> to finish setting up your account.</p>
+        <p class="done-s">The link comes from noreply@cuedeck.io. Open it on this device and you land back here, signed in.</p>
+        <div class="done-mail">
+          <a class="btn btn-s" href="https://mail.google.com/mail/u/0/#search/from%3Anoreply%40cuedeck.io" target="_blank" rel="noopener">Open Gmail</a>
+          <a class="btn btn-s" href="https://outlook.office.com/mail/" target="_blank" rel="noopener">Open Outlook</a>
+        </div>
+        <div class="done-next">
+          <div class="done-k">Then</div>
+          <ol class="next">
+            <li><b>Create your event</b> and import your guest list.</li>
+            <li><b>Try the desk for free</b> with up to <span id="up-cap"></span> test check-ins.</li>
+            <li><b>Go live</b> <span data-price-line hidden>for <span data-price></span> per event, excl. VAT,</span> when you are ready.</li>
+          </ol>
+        </div>
+        <div class="done-foot">
+          <p class="small">No email after a few minutes? Check your spam folder, or <button type="button" class="link" id="up-resend">send it again</button>. <span id="up-resend-msg" role="status"></span></p>
+          <p class="small">Already have a CueDeck account with this email? Then no new email is sent: <button type="button" class="link" id="up-to-in">sign in</button> or <button type="button" class="link" id="up-to-reset">reset your password</button>.</p>
+          <p class="small"><button type="button" class="link" id="up-again">Use a different email</button></p>
+        </div>
       </div>
       <form id="f-forgot" hidden>
         <h3>Reset your password</h3><p class="s">We'll email you a link.</p>
@@ -235,6 +246,7 @@ function tab(which) {
   $('f-up').hidden = which !== 'up';
   $('f-forgot').hidden = which !== 'forgot';
   $('up-done').hidden = true;
+  document.querySelector('.tabs').hidden = false; $('captcha').hidden = false;
 }
 $('t-in').onclick = () => tab('in');
 $('t-up').onclick = () => tab('up');
@@ -295,7 +307,10 @@ let doneEmail = '', resendTimer = null;
 function showDone(email) {
   doneEmail = email;
   $('f-in').hidden = true; $('f-up').hidden = true; $('f-forgot').hidden = true; $('up-done').hidden = false;
-  $('up-done-t').textContent = 'If ' + email + ' is new to CueDeck, a confirmation link is on its way. Open it on this device and you will land back here, signed in.';
+  // The tabs and the finished security check are noise here; the check
+  // comes back only while a resend needs it.
+  document.querySelector('.tabs').hidden = true; $('captcha').hidden = true;
+  $('up-done-email').textContent = email;
   $('up-resend-msg').textContent = '';
   cooldown(60);
 }
@@ -311,10 +326,11 @@ function cooldown(sec) {
 }
 async function resend() {
   $('up-resend-msg').textContent = '';
+  $('captcha').hidden = false;
   const c = await captchaToken($('up-resend-msg'));
   if (!c.ok) return;
   const { error } = await sb.auth.resend({ type: 'signup', email: doneEmail, options: { emailRedirectTo: location.origin + '/checkin', captchaToken: c.token } });
-  cap().reset();
+  cap().reset(); $('captcha').hidden = true;
   if (error) { $('up-resend-msg').textContent = cdAuth.message(error); return; }
   $('up-resend-msg').textContent = 'Sent, if this address is waiting for confirmation.';
   cooldown(60);
