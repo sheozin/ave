@@ -1,0 +1,34 @@
+<!-- Supabase Auth > Emails > Confirm signup. Not deployed from here: paste it
+     into the dashboard. Accounts made on /checkin carry
+     signup_source 'checkin' in their metadata (.Data) and get the check-in
+     wording; everyone else gets the original command center email. -->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:48px 16px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+    <tr><td align="center" style="padding-bottom:32px;">
+      <span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#0f172a;">Cue<span style="color:#3b82f6;">Deck</span></span>{{ if eq .Data.signup_source "checkin" }}<span style="font-size:15px;font-weight:600;color:#64748b;padding-left:10px;">Check-in</span>{{ end }}
+    </td></tr>
+    <tr><td style="background:#ffffff;border-radius:14px;padding:40px;">
+{{ if eq .Data.signup_source "checkin" }}
+      <h1 style="margin:0 0 20px;font-size:26px;line-height:1.25;color:#0f172a;">Confirm your email to start checking in guests</h1>
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#475569;">Thanks for signing up to CueDeck Check-in.</p>
+      <p style="margin:0 0 28px;font-size:16px;line-height:1.6;color:#475569;">Confirm your email address and you go straight to Check-in, where you can create your event, import your guest list and try the desk for free.</p>
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#3b82f6;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:15px 30px;border-radius:9px;">Confirm and open Check-in</a>
+{{ else }}
+      <h1 style="margin:0 0 20px;font-size:26px;line-height:1.25;color:#0f172a;">Confirm your email</h1>
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#475569;">Thanks for signing up to CueDeck.</p>
+      <p style="margin:0 0 28px;font-size:16px;line-height:1.6;color:#475569;">Click the button below to confirm your email address and activate your account.</p>
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#3b82f6;color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:15px 30px;border-radius:9px;">Confirm email address</a>
+{{ end }}
+      <p style="margin:28px 0 0;font-size:14px;line-height:1.6;color:#94a3b8;">This link expires in 24 hours. If you didn't create a CueDeck account, you can safely ignore this email.</p>
+    </td></tr>
+    <tr><td align="center" style="padding-top:28px;font-size:13px;color:#94a3b8;">&copy; 2026 CueDeck &middot; <a href="https://www.cuedeck.io" style="color:#94a3b8;text-decoration:none;">cuedeck.io</a></td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>
