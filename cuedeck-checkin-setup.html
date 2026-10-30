@@ -382,7 +382,7 @@
     <div class="ph"><div><h2>Badges</h2><p>What the desk and the kiosk print for each guest. The preview is the real badge, drawn at its printed size.</p></div></div>
     <div class="bd-wrap">
       <div style="display:grid;gap:14px">
-        <div class="field"><label for="bd-tpl">Template</label><select id="bd-tpl"></select>
+        <div class="field"><label for="bd-tpl">Badge layout</label><select id="bd-tpl"></select>
           <p class="sc-p" id="bd-tpl-hint" style="margin:6px 0 0" hidden></p></div>
         <div id="bd-std" style="display:grid;gap:14px">
         <div class="field"><label for="bd-size">Badge stock</label>
@@ -1363,7 +1363,7 @@ function renderBadges() {
     og.append(...BADGE_SIZES.filter(z => z.group === g).map(z => { const o = el('option', null, z.label); o.value = z.id; return o; }));
     return og;
   }), (() => { const o = el('option', null, 'Custom size'); o.value = 'custom'; return o; })());
-  $('bd-tpl').replaceChildren(el('option', null, 'Standard (design it below)'),
+  $('bd-tpl').replaceChildren(el('option', null, 'Designer: any size (13 stock sizes or custom)'),
     ...BADGE_TEMPLATES.map(t => { const o = el('option', null, t.label); o.value = t.id; return o; }));
   $('bd-tpl').firstChild.value = '';
   $('bd-ok').textContent = ''; $('bd-err').textContent = '';
@@ -1373,7 +1373,7 @@ function renderBadges() {
 function drawBadgeForm() {
   const tpl = BADGE_TEMPLATES.find(t => t.id === BD.template);
   $('bd-tpl').value = tpl ? tpl.id : '';
-  $('bd-tpl-hint').hidden = !tpl; $('bd-tpl-hint').textContent = tpl ? tpl.hint : '';
+  $('bd-tpl-hint').hidden = !tpl; $('bd-tpl-hint').textContent = tpl ? tpl.hint + ' This template has one fixed size; pick Designer for any other stock.' : '';
   $('bd-std').hidden = !!tpl; $('bd-png').hidden = !tpl;
   // The template draws with the bundled font; redraw once it has loaded.
   if (tpl) loadBadgeFonts().then(() => { if (BD && BD.template && !$('p-badges').hidden) drawBadgePreview(); }).catch(() => {});
@@ -1459,6 +1459,23 @@ $('bd-print').onclick = async () => {
   st.textContent = pageCss(BD);
   $('badge-sheet').replaceChildren(badgeElement(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }));
   await Promise.all([...$('badge-sheet').querySelectorAll('img')].map(i => i.decode().catch(() => {})));
+  $('bd-ok').textContent = ''; $('bd-err').textContent = '';
+  // Same path as the desk: a template goes to the print helper when this
+  // laptop uses one (the desk's "Print straight to a Brother" switch).
+  let helperOn = false; try { helperOn = localStorage.getItem('ck_print_helper') === '1'; } catch (_) {}
+  if (BD.template && helperOn) {
+    try {
+      const r = await fetch('http://127.0.0.1:7841/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labels: [...$('badge-sheet').querySelectorAll('img')].map(i => i.src) }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) { $('bd-ok').textContent = 'Sent to the Brother printer through the print helper.'; return; }
+      $('bd-err').textContent = 'The print helper could not print: ' + (j.error || r.status); return;
+    } catch (_) { /* helper not running: print through the browser */ }
+  }
+  // Safari ignores the page size a site asks for and prints on A4.
+  if (/^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent)) {
+    $('bd-err').textContent = 'Safari prints badges on A4 whatever size is set here. Print badges from Chrome, or use the print helper.';
+  }
   window.print();
 };
 window.addEventListener('resize', () => { if (BD && !$('p-badges').hidden) drawBadgePreview(); });

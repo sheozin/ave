@@ -10,7 +10,8 @@ const DIR = join(__dirname, 'e2e');
 const BAD = [
   { re: /\/private\/tmp\//, why: 'a temp path on one machine' },
   { re: /\/Users\/[^/'"`\s]+/, why: 'a home directory on one machine' },
-  { re: /(?:127\.0\.0\.1|localhost):(?!7230\b)\d+/, why: 'a local port other than CI\'s 7230' },
+  // 7841 is the CueDeck print helper's fixed port (print-helper/), faked with routes.
+  { re: /(?:127\.0\.0\.1|localhost):(?!(?:7230|7841)\b)\d+/, why: 'a local port other than CI\'s 7230 or the print helper\'s 7841' },
 ];
 
 describe('E2E specs are portable', () => {

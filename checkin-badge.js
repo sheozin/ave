@@ -222,7 +222,7 @@ function splitSurname(text) {
   return text[i] === '-' ? [text.slice(0, i + 1), text.slice(i + 1)] : [text.slice(0, i), text.slice(i + 1)];
 }
 
-export function visaNextCanvas(attendee, doc = document) {
+export function visaNextCanvas(attendee, doc = document, { test = false } = {}) {
   const { w: W, h: H } = VISA_NEXT_PX;
   const c = doc.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
@@ -282,6 +282,19 @@ export function visaNextCanvas(attendee, doc = document) {
       if ((xx + yy) % 2 === 0) { const i = (yy * W + xx) * 4; px[i] = px[i + 1] = px[i + 2] = 0; }
     }
   }
+  // Test mode: a diagonal TEST in a sparse dot pattern, so the name still reads.
+  if (test) {
+    const m = doc.createElement('canvas'); m.width = W; m.height = H;
+    const mg = m.getContext('2d');
+    mg.translate(W / 2, H / 2); mg.rotate(-0.32);
+    mg.font = '900 300px Montserrat'; mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillStyle = '#000';
+    mg.fillText('TEST', 0, 0);
+    const mask = mg.getImageData(0, 0, W, H).data;
+    for (let i = 0; i < W * H; i++) {
+      const x = i % W, yy = (i / W) | 0;
+      if (mask[i * 4 + 3] > 128 && x % 3 === 0 && yy % 3 === 0) px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = 0;
+    }
+  }
   g.putImageData(img, 0, 0);
   return c;
 }
@@ -293,12 +306,8 @@ function visaNextElement(attendee, ctx, doc) {
   badge.className = 'badge';
   const img = el(doc, 'img', `width:${d.w}mm;height:${(VISA_NEXT_PX.h * 25.4 / 300).toFixed(2)}mm;display:block;image-rendering:pixelated`);
   img.alt = [attendee.first_name, attendee.last_name, attendee.company].filter(Boolean).join(' ');
-  img.src = visaNextCanvas(attendee, doc).toDataURL('image/png');
+  img.src = visaNextCanvas(attendee, doc, { test: !!ctx.test }).toDataURL('image/png');
   if (!fontsReady(doc)) img.dataset.fontPending = '1';
   badge.append(img);
-  if (ctx.test) {
-    badge.append(el(doc, 'div', 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:48pt;font-weight:900;'
-      + 'letter-spacing:6pt;color:rgba(0,0,0,.25);transform:rotate(-18deg);pointer-events:none', 'TEST'));
-  }
   return badge;
 }

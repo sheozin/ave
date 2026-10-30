@@ -719,3 +719,46 @@ test('the desk prints the visa-next-full template: a 76 x 62 mm page with the re
   expect(await page.evaluate(() => (window as unknown as { __prints: string[] }).__prints[0])).toContain('Ben');
   expect(await page.locator('#badge-page').textContent()).toBe('@page { size: 76mm 62mm; margin: 0; }');
 });
+
+// The print helper (print-helper/) on 127.0.0.1:7841, faked with routes.
+async function withHelper(page, print: (b: { labels: string[] }) => { status: number; body: unknown }) {
+  await page.addInitScript(() => { localStorage.setItem('ck_print_helper', '1'); (window as unknown as { __prints: number }).__prints = 0;
+    window.print = () => { (window as unknown as { __prints: number }).__prints++; }; });
+  await page.route('http://127.0.0.1:7841/status', r => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify({ ok: true, version: '1.0.0', printer: '192.168.1.50', cut_mm: 76, status: { errors: [], media: { width_mm: 62, type: 'continuous', length_mm: 0 } }, error: null, warning: null }) }));
+  await page.route('http://127.0.0.1:7841/print', r => { const o = print(r.request().postDataJSON()); return r.fulfill({ status: o.status, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(o.body) }); });
+}
+
+test('with the print helper on, a template badge goes straight to the Brother, not the print dialog', async ({ page }) => {
+  const jobs: { labels: string[] }[] = [];
+  await withHelper(page, (b) => { jobs.push(b); return { status: 200, body: { ok: true, labels: 1, cut_mm: 76 } }; });
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await expect(page.locator('#ck-printer')).toContainText('Printing straight to the Brother at 192.168.1.50');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect.poll(() => jobs.length).toBe(1);
+  expect(jobs[0].labels[0]).toMatch(/^data:image\/png;base64,/);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('a printer error from the helper is shown and the badge is not marked printed', async ({ page }) => {
+  const stamps: unknown[] = [];
+  await withHelper(page, () => ({ status: 502, body: { error: 'cannot reach the printer at 192.168.1.50 (ECONNREFUSED)' } }));
+  await page.route(/\/rest\/v1\/leod_checkin_attendees\?.*id=in/, r => { if (r.request().method() === 'PATCH') stamps.push(r.request().postDataJSON()); return r.fallback(); });
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-printer')).toContainText('Badge not printed: cannot reach the printer');
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+  expect(stamps).toEqual([]);
+});
+
+test('without the helper switched on, the desk never contacts this computer and offers it once', async ({ page }) => {
+  let contacted = false;
+  await page.route('http://127.0.0.1:7841/**', r => { contacted = true; return r.abort(); });
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await expect(page.locator('#ck-printer')).toContainText('Print straight to a Brother label printer?');
+  expect(contacted).toBe(false);
+});

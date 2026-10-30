@@ -2206,7 +2206,49 @@ function setBadgeDesign(ent) {
   st.textContent = window.CK_BADGE.pageCss(design);
   if (design.logo && logoUrl) new Image().src = logoUrl;
   // A template draws with the bundled font: load it now, while online.
-  if (design.template) window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
+  if (design.template) {
+    window.CK_BADGE.loadBadgeFonts().catch(e => console.warn('checkin: badge font not loaded', e && e.message));
+    probePrintHelper();
+  }
+}
+
+// ── CueDeck print helper (print-helper/, runs on this laptop) ──
+// A template badge is an image, so it can go straight to a Brother QL
+// through the helper: no print dialog, no driver, cut at the label length.
+// Without the helper the desk prints through the browser as before.
+const PRINT_HELPER = 'http://127.0.0.1:7841';
+// Opt-in per laptop: Chrome asks before a page may reach this computer,
+// and a desk without the helper should never see that question.
+const helperWanted = () => { try { return localStorage.getItem('ck_print_helper') === '1'; } catch (_) { return false; } };
+async function probePrintHelper() {
+  if (!helperWanted()) { S.helper = null; renderPrinterChip(); return; }
+  try {
+    const r = await fetch(PRINT_HELPER + '/status', { signal: AbortSignal.timeout(3000) });
+    S.helper = await r.json();
+  } catch (_) { S.helper = null; }
+  renderPrinterChip();
+}
+function renderPrinterChip(error) {
+  let chip = document.getElementById('ck-printer');
+  if (!(S.badge && S.badge.design.template)) { if (chip) chip.remove(); return; }
+  if (!chip) {
+    chip = document.createElement('div'); chip.id = 'ck-printer'; chip.setAttribute('role', 'status');
+    chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;max-width:340px;padding:8px 12px;border-radius:10px;font:600 12.5px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.12)';
+    document.body.appendChild(chip);
+  }
+  chip.onclick = null; chip.style.cursor = '';
+  if (!S.helper && !error) {
+    chip.style.background = '#fff'; chip.style.color = '#1D1D1F'; chip.style.cursor = 'pointer';
+    chip.textContent = helperWanted() ? 'Print helper not found on this laptop. Start it, then click to retry.' : 'Print straight to a Brother label printer? Click to use the CueDeck print helper.';
+    chip.onclick = () => { try { localStorage.setItem('ck_print_helper', '1'); } catch (_) {} probePrintHelper(); };
+    return;
+  }
+  const h = S.helper, bad = error || (h && (h.error || h.warning));
+  chip.style.background = error || (h && h.error) ? '#FDECEA' : bad ? '#FEF6E7' : '#E8F6EE';
+  chip.style.color = error || (h && h.error) ? '#B3261E' : bad ? '#9A5B00' : '#1D8348';
+  chip.textContent = error ? 'Badge not printed: ' + error
+    : h.error ? 'Print helper is running, but ' + h.error
+    : 'Printing straight to the Brother at ' + h.printer + (h.warning ? '. ' + h.warning : '');
 }
 
 function badgeNode(attendee) {
@@ -2297,7 +2339,21 @@ async function printBadges(attendees) {
   // A template badge is an image; print once it is decoded, never blank.
   await Promise.all([...document.querySelectorAll('#badge-sheet img')].map(i => i.decode().catch(() => {})));
 
-  window.print();
+  let viaHelper = false;
+  if (S.badge && S.badge.design.template && S.helper) {
+    try {
+      const r = await fetch(PRINT_HELPER + '/print', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labels: [...document.querySelectorAll('#badge-sheet img')].map(i => i.src) }) });
+      const j = await r.json().catch(() => ({}));
+      // The helper answered but the printer did not print: say so, and do
+      // not mark the badge printed. Never fall back to a wrong-size print.
+      if (!r.ok) { renderPrinterChip(j.error || 'the printer refused the job'); return; }
+      viaHelper = true; renderPrinterChip();
+    } catch (_) {
+      S.helper = null; renderPrinterChip();   // helper closed: print through the browser
+    }
+  }
+  if (!viaHelper) window.print();
 
   const now = deskNowIso();
   for (const a of attendees) {
