@@ -1164,7 +1164,7 @@ test('a desk tab from before an update holds the database: the new desk says so,
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
   await table(page, 'leod_checkin_attendees', [ANA, BEN]);
   await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
-  await expect(page.locator('#db-blocked')).toContainText('Close it (or reload it)');
+  await expect(page.locator('#db-blocked')).toContainText('Close the other check-in tabs');
   await expect(page.locator('#station')).toBeHidden();
   await old.close();
   await expect(page.locator('#station')).toBeVisible();
@@ -1183,4 +1183,32 @@ test('the desk gives up its database connection when a newer desk needs to upgra
     r.onsuccess = () => { r.result.close(); ok('upgraded'); };
   }));
   expect(upgraded).toBe('upgraded');
+});
+
+test('a desk queued behind another tab\'s pending upgrade says so too', async ({ page, context }) => {
+  const old = await context.newPage();
+  await old.goto('/favicon.svg');
+  await old.evaluate(() => new Promise<void>((ok) => {
+    const r = indexedDB.open('cuedeck-checkin', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('roster', { keyPath: 'id' }); };
+    r.onsuccess = () => { (window as unknown as { held: IDBDatabase }).held = r.result; ok(); };
+  }));
+  // A second new tab already waiting on the upgrade.
+  const first = await context.newPage();
+  await first.goto('/favicon.svg');
+  await first.evaluate(() => { indexedDB.open('cuedeck-checkin', 2); });
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', () => 'Desk 1');
+  await rpc(page, 'checkin_recent_alerts', () => []);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'crew' })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await table(page, 'leod_checkin_attendees', [ANA, BEN]);
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await expect(page.locator('#db-blocked')).toContainText('Close the other check-in tabs', { timeout: 8000 });
+  // The waiting tab goes first: left to finish, its bare upgrade would make
+  // a version 2 without the desk's stores, which no real desk does.
+  await first.close();
+  await old.close();
+  await expect(page.locator('#station')).toBeVisible();
 });
