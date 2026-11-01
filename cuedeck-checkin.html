@@ -1009,10 +1009,10 @@ async function idbClearOtherEvents(eventId) {
 // ROSTER
 // ═══════════════════════════════════════════════════
 async function loadRoster(eventId) {
-  const { data, error } = await sb
+  const { data, error } = noServer ? NO_ANSWER : await within(20000, sb   // a dead venue network can hang instead of failing
     .from('leod_checkin_attendees')
     .select('id,event_id,first_name,last_name,email,company,role_title,ticket_type,qr_token,checked_in_at,badge_printed_at')
-    .eq('event_id', eventId);
+    .eq('event_id', eventId));
   if (error) {
     // Offline or fetch failed: fall back to the cached copy, scoped to
     // THIS event. The store is keyed on attendee id and can hold rows
@@ -1622,6 +1622,10 @@ const rolesReady = KIOSK ? Promise.resolve() : loadRoles();
 window.addEventListener('DOMContentLoaded', async () => {
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   cdAuth.watch(sb, onSignInExpired);
+  sb.auth.onAuthStateChange((ev) => { if (ev === 'TOKEN_REFRESHED') noServer = false; });
+  // Keeps this page on the device, so a desk reloaded or reopened while
+  // the venue has no internet still opens (checkin-sw.js).
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/checkin-sw.js', { scope: location.pathname }).catch(() => {});
 
   // The kiosk must NOT ask for a session, and must not be reachable by
   // signing in either — a public touchscreen holding a live crew session
@@ -1657,7 +1661,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape') { closeKioskSetup(); closeWalkIn(); closeDeskRename(); }
   });
 
-  const { data: { session } } = await sb.auth.getSession();
+  const session = await deskSession();
   if (session) {
     S.user = session.user;
     await showPicker();
@@ -1668,6 +1672,56 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('si-email').focus();
   }
 });
+
+// The sign-in this device holds. An access token lasts an hour, and with
+// no internet supabase-js cannot renew it: it keeps retrying for up to
+// 30 s and then answers "no session" while leaving the stored one in
+// place. A desk that opens during an outage would land on a sign-in form
+// it cannot use. So when renewal cannot reach the server, the person
+// stored on this device keeps working the desk: nothing here reaches the
+// server without a valid token, and supabase-js renews it once the
+// internet is back. A sign-out removes the stored session, so this never
+// brings back someone who signed out.
+const AUTH_KEY = 'sb-sawekpguemzvuvvulfbc-auth-token';
+const AUTH_WAIT_MS = 6000;
+async function deskSession() {
+  const stored = () => { try { const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return s && s.user && s.user.id ? s : null; } catch (_) { return null; } };
+  const late = new Promise(ok => setTimeout(() => ok({ late: true }), AUTH_WAIT_MS));
+  const got = await Promise.race([sb.auth.getSession().catch(error => ({ error })), late]);
+  if (got.data && got.data.session) {
+    // Some supabase-js versions hand back the stored session when renewal
+    // failed instead of answering "no session": still expired means the
+    // server could not be reached.
+    const exp = got.data.session.expires_at;
+    if (exp && exp * 1000 <= Date.now()) noServer = true;
+    return got.data.session;
+  }
+  const cut = got.late || !navigator.onLine || (got.error && (got.error.name === 'AuthRetryableFetchError' || got.error.status === 0));
+  const s = cut ? stored() : null;
+  if (s) noServer = true;
+  return s;
+}
+// True from an offline start until supabase-js renews the sign-in. While
+// a token cannot be renewed, supabase-js holds EVERY request for up to
+// 30 s retrying the renewal, so the desk reads its saved copies instead
+// of asking. Cleared by the renewal, so the desk goes back online by itself.
+let noServer = false;
+
+// Saved copies of what the desk reads from CueDeck before it opens, for
+// when CueDeck cannot be reached. Only an answer with no code counts as
+// unreachable: a refusal from the database is an answer, never replaced.
+const cantReach = (error) => !navigator.onLine || (error && !error.code);
+// A call to CueDeck that answers within `ms` or counts as unreachable. An
+// abortSignal alone is not enough: it covers the fetch, not the wait for
+// a token renewal that happens before it.
+const NO_ANSWER = { data: null, error: { message: 'CueDeck did not answer', code: '' } };
+function within(ms, query) {
+  let timer;
+  const late = new Promise(ok => { timer = setTimeout(() => ok(NO_ANSWER), ms); });
+  return Promise.race([Promise.resolve(query).then(r => r, () => NO_ANSWER), late]).finally(() => clearTimeout(timer));
+}
+function saveCopy(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* storage full or blocked */ } }
+function savedCopy(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } }
 
 function showScreen(name) {
   document.getElementById('signin').style.display  = name === 'signin'  ? 'flex' : 'none';
@@ -1822,7 +1876,11 @@ async function showPicker() {
   note.textContent = '';
   list.replaceChildren();
 
-  const { data: mine, error } = await sb.rpc('checkin_my_events');
+  // A copy per person: with no internet the desk still lists their events.
+  const eventsKey = 'ck-my-events:' + (S.user ? S.user.id : '');
+  let { data: mine, error } = noServer ? NO_ANSWER : await within(8000, sb.rpc('checkin_my_events'));
+  if (!error) saveCopy(eventsKey, mine || []);
+  else if (cantReach(error) && Array.isArray(savedCopy(eventsKey))) { mine = savedCopy(eventsKey); error = null; }
   if (error) {
     note.textContent = 'Could not load your events: ' + error.message;
     note.style.display = 'block';
@@ -1901,11 +1959,16 @@ async function openEvent(eventId, ev, role) {
 
   // Entitlement gate. A missing row counts as not enabled: RLS hides
   // the entitlements row entirely when checkin_core is false.
-  const { data: ent } = await sb
+  // Saved per event, so the desk opens with its badge design and test or
+  // live status when the internet is down.
+  const entKey = 'ck-ent:' + eventId;
+  let { data: ent, error: entErr } = noServer ? NO_ANSWER : await within(8000, sb
     .from('leod_checkin_entitlements')
     .select('checkin_core, status, badge_design, registration_brand_color, registration_logo_path')
     .eq('event_id', eventId)
-    .maybeSingle();
+    .maybeSingle());
+  if (!entErr) saveCopy(entKey, ent);
+  else if (cantReach(entErr)) ent = savedCopy(entKey);
 
   if (!ent || ent.checkin_core !== true) {
     const note = document.getElementById('pk-note');
@@ -2268,8 +2331,8 @@ async function loadPrintStations() {
   if (!S.event) return;
   const key = 'ck-stations:' + S.event.id;
   const cached = () => { try { const c = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(c)) S.stations = c; } catch (_) {} };
-  if (!navigator.onLine) return cached();
-  const { data, error } = await sb.rpc('checkin_print_stations', { p_event_id: S.event.id });
+  if (!navigator.onLine || noServer) return cached();
+  const { data, error } = await within(8000, sb.rpc('checkin_print_stations', { p_event_id: S.event.id }));
   if (error) { console.warn('checkin: print stations not loaded', error.message); return cached(); }
   S.stations = Array.isArray(data) ? data : [];
   try { localStorage.setItem(key, JSON.stringify(S.stations)); } catch (_) {}
@@ -2476,6 +2539,7 @@ async function stampBadgePrinted(ids, when) {
 // other direction — a badge that reached the printer but jammed inside
 // it — and that is a physical failure the operator is looking straight
 // at, not one the database can help with.
+let lanFirstUntil = 0;
 async function printBadges(attendees) {
   if (!attendees.length) return;
 
@@ -2493,14 +2557,18 @@ async function printBadges(attendees) {
     const st = stationOf(route);
     if (st) {
       let ids = null, error = null;
-      if (navigator.onLine) {
-        ({ data: ids, error } = await sb.rpc('checkin_queue_print', { p_event_id: S.event.id, p_device_id: st.id,
-          p_labels: labels.map(l => ({ attendee_id: null, png: l.png, cut_mm: l.cut_mm })) }).abortSignal(AbortSignal.timeout(8000)));
-      }
+      // After one badge found CueDeck unreachable, the next ones in the
+      // following minute go straight over the venue network instead of
+      // each waiting out the same silence.
+      if (navigator.onLine && !noServer && Date.now() >= lanFirstUntil) {
+        ({ data: ids, error } = await within(8000, sb.rpc('checkin_queue_print', { p_event_id: S.event.id, p_device_id: st.id,
+          p_labels: labels.map(l => ({ attendee_id: null, png: l.png, cut_mm: l.cut_mm })) })));
+      } else error = NO_ANSWER.error;
       // No answer from CueDeck (offline, or the venue's internet is down
       // while its network is up): a refusal from the database carries a
       // code, a dead connection does not.
       if (!navigator.onLine || (error && !error.code)) {
+        lanFirstUntil = Date.now() + 60000;
         const lan = await printOverLan(st, labels);
         if (!lan.ok) { printNote('err', 'Badge not printed: ' + lan.error); return; }
         printNote('ok', (attendees.length === 1 ? 'Printed on ' : attendees.length + ' badges printed on ') + st.label + ' over the venue network.');

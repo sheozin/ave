@@ -314,10 +314,11 @@ test('the desk still opens and checks people in when the roles module fails to l
   expect(sent.items).toMatchObject([{ action: 'checkin', attendee_id: BEN.id }]);
 });
 
-test('the desk opens on the fallback when the roles module never answers', async ({ page }) => {
+test('the desk opens on the fallback when the roles module never answers', async ({ page, context }) => {
   test.setTimeout(40000);
-  // Held forever: each try gives up on its own time limit.
-  await page.route(/\/checkin-roles\.js(\?|$)/, () => {});
+  // Held forever: each try gives up on its own time limit. On the context,
+  // so the retry is held too when the desk's service worker fetches it.
+  await context.route(/\/checkin-roles\.js(\?|$)/, () => {});
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'crew' })]);
@@ -1018,4 +1019,97 @@ test('a Zebra station gets the badge at full size, not squeezed to the Brother r
   const size = await page.evaluate(async (src) => { const i = new Image(); i.src = src; await i.decode(); return [i.naturalWidth, i.naturalHeight]; }, queued[0].p_labels[0].png);
   expect(size).toEqual([1205, 898]);   // 102 x 76 mm at 300 dpi
   expect(queued[0].p_labels[0].cut_mm).toBe(102);
+});
+
+// ── a desk that opens with no internet (checkin-sw.js) ─────────────────────
+// The page is kept by the service worker; events, settings and the guest
+// list come from this device's saved copies.
+async function untilWorkerControls(page) {
+  await page.waitForFunction(async () => { await navigator.serviceWorker.ready; return !!navigator.serviceWorker.controller; });
+}
+
+test('a desk reloaded with no internet opens with its events and guest list', async ({ page, context }) => {
+  await open(page, { role: 'crew' });
+  await untilWorkerControls(page);
+  await context.setOffline(true);
+  await page.reload();
+  // The ?event= link was used up on the first open: the saved event list.
+  await page.locator('.ck-ev', { hasText: 'Probe Summit' }).click();
+  await expect(page.locator('#station')).toBeVisible();
+  await expect(page.locator('#st-sync')).toContainText('Offline');
+  await search(page, 'Ben');
+  await expect(page.locator('.ck-res-row', { hasText: 'Ben Probe' })).toBeVisible();
+  await context.setOffline(false);
+});
+
+test('a venue router with no uplink: an expired sign-in still opens the desk from saved copies', async ({ page, context }) => {
+  await open(page, { role: 'lead', badgeDesign: { w: 90, h: 55 } });
+  await untilWorkerControls(page);
+  // The access token has expired and CueDeck cannot be reached, while the
+  // browser still reports a network (navigator.onLine stays true). A second
+  // tab, because the first one re-stores a valid sign-in on every load.
+  await page.evaluate(() => {
+    const k = 'sb-sawekpguemzvuvvulfbc-auth-token';
+    const s = JSON.parse(localStorage.getItem(k)!);
+    s.expires_at = 1700000000;
+    localStorage.setItem(k, JSON.stringify(s));
+  });
+  await context.route(/supabase\.co\//, r => r.abort('internetdisconnected'));
+  await page.close();
+  const desk = await context.newPage();
+  const started = Date.now();
+  await desk.goto('/cuedeck-checkin.html');
+  await desk.locator('.ck-ev', { hasText: 'Probe Summit' }).click();
+  await expect(desk.locator('#station')).toBeVisible();
+  // Saved copies, not each call waiting out its time limit.
+  expect(Date.now() - started).toBeLessThan(12000);
+  await expect(desk.locator('#signin')).toBeHidden();
+  await search(desk, 'Ana');
+  await expect(desk.locator('.ck-res-row', { hasText: 'Ana Probe' })).toBeVisible();
+});
+
+test('a refusal from CueDeck is not replaced by the saved event list', async ({ page }) => {
+  await open(page, { role: 'crew' });
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', { code: '42501', message: 'permission denied' }, 403);
+  await page.reload();
+  await expect(page.locator('#pk-note')).toContainText('Could not load your events');
+  await expect(page.locator('.ck-ev')).toHaveCount(0);
+});
+
+test('a desk opened with no uplink prints over the venue network without asking CueDeck first', async ({ page, context }) => {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  const LAN = { host: '192.168.1.130', port: 7842, token: 'c'.repeat(32) };
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: async () => {
+    await st.setup();
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online: true, printer_info: { model: 'brother-ql', lan: LAN } }]);
+  } });
+  await untilWorkerControls(page);
+  await page.evaluate(() => {
+    const k = 'sb-sawekpguemzvuvvulfbc-auth-token';
+    const s = JSON.parse(localStorage.getItem(k)!);
+    s.expires_at = 1700000000;
+    localStorage.setItem(k, JSON.stringify(s));
+  });
+  let askedCueDeck = 0, lanCalls = 0;
+  await context.route(/supabase\.co\//, r => { if (r.request().url().includes('checkin_queue_print')) askedCueDeck++; return r.abort('internetdisconnected'); });
+  await context.route('http://192.168.1.130:7842/print', r => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-private-network': 'true' };
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+    lanCalls++;
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: '{"ok":true}' });
+  });
+  await page.close();
+  const desk = await context.newPage();
+  await desk.goto('/cuedeck-checkin.html');
+  await desk.locator('.ck-ev', { hasText: 'Probe Summit' }).click();
+  await expect(desk.locator('#station')).toBeVisible();
+  await expect(desk.locator('#ck-print-to')).toHaveValue('station:aaaaaaaa-0000-4000-8000-0000000000d1');
+  await search(desk, 'Ben');
+  await desk.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await desk.locator('#primary').click();
+  await expect(desk.locator('#ck-print-msg')).toContainText('Printed on Desk printer over the venue network.', { timeout: 4000 });
+  expect(lanCalls).toBe(1);
+  expect(askedCueDeck).toBe(0);
 });
