@@ -1459,3 +1459,41 @@ test('an address CueDeck reports for an online station replaces a typed one', as
   await expect(page.locator('#ck-st-addr-sum')).toHaveText('Station address on this network');
   expect(await page.evaluate((id) => localStorage.getItem('ck-station-addr:' + id), ST_ID)).toBeNull();
 });
+
+test('the guest list under the search shows everyone, filters by arrival, and opens a guest', async ({ page }) => {
+  const CAL = { ...BEN, id: 'a0000000-0000-4000-8000-000000000003', first_name: 'Cal', last_name: 'Adams', email: 'cal@cuedeck-test.io', qr_token: 'tok-cal' };
+  // The server's copy follows the check-in, so the re-read after the flush agrees.
+  const roster = [ANA, { ...BEN }, CAL];
+  const scanResult = (i: { action: string; attendee_id?: string }) => {
+    const row = roster.find(r => r.id === i.attendee_id);
+    if (row) row.checked_in_at = FIXED_NOW.toISOString();
+    return 'ok';
+  };
+  await open(page, { role: 'crew', roster, scanResult });
+  const list = page.locator('#guests');
+  await expect(list).toBeVisible();
+  await expect(list.locator('.ck-res-name')).toHaveText(['Cal Adams', 'Ana Probe', 'Ben Probe']);
+  await expect(list.locator('.ck-chip[data-f="all"]')).toHaveText('All 3');
+  await list.locator('.ck-chip[data-f="in"]').click();
+  await expect(list.locator('.ck-res-name')).toHaveText(['Ana Probe']);
+  await expect(page.locator('#scan')).toBeFocused();
+  await list.locator('.ck-chip[data-f="out"]').click();
+  await expect(list.locator('.ck-res-name')).toHaveText(['Cal Adams', 'Ben Probe']);
+  await search(page, 'Ben');
+  await expect(list).toBeHidden();
+  await expect(page.locator('.ck-res-row', { hasText: 'Ben Probe' })).toHaveCount(1);
+  await search(page, '');
+  await list.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await expect(page.locator('#verdict')).toContainText('Ben Probe is on the list');
+  await page.locator('#secondary').click();
+  await expect(list.locator('.ck-res-name')).toHaveText(['Cal Adams']);
+  await expect(list.locator('.ck-chip[data-f="in"]')).toHaveText('Arrived 2');
+});
+
+test('the guest list shows at most 200 rows and points to search for the rest', async ({ page }) => {
+  const roster = Array.from({ length: 205 }, (_, i) => ({ ...BEN, id: 'b0000000-0000-4000-8000-' + String(i).padStart(12, '0'),
+    first_name: 'G' + i, last_name: 'Guest', email: 'g' + i + '@cuedeck-test.io', qr_token: 'tok-g' + i }));
+  await open(page, { role: 'crew', roster });
+  await expect(page.locator('#guests .ck-res-row')).toHaveCount(200);
+  await expect(page.locator('#guests .ck-res-note')).toHaveText('Showing 200 of 205. Search above to find anyone else.');
+});

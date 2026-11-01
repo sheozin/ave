@@ -191,6 +191,15 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-res-row{display:flex;align-items:center;gap:8px}
 .ck-res-row .ck-res-btn{flex:1;min-width:0}
 
+/* ── GUEST LIST (under the search) ── */
+.ck-guests{margin-top:28px;border-top:1px solid var(--bd);padding-top:20px}
+.ck-guests-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ck-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ck-chip{font:inherit;font-size:13px;padding:6px 12px;border-radius:999px;cursor:pointer;
+  background:transparent;color:var(--t2);border:1px solid var(--bd)}
+.ck-chip[aria-pressed="true"]{background:var(--ac);border-color:var(--ac);color:#fff}
+.ck-guests .ck-res{margin-top:14px}
+
 /* ── UNDO CONTROL ─────────────────────────────────
    A correction, not a main path, so it is quiet: outline only, muted
    until hovered. It must never compete with the primary check-in
@@ -666,6 +675,20 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
       <div class="ck-actions" id="actions" style="display:none">
         <button class="ck-btn" type="button" id="primary"></button>
         <button class="ck-btn ghost" type="button" id="secondary">Check in without printing</button>
+      </div>
+      <!-- The whole guest list, under the search: who is still to come,
+           who is in. Hidden while a name is being searched, so the
+           matches are the only list on screen. -->
+      <div class="ck-guests" id="guests" hidden>
+        <div class="ck-guests-head">
+          <div class="ck-lbl" style="margin:0">Guest list</div>
+          <div class="ck-chips" id="guest-filter" role="group" aria-label="Show">
+            <button type="button" class="ck-chip" data-f="all"></button>
+            <button type="button" class="ck-chip" data-f="out"></button>
+            <button type="button" class="ck-chip" data-f="in"></button>
+          </div>
+        </div>
+        <div id="guest-rows"></div>
       </div>
       <div class="ck-panel-text" id="st-status" style="margin-top:24px"></div>
       <!-- Arrival alerts (event-day spec, feature 5): owner, organizer and
@@ -2176,6 +2199,7 @@ function renderCount() {
   document.getElementById('st-count').textContent = arrived + ' of ' + total;
   document.getElementById('st-status').textContent =
     total + ' attendees cached on this device. The desk keeps working if the venue network drops.';
+  renderGuestList();
 }
 
 // ═══════════════════════════════════════════════════
@@ -2336,6 +2360,7 @@ scanInput.addEventListener('input', () => {
   const q = scanInput.value;
   if (q.length >= 2) renderSearchResults(searchByName(q, S.roster));
   else clearResults();
+  renderGuestList();
 });
 
 document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
@@ -3168,6 +3193,42 @@ const MAX_RESULTS = 8;
 
 function clearResults() { document.getElementById('results').replaceChildren(); }
 
+// One guest as a row: pick on click, undo beside it when allowed. Shared
+// by the search matches and the guest list.
+function resultRow(a) {
+  const row = document.createElement('div');
+  row.className = 'ck-res-row';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ck-res-btn';
+
+  const main = document.createElement('div');
+  main.className = 'ck-res-main';
+  const name = document.createElement('div');
+  name.className = 'ck-res-name';
+  name.textContent = fullName(a);
+  const meta = document.createElement('div');
+  meta.className = 'ck-res-meta';
+  meta.textContent = [a.company, a.ticket_type].filter(Boolean).join(' · ');
+  main.append(name, meta);
+
+  const pill = document.createElement('span');
+  pill.className = a.checked_in_at ? 'pill-in' : 'pill-un';
+  pill.textContent = a.checked_in_at ? 'arrived ' + atTime(a.checked_in_at) : 'not here yet';
+
+  btn.append(main, pill);
+  btn.addEventListener('click', () => pickAttendee(a));
+  row.appendChild(btn);
+
+  // Reachable minutes later without rescanning. The correction a desk
+  // actually needs is rarely the last one it made: the operator notices
+  // at 09:40 that the wrong Kowalski was ticked at 09:12, and search is
+  // the only way back to that person.
+  if (mayUndoHere(a)) row.appendChild(undoButton(a, 'Undo check-in'));
+  return row;
+}
+
 function renderSearchResults(list) {
   const host = document.getElementById('results');
   host.replaceChildren();
@@ -3182,40 +3243,7 @@ function renderSearchResults(list) {
 
   const wrap = document.createElement('div');
   wrap.className = 'ck-res';
-  list.slice(0, MAX_RESULTS).forEach(a => {
-    const row = document.createElement('div');
-    row.className = 'ck-res-row';
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ck-res-btn';
-
-    const main = document.createElement('div');
-    main.className = 'ck-res-main';
-    const name = document.createElement('div');
-    name.className = 'ck-res-name';
-    name.textContent = fullName(a);
-    const meta = document.createElement('div');
-    meta.className = 'ck-res-meta';
-    meta.textContent = [a.company, a.ticket_type].filter(Boolean).join(' · ');
-    main.append(name, meta);
-
-    const pill = document.createElement('span');
-    pill.className = a.checked_in_at ? 'pill-in' : 'pill-un';
-    pill.textContent = a.checked_in_at ? 'arrived ' + atTime(a.checked_in_at) : 'not here yet';
-
-    btn.append(main, pill);
-    btn.addEventListener('click', () => pickAttendee(a));
-    row.appendChild(btn);
-
-    // Reachable minutes later without rescanning. The correction a desk
-    // actually needs is rarely the last one it made: the operator notices
-    // at 09:40 that the wrong Kowalski was ticked at 09:12, and search is
-    // the only way back to that person.
-    if (mayUndoHere(a)) row.appendChild(undoButton(a, 'Undo check-in'));
-
-    wrap.appendChild(row);
-  });
+  list.slice(0, MAX_RESULTS).forEach(a => wrap.appendChild(resultRow(a)));
   host.appendChild(wrap);
 
   if (list.length > MAX_RESULTS) {
@@ -3226,6 +3254,67 @@ function renderSearchResults(list) {
   }
   holdFocus();   // this render dropped the previous result buttons
 }
+
+// ═══════════════════════════════════════════════════
+// DESK — GUEST LIST
+// The full roster under the search, sorted by surname, filterable by
+// arrived or not. Capped so a 3,000-guest event does not build 3,000
+// rows on every check-in; search reaches everyone else.
+// ═══════════════════════════════════════════════════
+const MAX_LIST = 200;
+let guestFilter = 'all';
+
+function renderGuestList() {
+  const box = document.getElementById('guests');
+  if (!box) return;
+  const searching = scanInput.value.trim().length >= 2;
+  box.hidden = searching || !S.roster.length;
+  // Emptied, not just hidden: one guest must never be two rows on the page.
+  if (box.hidden) { document.getElementById('guest-rows').replaceChildren(); return; }
+
+  const arrived = S.roster.filter(a => a.checked_in_at).length;
+  const counts = { all: S.roster.length, out: S.roster.length - arrived, in: arrived };
+  const labels = { all: 'All', out: 'Not here yet', in: 'Arrived' };
+  box.querySelectorAll('.ck-chip').forEach(c => {
+    c.textContent = labels[c.dataset.f] + ' ' + counts[c.dataset.f];
+    c.setAttribute('aria-pressed', String(c.dataset.f === guestFilter));
+  });
+
+  const key = a => ((a.last_name || '') + ' ' + (a.first_name || '')).trim().toLowerCase();
+  const list = S.roster
+    .filter(a => guestFilter === 'all' || (guestFilter === 'in') === !!a.checked_in_at)
+    .sort((x, y) => key(x).localeCompare(key(y)));
+
+  const hadFocus = box.contains(document.activeElement);
+  const host = document.getElementById('guest-rows');
+  host.replaceChildren();
+  if (!list.length) {
+    const none = document.createElement('div');
+    none.className = 'ck-res-note';
+    none.textContent = guestFilter === 'in' ? 'Nobody has arrived yet.' : 'Everyone is here.';
+    host.appendChild(none);
+  } else {
+    const wrap = document.createElement('div');
+    wrap.className = 'ck-res';
+    list.slice(0, MAX_LIST).forEach(a => wrap.appendChild(resultRow(a)));
+    host.appendChild(wrap);
+    if (list.length > MAX_LIST) {
+      const note = document.createElement('div');
+      note.className = 'ck-res-note';
+      note.textContent = 'Showing ' + MAX_LIST + ' of ' + list.length + '. Search above to find anyone else.';
+      host.appendChild(note);
+    }
+  }
+  if (hadFocus) holdFocus();   // the button that had focus is gone
+}
+
+document.getElementById('guest-filter').addEventListener('click', (e) => {
+  const chip = e.target.closest('.ck-chip');
+  if (!chip) return;
+  guestFilter = chip.dataset.f;
+  renderGuestList();
+  scanInput.focus();
+});
 
 // ═══════════════════════════════════════════════════
 // DESK — CORRECT A NAME
