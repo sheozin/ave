@@ -1244,3 +1244,21 @@ test('a slow sign-in check at start (a browser just restarted) does not put an o
   await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer.', { timeout: 10000 });
   expect(st.queued).toHaveLength(1);
 });
+
+test('on a router with no uplink, where requests hang, the desk reopens within seconds', async ({ page, context }) => {
+  test.setTimeout(60000);
+  await open(page, { role: 'crew' });
+  await untilWorkerControls(page);
+  // Nothing answers: page files and CueDeck both hang (navigator.onLine stays true).
+  await context.route(/supabase\.co\//, () => {});
+  await context.route(/127\.0\.0\.1:7231\/(?!favicon)/, () => {});
+  await page.close();
+  const desk = await context.newPage();
+  const started = Date.now();
+  desk.goto('/cuedeck-checkin.html').catch(() => {});
+  await desk.locator('.ck-ev', { hasText: 'Probe Summit' }).click();
+  await expect(desk.locator('#station')).toBeVisible({ timeout: 30000 });
+  expect(Date.now() - started).toBeLessThan(10000);
+  await search(desk, 'Ben');
+  await expect(desk.locator('.ck-res-row', { hasText: 'Ben Probe' })).toBeVisible();
+});

@@ -1764,11 +1764,20 @@ const cantReach = (error) => !navigator.onLine || (error && !error.code);
 // A call to CueDeck that answers within `ms` or counts as unreachable. An
 // abortSignal alone is not enough: it covers the fetch, not the wait for
 // a token renewal that happens before it.
+// Once one call found CueDeck unreachable, the next ones for a minute wait
+// only briefly: a desk opening on a router with no uplink must not wait
+// out every call's full limit in turn.
 const NO_ANSWER = { data: null, error: { message: 'CueDeck did not answer', code: '' } };
+const QUICK_MS = 2000, QUICK_FOR_MS = 60000;
+// The service worker served this page from its saved copy: CueDeck is
+// almost certainly unreachable too (checkin-sw.js).
+let unreachableAt = window.CK_FROM_SAVED ? Date.now() : 0;
 function within(ms, query) {
   let timer;
-  const late = new Promise(ok => { timer = setTimeout(() => ok(NO_ANSWER), ms); });
-  return Promise.race([Promise.resolve(query).then(r => r, () => NO_ANSWER), late]).finally(() => clearTimeout(timer));
+  const limit = Date.now() - unreachableAt < QUICK_FOR_MS ? Math.min(ms, QUICK_MS) : ms;
+  const late = new Promise(ok => { timer = setTimeout(() => ok(NO_ANSWER), limit); });
+  return Promise.race([Promise.resolve(query).then(r => r, () => NO_ANSWER), late]).finally(() => clearTimeout(timer))
+    .then(r => { unreachableAt = r && r.error && !r.error.code ? Date.now() : 0; return r; });
 }
 function saveCopy(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* storage full or blocked */ } }
 function savedCopy(key) { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } }
@@ -1932,7 +1941,7 @@ async function showPicker() {
 
   // A copy per person: with no internet the desk still lists their events.
   const eventsKey = 'ck-my-events:' + (S.user ? S.user.id : '');
-  let { data: mine, error } = noServer ? NO_ANSWER : await within(8000, sb.rpc('checkin_my_events'));
+  let { data: mine, error } = noServer ? NO_ANSWER : await within(6000, sb.rpc('checkin_my_events'));
   if (!error) saveCopy(eventsKey, mine || []);
   else if (cantReach(error) && Array.isArray(savedCopy(eventsKey))) { mine = savedCopy(eventsKey); error = null; }
   if (error) {
