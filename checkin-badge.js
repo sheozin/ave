@@ -63,6 +63,7 @@ export function normalizeDesign(d) {
   const tpl = BADGE_TEMPLATES.find(t => t.id === x.template);
   return {
     template: tpl ? tpl.id : null,
+    divider: x.divider !== false,   // the line between name and company on a template (147)
     w: tpl ? tpl.w : int(x.w, 50, 200, BADGE_DEFAULT.w), h: tpl ? tpl.h : int(x.h, 40, 200, BADGE_DEFAULT.h),
     band: x.band === true, logo: x.logo === true, name: x.name === 'split' ? 'split' : 'full',
     company: x.company !== false, title: x.title === true, ticket: x.ticket !== false, qr: x.qr === true,
@@ -224,7 +225,7 @@ function splitSurname(text) {
   return text[i] === '-' ? [text.slice(0, i + 1), text.slice(i + 1)] : [text.slice(0, i), text.slice(i + 1)];
 }
 
-export function visaNextCanvas(attendee, doc = document, { test = false, nameGap = VISA_NEXT_NAME_GAP } = {}) {
+export function visaNextCanvas(attendee, doc = document, { test = false, nameGap = VISA_NEXT_NAME_GAP, divider = true } = {}) {
   const { w: W, h: H } = VISA_NEXT_PX;
   const c = doc.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
@@ -281,7 +282,7 @@ export function visaNextCanvas(attendee, doc = document, { test = false, nameGap
     const v = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000 < 128 ? 0 : 255;
     px[i] = px[i + 1] = px[i + 2] = v; px[i + 3] = 255;
   }
-  if (company) {
+  if (company && divider) {
     for (let yy = 419; yy < 422; yy++) for (let xx = 120; xx < W - 120; xx++) {
       if ((xx + yy) % 2 === 0) { const i = (yy * W + xx) * 4; px[i] = px[i + 1] = px[i + 2] = 0; }
     }
@@ -313,7 +314,7 @@ function visaNextElement(attendee, ctx, doc) {
   badge.className = 'badge';
   const img = el(doc, 'img', `width:${d.w}mm;height:${(VISA_NEXT_PX.h * 25.4 / 300).toFixed(2)}mm;display:block;image-rendering:pixelated`);
   img.alt = [attendee.first_name, attendee.last_name, attendee.company].filter(Boolean).join(' ');
-  img.src = visaNextCanvas(attendee, doc, { test: !!ctx.test }).toDataURL('image/png');
+  img.src = visaNextCanvas(attendee, doc, { test: !!ctx.test, divider: d.divider !== false }).toDataURL('image/png');
   if (!fontsReady(doc)) img.dataset.fontPending = '1';
   badge.append(img);
   return badge;
@@ -349,7 +350,7 @@ async function inlineImages(node) {
 
 export async function badgePng(attendee, ctx, { printer = null } = {}) {
   const doc = ctx.doc || document, d = ctx.design, zebra = isZebra(printer);
-  if (d.template === 'visa-next-full') return { png: visaNextCanvas(attendee, doc, { test: !!ctx.test }).toDataURL('image/png'), cut_mm: d.w };
+  if (d.template === 'visa-next-full') return { png: visaNextCanvas(attendee, doc, { test: !!ctx.test, divider: d.divider !== false }).toDataURL('image/png'), cut_mm: d.w };
   if (!fitsPrinter(d, printer)) throw new Error(zebra ? `a ${d.w} x ${d.h} mm badge is wider than this printer` : `a ${d.w} x ${d.h} mm badge does not fit the ${ROLL_MM} mm roll`);
   const node = badgeElement(attendee, { ...ctx, test: false, preview: false, doc });
   await inlineImages(node);

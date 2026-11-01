@@ -711,9 +711,22 @@ test('badges tab: the visa-next-full template previews, downloads an 898 x 696 P
   const buf = await (await dl.createReadStream()).toArray().then(c => Buffer.concat(c));
   expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([898, 696]);
   expect(await page.evaluate(() => document.fonts.check('800 40px Montserrat', 'Ł'))).toBe(true);
+  // The dividing line is an option: on by default, gone from the image when off.
+  await expect(page.locator('#bd-div-row')).toBeVisible();
+  await expect(page.locator('#bd-divider')).toBeChecked();
+  const lineInk = (divider: boolean) => page.evaluate(async (dv) => {
+    const m = await import('/checkin-badge.js'); await m.loadBadgeFonts();
+    const c = m.visaNextCanvas({ first_name: 'Adam', last_name: 'Kowalski', company: 'ProfIT GmbH' }, document, { divider: dv });
+    const d = c.getContext('2d').getImageData(120, 419, 658, 3).data; let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] === 0) n++;
+    return n;
+  }, divider);
+  expect(await lineInk(true)).toBeGreaterThan(900);
+  expect(await lineInk(false)).toBe(0);
+  await page.locator('#bd-divider').evaluate((e: HTMLInputElement) => e.click());
   await page.click('#bd-save');
   await expect(page.locator('#bd-ok')).toContainText('Saved.');
-  expect(saved[0]).toMatchObject({ p_design: { template: 'visa-next-full', w: 76, h: 62 } });
+  expect(saved[0]).toMatchObject({ p_design: { template: 'visa-next-full', w: 76, h: 62, divider: false } });
   await page.selectOption('#bd-tpl', '');
   await expect(page.locator('#bd-std')).toBeVisible();
 });

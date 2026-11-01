@@ -388,6 +388,7 @@
       <div style="display:grid;gap:14px">
         <div class="field"><label for="bd-tpl">Badge layout</label><select id="bd-tpl"></select>
           <p class="sc-p" id="bd-tpl-hint" style="margin:6px 0 0" hidden></p></div>
+        <div class="toggle" id="bd-div-row" hidden><div><b>Line between name and company</b><p>The fine dotted line across the middle of the badge.</p></div><label class="sw"><input type="checkbox" id="bd-divider"><span></span></label></div>
         <div id="bd-std" style="display:grid;gap:14px">
         <div class="field"><label for="bd-size">Badge stock</label>
           <div style="display:flex;gap:8px"><select id="bd-size" style="flex:1;min-width:0"></select><button class="btn btn-s" id="bd-turn" type="button" title="Swap width and height">Turn</button></div>
@@ -1405,6 +1406,7 @@ function drawBadgeForm() {
   $('bd-tpl').value = tpl ? tpl.id : '';
   $('bd-tpl-hint').hidden = !tpl; $('bd-tpl-hint').textContent = tpl ? tpl.hint + ' This template has one fixed size; pick Designer for any other stock.' : '';
   $('bd-std').hidden = !!tpl; $('bd-png').hidden = !tpl;
+  $('bd-div-row').hidden = !tpl; $('bd-divider').checked = BD.divider !== false;
   // The template draws with the bundled font; redraw once it has loaded.
   if (tpl) loadBadgeFonts().then(() => { if (BD && BD.template && !$('p-badges').hidden) drawBadgePreview(); }).catch(() => {});
   const z = BD_CUSTOM ? null : BADGE_SIZES.find(x => x.w === BD.w && x.h === BD.h);
@@ -1453,11 +1455,12 @@ $('bd-size').onchange = () => {
   if (z) { BD.w = z.w; BD.h = z.h; }
   drawBadgeForm();
 };
+$('bd-divider').onchange = () => { BD.divider = $('bd-divider').checked; drawBadgePreview(); };
 $('bd-tpl').onchange = () => { BD = normalizeDesign({ ...BD, template: $('bd-tpl').value || null }); drawBadgeForm(); };
 // The client's check: the exact 898 x 696 px bitmap that goes to the printer.
 $('bd-png').onclick = async () => {
   await loadBadgeFonts().catch(() => {});
-  const c = visaNextCanvas({ first_name: 'Adam', last_name: 'Kowalski', company: 'ProfIT GmbH' });
+  const c = visaNextCanvas({ first_name: 'Adam', last_name: 'Kowalski', company: 'ProfIT GmbH' }, document, { divider: BD.divider !== false });
   const a = document.createElement('a'); a.download = BD.template + '-sample.png'; a.href = c.toDataURL('image/png'); a.click();
 };
 $('bd-turn').onclick = () => { [BD.w, BD.h] = [BD.h, BD.w]; drawBadgeForm(); };
