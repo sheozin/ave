@@ -186,6 +186,8 @@ export function badgeElement(attendee, ctx) {
 // pixels. Montserrat is bundled (/vendor/fonts), never fetched from a CDN,
 // so Polish letters render and the desk prints with the venue Wi-Fi down.
 export const VISA_NEXT_PX = { w: 898, h: 696 };
+// Space between the first-name and surname lines, in dots (300 dpi).
+export const VISA_NEXT_NAME_GAP = 45;   // about 3.8 mm; the spec said ~20, which printed tight under large capitals
 const FONT_URL = '/vendor/fonts/montserrat-latin-ext.woff2';
 let fontsLoading = null;
 
@@ -222,7 +224,7 @@ function splitSurname(text) {
   return text[i] === '-' ? [text.slice(0, i + 1), text.slice(i + 1)] : [text.slice(0, i), text.slice(i + 1)];
 }
 
-export function visaNextCanvas(attendee, doc = document, { test = false } = {}) {
+export function visaNextCanvas(attendee, doc = document, { test = false, nameGap = VISA_NEXT_NAME_GAP } = {}) {
   const { w: W, h: H } = VISA_NEXT_PX;
   const c = doc.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d');
@@ -253,14 +255,16 @@ export function visaNextCanvas(attendee, doc = document, { test = false } = {}) 
     const m = g.measureText(l.text);
     l.asc = m.actualBoundingBoxAscent; l.desc = m.actualBoundingBoxDescent;
   }
-  const GAP = 20;
-  const blockH = lines.reduce((t, l) => t + l.asc + l.desc, 0) + GAP * (lines.length - 1);
+  // Between the first name and the surname: nameGap. Between the two
+  // halves of a wrapped surname: the tighter 20 px of the original spec.
+  const gapAfter = (i) => (i === 0 && first) ? nameGap : 20;
+  const blockH = lines.reduce((t, l, i) => t + l.asc + l.desc + (i < lines.length - 1 ? gapAfter(i) : 0), 0);
   const [zTop, zBot] = company ? [0, 355] : [0, H];
   let y = zTop + (zBot - zTop - blockH) / 2;
   for (const l of lines) {
     g.font = `${l.weight} ${l.size}px Montserrat`;
     g.fillText(l.text, W / 2, y + l.asc);
-    y += l.asc + l.desc + GAP;
+    y += l.asc + l.desc + gapAfter(lines.indexOf(l));
   }
 
   if (company) {
