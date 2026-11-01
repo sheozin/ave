@@ -134,10 +134,33 @@ const PAIRING_TTL_MS = 10 * 60 * 1000
 // one shared bucket, which is the conservative direction: it cannot
 // lock out a real venue, because a real venue always arrives through
 // the edge with the header set.
+// Caller-settable (the first X-Forwarded-For entry is whatever the client
+// sent), so per-source limits are only a first filter. What actually bounds
+// guessing is the service-wide ceiling on wrong codes and the per-person
+// limits below (migration 145), none of which trust this value.
 function sourceAddress(req: Request): string {
   const xff = req.headers.get('x-forwarded-for')
   return xff?.split(',')[0]?.trim() || 'unknown'
 }
+
+// Service-wide ceiling on wrong pairing codes (migration 145). Fails closed.
+// deno-lint-ignore no-explicit-any
+async function globalOk(sb: any): Promise<boolean> {
+  const { data, error } = await sb.rpc('checkin_pair_global_ok')
+  if (error) console.error('checkin-kiosk-pair: global limit check failed', error.code)
+  return !error && data === true
+}
+// deno-lint-ignore no-explicit-any
+async function noteFailure(sb: any): Promise<void> {
+  const { error } = await sb.rpc('checkin_pair_note_failure')
+  if (error) console.error('checkin-kiosk-pair: failure not counted', error.code)
+}
+// deno-lint-ignore no-explicit-any
+async function personOk(sb: any, userId: string): Promise<boolean> {
+  const { data, error } = await sb.rpc('checkin_kiosk_pair_rate_check', { p_ip_hash: await sha256Hex('user:' + userId) })
+  return !error && data === true
+}
+const TOO_MANY = { error: 'Too many pairing attempts. Please wait a few minutes and try again.' }
 
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
@@ -262,6 +285,8 @@ Deno.serve(async (req) => {
     const keyHash = String(body.key_hash || '')
     if (!/^[0-9a-f]{64}$/.test(keyHash)) return json({ error: 'key_hash must be the SHA-256 of the station key' }, 400)
     if (body.device_kind !== 'printer') return json({ error: 'Only print stations pair this way' }, 400)
+    const { data: roomOk, error: roomErr } = await sb.rpc('checkin_print_request_ok')
+    if (roomErr || roomOk !== true) return json(TOO_MANY, 429)
     const info = printerInfo(body.info)
     // The station's local proof (migration 144): only its hash comes here.
     const proofHash = /^[0-9a-f]{64}$/.test(String(body.proof_hash || '')) ? String(body.proof_hash) : null
@@ -299,14 +324,15 @@ Deno.serve(async (req) => {
     const jwt = req.headers.get('Authorization')?.replace('Bearer ', '')
     const { data: { user } } = jwt ? await sb.auth.getUser(jwt) : { data: { user: null } }
     if (!user) return json({ error: 'Unauthorized' }, 401)
-    const ipHash = await sha256Hex(sourceAddress(req))
-    const { data: allowed, error: rateErr } = await sb.rpc('checkin_kiosk_pair_rate_check', { p_ip_hash: ipHash })
-    if (rateErr || allowed !== true) return json({ error: 'Too many pairing attempts. Please wait a few minutes and try again.' }, 429)
+    if (!(await personOk(sb, user.id)) || !(await globalOk(sb))) return json(TOO_MANY, 429)
     const code = normalizeCode(String(body.code || ''))
     const { data: r, error } = await sb.from('leod_checkin_device_requests')
       .select('info, created_at, expires_at, approved_at').eq('code', code).maybeSingle()
     if (error) return json({ error: 'Could not read the code' }, 500)
-    if (!r || r.approved_at || Date.parse(r.expires_at) < Date.now()) return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
+    if (!r || r.approved_at || Date.parse(r.expires_at) < Date.now()) {
+      await noteFailure(sb)
+      return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
+    }
     return json({ ok: true, printer: r.info ?? null, requested_at: r.created_at })
   }
 
@@ -319,6 +345,7 @@ Deno.serve(async (req) => {
     const label = String(body.label || '').trim().slice(0, MAX_LABEL)
     const code = normalizeCode(String(body.code || ''))
     if (!event_id || !label || code.length !== CODE_LENGTH) return json({ error: 'Type the 8-character code the print station shows, and a name' }, 400)
+    if (!(await personOk(sb, user.id)) || !(await globalOk(sb))) return json(TOO_MANY, 429)
     const gate = functionGate('checkin-kiosk-pair', await loadCallerRole(sb, event_id, user.id))
     if (!gate.ok) return json(gate.body, gate.status)
     const { data: entRow, error: entErr } = await sb.from('leod_checkin_entitlements').select(ENT_COLS).eq('event_id', event_id).maybeSingle()
@@ -330,7 +357,7 @@ Deno.serve(async (req) => {
     // X-Forwarded-For.
     const { data: req0, error: reqErr } = await sb.from('leod_checkin_device_requests').select('proof_hash').eq('code', code).maybeSingle()
     if (reqErr) return json({ error: 'Could not read the code' }, 500)
-    if (!req0) return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
+    if (!req0) { await noteFailure(sb); return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404) }
     const proof = String(body.local_proof || '')
     const proven = !!req0.proof_hash && proof.length === 64 && req0.proof_hash === await sha256Hex(proof)
     if (!proven && body.code_typed !== true) {
@@ -338,7 +365,7 @@ Deno.serve(async (req) => {
     }
     const { data, error } = await sb.rpc('checkin_approve_device_request', { p_code: code, p_event_id: event_id, p_label: label, p_user: user.id })
     if (error) {
-      if (error.code === 'P0002') return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404)
+      if (error.code === 'P0002') { await noteFailure(sb); return json({ error: 'That code is not waiting to be paired. Check it on the print station.' }, 404) }
       console.error('checkin-kiosk-pair: approve failed', error.code)
       return json({ error: 'Pairing failed' }, 500)
     }
@@ -361,6 +388,7 @@ Deno.serve(async (req) => {
       return json({ error: 'Too many pairing attempts. Please wait a few minutes and try again.' }, 429)
     }
 
+    if (!(await globalOk(sb))) return json(TOO_MANY, 429)
     const code = normalizeCode(String(body.code || ''))
     if (!code) return json({ error: 'Invalid or expired pairing code' }, 400)
     // The page says what it is. A code minted for the other kind of device
@@ -388,6 +416,7 @@ Deno.serve(async (req) => {
       // difference between searching the whole space and searching a
       // recently-used corner of it.
       console.warn('checkin-kiosk-pair: claim rejected')
+      await noteFailure(sb)
       return json({ error: 'Invalid or expired pairing code' }, 400)
     }
 

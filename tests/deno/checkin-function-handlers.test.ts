@@ -223,7 +223,8 @@ function setup(who: Who, opts: { ent?: Row | null; comp?: boolean; admin?: boole
       leod_checkin_comp_accounts: opts.comp ? [{ user_id: createdBy }] : [],
     },
     rpcCalls: [],
-    rpcResult: { checkin_apply_scan: 'ok' },
+    // Pairing limits (056, 145) pass unless a test says otherwise.
+    rpcResult: { checkin_apply_scan: 'ok', checkin_pair_global_ok: true, checkin_print_request_ok: true, checkin_kiosk_pair_rate_check: true },
   }
 }
 
@@ -1873,4 +1874,29 @@ Deno.test('checkin-kiosk-pair: one-click pairing needs the local proof from the 
   world.tables.leod_checkin_device_requests = []
   r = await call('checkin-kiosk-pair', { action: 'request_info', code: 'ZZZZ2222' })
   assert(r.status === 404, JSON.stringify(r))
+})
+
+Deno.test('checkin-kiosk-pair: wrong codes count toward one service-wide ceiling that no address header can dodge (migration 145)', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test', self_registration: true } })
+  world.rpcResult.checkin_kiosk_claim_pairing = []
+  let r = await call('checkin-kiosk-pair', { action: 'claim', code: 'ABCD-EFGH' })
+  assert(r.status === 400, JSON.stringify(r))
+  assert(world.rpcCalls.some(x => x.name === 'checkin_pair_note_failure'), 'a failed claim is counted')
+  world.rpcResult.checkin_pair_global_ok = false
+  r = await call('checkin-kiosk-pair', { action: 'claim', code: 'ABCD-EFGH' })
+  assert(r.status === 429, 'over the ceiling: ' + JSON.stringify(r))
+  assert(!world.rpcCalls.some(x => x.name === 'checkin_kiosk_claim_pairing' && world.rpcCalls.indexOf(x) > world.rpcCalls.findIndex(y => y.name === 'checkin_pair_note_failure')), 'no claim tried over the ceiling')
+})
+Deno.test('checkin-kiosk-pair: print stations cannot flood codes, and signed-in checks are limited per person', async () => {
+  setup('lead', { ent: { checkin_core: true, status: 'test' } })
+  world.rpcResult.checkin_print_request_ok = false
+  let r = await call('checkin-kiosk-pair', { action: 'request', device_kind: 'printer', key_hash: 'f'.repeat(64) })
+  assert(r.status === 429, 'too many codes waiting: ' + JSON.stringify(r))
+  world.rpcResult.checkin_kiosk_pair_rate_check = false
+  r = await call('checkin-kiosk-pair', { action: 'request_info', code: 'ABCD-EFGH' })
+  assert(r.status === 429, JSON.stringify(r))
+  r = await call('checkin-kiosk-pair', { action: 'approve', event_id: EVENT, code: 'ABCDEFGH', label: 'x', code_typed: true })
+  assert(r.status === 429, JSON.stringify(r))
+  const c = world.rpcCalls.filter(x => x.name === 'checkin_kiosk_pair_rate_check').at(-1)!
+  assert(c.args.p_ip_hash === await sha256('user:' + USER), 'keyed on the person, not an address: ' + JSON.stringify(c))
 })
