@@ -591,6 +591,8 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .wi-form .ck-input{margin-bottom:12px}
 .wi-err{color:var(--rd);font-size:13px;min-height:18px;margin:0 0 10px}
 .dr-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.im-help{color:var(--t2);font-size:13px;line-height:1.5;margin:0 0 14px}
+.im-sum{font-size:14px;line-height:1.5;color:var(--t1);margin:0 0 8px;white-space:pre-line}
 a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 </style>
 </head>
@@ -645,6 +647,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
            a permission they do not have. -->
       <button class="ck-quiet" type="button" id="st-desk" aria-label="Rename this desk">This desk · Rename</button>
       <button class="ck-quiet" type="button" id="st-walkin" style="display:none">Add walk-in</button>
+      <button class="ck-quiet" type="button" id="st-import" style="display:none">Import guests</button>
       <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Kiosk or scanner</button>
       <a class="ck-quiet" id="st-dash" href="#">Dashboard</a>
       <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
@@ -858,6 +861,28 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
   </div>
 </div>
 
+<!-- ── IMPORT GUESTS ──────────────────────────────
+     A CSV read on this desk, so it works with no internet: the guests
+     are on the desk at once and go up to CueDeck when it is online.  -->
+<div id="import" class="ck-modal" style="display:none">
+  <div class="ck-modal-card" role="dialog" aria-modal="true" aria-labelledby="im-title">
+    <div class="ks-top">
+      <div class="ks-top-main">
+        <div class="ks-eyebrow">Guest list</div>
+        <div class="ks-h" id="im-title">Import guests from a CSV file</div>
+      </div>
+      <button class="ks-x" type="button" id="im-close" aria-label="Close">&times;</button>
+    </div>
+    <form id="im-form" class="wi-form" novalidate>
+      <p class="im-help">Columns: first name and last name, and if you have them email, company, title, ticket type and ID. This works without internet: the guests are added on this desk straight away, and go up to CueDeck when it is online. Other desks see them after that.</p>
+      <label class="ck-lbl" for="im-file">CSV file</label><input class="ck-input" id="im-file" type="file" accept=".csv,text/csv">
+      <div class="im-sum" id="im-sum" aria-live="polite"></div>
+      <div class="wi-err" id="im-err" role="alert"></div>
+      <button class="ck-btn" type="submit" id="im-save" disabled>Add guests</button>
+    </form>
+  </div>
+</div>
+
 <!-- ── DESK RENAME ─────────────────────────────────
      A field, not window.prompt: a prompt freezes the page (flush,
      heartbeat, check-ins) and a wedge scanner types into whatever has
@@ -896,6 +921,8 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
   import { checkinWindow, isWithinWindow, TEST_CAP } from '/checkin-window.js';
   import { bestOffset, correctedIso, skewNotice } from '/checkin-clock.js';
   import { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
+  import { parseCsv, mapRows } from '/checkin-csv.js';
+  window.CK_CSV = { parseCsv, mapRows };
   window.CK_POLICY = { checkinWindow, isWithinWindow, TEST_CAP };
   window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll, fitsPrinter };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
@@ -1674,6 +1701,11 @@ window.addEventListener('DOMContentLoaded', async () => {
   // lobby screen never carries any of it.
   document.getElementById('st-kiosk').addEventListener('click', openKioskSetup);
   document.getElementById('st-walkin').addEventListener('click', openWalkIn);
+  document.getElementById('st-import').addEventListener('click', openImport);
+  document.getElementById('im-close').addEventListener('click', closeImport);
+  document.getElementById('im-file').addEventListener('change', readImportFile);
+  document.getElementById('im-form').addEventListener('submit', submitImport);
+  document.getElementById('import').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeImport(); });
   document.getElementById('st-desk').addEventListener('click', openDeskRename);
   document.getElementById('dr-form').addEventListener('submit', submitDeskRename);
   document.getElementById('dr-close').addEventListener('click', closeDeskRename);
@@ -1691,7 +1723,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // Escape is free here: the desk's capture-phase scanner backstop only
   // looks at single printable characters, so it never sees this key.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { closeKioskSetup(); closeWalkIn(); closeDeskRename(); }
+    if (e.key === 'Escape') { closeKioskSetup(); closeWalkIn(); closeDeskRename(); closeImport(); }
   });
 
   const session = await deskSession();
@@ -1792,7 +1824,7 @@ function showScreen(name) {
   // Leaving the desk takes the kiosk modal with it. Switching event or
   // signing out must not leave a live pairing code on a screen that is
   // no longer the desk it was minted from.
-  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); stopHeartbeat(); stopDeskAlerts(); stopClockSync(); }
+  else { stopFocusBackstop(); stopRosterRefresh(); closeKioskSetup(); closeWalkIn(); closeDeskRename(); closeImport(); stopHeartbeat(); stopDeskAlerts(); stopClockSync(); }
 }
 
 // ═══════════════════════════════════════════════════
@@ -2081,6 +2113,7 @@ function renderStation() {
   const R = window.CK_ROLES;
   document.getElementById('st-kiosk').style.display = R.can(S.role, 'kiosk') ? '' : 'none';
   document.getElementById('st-walkin').style.display = R.can(S.role, 'walk_in') ? '' : 'none';
+  document.getElementById('st-import').style.display = R.can(S.role, 'manage_guests') ? '' : 'none';
   document.getElementById('st-dash').href = '/checkin/dashboard?event=' + encodeURIComponent(S.event.id);
   const notice = document.getElementById('st-notice');
   notice.textContent = rolesFailed ? 'Some desk controls did not load. Reload when the connection is steady.' : '';
@@ -3681,10 +3714,217 @@ async function queueWalkIn(body) {
   scanInput.focus();
 }
 
-// Sends the walk-ins added offline. Called from flushOutbox, inside its
-// lock, before the check-ins that may point at them.
+// ═══════════════════════════════════════════════════
+// IMPORT GUESTS (owners and organizers)
+// A CSV read here with the same parser as Event admin (checkin-csv.js),
+// so it works with no internet. Each new guest gets an id and qr_token
+// made on this desk and is kept in STORE_WALKINS with source 'import':
+// checked in and printed like anyone else at once, and sent to
+// checkin-import-attendees (queued: true) in batches by flushImports.
+// A guest already on this desk's list (same email) is left as it is.
+// ═══════════════════════════════════════════════════
+const IMPORT_MAX = 5000, IMPORT_FIELD_MAX = 200, IMPORT_BATCH = 500;
+const IMPORT_FIELDS = ['first_name', 'last_name', 'email', 'company', 'role_title', 'ticket_type', 'external_ref'];
+let importPlan = null;
+
+function openImport() {
+  if (!window.CK_ROLES.can(S.role, 'manage_guests') || !S.event) return;
+  importPlan = null;
+  document.getElementById('im-form').reset();
+  document.getElementById('im-sum').textContent = '';
+  document.getElementById('im-err').textContent = '';
+  const btn = document.getElementById('im-save');
+  btn.disabled = true;
+  btn.textContent = 'Add guests';
+  document.getElementById('import').style.display = 'flex';
+  document.getElementById('im-file').focus();
+}
+
+function closeImport() {
+  const host = document.getElementById('import');
+  if (host.style.display === 'none') return;
+  host.style.display = 'none';
+  importPlan = null;
+  if (stationVisible()) scanInput.focus();
+}
+
+// The rows, checked as checkin-import-attendees checks them, split into
+// new guests, guests already on the list, and rows that cannot be used.
+function planImport(table) {
+  const { rows, missing } = window.CK_CSV.mapRows(table);
+  if (missing.length) return { error: 'The file needs a First name and a Last name column. The first row must be the column names.' };
+  if (!rows.length) return { error: 'There are no guests in this file.' };
+  if (rows.length > IMPORT_MAX) return { error: 'The file has ' + rows.length + ' guests. Import at most ' + IMPORT_MAX + ' at a time.' };
+  const known = new Set(S.roster.map(a => (a.email || '').toLowerCase()).filter(Boolean));
+  const seenEmail = new Set(), seenRef = new Set();
+  const plan = { add: [], already: 0, noName: 0, tooLong: 0, twice: 0 };
+  for (const raw of rows) {
+    const r = {};
+    for (const k of IMPORT_FIELDS) {
+      const v = String(raw[k] || '').replace(/[\t\n\r]/g, ' ').replace(WALKIN_CONTROL, '').trim();
+      if (v) r[k] = v;
+    }
+    if (!r.first_name || !r.last_name) { plan.noName++; continue; }
+    if (IMPORT_FIELDS.some(k => r[k] && r[k].length > IMPORT_FIELD_MAX)) { plan.tooLong++; continue; }
+    const em = (r.email || '').toLowerCase();
+    if (em && known.has(em)) { plan.already++; continue; }
+    if ((em && seenEmail.has(em)) || (r.external_ref && seenRef.has(r.external_ref))) { plan.twice++; continue; }
+    if (em) seenEmail.add(em);
+    if (r.external_ref) seenRef.add(r.external_ref);
+    plan.add.push(r);
+  }
+  return plan;
+}
+
+async function readImportFile() {
+  const file = document.getElementById('im-file').files[0];
+  const sum = document.getElementById('im-sum'), err = document.getElementById('im-err'), btn = document.getElementById('im-save');
+  importPlan = null; sum.textContent = ''; err.textContent = ''; btn.disabled = true; btn.textContent = 'Add guests';
+  if (!file) return;
+  let plan;
+  try { plan = planImport(window.CK_CSV.parseCsv(await file.text())); }
+  catch (_) { err.textContent = 'This file could not be read. Save it as CSV and try again.'; return; }
+  if (plan.error) { err.textContent = plan.error; return; }
+  const lines = [plan.add.length === 1 ? '1 new guest to add.' : plan.add.length + ' new guests to add.'];
+  if (plan.already) lines.push(plan.already + ' already on the list, left as they are.');
+  if (plan.twice) lines.push(plan.twice + ' listed twice in the file, added once.');
+  if (plan.noName) lines.push(plan.noName + ' without a first or last name, skipped.');
+  if (plan.tooLong) lines.push(plan.tooLong + ' with a value longer than ' + IMPORT_FIELD_MAX + ' characters, skipped.');
+  sum.textContent = lines.join('\n');
+  if (!plan.add.length) return;
+  importPlan = plan;
+  btn.disabled = false;
+  btn.textContent = plan.add.length === 1 ? 'Add 1 guest' : 'Add ' + plan.add.length + ' guests';
+}
+
+async function submitImport(e) {
+  e.preventDefault();
+  if (!importPlan || !S.event) return;
+  const eventId = S.event.id;
+  const queued = [], rows = [];
+  for (const r of importPlan.add) {
+    const rnd = crypto.getRandomValues(new Uint8Array(16));
+    const body = { ...r, client_id: crypto.randomUUID(), qr_token: Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('') };
+    const row = { id: body.client_id, event_id: eventId, first_name: r.first_name, last_name: r.last_name,
+                  email: r.email || null, company: r.company || null, role_title: r.role_title || null,
+                  ticket_type: r.ticket_type || 'attendee', qr_token: body.qr_token, checked_in_at: null, badge_printed_at: null };
+    queued.push({ id: row.id, event_id: eventId, source: 'import', seq: queued.length, body, row, added_at: new Date().toISOString() });
+    rows.push(row);
+  }
+  await idbPutAll(STORE_WALKINS, queued);
+  await idbPutAll(STORE_ROSTER, rows);
+  const n = rows.length;
+  closeImport();
+  if (!S.event || S.event.id !== eventId) return;
+  S.roster.push(...rows);
+  renderCount();
+  await renderPendingCount();
+  showDeskBlock({
+    title: n === 1 ? '1 guest added' : n + ' guests added',
+    text: 'They can be checked in and printed on this desk now. They go up to CueDeck when this desk is online, and other desks see them after that.',
+  });
+  flushOutbox();
+}
+
+// One guest the desk made (walk-in or import) turned out to be someone
+// already on the list: move this desk's check-ins and the row on screen
+// onto that guest.
+async function moveOntoGuest(localId, a) {
+  const moved = (await idbGetAll(STORE_OUTBOX)).filter(p => p.attendee_id === localId).map(p => ({ ...p, attendee_id: a.id }));
+  if (moved.length) await idbPutAll(STORE_OUTBOX, moved);
+  const local = S.roster.find(x => x.id === localId);
+  S.roster = S.roster.filter(x => x.id !== localId);
+  if (!S.roster.some(x => x.id === a.id)) S.roster.push({ ...a, checked_in_at: a.checked_in_at || (local && local.checked_in_at) || null });
+  await idbDelete(STORE_ROSTER, [localId]);
+  if (S.party) {
+    S.party.members = S.party.members.map(m => (m.id === localId ? S.roster.find(x => x.id === a.id) : m));
+    if (S.party.ticked.delete(localId)) S.party.ticked.add(a.id);
+  }
+}
+
+// Guests the server will never add: off this desk, and their check-ins
+// settled so the queue does not wait on them forever.
+async function dropRefused(ids) {
+  const dropped = (await idbGetAll(STORE_OUTBOX)).filter(p => !p.synced && ids.has(p.attendee_id)).map(p => ({ ...p, synced: true, result: 'walk_in_refused' }));
+  if (dropped.length) await idbPutAll(STORE_OUTBOX, dropped);
+  S.roster = S.roster.filter(x => !ids.has(x.id));
+  if (S.party) { S.party.members = S.party.members.filter(m => !ids.has(m.id)); if (!S.party.members.length) S.party = null; }
+  await idbDelete(STORE_ROSTER, [...ids]);
+  await idbDelete(STORE_WALKINS, [...ids]);
+}
+
+// Sends imported guests in batches, per event. False when the server could
+// not be reached (or the session lapsed): the rest waits for the next flush.
+async function flushImports(queued) {
+  const byEvent = new Map();
+  for (const w of queued) { if (!byEvent.has(w.event_id)) byEvent.set(w.event_id, []); byEvent.get(w.event_id).push(w); }
+  const refused = [], merged = [];
+  let reached = true;
+  outer:
+  for (const [eventId, items] of byEvent) {
+    for (let i = 0; i < items.length; i += IMPORT_BATCH) {
+      const chunk = items.slice(i, i + IMPORT_BATCH);
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FLUSH_TIMEOUT_MS * 2);
+      const { data, error } = await sb.functions.invoke('checkin-import-attendees', {
+        body: { event_id: eventId, rows: chunk.map(w => w.body), dry_run: false, queued: true }, signal: ctrl.signal });
+      clearTimeout(timer);
+      if (error && !(error.context && typeof error.context.status === 'number')) { syncFailures++; reached = false; break outer; }
+      if (error) {
+        const status = error.context.status;
+        if (status >= 500 || status === 401) { syncFailures++; reached = false; break outer; }
+        let msg = 'It was refused.';
+        try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+        chunk.forEach(w => refused.push({ w, msg }));
+        continue;
+      }
+      const results = data && Array.isArray(data.results) ? data.results : null;
+      if (!results) { syncFailures++; reached = false; break outer; }
+      lastSyncOk = Date.now();
+      syncFailures = 0;
+      const byId = new Map(chunk.map(w => [w.id, w]));
+      const done = [];
+      for (const r of results) {
+        const w = byId.get(r.client_id);
+        if (!w) continue;
+        if (r.action === 'skip') { refused.push({ w, msg: r.reason || 'It was refused.' }); continue; }
+        if (r.action === 'update' && r.attendee_id && r.attendee_id !== w.id) {
+          const local = S.roster.find(x => x.id === w.id) || w.row;
+          const known = S.roster.find(x => x.id === r.attendee_id);
+          await moveOntoGuest(w.id, known || { ...local, id: r.attendee_id });
+          if (local.checked_in_at || local.badge_printed_at) merged.push(w.row);
+        }
+        done.push(w.id);
+      }
+      if (done.length) await idbDelete(STORE_WALKINS, done);
+    }
+  }
+  if (refused.length) {
+    await dropRefused(new Set(refused.map(r => r.w.id)));
+    showDeskBlock({
+      title: refused.length === 1 ? 'An imported guest was not added' : refused.length + ' imported guests were not added',
+      text: refused.slice(0, 10).map(r => fullName(r.w.row) + ': ' + r.msg).join(' ') + (refused.length > 10 ? ' And ' + (refused.length - 10) + ' more.' : ''),
+    });
+  }
+  if (merged.length) {
+    showDeskBlock({
+      title: merged.length === 1 ? 'An imported guest was already registered' : merged.length + ' imported guests were already registered',
+      text: merged.map(fullName).join(', ') + ' registered with the same email meanwhile, so the check-in was moved onto that registration. Reprint the badge: the one printed offline has a QR code that will not scan.',
+    });
+  }
+  if (refused.length || merged.length) { renderParty(); renderCount(); }
+  return reached;
+}
+
+// Sends the walk-ins and imported guests added offline. Called from
+// flushOutbox, inside its lock, before the check-ins that may point at them.
 async function flushWalkIns() {
-  const queued = await idbGetAll(STORE_WALKINS);
+  const all = await idbGetAll(STORE_WALKINS);
+  // In the file's order: the store returns them sorted by id.
+  const imports = all.filter(w => w.source === 'import')
+    .sort((a, b) => (a.added_at < b.added_at ? -1 : a.added_at > b.added_at ? 1 : (a.seq || 0) - (b.seq || 0)));
+  if (imports.length && !(await flushImports(imports))) return;
+  const queued = all.filter(w => w.source !== 'import');
   const refused = [], merged = [];
   for (const w of queued) {
     const ctrl  = new AbortController();
@@ -3706,32 +3946,15 @@ async function flushWalkIns() {
     const a = data && data.attendee;
     if (!a) { syncFailures++; break; }
     if (a.id !== w.id) {
-      // Already on the list under another id: move this desk's check-ins
-      // and the row on screen onto that guest.
-      const moved = (await idbGetAll(STORE_OUTBOX)).filter(p => p.attendee_id === w.id).map(p => ({ ...p, attendee_id: a.id }));
-      if (moved.length) await idbPutAll(STORE_OUTBOX, moved);
-      const local = S.roster.find(x => x.id === w.id);
-      S.roster = S.roster.filter(x => x.id !== w.id);
-      if (!S.roster.some(x => x.id === a.id)) S.roster.push({ ...a, checked_in_at: a.checked_in_at || (local && local.checked_in_at) || null });
-      await idbDelete(STORE_ROSTER, [w.id]);
-      if (S.party) {
-        S.party.members = S.party.members.map(m => (m.id === w.id ? S.roster.find(x => x.id === a.id) : m));
-        if (S.party.ticked.delete(w.id)) S.party.ticked.add(a.id);
-      }
+      // Already on the list under another id.
+      await moveOntoGuest(w.id, a);
       merged.push(w.row);
     }
     await idbDelete(STORE_WALKINS, [w.id]);
   }
   if (refused.length) {
-    // Never on the list: take them off this desk, and settle their check-ins
-    // so the queue does not wait on them forever.
-    const ids = new Set(refused.map(r => r.w.id));
-    const dropped = (await idbGetAll(STORE_OUTBOX)).filter(p => !p.synced && ids.has(p.attendee_id)).map(p => ({ ...p, synced: true, result: 'walk_in_refused' }));
-    if (dropped.length) await idbPutAll(STORE_OUTBOX, dropped);
-    S.roster = S.roster.filter(x => !ids.has(x.id));
-    if (S.party) { S.party.members = S.party.members.filter(m => !ids.has(m.id)); if (!S.party.members.length) S.party = null; }
-    await idbDelete(STORE_ROSTER, [...ids]);
-    await idbDelete(STORE_WALKINS, [...ids]);
+    // Never on the list.
+    await dropRefused(new Set(refused.map(r => r.w.id)));
     showDeskBlock({
       title: refused.length === 1 ? 'A walk-in was not added' : refused.length + ' walk-ins were not added',
       text: refused.map(r => fullName(r.w.row) + ': ' + r.msg).join(' '),

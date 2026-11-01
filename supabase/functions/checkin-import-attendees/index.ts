@@ -6,11 +6,22 @@
 // Dedup key: external_ref if present, else email, scoped to event_id.
 // New attendees get a random URL-safe qr_token; matched attendees keep
 // theirs — re-importing never invalidates an already-sent QR.
+//
+// queued: true is the check-in desk sending a guest list it imported with
+// no connection. Each row carries the id and qr_token the desk made
+// ({ client_id, qr_token }), because the desk may already have checked
+// those guests in and printed their badges. Sending the same rows again
+// returns 'already' for each, so a retry after a lost answer never adds
+// anyone twice. A row whose guest is already on the list (same
+// external_ref or email) updates that guest, as any import does, and the
+// answer names that guest's id so the desk can move its check-ins onto it.
+// The answer is one compact result per row: { client_id, action,
+// attendee_id?, reason? }.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
-import { loadCallerRole } from '../_shared/checkin-roles.ts'
-import { functionGate } from '../_shared/checkin-gates.ts'
+import { isUuid, loadCallerRole } from '../_shared/checkin-roles.ts'
+import { functionGate, likeEscape } from '../_shared/checkin-gates.ts'
 import { sendQrEmailsForAttendees, withBrand } from '../_shared/qr-email.ts'
 
 interface ImportRow {
@@ -21,12 +32,15 @@ interface ImportRow {
   role_title?: string
   ticket_type?: string
   external_ref?: string
+  client_id?: string
+  qr_token?: string
 }
 
 interface RowResult {
   row: ImportRow
-  action: 'create' | 'update' | 'skip'
+  action: 'create' | 'update' | 'skip' | 'already'
   reason?: string
+  attendee_id?: string
 }
 
 function makeQrToken(): string {
@@ -87,6 +101,7 @@ Deno.serve(async (req) => {
   const event_id = String(body.event_id || '')
   const rows = Array.isArray(body.rows) ? (body.rows as ImportRow[]) : []
   const dry_run = body.dry_run !== false
+  const queued = body.queued === true && !dry_run
 
   if (!event_id || rows.length === 0) {
     return new Response(JSON.stringify({ error: 'Missing event_id or rows' }), {
@@ -137,6 +152,7 @@ Deno.serve(async (req) => {
     })
   }
 
+  const byId = new Set((existing || []).map(a => a.id))
   const byExternalRef = new Map((existing || []).filter(a => a.external_ref).map(a => [a.external_ref, a]))
   const byEmail = new Map((existing || []).filter(a => a.email).map(a => [a.email!.toLowerCase(), a]))
 
@@ -154,6 +170,13 @@ Deno.serve(async (req) => {
   for (const row of rows) {
     const invalid = validateRow(row)
     if (invalid) { results.push({ row, action: 'skip', reason: invalid }); continue }
+    if (queued) {
+      if (!isUuid(String(row.client_id ?? '')) || !/^[0-9a-f]{32}$/.test(String(row.qr_token ?? ''))) {
+        results.push({ row, action: 'skip', reason: 'Invalid value' }); continue
+      }
+      // Sent before and added then: the answer to that send was lost.
+      if (byId.has(row.client_id!)) { results.push({ row, action: 'already', attendee_id: row.client_id }); continue }
+    }
 
     const normalizedEmail = row.email?.toLowerCase()
     const match = (row.external_ref && byExternalRef.get(row.external_ref))
@@ -174,7 +197,7 @@ Deno.serve(async (req) => {
     }
 
     if (match) {
-      results.push({ row, action: 'update' })
+      results.push({ row, action: 'update', attendee_id: match.id })
       toUpdate.push({
         id: match.id,
         patch: {
@@ -187,15 +210,16 @@ Deno.serve(async (req) => {
     } else {
       if (row.external_ref) claimedExternalRefs.add(row.external_ref)
       if (normalizedEmail) claimedEmails.add(normalizedEmail)
-      results.push({ row, action: 'create' })
+      results.push({ row, action: 'create', ...(queued ? { attendee_id: row.client_id } : {}) })
       toInsert.push({
+        ...(queued ? { id: row.client_id } : {}),
         event_id,
         first_name: row.first_name, last_name: row.last_name,
         email: row.email || null, company: row.company || null,
         role_title: row.role_title || null,
         ticket_type: row.ticket_type || 'attendee',
         external_ref: row.external_ref || null,
-        qr_token: makeQrToken(),
+        qr_token: queued ? row.qr_token : makeQrToken(),
       })
     }
   }
@@ -205,6 +229,7 @@ Deno.serve(async (req) => {
     to_create: results.filter(r => r.action === 'create').length,
     to_update: results.filter(r => r.action === 'update').length,
     to_skip: results.filter(r => r.action === 'skip').length,
+    ...(queued ? { already: results.filter(r => r.action === 'already').length } : {}),
   }
 
   if (dry_run) {
@@ -218,12 +243,32 @@ Deno.serve(async (req) => {
     const { data: inserted, error } = await sb.from('leod_checkin_attendees')
       .insert(toInsert)
       .select('id, first_name, email, qr_token')
-    if (error) {
+    if (error && queued && error.code === '23505') {
+      // One row collides with a guest added since the list was read (or an
+      // id already used elsewhere): the whole batch was refused, so add the
+      // rows one by one and settle each collision on its own.
+      for (const ins of toInsert) {
+        const one = await sb.from('leod_checkin_attendees').insert(ins).select('id, first_name, email, qr_token').single()
+        const res = results.find(r => r.row.client_id === ins.id)!
+        if (!one.error) { insertedAttendees.push(one.data); continue }
+        if (one.error.code !== '23505') {
+          return new Response(JSON.stringify({ error: one.error.message }), {
+            status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
+          })
+        }
+        const { data: winner } = ins.email
+          ? await sb.from('leod_checkin_attendees').select('id').eq('event_id', event_id).ilike('email', likeEscape(String(ins.email))).limit(1)
+          : { data: null }
+        if (winner && winner.length) { res.action = 'update'; res.attendee_id = winner[0].id; continue }
+        res.action = 'skip'; res.reason = 'Could not be added'; delete res.attendee_id
+      }
+    } else if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500, headers: { ...cors, 'Content-Type': 'application/json' },
       })
+    } else {
+      insertedAttendees = inserted || []
     }
-    insertedAttendees = inserted || []
   }
   // Track per-row failures rather than discarding them: silently
   // swallowing an update error here would make summary.to_update
@@ -262,6 +307,8 @@ Deno.serve(async (req) => {
   return new Response(JSON.stringify({
     ok: true, dry_run: false, summary,
     ...(updateErrors.length ? { update_errors: updateErrors } : {}),
+    ...(queued ? { results: results.map(r => ({ client_id: r.row?.client_id ?? null, action: r.action,
+      ...(r.attendee_id ? { attendee_id: r.attendee_id } : {}), ...(r.reason ? { reason: r.reason } : {}) })) } : {}),
   }), {
     headers: { ...cors, 'Content-Type': 'application/json' },
   })

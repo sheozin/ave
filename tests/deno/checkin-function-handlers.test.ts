@@ -2062,3 +2062,56 @@ Deno.test('checkin-email-status: only the cron may run it; it records what Resen
   const run = world.tables.leod_checkin_job_runs[0]
   assert(run && run.job_name === 'checkin-email-status' && run.status === 'ok', JSON.stringify(run))
 })
+
+// ── a guest list the desk imported with no connection (queued) ──────
+const IMP = 'checkin-import-attendees'
+const IID1 = '8c1d5e3f-2a4b-4c6d-9e7f-0a1b2c3d4e5f'
+const IID2 = '9d2e6f4a-3b5c-4d7e-8f0a-1b2c3d4e5f6a'
+const ITOK1 = 'c'.repeat(32), ITOK2 = 'd'.repeat(32)
+const impSetup = () => setup('organizer', { ent: { checkin_core: true, status: 'test', auto_send_qr_email: false } })
+const deskRows = () => [
+  { first_name: 'Ida', last_name: 'One', email: 'ida@example.com', client_id: IID1, qr_token: ITOK1 },
+  { first_name: 'Jan', last_name: 'Two', client_id: IID2, qr_token: ITOK2 },
+]
+Deno.test(`${IMP} queued: adds each guest under the id and QR code the desk made`, async () => {
+  impSetup()
+  const r = await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false, queued: true })
+  assert(r.status === 200, JSON.stringify(r))
+  const res = r.body.results as Row[]
+  assert(res.length === 2 && res.every(x => x.action === 'create'), JSON.stringify(res))
+  assert(res[0].client_id === IID1 && res[0].attendee_id === IID1, JSON.stringify(res))
+  const rows = world.tables.leod_checkin_attendees
+  assert(rows.some(a => a.id === IID1 && a.qr_token === ITOK1) && rows.some(a => a.id === IID2 && a.qr_token === ITOK2), JSON.stringify(rows))
+  assert(rows.every(a => !('client_id' in a)), 'client_id stored as a column')
+})
+Deno.test(`${IMP} queued: sending the same rows again adds nobody`, async () => {
+  impSetup()
+  await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false, queued: true })
+  const r = await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false, queued: true })
+  const res = r.body.results as Row[]
+  assert(res.every(x => x.action === 'already'), JSON.stringify(res))
+  assert(world.tables.leod_checkin_attendees.length === 2, JSON.stringify(world.tables.leod_checkin_attendees))
+})
+Deno.test(`${IMP} queued: a guest already on the list is updated and named, not added`, async () => {
+  impSetup()
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'ida@example.com', qr_token: 'e'.repeat(32), first_name: 'I', last_name: 'O' }]
+  const r = await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false, queued: true })
+  const res = r.body.results as Row[]
+  assert(res[0].action === 'update' && res[0].attendee_id === ATT, JSON.stringify(res))
+  assert(res[1].action === 'create', JSON.stringify(res))
+  const ida = world.tables.leod_checkin_attendees.filter(a => a.email === 'ida@example.com')
+  assert(ida.length === 1 && ida[0].qr_token === 'e'.repeat(32) && ida[0].first_name === 'Ida', JSON.stringify(ida))
+})
+Deno.test(`${IMP} queued: a row without a well-formed id or QR code is skipped`, async () => {
+  impSetup()
+  const r = await call(IMP, { event_id: EVENT, rows: [{ first_name: 'A', last_name: 'B', client_id: 'x', qr_token: ITOK1 }, { first_name: 'C', last_name: 'D', client_id: IID1, qr_token: 'short' }], dry_run: false, queued: true })
+  const res = r.body.results as Row[]
+  assert(res.every(x => x.action === 'skip' && x.reason === 'Invalid value'), JSON.stringify(res))
+  assert(!(world.tables.leod_checkin_attendees ?? []).length, 'written anyway')
+})
+Deno.test(`${IMP}: without queued, desk ids in a row are ignored and no results list is returned`, async () => {
+  impSetup()
+  const r = await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false })
+  assert(r.status === 200 && !('results' in r.body), JSON.stringify(r))
+  assert(world.tables.leod_checkin_attendees.every(a => a.id !== IID1 && a.qr_token !== ITOK1), JSON.stringify(world.tables.leod_checkin_attendees))
+})

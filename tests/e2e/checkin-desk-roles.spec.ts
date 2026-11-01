@@ -1262,3 +1262,134 @@ test('on a router with no uplink, where requests hang, the desk reopens within s
   await search(desk, 'Ben');
   await expect(desk.locator('.ck-res-row', { hasText: 'Ben Probe' })).toBeVisible();
 });
+
+// ── import guests on the desk, also with no internet ───────────────────────
+const CSV = [
+  'First name;Last name;Email;Company',
+  'Nina;New;nina@cuedeck-test.io;Contoso Demo',
+  'Ana;Again;ANA@cuedeck-test.io;Contoso Demo',      // Ana is on the list already
+  ';Nameless;x@cuedeck-test.io;',
+  'Nina;Twice;nina@cuedeck-test.io;',
+  'Olaf;Other;;Fabrikam Demo',
+].join('\n');
+async function importCsv(page, csv = CSV) {
+  await page.locator('#st-import').click();
+  await page.locator('#im-file').setInputFiles({ name: 'guests.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+}
+
+test('desk staff and desk leads see no import button', async ({ page }) => {
+  await open(page, { role: 'lead' });
+  await expect(page.locator('#st-import')).toBeHidden();
+});
+
+test('an organizer imports a guest list with no internet, checks a guest in, and it all syncs when back online', async ({ page, context }) => {
+  const imports: Record<string, unknown>[] = [];
+  const scans: { attendee_id: string; action: string }[] = [];
+  await open(page, { role: 'organizer' });
+  await fn(page, 'checkin-import-attendees', (b) => { imports.push(b); return { body: { ok: true, dry_run: false,
+    results: (b.rows as { client_id: string }[]).map(r => ({ client_id: r.client_id, action: 'create', attendee_id: r.client_id })) } }; });
+  await fn(page, 'checkin-record-scans', (b) => { scans.push(...(b.items as typeof scans)); return { body: { ok: true, errors: [],
+    results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }; });
+  await context.setOffline(true);
+  await importCsv(page);
+  await expect(page.locator('#im-sum')).toContainText('2 new guests to add.');
+  await expect(page.locator('#im-sum')).toContainText('1 already on the list, left as they are.');
+  await expect(page.locator('#im-sum')).toContainText('1 listed twice in the file, added once.');
+  await expect(page.locator('#im-sum')).toContainText('1 without a first or last name, skipped.');
+  await page.locator('#im-save').click();
+  await expect(page.locator('#import')).toBeHidden();
+  await expect(page.locator('#verdict')).toContainText('2 guests added');
+  await search(page, 'Nina');
+  await page.locator('.ck-res-row', { hasText: 'Nina New' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await expect(page.locator('#verdict')).toContainText('Nina New is checked in');
+  await expect(page.locator('#st-sync')).toHaveText('Offline · 3 waiting');
+  expect(imports).toHaveLength(0);
+  await context.setOffline(false);
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+  expect(imports).toHaveLength(1);
+  expect(imports[0]).toMatchObject({ event_id: EVENT_ID, dry_run: false, queued: true });
+  const rows = imports[0].rows as { first_name: string; client_id: string; qr_token: string; email?: string; company?: string }[];
+  expect(rows.map(r => r.first_name)).toEqual(['Nina', 'Olaf']);
+  expect(rows[0]).toMatchObject({ email: 'nina@cuedeck-test.io', company: 'Contoso Demo' });
+  expect(rows[0].client_id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(rows[0].qr_token).toMatch(/^[0-9a-f]{32}$/);
+  // The check-in went up after the guest existed, under the desk's id.
+  expect(scans).toEqual([expect.objectContaining({ attendee_id: rows[0].client_id, action: 'checkin' })]);
+});
+
+test('an imported guest who registered meanwhile: the check-in moves onto that registration', async ({ page, context }) => {
+  const scans: { attendee_id: string }[] = [];
+  await open(page, { role: 'organizer' });
+  await fn(page, 'checkin-import-attendees', (b) => ({ body: { ok: true, dry_run: false,
+    results: (b.rows as { client_id: string }[]).map(r => ({ client_id: r.client_id, action: 'update', attendee_id: BEN.id })) } }));
+  await fn(page, 'checkin-record-scans', (b) => { scans.push(...(b.items as typeof scans)); return { body: { ok: true, errors: [],
+    results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }; });
+  await context.setOffline(true);
+  await importCsv(page, 'First name,Last name,Email\nBenny,Late,benny@cuedeck-test.io');
+  await page.locator('#im-save').click();
+  await expect(page.locator('#verdict')).toContainText('1 guest added');
+  await search(page, 'Benny');
+  await page.locator('.ck-res-row', { hasText: 'Benny Late' }).locator('.ck-res-btn').click();
+  await page.locator('#secondary').click();
+  await context.setOffline(false);
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+  expect(scans).toEqual([expect.objectContaining({ attendee_id: BEN.id })]);
+  await expect(page.locator('#verdict')).toContainText('already registered');
+});
+
+test('an imported guest the server skips is taken off the desk and named', async ({ page, context }) => {
+  await open(page, { role: 'organizer' });
+  await fn(page, 'checkin-import-attendees', (b) => ({ body: { ok: true, dry_run: false,
+    results: (b.rows as { client_id: string }[]).map(r => ({ client_id: r.client_id, action: 'skip', reason: 'Could not be added' })) } }));
+  await context.setOffline(true);
+  await importCsv(page, 'First name,Last name\nPia,Probe');
+  await page.locator('#im-save').click();
+  await context.setOffline(false);
+  await expect(page.locator('#verdict')).toContainText('An imported guest was not added');
+  await expect(page.locator('#verdict')).toContainText('Pia Probe: Could not be added');
+  await search(page, 'Pia');
+  await expect(page.locator('.ck-res-row', { hasText: 'Pia Probe' })).toHaveCount(0);
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+});
+
+test('a file without name columns says what it needs', async ({ page }) => {
+  await open(page, { role: 'organizer' });
+  await importCsv(page, 'Name,Mail\nNina New,nina@cuedeck-test.io');
+  await expect(page.locator('#im-err')).toContainText('needs a First name and a Last name column');
+  await expect(page.locator('#im-save')).toBeDisabled();
+});
+
+test('imported guests survive a reload with no internet', async ({ page, context }) => {
+  await open(page, { role: 'organizer' });
+  await untilWorkerControls(page);
+  await context.setOffline(true);
+  await importCsv(page, 'First name,Last name\nRita,Reload');
+  await page.locator('#im-save').click();
+  await expect(page.locator('#verdict')).toContainText('1 guest added');
+  await page.close();
+  const desk = await context.newPage();
+  await desk.goto('/cuedeck-checkin.html');
+  await desk.locator('.ck-ev', { hasText: 'Probe Summit' }).click();
+  await expect(desk.locator('#station')).toBeVisible();
+  await search(desk, 'Rita');
+  await expect(desk.locator('.ck-res-row', { hasText: 'Rita Reload' })).toBeVisible();
+  await expect(desk.locator('#st-sync')).toHaveText('Offline · 1 waiting');
+  await context.setOffline(false);
+});
+
+test('a large imported list goes up in batches of 500', async ({ page, context }) => {
+  const sizes: number[] = [];
+  await open(page, { role: 'organizer' });
+  await fn(page, 'checkin-import-attendees', (b) => { const rows = b.rows as { client_id: string }[]; sizes.push(rows.length); return { body: { ok: true, dry_run: false,
+    results: rows.map(r => ({ client_id: r.client_id, action: 'create', attendee_id: r.client_id })) } }; });
+  await context.setOffline(true);
+  const csv = ['First name,Last name,Email', ...Array.from({ length: 1200 }, (_, i) => `Guest${i},Bulk,g${i}@cuedeck-test.io`)].join('\n');
+  await importCsv(page, csv);
+  await expect(page.locator('#im-save')).toHaveText('Add 1200 guests');
+  await page.locator('#im-save').click();
+  await expect(page.locator('#verdict')).toContainText('1200 guests added');
+  await context.setOffline(false);
+  await expect(page.locator('#st-sync')).toHaveText('All synced', { timeout: 15000 });
+  expect(sizes).toEqual([500, 500, 200]);
+});
