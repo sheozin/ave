@@ -83,6 +83,9 @@
 .sc-p{margin:0 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
 .sc-tbl{margin-top:12px}
 .tbl .hide-lg{display:none}
+.ps-dl{margin-top:16px;padding:14px 16px;border:1px solid var(--bd);border-radius:12px;background:var(--wm)}
+.ps-dl p{margin:4px 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
+.ps-dl-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .sc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .sc-add .search{flex:1;min-width:160px}
 .al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -490,7 +493,17 @@
         <button class="btn btn-s" id="ps-add-btn">Add print station</button>
       </form>
       <div class="err" id="ps-err"></div><div class="ok" id="ps-ok"></div>
-      <p class="small">Starting a station on a Mac or Linux computer: open Terminal and run <code>curl -fsSL https://app.cuedeck.io/print-helper/install.sh | sh</code></p>
+      <div class="ps-dl">
+        <b>Get the CueDeck Print Station app</b>
+        <p>Install it on a computer next to the printer, on the same network. It finds the printer by itself, shows a code, and prints badges from every desk and kiosk.</p>
+        <div class="ps-dl-btns">
+          <a class="btn btn-s" href="https://sawekpguemzvuvvulfbc.supabase.co/storage/v1/object/public/downloads/print-station/CueDeck-Print-Station-mac-apple-silicon.dmg" download>Mac (Apple silicon)</a>
+          <a class="btn btn-s" href="https://sawekpguemzvuvvulfbc.supabase.co/storage/v1/object/public/downloads/print-station/CueDeck-Print-Station-mac-intel.dmg" download>Mac (Intel)</a>
+          <a class="btn btn-s" href="https://sawekpguemzvuvvulfbc.supabase.co/storage/v1/object/public/downloads/print-station/CueDeck-Print-Station-windows-setup.exe" download>Windows (beta)</a>
+        </div>
+        <p class="small">Early version, not yet signed. The first time you open it: on a Mac, if it says it cannot be opened, go to System Settings, Privacy &amp; Security, and click Open Anyway. On Windows, click More info, then Run anyway. Not sure which Mac? Apple menu, About This Mac: "Apple M" means Apple silicon.</p>
+        <p class="small">Linux, or a computer without a screen: open Terminal and run <code>curl -fsSL https://app.cuedeck.io/print-helper/install.sh | sh</code></p>
+      </div>
     </div>
   </section>
 

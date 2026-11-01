@@ -137,9 +137,14 @@ app.on('second-instance', showWindow);
 app.on('activate', showWindow);
 app.on('window-all-closed', () => {});   // keep printing from the menu bar
 app.whenReady().then(() => {
-  const img = nativeImage.createFromPath(path.join(HERE, 'build', 'trayTemplate.png'));
-  img.setTemplateImage(true);
+  // Mac: a black template icon the menu bar tints. Windows: the colour icon,
+  // which stays visible on a dark taskbar.
+  const mac = process.platform === 'darwin';
+  const img = mac ? nativeImage.createFromPath(path.join(HERE, 'build', 'trayTemplate.png'))
+    : nativeImage.createFromPath(path.join(HERE, 'build', 'icon.png')).resize({ width: 32, height: 32 });
+  if (mac) img.setTemplateImage(true);
   tray = new Tray(img);
+  if (!mac) tray.on('click', showWindow);
   ui.openAtLogin = app.getLoginItemSettings().openAtLogin;
   const s = readJson('settings.json');
   ui.printer = s && s.printer ? s.printer : null;

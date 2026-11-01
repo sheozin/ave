@@ -21,7 +21,7 @@
       "preload.cjs",
       "ui.html",
       "core/**",
-      "build/tray*.png",
+      "build/tray*.png", "build/icon.png",
       "package.json"
     ],
     "mac": {
@@ -39,11 +39,13 @@
     },
     "win": {
       "icon": "build/icon.png",
-      "target": "nsis"
+      "target": "nsis",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "CueDeck-Print-Station-windows-setup.${ext}"
     },
     "dmg": {
       "title": "CueDeck Print Station"

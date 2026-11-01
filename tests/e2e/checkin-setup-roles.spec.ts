@@ -255,6 +255,10 @@ test('an organizer sees the print stations, pairs one by its code and removes on
   });
   const rows = page.locator('#ps-body tr');
   await expect(rows).toHaveCount(2);
+  const dl = page.locator('.ps-dl a');
+  await expect(dl).toHaveText(['Mac (Apple silicon)', 'Mac (Intel)', 'Windows (beta)']);
+  await expect(dl.nth(0)).toHaveAttribute('href', /\/downloads\/print-station\/CueDeck-Print-Station-mac-apple-silicon\.dmg$/);
+  await expect(dl.nth(2)).toHaveAttribute('href', /CueDeck-Print-Station-windows-setup\.exe$/);
   await expect(rows.nth(0)).toContainText('Brother QL, 62 mm roll (192.168.1.130)');
   await expect(rows.nth(0)).toContainText('Online');
   await expect(rows.nth(0)).toContainText('2 min ago · 12 today');
