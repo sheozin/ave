@@ -311,6 +311,16 @@ test('an organizer sees the print stations, pairs one by its code and removes on
   await expect(rows.nth(0)).toContainText('2 min ago · 12 today');
   await expect(rows.nth(1)).toContainText('ZD621, 104 mm, 300 dpi');
   await expect(rows.nth(1)).toContainText('Offline, seen 1 h ago');
+  // Neither station reported a venue-network address: both need the internet.
+  await expect(rows.nth(0)).toContainText('Needs the internet to print');
+  // The network setup guide is there, folded until opened.
+  const guide = page.locator('#ps-guide');
+  await expect(guide.locator('summary')).toHaveText('Setting up the network at the venue');
+  await expect(guide.locator('ol')).toBeHidden();
+  await guide.locator('summary').click();
+  await expect(guide.locator('ol li')).toHaveCount(3);
+  await expect(guide).toContainText('Printer and print station: always the same network.');
+  await expect(guide).toContainText('reserve a fixed address');
   await page.fill('#ps-code', 'wxyz 2345');
   await page.fill('#ps-name', 'Lobby printer');
   await page.click('#ps-add-btn');

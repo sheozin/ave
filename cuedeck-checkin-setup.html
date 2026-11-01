@@ -86,6 +86,11 @@
 .ps-dl{margin-top:16px;padding:14px 16px;border:1px solid var(--bd);border-radius:12px;background:var(--wm)}
 .ps-dl p{margin:4px 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
 .ps-dl-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.ps-guide{margin-top:12px;padding:12px 16px;border:1px solid var(--bd);border-radius:12px}
+.ps-guide summary{cursor:pointer;font-size:14px;font-weight:600}
+.ps-guide p,.ps-guide li{font-size:13px;color:var(--t2);line-height:1.55}
+.ps-guide p{margin:10px 0 4px}.ps-guide b{color:var(--t1)}
+.ps-guide ol,.ps-guide ul{margin:4px 0 6px;padding-left:20px}.ps-guide li{margin:4px 0}
 .sc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .sc-add .search{flex:1;min-width:160px}
 .al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -508,6 +513,26 @@
         <p class="small">Early version, not yet signed. The first time you open it: on a Mac, if it says it cannot be opened, go to System Settings, Privacy &amp; Security, and click Open Anyway. On Windows, click More info, then Run anyway. Not sure which Mac? Apple menu, About This Mac: "Apple M" means Apple silicon.</p>
         <p class="small">Linux, or a computer without a screen: open Terminal and run <code>curl -fsSL https://app.cuedeck.io/print-helper/install.sh | sh</code></p>
       </div>
+      <details class="ps-guide" id="ps-guide">
+        <summary>Setting up the network at the venue</summary>
+        <p>Badge printing has three parts: the desks, the print station computer and the printer. Which network each one needs depends on whether the internet is working.</p>
+        <ol>
+          <li><b>Printer and print station: always the same network.</b> The station sends each badge straight to the printer, with or without internet.</li>
+          <li><b>Desks with internet: any network.</b> Badges travel through CueDeck, so a desk can be on the venue Wi-Fi, another network or mobile data. The print station needs internet too.</li>
+          <li><b>Desks without internet: the same network as the print station.</b> Offline, a desk sends the badge straight to the station. This needs a laptop in Chrome on the same Wi-Fi or network. iPads and phones need the internet to print.</li>
+        </ol>
+        <p><b>Two things that stop offline printing</b></p>
+        <ul>
+          <li><b>Guest Wi-Fi that keeps devices apart.</b> Many venue and hotel networks stop devices from reaching each other. Printing over the internet still works, offline printing does not. The safest setup is your own small router at the desk area: plug the venue internet into it and put the printer, the print station and the desk laptops on it. If the venue internet drops, your own network keeps working.</li>
+          <li><b>The print station changing address.</b> Desks remember where the station is from the last time they were online. In the router, reserve a fixed address for the print station computer and for the printer.</li>
+        </ul>
+        <p><b>Before doors open</b></p>
+        <ul>
+          <li>The station row above says "Prints without internet". If it says "Needs the internet to print", update the app.</li>
+          <li>The first time the app opens, macOS or Windows asks whether it may accept incoming network connections. Click Allow.</li>
+          <li>Open every desk laptop once while online, and print a test badge from it. Chrome asks once whether the page may reach devices on your local network: click Allow.</li>
+        </ul>
+      </details>
     </div>
   </section>
 
