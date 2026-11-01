@@ -135,8 +135,16 @@ const PAIRING_TTL_MS = 10 * 60 * 1000
 // gave anyone unlimited buckets. checkin-register reads the same header.
 // 'unknown' (one shared bucket) only if both are missing, which a request
 // through the edge never is.
+// An IPv6 address counts by its /64: one connection usually holds a whole
+// /64, and per-address buckets inside it would be unlimited.
 function sourceAddress(req: Request): string {
-  return (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '').trim() || 'unknown'
+  const ip = (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '').trim()
+  if (!ip) return 'unknown'
+  if (!ip.includes(':')) return ip
+  const [head, tail = ''] = ip.toLowerCase().split('::')
+  const h = head ? head.split(':') : [], t = tail ? tail.split(':') : []
+  const full = [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t]
+  return full.slice(0, 4).map(g => g.replace(/^0+(?=.)/, '')).join(':') + '::/64'
 }
 
 // Service-wide ceiling on wrong pairing codes (migration 145). Fails closed.

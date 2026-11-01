@@ -1912,3 +1912,14 @@ Deno.test('checkin-kiosk-pair: limits key on Cloudflare\'s address, never on a f
   const want = await sha256('109.243.146.124')
   assert(keys.length === 2 && keys.every(k => k === want), 'one bucket for one real address: ' + JSON.stringify(keys))
 })
+Deno.test('checkin-kiosk-pair: an IPv6 caller is one bucket per /64, however many addresses it rotates through', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test', self_registration: true } })
+  world.rpcResult.checkin_kiosk_claim_pairing = []
+  for (const ip of ['2a02:a311:4000:1e00:1111:2222:3333:4444', '2a02:a311:4000:1e00::beef', '2a02:a311:4000:1e00:0:0:0:1']) {
+    await handlers['checkin-kiosk-pair'](new Request('http://stub.local/functions/v1/checkin-kiosk-pair', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip, Origin: 'https://app.cuedeck.io' },
+      body: JSON.stringify({ action: 'claim', code: 'ABCD-EFGH' }) }))
+  }
+  const keys = new Set(world.rpcCalls.filter(x => x.name === 'checkin_kiosk_pair_rate_check').map(x => x.args.p_ip_hash))
+  assert(keys.size === 1 && keys.has(await sha256('2a02:a311:4000:1e00::/64')), JSON.stringify([...keys]))
+})
