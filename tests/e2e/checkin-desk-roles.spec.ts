@@ -1051,7 +1051,7 @@ test('a venue router with no uplink: an expired sign-in still opens the desk fro
   await page.evaluate(() => {
     const k = 'sb-sawekpguemzvuvvulfbc-auth-token';
     const s = JSON.parse(localStorage.getItem(k)!);
-    s.expires_at = 1700000000;
+    s.expires_at = Math.floor(Date.now() / 1000) - 1800;   // renewal due half an hour ago
     localStorage.setItem(k, JSON.stringify(s));
   });
   await context.route(/supabase\.co\//, r => r.abort('internetdisconnected'));
@@ -1089,7 +1089,7 @@ test('a desk opened with no uplink prints over the venue network without asking 
   await page.evaluate(() => {
     const k = 'sb-sawekpguemzvuvvulfbc-auth-token';
     const s = JSON.parse(localStorage.getItem(k)!);
-    s.expires_at = 1700000000;
+    s.expires_at = Math.floor(Date.now() / 1000) - 1800;   // renewal due half an hour ago
     localStorage.setItem(k, JSON.stringify(s));
   });
   let askedCueDeck = 0, lanCalls = 0;
@@ -1112,4 +1112,36 @@ test('a desk opened with no uplink prints over the venue network without asking 
   await expect(desk.locator('#ck-print-msg')).toContainText('Printed on Desk printer over the venue network.', { timeout: 4000 });
   expect(lanCalls).toBe(1);
   expect(askedCueDeck).toBe(0);
+});
+
+test('a sign-out with no internet is not undone by reopening the desk', async ({ page, context }) => {
+  await open(page, { role: 'crew' });
+  await untilWorkerControls(page);
+  await context.setOffline(true);
+  await page.locator('#st-switch').click();
+  await page.locator('#pk-signout').click();
+  await expect(page.locator('#signin')).toBeVisible();
+  await page.close();
+  const desk = await context.newPage();   // the first tab re-stores a sign-in on every load
+  await desk.goto('/cuedeck-checkin.html');
+  await expect(desk.locator('#signin')).toBeVisible();
+  await expect(desk.locator('#picker')).toBeHidden();
+  await context.setOffline(false);
+});
+
+test('a desk unused for over 12 hours does not open offline on its stored sign-in', async ({ page, context }) => {
+  await open(page, { role: 'crew' });
+  await untilWorkerControls(page);
+  await page.evaluate(() => {
+    const k = 'sb-sawekpguemzvuvvulfbc-auth-token';
+    const s = JSON.parse(localStorage.getItem(k)!);
+    s.expires_at = Math.floor(Date.now() / 1000) - 13 * 3600;
+    localStorage.setItem(k, JSON.stringify(s));
+  });
+  await context.setOffline(true);
+  await page.close();
+  const desk = await context.newPage();
+  await desk.goto('/cuedeck-checkin.html');
+  await expect(desk.locator('#signin')).toBeVisible({ timeout: 10000 });
+  await context.setOffline(false);
 });

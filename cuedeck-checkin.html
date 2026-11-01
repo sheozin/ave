@@ -1682,10 +1682,24 @@ window.addEventListener('DOMContentLoaded', async () => {
 // server without a valid token, and supabase-js renews it once the
 // internet is back. A sign-out removes the stored session, so this never
 // brings back someone who signed out.
+// The project's limits still apply on the device while the server cannot
+// enforce them (cuedeck-auth.js: 12 h without use, 7 days after sign-in).
+// A token is renewed hourly while the desk is in use, so its expiry tells
+// when the desk was last used online.
 const AUTH_KEY = 'sb-sawekpguemzvuvvulfbc-auth-token';
 const AUTH_WAIT_MS = 6000;
+const OFFLINE_IDLE_MS = 12 * 3600e3, OFFLINE_MAX_MS = 168 * 3600e3, TOKEN_LIFE_MS = 3600e3;
 async function deskSession() {
-  const stored = () => { try { const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return s && s.user && s.user.id ? s : null; } catch (_) { return null; } };
+  const stored = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+      if (!s || !s.user || !s.user.id || !s.expires_at) return null;
+      if (Date.now() - (s.expires_at * 1000 - TOKEN_LIFE_MS) > OFFLINE_IDLE_MS) return null;
+      const since = cdAuth.signedInAt(s);
+      if (since && Date.now() - since > OFFLINE_MAX_MS) return null;
+      return s;
+    } catch (_) { return null; }
+  };
   const late = new Promise(ok => setTimeout(() => ok({ late: true }), AUTH_WAIT_MS));
   const got = await Promise.race([sb.auth.getSession().catch(error => ({ error })), late]);
   if (got.data && got.data.session) {
@@ -1844,6 +1858,10 @@ async function handleSignIn(e) {
 async function signOut() {
   stopHeartbeat();   // before the await: no beat may go out mid sign-out
   await cdAuth.signOut(sb);
+  // supabase-js deletes the stored sign-in only once the server has
+  // answered. With no internet it stays, and deskSession() would bring it
+  // back on the next load. A sign-out on this device always ends it here.
+  try { localStorage.removeItem(AUTH_KEY); } catch (_) { /* storage blocked */ }
   leaveToSignIn();
 }
 function leaveToSignIn() {
