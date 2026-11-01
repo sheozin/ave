@@ -2432,6 +2432,10 @@ async function loadPrintStations() {
   if (error) { console.warn('checkin: print stations not loaded', error.message); return cached(); }
   S.stations = Array.isArray(data) ? data : [];
   try { localStorage.setItem(key, JSON.stringify(S.stations)); } catch (_) {}
+  // A station online now reports where it is now: that beats a typed address.
+  for (const st of S.stations) {
+    if (st.online && st.printer_info && st.printer_info.lan) { try { localStorage.removeItem(STATION_ADDR_KEY(st.id)); } catch (_) {} }
+  }
 }
 // Straight to the station over the venue network, for when CueDeck cannot
 // be reached. Chrome asks once whether this page may reach devices on the
@@ -2441,9 +2445,10 @@ async function loadPrintStations() {
 // QR codes. Only a private address, a sane port and a token of the right shape.
 const LAN_HOST = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}$/;
 async function printOverLan(st, labels) {
-  const lan = st.printer_info && st.printer_info.lan;
+  const typed = stationAddr(st.id);
+  const lan = st.printer_info && st.printer_info.lan && (typed ? { ...st.printer_info.lan, ...typed } : st.printer_info.lan);
   if (!lan || !LAN_HOST.test(String(lan.host)) || !Number.isInteger(lan.port) || lan.port < 1024 || lan.port > 65535 || !/^[0-9a-f]{32}$/.test(String(lan.token))) {
-    return { ok: false, error: 'CueDeck could not be reached, and this desk does not know where ' + st.label + ' is on the venue network yet. Open the desk once with the internet working, then try again' };
+    return { ok: false, error: 'CueDeck could not be reached, and this desk does not know where ' + st.label + ' is on the venue network yet. Open the desk once with the internet working, or type the station address under Station address on this network' };
   }
   try {
     const r = await fetch('http://' + lan.host + ':' + lan.port + '/print', {
@@ -2495,7 +2500,7 @@ function renderPrinterChip() {
     });
     const msg = document.createElement('div'); msg.id = 'ck-print-msg'; msg.setAttribute('role', 'status');
     msg.style.cssText = 'margin-top:6px;font-weight:600';
-    chip.append(lbl, sel, msg);
+    chip.append(lbl, sel, msg, stationAddrBox());
     document.body.appendChild(chip);
   }
   const sel = document.getElementById('ck-print-to');
@@ -2522,6 +2527,95 @@ function renderPrinterChip() {
   const msg = document.getElementById('ck-print-msg');
   msg.textContent = text || '';
   msg.style.color = { ok: '#1D8348', warn: '#9A5B00', err: '#B3261E', muted: '#6E6E73' }[tone];
+  renderStationAddr(st && fits ? st : null);
+}
+
+// ── station address typed in (a venue with no internet at all) ─────
+// The desk learns where a station is on the venue network from CueDeck
+// (printer_info.lan). A venue that never has internet cannot tell it, so
+// the address the print station app shows ("Venue network: …") can be
+// typed here, per station. The station's token still comes from CueDeck:
+// it follows the station's own key, so it is the same on every network,
+// and a desk opened once with internet anywhere (the office) has it.
+// A current address CueDeck reports for an online station replaces it.
+const STATION_ADDR_KEY = (id) => 'ck-station-addr:' + id;
+function stationAddr(id) {
+  try {
+    const a = JSON.parse(localStorage.getItem(STATION_ADDR_KEY(id)) || 'null');
+    return a && LAN_HOST.test(String(a.host)) && Number.isInteger(a.port) && a.port >= 1024 && a.port <= 65535 ? a : null;
+  } catch (_) { return null; }
+}
+// "Venue network: 192.168.1.3:7842", "192.168.1.3:7842" or "192.168.1.3".
+function parseStationAddr(text, defPort) {
+  const m = /(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?/.exec(String(text));
+  if (!m || m[1].split('.').some(n => Number(n) > 255) || !LAN_HOST.test(m[1])) return null;
+  const port = m[2] ? Number(m[2]) : defPort;
+  return Number.isInteger(port) && port >= 1024 && port <= 65535 ? { host: m[1], port } : null;
+}
+function stationAddrBox() {
+  const box = document.createElement('details'); box.id = 'ck-st-addr';
+  box.style.cssText = 'margin-top:8px;border-top:1px solid #E8E8ED;padding-top:6px';
+  const sum = document.createElement('summary'); sum.id = 'ck-st-addr-sum';
+  sum.style.cssText = 'cursor:pointer;color:#6E6E73;font-weight:600';
+  const help = document.createElement('div'); help.id = 'ck-st-addr-help';
+  help.style.cssText = 'color:#6E6E73;font-weight:500;margin:6px 0';
+  const form = document.createElement('form'); form.id = 'ck-st-addr-form';
+  form.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+  const inp = document.createElement('input'); inp.id = 'ck-st-addr-in'; inp.autocomplete = 'off'; inp.inputMode = 'decimal';
+  inp.placeholder = '192.168.1.3:7842'; inp.setAttribute('aria-label', 'Station address on this network');
+  inp.style.cssText = 'flex:1 1 140px;min-width:0;font:inherit;padding:6px 8px;border:1px solid #D2D2D7;border-radius:8px';
+  const save = document.createElement('button'); save.type = 'submit'; save.id = 'ck-st-addr-save'; save.textContent = 'Save and test';
+  save.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border:0;border-radius:8px;background:#0071E3;color:#fff;cursor:pointer';
+  const clear = document.createElement('button'); clear.type = 'button'; clear.id = 'ck-st-addr-clear'; clear.textContent = 'Clear';
+  clear.style.cssText = 'font:inherit;padding:6px 8px;border:0;background:none;color:#0071E3;cursor:pointer';
+  const note = document.createElement('div'); note.id = 'ck-st-addr-note'; note.setAttribute('role', 'status');
+  note.style.cssText = 'margin-top:6px;font-weight:600';
+  form.append(inp, save, clear);
+  box.append(sum, help, form, note);
+  form.addEventListener('submit', (e) => { e.preventDefault(); saveStationAddr(); });
+  clear.addEventListener('click', () => {
+    const st = stationOf(S.printTo); if (!st) return;
+    try { localStorage.removeItem(STATION_ADDR_KEY(st.id)); } catch (_) {}
+    inp.value = ''; note.textContent = '';
+    renderPrinterChip();
+  });
+  return box;
+}
+function renderStationAddr(st) {
+  const box = document.getElementById('ck-st-addr');
+  if (!box) return;
+  box.hidden = !st;
+  if (!st) return;
+  const lan = st.printer_info && st.printer_info.lan;
+  const known = !!(lan && /^[0-9a-f]{32}$/.test(String(lan.token)));
+  const typed = stationAddr(st.id);
+  document.getElementById('ck-st-addr-sum').textContent = typed
+    ? 'Station address on this network: ' + typed.host + ':' + typed.port + ' (typed in)'
+    : 'Station address on this network';
+  document.getElementById('ck-st-addr-help').textContent = known
+    ? 'Only needed where there is no internet at all. Type the address the print station app shows under Venue network.'
+    : 'Open this desk once with the internet working while ' + st.label + ' is running, so the desk knows it. Then an address can be typed here.';
+  document.getElementById('ck-st-addr-form').style.display = known ? 'flex' : 'none';
+}
+async function saveStationAddr() {
+  const st = stationOf(S.printTo);
+  const note = document.getElementById('ck-st-addr-note');
+  const lan = st && st.printer_info && st.printer_info.lan;
+  if (!st || !lan || !/^[0-9a-f]{32}$/.test(String(lan.token))) return;
+  const a = parseStationAddr(document.getElementById('ck-st-addr-in').value, Number.isInteger(lan.port) ? lan.port : 7842);
+  if (!a) { note.style.color = '#B3261E'; note.textContent = 'Type an address on this network, like 192.168.1.3:7842.'; return; }
+  try { localStorage.setItem(STATION_ADDR_KEY(st.id), JSON.stringify(a)); } catch (_) {}
+  renderPrinterChip();
+  note.style.color = '#6E6E73'; note.textContent = 'Looking for ' + st.label + ' at ' + a.host + ':' + a.port + '…';
+  let ok = false;
+  try {
+    const r = await fetch('http://' + a.host + ':' + a.port + '/ping', { targetAddressSpace: 'local', signal: AbortSignal.timeout(5000),
+      headers: { 'X-CueDeck-Token': lan.token } });
+    ok = r.ok;
+  } catch (_) { ok = false; }
+  note.style.color = ok ? '#1D8348' : '#9A5B00';
+  note.textContent = ok ? 'Found ' + st.label + '. Badges reach it on this network with or without internet.'
+    : 'Saved, but ' + st.label + ' did not answer at ' + a.host + ':' + a.port + '. Check the address, that the print station app is open, and that this laptop is on the same network.';
 }
 const printNote = (tone, text) => { S.printMsg = { tone, text }; renderPrinterChip(); };
 

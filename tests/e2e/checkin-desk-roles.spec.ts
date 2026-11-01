@@ -1393,3 +1393,69 @@ test('a large imported list goes up in batches of 500', async ({ page, context }
   await expect(page.locator('#st-sync')).toHaveText('All synced', { timeout: 15000 });
   expect(sizes).toEqual([500, 500, 200]);
 });
+
+// ── station address typed in, for a venue with no internet at all ─────────
+const ST_ID = 'aaaaaaaa-0000-4000-8000-0000000000d1';
+async function stationWithLan(page, lan: Record<string, unknown> | null, online = true) {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: async () => {
+    await st.setup();
+    await rpc(page, 'checkin_print_stations', [{ id: ST_ID, label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online, printer_info: { model: 'brother-ql', ...(lan ? { lan } : {}) } }]);
+  } });
+}
+function lanStation(context, host: string, calls: { path: string; token?: string }[]) {
+  return context.route(new RegExp('^http://' + host.replace(/\./g, '\\.') + ':7842/'), r => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-private-network': 'true' };
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+    calls.push({ path: new URL(r.request().url()).pathname, token: r.request().headers()['x-cuedeck-token'] });
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: '{"ok":true}' });
+  });
+}
+
+test('with no internet at the venue, a typed station address is tested and badges print to it', async ({ page, context }) => {
+  // The desk last saw the station at the office address.
+  await stationWithLan(page, { host: '192.168.1.107', port: 7842, token: 'c'.repeat(32) });
+  const calls: { path: string; token?: string }[] = [];
+  await lanStation(context, '192.168.1.3', calls);
+  await context.setOffline(true);
+  await page.locator('#ck-st-addr-sum').click();
+  await page.locator('#ck-st-addr-in').fill('Venue network: 192.168.1.3:7842');
+  await page.locator('#ck-st-addr-save').click();
+  await expect(page.locator('#ck-st-addr-note')).toContainText('Found Desk printer.');
+  await expect(page.locator('#ck-st-addr-sum')).toHaveText('Station address on this network: 192.168.1.3:7842 (typed in)');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer over the venue network.', { timeout: 10000 });
+  expect(calls.map(c => c.path)).toEqual(['/ping', '/print']);
+  expect(calls.every(c => c.token === 'c'.repeat(32))).toBe(true);
+  await context.setOffline(false);
+});
+
+test('a typed address that is not on a private network is refused and never contacted', async ({ page, context }) => {
+  await stationWithLan(page, { host: '192.168.1.107', port: 7842, token: 'c'.repeat(32) });
+  let contacted = 0;
+  await context.route(/8\.8\.8\.8/, r => { contacted++; return r.abort('failed'); });
+  await page.locator('#ck-st-addr-sum').click();
+  for (const bad of ['8.8.8.8:7842', '192.168.1.300', 'printer.local', '192.168.1.3:80']) {
+    await page.locator('#ck-st-addr-in').fill(bad);
+    await page.locator('#ck-st-addr-save').click();
+    await expect(page.locator('#ck-st-addr-note')).toHaveText('Type an address on this network, like 192.168.1.3:7842.');
+  }
+  expect(contacted).toBe(0);
+  expect(await page.evaluate((id) => localStorage.getItem('ck-station-addr:' + id), ST_ID)).toBeNull();
+});
+
+test('a station the desk never saw on a venue network asks for one online visit first', async ({ page }) => {
+  await stationWithLan(page, null);
+  await page.locator('#ck-st-addr-sum').click();
+  await expect(page.locator('#ck-st-addr-help')).toContainText('Open this desk once with the internet working');
+  await expect(page.locator('#ck-st-addr-form')).toBeHidden();
+});
+
+test('an address CueDeck reports for an online station replaces a typed one', async ({ page }) => {
+  await page.addInitScript((id) => { localStorage.setItem('ck-station-addr:' + id, JSON.stringify({ host: '192.168.1.3', port: 7842 })); }, ST_ID);
+  await stationWithLan(page, { host: '10.0.0.5', port: 7842, token: 'c'.repeat(32) }, true);
+  await expect(page.locator('#ck-st-addr-sum')).toHaveText('Station address on this network');
+  expect(await page.evaluate((id) => localStorage.getItem('ck-station-addr:' + id), ST_ID)).toBeNull();
+});
