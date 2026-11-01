@@ -21,13 +21,14 @@
       "preload.cjs",
       "ui.html",
       "core/**",
-      "build/tray*.png", "build/icon.png",
+      "build/tray*.png",
+      "build/icon.png",
       "package.json"
     ],
     "mac": {
       "category": "public.app-category.business",
       "icon": "build/icon.png",
-      "identity": null,
+      "identity": "-",
       "target": "dmg",
       "extendInfo": {
         "LSUIElement": false,
@@ -35,7 +36,9 @@
         "NSBonjourServices": [
           "_pdl-datastream._tcp"
         ]
-      }
+      },
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
     "win": {
       "icon": "build/icon.png",
