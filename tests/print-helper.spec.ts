@@ -75,7 +75,7 @@ describe('print helper server', () => {
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.4.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.5.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });
@@ -253,5 +253,54 @@ describe('print station pairs by showing its own code', () => {
     expect(calls.find(c => c.action === 'done')).toMatchObject({ job_id: 'j1', ok: true });
     const zpl = got.find(z => z.startsWith('^XA'))!;
     expect(zpl).toMatch(/^\^XA\^PW1248\^LL\d+\^LH0,0\^FO\d+,0\^GFA,/);
+  });
+});
+
+describe('venue network route (offline printing)', () => {
+  it('prints for a CueDeck page with the station token, refuses everything else, never serves the pairing proof', async () => {
+    const { mkdtempSync, writeFileSync } = await import('fs');
+    const os = await import('os'); const path = await import('path');
+    const { createStation, lanToken } = await import('../print-helper/station-core.mjs');
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'cdps-lan-'));
+    const cfgPath = path.join(dir, 'station.json');
+    writeFileSync(cfgPath, JSON.stringify({ event_id: 'e1', device_id: 'd1', label: 'Hall printer', device_key: 'k'.repeat(64) }));
+    const got: Buffer[] = [];
+    const prn = net.createServer(s => { const b: Buffer[] = []; s.on('data', d => b.push(d)); s.on('end', () => { got.push(Buffer.concat(b)); s.end(); }); });
+    await new Promise<void>(r => prn.listen(0, '127.0.0.1', () => r()));
+    const st = createStation({ printer: '127.0.0.1', printerPort: (prn.address() as net.AddressInfo).port, configPath: cfgPath, lanHost: '192.168.1.130', lanBind: '127.0.0.1' });
+    const lan = st.listenLan(0);
+    await new Promise(r => setTimeout(r, 100));
+    const port = (lan.address() as net.AddressInfo).port;
+    const u = (p: string) => `http://127.0.0.1:${port}${p}`;
+    const token = lanToken('k'.repeat(64));
+    const body = JSON.stringify({ labels: ['data:image/png;base64,' + PNG.toString('base64')], cut_mm: 76 });
+    const origin = 'https://app.cuedeck.io';
+    try {
+      // Not paired yet: nothing is reported, nothing prints.
+      expect(st.info().lan).toBeUndefined();
+      let r = await fetch(u('/ping'), { headers: { Origin: origin, 'X-CueDeck-Token': token } });
+      expect(r.status).toBe(503);
+      st.state.cfg = JSON.parse((await import('fs')).readFileSync(cfgPath, 'utf8'));
+      expect(st.info().lan).toEqual({ host: '192.168.1.130', port, token });
+      r = await fetch(u('/ping'), { headers: { Origin: origin, 'X-CueDeck-Token': token } });
+      expect(await r.json()).toMatchObject({ ok: true, label: 'Hall printer' });
+      // Wrong token, no token, another site, no Origin: refused.
+      for (const h of [{ Origin: origin, 'X-CueDeck-Token': 'f'.repeat(32) }, { Origin: origin }, { Origin: 'https://evil.example', 'X-CueDeck-Token': token }, { 'X-CueDeck-Token': token }]) {
+        r = await fetch(u('/print'), { method: 'POST', headers: { 'Content-Type': 'application/json', ...h }, body });
+        expect([401, 403]).toContain(r.status);
+      }
+      r = await fetch(u('/pair-proof'), { headers: { Origin: origin, 'X-CueDeck-Token': token } });
+      expect(r.status).toBe(404);
+      expect(got).toHaveLength(0);
+      r = await fetch(u('/print'), { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin, 'X-CueDeck-Token': token }, body });
+      expect(r.status).toBe(200);
+      for (let i = 0; i < 20 && !got.length; i++) await new Promise(res => setTimeout(res, 50));
+      expect(got.some(b => b[b.length - 1] === 0x1a && b.length > 50000)).toBe(true);
+      expect(st.state.printedToday).toBe(1);
+      // Preflight answers Chrome's private network question.
+      r = await fetch(u('/print'), { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Private-Network': 'true' } });
+      expect(r.headers.get('access-control-allow-private-network')).toBe('true');
+      expect(r.headers.get('access-control-allow-headers')).toContain('X-CueDeck-Token');
+    } finally { lan.close(); prn.close(); }
   });
 });

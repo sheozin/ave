@@ -1,7 +1,7 @@
 {
   "name": "cuedeck-print-station",
   "productName": "CueDeck Print Station",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Prints CueDeck badges from any desk or kiosk to a Brother or Zebra label printer.",
   "author": "CueDeck",
   "private": true,

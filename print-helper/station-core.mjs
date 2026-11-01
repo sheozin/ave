@@ -7,19 +7,37 @@
 //
 // onEvent(type, data) types: log, code (pairing code shown), paired,
 // printed, failed, offline, online, unpaired.
+//
+// Two local doors. 127.0.0.1:7841 is for a desk in Chrome on this computer
+// (and the pairing proof). Once paired, 0.0.0.0:7842 lets desks on the
+// venue network print here directly when the internet is down: CueDeck
+// pages only, and only with this station's LAN token, which the station
+// reports to CueDeck (printer_info.lan) for the event's desk staff.
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { decodePng, toLines, fitLength, rasterJob, parseStatus, STATUS_REQUEST, QL } from './brother-raster.mjs';
 import { zplLabel, zplText, ZEBRA_QUERY, parseZebraInfo } from './zebra-zpl.mjs';
 import { textImage } from './label-text.mjs';
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.5.0';
 export const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const PUBLIC_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';   // the app's public key, same as the pages
 const ALLOWED = [/^https:\/\/app\.cuedeck\.io$/, /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// The address desks on the venue network reach: a private IPv4 of this computer.
+const PRIVATE_V4 = /^(10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+$/;
+export function lanAddress(ifaces = os.networkInterfaces()) {
+  for (const list of Object.values(ifaces)) for (const a of list || []) {
+    if ((a.family === 'IPv4' || a.family === 4) && !a.internal && PRIVATE_V4.test(a.address)) return a.address;
+  }
+  return null;
+}
+// Derived from the device key, so it survives restarts and changes when the
+// station is paired again.
+export const lanToken = (deviceKey) => crypto.createHash('sha256').update('cuedeck-lan:' + deviceKey).digest('hex').slice(0, 32);
 
 export function createStation(opts) {
   const given = Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined));
@@ -62,7 +80,13 @@ export function createStation(opts) {
     } catch (e) { log('printer: ' + e.message); }
     return profile;
   }
-  const info = () => ({ model: profile.model, dpi: profile.dpi, width_mm: Math.round(profile.widthDots / profile.dpi * 25.4), name: profile.name, host: o.printer });
+  let lanPort = null;
+  const info = () => {
+    const i = { model: profile.model, dpi: profile.dpi, width_mm: Math.round(profile.widthDots / profile.dpi * 25.4), name: profile.name, host: o.printer };
+    const host = lanPort && state.cfg && (o.lanHost || lanAddress());
+    if (host) i.lan = { host, port: lanPort, token: lanToken(state.cfg.device_key) };
+    return i;
+  };
 
   // PNGs (300 dpi, from checkin-badge.js badgePng) to one job for this printer.
   function jobFor(pngs, cutMm) {
@@ -85,23 +109,41 @@ export function createStation(opts) {
     catch (e) { if (/did not answer/.test(e.message)) return { errors: [], media: null }; throw e; }
   });
 
-  // ── local route: a desk in Chrome on this computer ───────────────
-  function listen(port) {
-    const send = (res, code, body, origin) => {
-      res.writeHead(code, { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}) });
-      res.end(JSON.stringify(body));
-    };
+  // ── local routes: a desk in Chrome on this computer, or on the venue network
+  const send = (res, code, body, origin) => {
+    res.writeHead(code, { 'Content-Type': 'application/json', ...(origin ? { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : {}) });
+    res.end(JSON.stringify(body));
+  };
+  const preflight = (res, origin, headers) => {
+    // Chrome asks before a public page may call a local service.
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': origin || '*', 'Access-Control-Allow-Methods': 'GET, POST',
+      'Access-Control-Allow-Headers': headers, 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Max-Age': '600', Vary: 'Origin',
+    });
+    res.end();
+  };
+  async function printRequest(req, res, origin) {
+    if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'send JSON' }, origin);
+    const chunks = []; let size = 0;
+    for await (const c of req) { size += c.length; if (size > 8e6) return send(res, 413, { error: 'too large' }, origin); chunks.push(c); }
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const pngs = (Array.isArray(body.labels) ? body.labels : [body.png]).filter(Boolean).slice(0, 20);
+    if (!pngs.length) return send(res, 400, { error: 'no label' }, origin);
+    const copies = Math.min(Math.max(1, Number(body.copies) || 1), 10);
+    const cutMm = Number(body.cut_mm) > 20 && Number(body.cut_mm) <= 300 ? Number(body.cut_mm) : o.cutMm;
+    const all = pngs.flatMap(p => Array(copies).fill(p));
+    await printPngs(all, cutMm);
+    log(`printed ${all.length} label(s) at ${cutMm} mm`);
+    send(res, 200, { ok: true, labels: all.length, cut_mm: cutMm }, origin);
+    return true;
+  }
+  const failed = (res, e, origin) => { log(e.message); send(res, /reach|answer|timed out/.test(e.message) ? 502 : 400, { error: e.message }, origin); };
+
+  function listen(port, { lan = true } = {}) {
     const server = http.createServer(async (req, res) => {
       const origin = req.headers.origin;
       if (origin && !ALLOWED.some(r => r.test(origin))) return send(res, 403, { error: 'not a CueDeck page' });
-      if (req.method === 'OPTIONS') {
-        // Chrome asks before a public page may call a local service.
-        res.writeHead(204, {
-          'Access-Control-Allow-Origin': origin || '*', 'Access-Control-Allow-Methods': 'GET, POST',
-          'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Private-Network': 'true', 'Access-Control-Max-Age': '600', Vary: 'Origin',
-        });
-        return res.end();
-      }
+      if (req.method === 'OPTIONS') return preflight(res, origin, 'Content-Type');
       try {
         // The pairing page asks this station, on this computer only, to prove
         // it is the one showing the code (migration 144). Only CueDeck pages
@@ -120,28 +162,45 @@ export function createStation(opts) {
             warning: wrongRoll ? `Loaded: ${media.width_mm} mm ${media.type}. This label needs the 62 mm continuous roll (DK-22205).`
               : printer && !media ? 'Printer connected; it did not report which roll is loaded.' : null }, origin);
         }
-        if (req.method === 'POST' && req.url === '/print') {
-          if (!/^application\/json/.test(req.headers['content-type'] || '')) return send(res, 415, { error: 'send JSON' }, origin);
-          const chunks = []; let size = 0;
-          for await (const c of req) { size += c.length; if (size > 8e6) return send(res, 413, { error: 'too large' }, origin); chunks.push(c); }
-          const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          const pngs = (Array.isArray(body.labels) ? body.labels : [body.png]).filter(Boolean).slice(0, 20);
-          if (!pngs.length) return send(res, 400, { error: 'no label' }, origin);
-          const copies = Math.min(Math.max(1, Number(body.copies) || 1), 10);
-          const cutMm = Number(body.cut_mm) > 20 && Number(body.cut_mm) <= 300 ? Number(body.cut_mm) : o.cutMm;
-          const all = pngs.flatMap(p => Array(copies).fill(p));
-          await printPngs(all, cutMm);
-          log(`printed ${all.length} label(s) at ${cutMm} mm`);
-          return send(res, 200, { ok: true, labels: all.length, cut_mm: cutMm }, origin);
-        }
+        if (req.method === 'POST' && req.url === '/print') return await printRequest(req, res, origin);
         send(res, 404, { error: 'not found' }, origin);
-      } catch (e) {
-        log(e.message);
-        send(res, /reach|answer|timed out/.test(e.message) ? 502 : 400, { error: e.message }, origin);
-      }
+      } catch (e) { failed(res, e, origin); }
     });
     server.on('error', (e) => { if (e.code === 'EADDRINUSE') log(`Port ${port} is in use (another station running?); the local route is off, the print station still works.`); else log(e.message); });
     server.listen(port, '127.0.0.1');
+    if (lan) {
+      const lanServer = listenLan(port + 1);
+      const close = server.close.bind(server);
+      server.close = (cb) => { lanServer.close(); return close(cb); };
+    }
+    return server;
+  }
+
+  // Venue network: print only, CueDeck pages only, this station's token only.
+  // Never the pairing proof: that must stay on this computer.
+  function listenLan(port, host = o.lanBind || '0.0.0.0') {
+    const server = http.createServer(async (req, res) => {
+      const origin = req.headers.origin;
+      if (!origin || !ALLOWED.some(r => r.test(origin))) return send(res, 403, { error: 'CueDeck pages only' });
+      if (req.method === 'OPTIONS') return preflight(res, origin, 'Content-Type, X-CueDeck-Token');
+      if (!state.cfg) return send(res, 503, { error: 'this print station is not paired' }, origin);
+      const want = Buffer.from(lanToken(state.cfg.device_key));
+      const got = Buffer.from(String(req.headers['x-cuedeck-token'] || ''));
+      if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return send(res, 401, { error: 'wrong print station token' }, origin);
+      try {
+        if (req.method === 'GET' && req.url === '/ping') return send(res, 200, { ok: true, label: state.cfg.label, version: VERSION }, origin);
+        if (req.method === 'POST' && req.url === '/print') {
+          if (await printRequest(req, res, origin) === true) {
+            state.printedToday++; state.lastPrinted = new Date();
+            emit('printed', { count: state.printedToday, lan: true });
+          }
+          return;
+        }
+        send(res, 404, { error: 'not found' }, origin);
+      } catch (e) { failed(res, e, origin); }
+    });
+    server.on('error', (e) => { lanPort = null; log(e.code === 'EADDRINUSE' ? `Port ${port} is in use; desks cannot print here over the venue network.` : e.message); });
+    server.listen(port, host, () => { lanPort = server.address().port; });
     return server;
   }
 
@@ -238,5 +297,5 @@ export function createStation(opts) {
   }
 
   const stop = () => { state.stopped = true; };
-  return { detect, info, status, listen, run, stop, forget, printText, printPngs, state, profile: () => profile };
+  return { detect, info, status, listen, listenLan, run, stop, forget, printText, printPngs, state, profile: () => profile };
 }

@@ -1131,6 +1131,58 @@ for (const [label, extra] of [
     assert(walkIns().length === 0, 'written anyway')
   })
 }
+const CID = '7b0c4d2e-1f3a-4b5c-8d6e-9f0a1b2c3d4e'
+const CTOK = 'a'.repeat(32)
+Deno.test(`${WI} offline: the desk's own id and qr_token are kept`, async () => {
+  walkSetup('test')
+  const r = await call(WI, { ...BODY[WI], client_id: CID, qr_token: CTOK })
+  assert(r.status === 200 && r.body.ok === true, JSON.stringify(r))
+  const rows = walkIns()
+  assert(rows.length === 1 && rows[0].id === CID && rows[0].qr_token === CTOK, JSON.stringify(rows))
+})
+Deno.test(`${WI} offline: sending the same walk-in again returns it, nothing new`, async () => {
+  walkSetup('test')
+  await call(WI, { ...BODY[WI], client_id: CID, qr_token: CTOK })
+  const r = await call(WI, { ...BODY[WI], client_id: CID, qr_token: CTOK })
+  assert(r.status === 200 && r.body.already === true && (r.body.attendee as Row).id === CID, JSON.stringify(r))
+  assert(walkIns().length === 1, JSON.stringify(walkIns()))
+})
+Deno.test(`${WI} queued: an email already on the list returns that guest, merged`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'ewa@example.com', source: 'import', qr_token: 'b'.repeat(32) }]
+  const r = await call(WI, { ...BODY[WI], email: 'EWA@example.com', client_id: CID, qr_token: CTOK, queued: true })
+  assert(r.status === 200 && r.body.merged === true && (r.body.attendee as Row).id === ATT, JSON.stringify(r))
+  assert(walkIns().length === 0, 'written anyway')
+})
+Deno.test(`${WI}: online with the desk's ids, an email already on the list is still a 409`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT, email: 'ewa@example.com', source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], email: 'ewa@example.com', client_id: CID, qr_token: CTOK })
+  assert(r.status === 409 && r.body.code === 'already_registered', JSON.stringify(r))
+})
+Deno.test(`${WI} offline: an id used on another event is refused`, async () => {
+  walkSetup('test')
+  world.tables.leod_checkin_attendees = [{ id: CID, event_id: OTHER, source: 'import' }]
+  const r = await call(WI, { ...BODY[WI], client_id: CID, qr_token: CTOK })
+  assert(r.status === 400 && r.body.code === 'invalid', JSON.stringify(r))
+})
+for (const [label, extra] of [
+  ['client_id without qr_token', { client_id: CID }],
+  ['qr_token without client_id', { qr_token: CTOK }],
+  ['a short qr_token', { client_id: CID, qr_token: 'abc' }],
+  ['an uppercase qr_token', { client_id: CID, qr_token: 'A'.repeat(32) }],
+] as [string, Row][]) {
+  Deno.test(`${WI} offline: ${label} is a 400 invalid`, async () => {
+    walkSetup('test')
+    const r = await call(WI, { ...BODY[WI], ...extra })
+    assert(r.status === 400 && r.body.code === 'invalid' && walkIns().length === 0, JSON.stringify(r))
+  })
+}
+Deno.test(`${WI} offline: the test cap still applies`, async () => {
+  walkSetup('test', 25)
+  const r = await call(WI, { ...BODY[WI], client_id: CID, qr_token: CTOK })
+  assert(r.status === 403 && r.body.code === 'test_cap' && walkIns().length === 0, JSON.stringify(r))
+})
 Deno.test(`${WI}: a bad event id is a 400`, async () => {
   walkSetup('test')
   const r = await call(WI, { ...BODY[WI], event_id: 'nope' })
@@ -1864,6 +1916,19 @@ Deno.test('checkin-print-station: the station reports what printer it drives', a
   assert(JSON.stringify(world.tables.leod_checkin_devices[0].printer_info) === JSON.stringify({ model: 'brother-ql', dpi: 300, width_mm: 62 }), JSON.stringify(world.tables.leod_checkin_devices[0]))
 })
 
+Deno.test('checkin-print-station: the station reports where desks reach it on the venue network, private addresses only', async () => {
+  const LAN = { host: '192.168.1.130', port: 7842, token: 'c'.repeat(32) }
+  await setupScanner({ kind: 'printer' })
+  // A waiting job, so 'next' answers at once instead of long-polling.
+  world.rpcResult.checkin_print_claim = [{ id: ATT, label_png: 'data:image/png;base64,AAAA', cut_mm: 76 }]
+  let r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY, info: { model: 'brother-ql', lan: LAN } })
+  assert(r.status === 200, JSON.stringify(r))
+  assert(JSON.stringify(world.tables.leod_checkin_devices[0].printer_info) === JSON.stringify({ lan: LAN, model: 'brother-ql' }), JSON.stringify(world.tables.leod_checkin_devices[0]))
+  for (const bad of [{ ...LAN, host: '8.8.8.8' }, { ...LAN, host: 'evil.example' }, { ...LAN, port: 80 }, { ...LAN, token: 'short' }, { ...LAN, host: '192.168.1.130:9100' }]) {
+    r = await call('checkin-print-station', { action: 'next', event_id: EVENT, device_key: SCAN_KEY, info: { model: 'brother-ql', lan: bad } })
+    assert(JSON.stringify(world.tables.leod_checkin_devices[0].printer_info) === JSON.stringify({ model: 'brother-ql' }), JSON.stringify(bad))
+  }
+})
 Deno.test('checkin-kiosk-pair: one-click pairing needs the local proof from the station, else a typed code (device-code phishing, migration 144)', async () => {
   setup('lead', { ent: { checkin_core: true, status: 'test' } })
   world.rpcResult.checkin_approve_device_request = [{ device_id: DEV, info: null }]

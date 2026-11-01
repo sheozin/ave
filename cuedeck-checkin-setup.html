@@ -2022,6 +2022,9 @@ async function loadStations() {
     const tr = el('tr');
     const name = el('td'); name.append(el('b', null, st.label), el('div', 'small hide-lg', psPrints(st.printer_info)));
     const prints = el('td', 'hide-sm', psPrints(st.printer_info) + (st.printer_info && st.printer_info.host ? ' (' + st.printer_info.host + ')' : ''));
+    // Offline printing: desks in Chrome on the venue network reach it here.
+    const lan = st.printer_info && st.printer_info.lan;
+    prints.append(el('div', 'small', lan ? 'Prints without internet, on the venue network (' + lan.host + ')' : 'Needs the internet to print (update the app for offline printing)'));
     const stat = el('td', null, st.online ? 'Online' : 'Offline' + (st.last_seen_at ? ', seen ' + psAgo(st.last_seen_at) : ''));
     stat.style.color = st.online ? 'var(--gn)' : 'var(--am)'; stat.style.fontWeight = '600';
     const last = el('td', 'hide-sm', st.last_printed_at ? psAgo(st.last_printed_at) + (st.printed_today ? ' · ' + st.printed_today + ' today' : '') : 'None yet');

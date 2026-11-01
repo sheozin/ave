@@ -939,14 +939,18 @@ var S = { user: null, event: null, role: null, roster: [], party: null, scanPoin
 const DB_NAME = 'cuedeck-checkin';
 const STORE_ROSTER = 'roster';
 const STORE_OUTBOX = 'outbox';
+// Walk-ins added with no connection, waiting for checkin-add-walk-in. Keyed
+// on the attendee id the desk made, which the server keeps.
+const STORE_WALKINS = 'walkins';
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_ROSTER)) db.createObjectStore(STORE_ROSTER, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORE_OUTBOX)) db.createObjectStore(STORE_OUTBOX, { keyPath: 'client_id' });
+      if (!db.objectStoreNames.contains(STORE_WALKINS)) db.createObjectStore(STORE_WALKINS, { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -970,6 +974,17 @@ async function idbGetAll(store) {
     const req = tx.objectStore(store).getAll();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbDelete(store, keys) {
+  if (!keys.length) return;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    keys.forEach(k => tx.objectStore(store).delete(k));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -1008,6 +1023,11 @@ async function loadRoster(eventId) {
     return;
   }
   S.roster = data;
+  // Walk-ins added offline are not on the server yet: keep them listed.
+  const known = new Set(data.map(a => a.id));
+  for (const w of await idbGetAll(STORE_WALKINS)) {
+    if (w.event_id === eventId && !known.has(w.id)) S.roster.push(w.row);
+  }
   await idbPutAll(STORE_ROSTER, data);
   await overlayPending();
 }
@@ -1113,8 +1133,12 @@ async function flushOutbox() {
   if (flushing || !navigator.onLine) return;
   flushing = true;
   try {
-    const pending = replayOrder(await idbGetAll(STORE_OUTBOX));
-    if (!pending.length) return;
+    // Walk-ins first: checkin-record-scans only knows people who exist.
+    // A check-in of a walk-in still waiting stays queued until it does.
+    await flushWalkIns();
+    const waiting = new Set((await idbGetAll(STORE_WALKINS)).map(w => w.id));
+    const pending = replayOrder(await idbGetAll(STORE_OUTBOX)).filter(p => !waiting.has(p.attendee_id));
+    if (!pending.length) { await renderPendingCount(); return; }
 
     // Items carry the event they were scanned at. The outbox deliberately
     // survives an event switch, so flushing everything under whichever
@@ -1972,7 +1996,7 @@ function renderTestBanner() {
 // on a portal and on dead venue wifi — so a run of failed invokes is
 // what stands in for "connected but going nowhere".
 async function renderPendingCount() {
-  const n = pendingCount(await idbGetAll(STORE_OUTBOX));
+  const n = pendingCount(await idbGetAll(STORE_OUTBOX)) + (await idbGetAll(STORE_WALKINS)).length;
   const offline     = !navigator.onLine;
   const unreachable = !offline && syncFailures >= UNREACHABLE_AFTER;
   const el = document.getElementById('st-sync');
@@ -2237,11 +2261,35 @@ async function initPrinting() {
   if (S.printTo === 'local') await probePrintHelper(); else renderPrinterChip();
   if (!S.stationTimer) S.stationTimer = setInterval(() => { loadPrintStations().then(renderPrinterChip); }, 30000);
 }
+// The list is kept on this device too: a desk reloaded while the internet
+// is down still knows its print stations and where to reach them on the
+// venue network (printer_info.lan).
 async function loadPrintStations() {
-  if (!S.event || !navigator.onLine) return;
+  if (!S.event) return;
+  const key = 'ck-stations:' + S.event.id;
+  const cached = () => { try { const c = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(c)) S.stations = c; } catch (_) {} };
+  if (!navigator.onLine) return cached();
   const { data, error } = await sb.rpc('checkin_print_stations', { p_event_id: S.event.id });
-  if (error) { console.warn('checkin: print stations not loaded', error.message); return; }
+  if (error) { console.warn('checkin: print stations not loaded', error.message); return cached(); }
   S.stations = Array.isArray(data) ? data : [];
+  try { localStorage.setItem(key, JSON.stringify(S.stations)); } catch (_) {}
+}
+// Straight to the station over the venue network, for when CueDeck cannot
+// be reached. Chrome asks once whether this page may reach devices on the
+// local network; Safari never lets it, so iPads need the internet.
+async function printOverLan(st, labels) {
+  const lan = st.printer_info && st.printer_info.lan;
+  if (!lan) return { ok: false, error: 'this device is offline' };
+  try {
+    const r = await fetch('http://' + lan.host + ':' + lan.port + '/print', {
+      method: 'POST', targetAddressSpace: 'local', signal: AbortSignal.timeout(15000),
+      headers: { 'Content-Type': 'application/json', 'X-CueDeck-Token': lan.token },
+      body: JSON.stringify({ labels: labels.map(l => l.png), cut_mm: labels[0].cut_mm }) });
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? { ok: true } : { ok: false, error: j.error || 'the print station refused the badge' };
+  } catch (_) {
+    return { ok: false, error: 'this device is offline and could not reach ' + st.label + ' on the venue network' };
+  }
 }
 // Chrome asks before a page may reach this computer, so the helper is
 // only contacted once someone picks it.
@@ -2438,11 +2486,24 @@ async function printBadges(attendees) {
     } catch (e) { printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
     const st = stationOf(route);
     if (st) {
-      const { data: ids, error } = await sb.rpc('checkin_queue_print', { p_event_id: S.event.id, p_device_id: st.id,
-        p_labels: labels.map(l => ({ attendee_id: null, png: l.png, cut_mm: l.cut_mm })) });
+      let ids = null, error = null;
+      if (navigator.onLine) {
+        ({ data: ids, error } = await sb.rpc('checkin_queue_print', { p_event_id: S.event.id, p_device_id: st.id,
+          p_labels: labels.map(l => ({ attendee_id: null, png: l.png, cut_mm: l.cut_mm })) }).abortSignal(AbortSignal.timeout(8000)));
+      }
+      // No answer from CueDeck (offline, or the venue's internet is down
+      // while its network is up): a refusal from the database carries a
+      // code, a dead connection does not.
+      if (!navigator.onLine || (error && !error.code)) {
+        const lan = await printOverLan(st, labels);
+        if (!lan.ok) { printNote('err', 'Badge not printed: ' + lan.error); return; }
+        printNote('ok', (attendees.length === 1 ? 'Printed on ' : attendees.length + ' badges printed on ') + st.label + ' over the venue network.');
+        await markPrinted(attendees);
+        return;
+      }
       // Never fall back to the print dialog here: on this printer that is
       // a wrong-size badge. The guest is checked in either way.
-      if (error || !Array.isArray(ids)) { printNote('err', 'Badge not printed: ' + (navigator.onLine ? (error && error.message) || 'CueDeck did not take it' : 'this device is offline')); return; }
+      if (error || !Array.isArray(ids)) { printNote('err', 'Badge not printed: ' + ((error && error.message) || 'CueDeck did not take it')); return; }
       printNote('muted', (ids.length === 1 ? 'Sent to ' : ids.length + ' badges sent to ') + st.label + '…');
       watchPrintJobs(ids, attendees, st.label);
       return;
@@ -3369,10 +3430,14 @@ function ksStopTimer() { clearInterval(ksTimer); ksTimer = null; }
 
 // ═══════════════════════════════════════════════════
 // WALK-INS (roles ruling 7)
-// A desk lead or above adds a person who is standing at the desk. Needs a
-// connection: checkin-add-walk-in creates the row (test-mode rows must be
-// is_test, which only the service role may set), then the desk checks
-// them in through the normal outbox like anyone else.
+// A desk lead or above adds a person who is standing at the desk.
+// checkin-add-walk-in creates the row (test-mode rows must be is_test,
+// which only the service role may set), then the desk checks them in
+// through the normal outbox like anyone else. The desk makes the id and
+// qr_token itself, so with no connection (or no answer) the person is kept
+// in STORE_WALKINS, checked in and printed like anyone else, and sent by
+// flushWalkIns when the connection is back. Sending the same ids twice
+// returns the same row, so a retry never adds them twice.
 // ═══════════════════════════════════════════════════
 function openWalkIn() {
   if (!window.CK_ROLES.can(S.role, 'walk_in') || !S.event) return;
@@ -3406,10 +3471,6 @@ async function submitWalkIn(e) {
   const err = document.getElementById('wi-err');
   const btn = document.getElementById('wi-save');
   err.textContent = '';
-  if (!navigator.onLine) {
-    err.textContent = 'Adding a walk-in needs a connection. Try again when the desk is back online.';
-    return;
-  }
   // Control and bidi characters dropped before sending: a name typed at a
   // desk ends up on badges, exports and other people's screens, where a
   // right-to-left override would make it read as something else.
@@ -3417,6 +3478,16 @@ async function submitWalkIn(e) {
   const body = { event_id: S.event.id, first_name: v('wi-first'), last_name: v('wi-last'),
                  email: v('wi-email'), company: v('wi-company'), ticket_type: v('wi-tt') };
   if (!body.first_name || !body.last_name) { err.textContent = 'First and last name are needed.'; return; }
+  // Offline the server cannot refuse a known email, so the desk does.
+  const em = body.email.toLowerCase();
+  if (em && S.roster.some(a => (a.email || '').toLowerCase() === em)) {
+    err.textContent = 'Someone with this email is already on the list. Search for them instead.';
+    return;
+  }
+  const rnd = crypto.getRandomValues(new Uint8Array(16));
+  body.client_id = crypto.randomUUID();
+  body.qr_token = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
+  if (!navigator.onLine) { await queueWalkIn(body); return; }
   btn.disabled = true;
   btn.textContent = 'Adding…';
   const ctrl  = new AbortController();
@@ -3431,8 +3502,10 @@ async function submitWalkIn(e) {
     // No HTTP status means the request was aborted or never answered: the
     // server may have added the row before the answer was lost, so do not
     // claim it was not added.
-    let msg = 'The server did not answer, so the walk-in may or may not have been added. Search for the name before adding it again.';
-    if (error.context && typeof error.context.status === 'number') msg = 'The walk-in was not added. Try again.';
+    // No answer at all: keep it on this desk and send it again later. The
+    // same ids make that safe even if the server did add it.
+    if (!(error.context && typeof error.context.status === 'number')) { await queueWalkIn(body); return; }
+    let msg = 'The walk-in was not added. Try again.';
     try {
       if (error.context && typeof error.context.json === 'function') {
         const b = await error.context.json();
@@ -3452,6 +3525,88 @@ async function submitWalkIn(e) {
   closeWalkIn();
   showParty(a);
   scanInput.focus();
+}
+
+// Offline: the person exists on this desk until flushWalkIns sends them.
+async function queueWalkIn(body) {
+  const row = { id: body.client_id, event_id: body.event_id, first_name: body.first_name, last_name: body.last_name,
+                email: body.email || null, company: body.company || null, role_title: null,
+                ticket_type: body.ticket_type || 'attendee', qr_token: body.qr_token,
+                checked_in_at: null, badge_printed_at: null };
+  await idbPutAll(STORE_WALKINS, [{ id: row.id, event_id: row.event_id, body, row, added_at: new Date().toISOString() }]);
+  await idbPutAll(STORE_ROSTER, [row]);
+  if (!S.event || row.event_id !== S.event.id) return;
+  S.roster.push(row);
+  renderCount();
+  renderPendingCount();
+  closeWalkIn();
+  showParty(row);
+  scanInput.focus();
+}
+
+// Sends the walk-ins added offline. Called from flushOutbox, inside its
+// lock, before the check-ins that may point at them.
+async function flushWalkIns() {
+  const queued = await idbGetAll(STORE_WALKINS);
+  const refused = [], merged = [];
+  for (const w of queued) {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FLUSH_TIMEOUT_MS);
+    const { data, error } = await sb.functions.invoke('checkin-add-walk-in', { body: { ...w.body, queued: true }, signal: ctrl.signal });
+    clearTimeout(timer);
+    if (error && !(error.context && typeof error.context.status === 'number')) { syncFailures++; break; }
+    if (error) {
+      const status = error.context.status;
+      // A server fault or a session that lapsed: keep it and try again.
+      if (status >= 500 || status === 401) { syncFailures++; break; }
+      let msg = 'It was refused.';
+      try { const b = await error.context.json(); if (b && b.error) msg = b.error; } catch (_) {}
+      refused.push({ w, msg });
+      continue;
+    }
+    lastSyncOk = Date.now();
+    syncFailures = 0;
+    const a = data && data.attendee;
+    if (!a) { syncFailures++; break; }
+    if (a.id !== w.id) {
+      // Already on the list under another id: move this desk's check-ins
+      // and the row on screen onto that guest.
+      const moved = (await idbGetAll(STORE_OUTBOX)).filter(p => p.attendee_id === w.id).map(p => ({ ...p, attendee_id: a.id }));
+      if (moved.length) await idbPutAll(STORE_OUTBOX, moved);
+      const local = S.roster.find(x => x.id === w.id);
+      S.roster = S.roster.filter(x => x.id !== w.id);
+      if (!S.roster.some(x => x.id === a.id)) S.roster.push({ ...a, checked_in_at: a.checked_in_at || (local && local.checked_in_at) || null });
+      await idbDelete(STORE_ROSTER, [w.id]);
+      if (S.party) {
+        S.party.members = S.party.members.map(m => (m.id === w.id ? S.roster.find(x => x.id === a.id) : m));
+        if (S.party.ticked.delete(w.id)) S.party.ticked.add(a.id);
+      }
+      merged.push(w.row);
+    }
+    await idbDelete(STORE_WALKINS, [w.id]);
+  }
+  if (refused.length) {
+    // Never on the list: take them off this desk, and settle their check-ins
+    // so the queue does not wait on them forever.
+    const ids = new Set(refused.map(r => r.w.id));
+    const dropped = (await idbGetAll(STORE_OUTBOX)).filter(p => !p.synced && ids.has(p.attendee_id)).map(p => ({ ...p, synced: true, result: 'walk_in_refused' }));
+    if (dropped.length) await idbPutAll(STORE_OUTBOX, dropped);
+    S.roster = S.roster.filter(x => !ids.has(x.id));
+    if (S.party) { S.party.members = S.party.members.filter(m => !ids.has(m.id)); if (!S.party.members.length) S.party = null; }
+    await idbDelete(STORE_ROSTER, [...ids]);
+    await idbDelete(STORE_WALKINS, [...ids]);
+    showDeskBlock({
+      title: refused.length === 1 ? 'A walk-in was not added' : refused.length + ' walk-ins were not added',
+      text: refused.map(r => fullName(r.w.row) + ': ' + r.msg).join(' '),
+    });
+  }
+  if (merged.length) {
+    showDeskBlock({
+      title: merged.length === 1 ? 'A walk-in was already registered' : merged.length + ' walk-ins were already registered',
+      text: merged.map(fullName).join(', ') + ' had registered with the same email, so the check-in was moved onto that registration. Reprint the badge: the one printed offline has a QR code that will not scan.',
+    });
+  }
+  if (refused.length || merged.length) { renderParty(); renderCount(); }
 }
 
 function openKioskSetup() {

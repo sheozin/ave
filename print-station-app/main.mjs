@@ -18,7 +18,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null, tray = null, station = null, server = null;
 const ui = { version: VERSION, phase: 'setup', printer: null, code: null, label: null, online: false,
-             printedToday: 0, lastPrinted: null, error: null, openAtLogin: false };
+             printedToday: 0, lastPrinted: null, error: null, openAtLogin: false, lan: null };
 
 const file = (name) => path.join(app.getPath('userData'), name);
 const readJson = (name) => { try { return JSON.parse(fs.readFileSync(file(name), 'utf8')); } catch (_) { return null; } };
@@ -47,6 +47,9 @@ function onEvent(type, d) {
   else if (type === 'failed') { ui.error = d; }
   else if (type === 'unpaired') { ui.phase = 'code'; ui.label = null; }
   else return;
+  // Where desks on the venue network print when the internet is down.
+  const lan = station && station.info().lan;
+  ui.lan = ui.phase === 'ready' && lan ? lan.host + ':' + lan.port : null;
   push();
 }
 

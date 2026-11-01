@@ -47,7 +47,8 @@ const st = createStation({
     const t = new Date().toISOString();
     if (type === 'code') console.log(`\n  Pairing code:  ${d.code}\n  Type it in CueDeck: Event admin > Kiosk & scanners > Print stations\n  (or on the desk: Kiosk or scanner > Print station).\n`);
     else if (type === 'paired') console.log(d.resumed ? `Print station "${d.label}": waiting for badges from CueDeck.` : `Paired as "${d.label}".`);
-    else if (type === 'printed') console.log(t, 'printed a badge from CueDeck at', d.cut_mm, 'mm');
+    else if (type === 'online') { const l = st.info().lan; console.log(l ? `Desks on the venue network print here at ${l.host}:${l.port} if the internet drops.` : 'No venue network address: badges print only while the internet works.'); }
+    else if (type === 'printed') console.log(t, d.lan ? 'printed a badge over the venue network' : 'printed a badge from CueDeck at ' + d.cut_mm + ' mm');
     else if (type === 'failed') console.error(t, 'badge not printed:', d);
     else if (type === 'offline') console.log('Cannot reach CueDeck (' + d + '); retrying.');
     else if (type === 'unpaired') console.error('This print station was removed from the event. Pairing again.');

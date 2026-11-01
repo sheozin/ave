@@ -40,10 +40,21 @@ export async function authDevice(sb: Client, eventId: string, deviceKey: string,
 
 // What a print station says it drives. Only known keys, short strings, so a
 // station cannot put anything else into a row desks read.
-export function printerInfo(v: unknown): Record<string, unknown> | null {
+// lan: where desks on the venue network reach a paired station when the
+// internet is down (print-helper/station-core.mjs listenLan). Only from the
+// paired station itself (checkin-print-station), never from a pairing
+// request, and only a private IPv4, so a desk is never sent elsewhere.
+const PRIVATE_V4 = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}$/
+export function printerInfo(v: unknown, { lan = false } = {}): Record<string, unknown> | null {
   if (!v || typeof v !== 'object') return null
   const o = v as Record<string, unknown>
   const out: Record<string, unknown> = {}
+  const l = o.lan as Record<string, unknown> | undefined
+  if (lan && l && typeof l === 'object' && typeof l.host === 'string' && PRIVATE_V4.test(l.host) &&
+      Number.isInteger(l.port) && (l.port as number) >= 1024 && (l.port as number) <= 65535 &&
+      typeof l.token === 'string' && /^[0-9a-f]{32}$/.test(l.token)) {
+    out.lan = { host: l.host, port: l.port, token: l.token }
+  }
   if (o.model === 'brother-ql' || o.model === 'zebra') out.model = o.model
   if (typeof o.name === 'string') out.name = o.name.slice(0, 80)
   if (typeof o.host === 'string' && /^[0-9a-zA-Z.:-]{1,64}$/.test(o.host)) out.host = o.host

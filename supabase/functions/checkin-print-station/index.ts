@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   if (body.action === 'next') {
     // What the station drives (model, dpi, width), so desks size badges for
     // it. Best effort: a failed write must not stop the station printing.
-    const info = printerInfo(body.info)
+    const info = printerInfo(body.info, { lan: true })
     if (info) {
       const { error: infoErr } = await sb.from('leod_checkin_devices').update({ printer_info: info }).eq('id', deviceId)
       if (infoErr) console.warn('checkin-print-station: printer_info not saved', infoErr.code)

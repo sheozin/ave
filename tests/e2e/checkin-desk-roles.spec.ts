@@ -117,7 +117,7 @@ test('outbox items carry the operator id', async ({ page }) => {
   await page.locator('#secondary').click();
   await req;
   const items = await page.evaluate(() => new Promise<unknown[]>((resolve, reject) => {
-    const open = indexedDB.open('cuedeck-checkin', 1);
+    const open = indexedDB.open('cuedeck-checkin');
     open.onsuccess = () => { const q = open.result.transaction('outbox').objectStore('outbox').getAll(); q.onsuccess = () => resolve(q.result); q.onerror = () => reject(q.error); };
     open.onerror = () => reject(open.error);
   }));
@@ -193,30 +193,106 @@ test('walk-in names lose control and bidi characters before they are sent', asyn
   expect(sent).toMatchObject({ first_name: 'Walt', last_name: 'Walkin', company: 'Northwind' });
 });
 
-test('a walk-in needs a connection', async ({ page, context }) => {
-  let calls = 0;
-  await open(page, { role: 'lead' });
-  await fn(page, 'checkin-add-walk-in', () => { calls++; return { body: {} }; });
+async function addWalt(page, email = '') {
   await page.locator('#st-walkin').click();
   await page.locator('#wi-first').fill('Walt');
   await page.locator('#wi-last').fill('Walkin');
-  await context.setOffline(true);
+  if (email) await page.locator('#wi-email').fill(email);
   await page.locator('#wi-save').click();
-  await expect(page.locator('#wi-err')).toHaveText('Adding a walk-in needs a connection. Try again when the desk is back online.');
+}
+
+test('offline, a walk-in is added, checked in, and sent when the connection is back', async ({ page, context }) => {
+  const sent: Record<string, unknown>[] = [];
+  const scans: { attendee_id: string; action: string }[] = [];
+  await open(page, { role: 'lead' });
+  await fn(page, 'checkin-add-walk-in', (b) => { sent.push(b); return { body: { ok: true, attendee: {
+    id: b.client_id, event_id: EVENT_ID, first_name: 'Walt', last_name: 'Walkin', email: null, company: null,
+    ticket_type: 'attendee', qr_token: b.qr_token, checked_in_at: null, badge_printed_at: null } } }; });
+  await fn(page, 'checkin-record-scans', (b) => { scans.push(...(b.items as typeof scans)); return { body: { ok: true, errors: [],
+    results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }; });
+  await context.setOffline(true);
+  await addWalt(page);
+  await expect(page.locator('#walkin')).toBeHidden();
+  await expect(page.locator('#party')).toContainText('Walt Walkin');
+  await page.locator('#secondary').click();
+  await expect(page.locator('#st-sync')).toHaveText('Offline · 2 waiting');
+  expect(sent).toHaveLength(0);
+  await context.setOffline(false);
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ event_id: EVENT_ID, first_name: 'Walt', last_name: 'Walkin', queued: true });
+  expect(String(sent[0].client_id)).toMatch(/^[0-9a-f-]{36}$/);
+  expect(String(sent[0].qr_token)).toMatch(/^[0-9a-f]{32}$/);
+  // The check-in went out after the walk-in, under the id the desk made.
+  expect(scans).toEqual([expect.objectContaining({ attendee_id: sent[0].client_id, action: 'checkin' })]);
+});
+
+test('a walk-in request that gets no answer is kept on the desk and sent again with the same ids', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  let fail = true;
+  await open(page, { role: 'lead' });
+  await page.route(/\/functions\/v1\/checkin-add-walk-in/, async r => {
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' }, body: 'ok' });
+    const b = r.request().postDataJSON();
+    sent.push(b);
+    if (fail) return r.abort('failed');
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ ok: true, attendee: {
+      id: b.client_id, event_id: EVENT_ID, first_name: 'Walt', last_name: 'Walkin', email: null, company: null,
+      ticket_type: 'attendee', qr_token: b.qr_token, checked_in_at: null, badge_printed_at: null } }) });
+  });
+  await addWalt(page);
+  await expect(page.locator('#walkin')).toBeHidden();
+  await expect(page.locator('#party')).toContainText('Walt Walkin');
+  await expect(page.locator('#st-sync')).toContainText('1 waiting');
+  fail = false;
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+  expect(sent.length).toBeGreaterThanOrEqual(2);
+  expect(sent.at(-1)).toMatchObject({ client_id: sent[0].client_id, qr_token: sent[0].qr_token, queued: true });
+});
+
+test('a walk-in whose email is already on the list is refused at the desk, even offline', async ({ page, context }) => {
+  let calls = 0;
+  await open(page, { role: 'lead' });
+  await fn(page, 'checkin-add-walk-in', () => { calls++; return { body: {} }; });
+  await context.setOffline(true);
+  await addWalt(page, 'BEN@cuedeck-test.io');
+  await expect(page.locator('#wi-err')).toHaveText('Someone with this email is already on the list. Search for them instead.');
   await context.setOffline(false);
   expect(calls).toBe(0);
 });
 
-test('a walk-in request that gets no answer says it may or may not have been added', async ({ page }) => {
+test('an offline walk-in who had registered from another desk is merged onto that registration', async ({ page, context }) => {
+  const CARL = { ...BEN, id: 'a0000000-0000-4000-8000-000000000003', first_name: 'Walt', last_name: 'Walkin', email: 'walt@cuedeck-test.io', qr_token: 'tok-carl' };
+  const scans: { attendee_id: string }[] = [];
   await open(page, { role: 'lead' });
-  await page.route(/\/functions\/v1\/checkin-add-walk-in/, r => r.abort('failed'));
-  await page.locator('#st-walkin').click();
-  await page.locator('#wi-first').fill('Walt');
-  await page.locator('#wi-last').fill('Walkin');
-  await page.locator('#wi-save').click();
-  await expect(page.locator('#wi-err')).toHaveText('The server did not answer, so the walk-in may or may not have been added. Search for the name before adding it again.');
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#walkin')).toBeHidden();
+  await fn(page, 'checkin-add-walk-in', () => ({ body: { ok: true, merged: true, attendee: CARL } }));
+  await fn(page, 'checkin-record-scans', (b) => { scans.push(...(b.items as typeof scans)); return { body: { ok: true, errors: [],
+    results: Object.fromEntries((b.items as { client_id: string }[]).map(i => [i.client_id, 'ok'])) } }; });
+  await context.setOffline(true);
+  await addWalt(page, 'walt@cuedeck-test.io');
+  await page.locator('#secondary').click();
+  await context.setOffline(false);
+  await expect(page.locator('#verdict')).toContainText('already registered');
+  await expect(page.locator('#verdict')).toContainText('Reprint the badge');
+  await expect.poll(() => scans.map(s => s.attendee_id)).toEqual([CARL.id]);
+});
+
+test('an offline walk-in the server refuses is taken off the desk with the reason', async ({ page, context }) => {
+  const scans: unknown[] = [];
+  await open(page, { role: 'lead' });
+  await fn(page, 'checkin-add-walk-in', () => ({ status: 409, body: { error: 'This event was deleted.', code: 'archived' } }));
+  await fn(page, 'checkin-record-scans', (b) => { scans.push(...(b.items as unknown[])); return { body: { ok: true, errors: [], results: {} } }; });
+  await context.setOffline(true);
+  await addWalt(page);
+  await page.locator('#secondary').click();
+  await context.setOffline(false);
+  await expect(page.locator('#verdict')).toContainText('A walk-in was not added');
+  await expect(page.locator('#verdict')).toContainText('Walt Walkin: This event was deleted.');
+  await expect(page.locator('#st-sync')).toHaveText('All synced');
+  await search(page, 'Walt');
+  await expect(page.locator('.ck-res-row', { hasText: 'Walt Walkin' })).toHaveCount(0);
+  expect(scans).toHaveLength(0);
 });
 
 // Fix round 1. The desk is used at live events: a roles module that fails
@@ -816,6 +892,46 @@ test('with one print station paired, the desk sends the badge to it and says whe
   expect(q.p_device_id).toBe('aaaaaaaa-0000-4000-8000-0000000000d1');
   expect(q.p_labels[0].cut_mm).toBe(76);
   expect(q.p_labels[0].png).toMatch(/^data:image\/png;base64,/);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('when CueDeck cannot be reached, the badge goes straight to the station over the venue network', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  const LAN = { host: '192.168.1.130', port: 7842, token: 'c'.repeat(32) };
+  const lanCalls: { headers: Record<string, string>; body: { labels: string[]; cut_mm: number } }[] = [];
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: async () => {
+    await st.setup();
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online: true, printer_info: { model: 'brother-ql', lan: LAN } }]);
+  } });
+  // The venue's internet is down: CueDeck never answers.
+  await page.route(/\/rest\/v1\/rpc\/checkin_queue_print/, r => r.abort('failed'));
+  await page.route('http://192.168.1.130:7842/print', r => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-private-network': 'true' };
+    if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: cors });
+    lanCalls.push({ headers: r.request().headers(), body: r.request().postDataJSON() });
+    return r.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: '{"ok":true}' });
+  });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer over the venue network.', { timeout: 10000 });
+  expect(lanCalls).toHaveLength(1);
+  expect(lanCalls[0].headers['x-cuedeck-token']).toBe(LAN.token);
+  expect(lanCalls[0].body.cut_mm).toBe(76);
+  expect(lanCalls[0].body.labels[0]).toMatch(/^data:image\/png;base64,/);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+  // The station list is kept on the device for a reload with no internet.
+  expect(await page.evaluate((id) => localStorage.getItem('ck-stations:' + id), EVENT_ID)).toContain('192.168.1.130');
+});
+
+test('with no internet and no venue-network address, the station badge says it was not printed', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup });
+  await page.route(/\/rest\/v1\/rpc\/checkin_queue_print/, r => r.abort('failed'));
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: this device is offline', { timeout: 10000 });
   expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
 });
 

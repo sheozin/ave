@@ -78,7 +78,11 @@ function render() {
         h('div', {}, h('span', {}, 'Paired as'), S.label || ''),
         h('div', {}, h('span', {}, 'Printer'), S.printer.name + ' (' + S.printer.host + ')'),
         h('div', {}, h('span', {}, 'Printed this session'), String(S.printedToday)),
-        h('div', {}, h('span', {}, 'Last badge'), last)),
+        h('div', {}, h('span', {}, 'Last badge'), last),
+        h('div', {}, h('span', {}, 'Venue network'), S.lan ? S.lan : 'Not available')),
+      h('p', { class: 'muted', style: 'margin:0 0 14px' }, S.lan
+        ? 'If the internet drops, desks in Chrome on this network still print here. Chrome asks once to allow it.'
+        : 'This computer has no venue network address, so badges print only while the internet works.'),
       h('div', { class: 'row' },
         h('button', { class: 'btn btn-s', onclick: () => ps.test() }, 'Print a test label'),
         h('button', { class: 'btn btn-s', onclick: () => ps.changePrinter() }, 'Change printer')),

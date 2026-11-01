@@ -10,6 +10,14 @@
 //        company, ticket_type, qr_token, checked_in_at, badge_printed_at } }
 //   Errors: 400 invalid, 403 forbidden / test_cap, 409 archived /
 //   already_registered.
+//
+// The desk makes each walk-in's id and qr_token itself ({ client_id,
+// qr_token }), so a retry after a lost answer returns the same row instead
+// of adding the person twice. A walk-in added with no connection is kept
+// on the desk (its badge may already be printed) and sent later with
+// queued: true. Then an email already on the list is not refused: the desk
+// cannot ask the person any more, so the existing guest is returned with
+// merged: true and the desk moves its offline check-in onto that guest.
 
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
@@ -66,13 +74,29 @@ Deno.serve(async (req) => {
   const parsed = normalizeWalkIn(body)
   if (!parsed.ok) return json({ error: parsed.error, code: 'invalid' }, 400)
 
+  // Made on the desk: both or neither.
+  const offline = body.client_id != null || body.qr_token != null
+  const queued = offline && body.queued === true
+  const clientId = String(body.client_id || '')
+  const clientToken = String(body.qr_token || '')
+  if (offline && (!isUuid(clientId) || !/^[0-9a-f]{32}$/.test(clientToken))) {
+    return json({ error: 'client_id and qr_token are required together', code: 'invalid' }, 400)
+  }
+  if (offline) {
+    const { data: same, error: sameErr } = await sb.from('leod_checkin_attendees')
+      .select(COLS).eq('id', clientId).maybeSingle()
+    if (sameErr) return json({ error: sameErr.message }, 500)
+    if (same && same.event_id === event_id) return json({ ok: true, attendee: same, already: true })
+    if (same) return json({ error: 'client_id is in use', code: 'invalid' }, 400)
+  }
+
   // Same key the import dedupes on: email, case-insensitive, per event.
   // The unique index (event_id, lower(email)) still decides a race below.
   if (parsed.row.email) {
     const { data: dup, error: dupErr } = await sb.from('leod_checkin_attendees')
-      .select('id').eq('event_id', event_id).ilike('email', likeEscape(parsed.row.email)).limit(1)
+      .select(COLS).eq('event_id', event_id).ilike('email', likeEscape(parsed.row.email)).limit(1)
     if (dupErr) return json({ error: dupErr.message }, 500)
-    if (dup && dup.length) return json(ALREADY, 409)
+    if (dup && dup.length) return queued ? json({ ok: true, attendee: dup[0], merged: true }) : json(ALREADY, 409)
   }
 
   const isTest = ent.status !== 'live'
@@ -91,7 +115,8 @@ Deno.serve(async (req) => {
     .insert({
       event_id,
       ...parsed.row,
-      qr_token: crypto.randomUUID().replace(/-/g, ''),
+      ...(offline ? { id: clientId } : {}),
+      qr_token: offline ? clientToken : crypto.randomUUID().replace(/-/g, ''),
       source: 'walk_in',
       is_test: isTest,
     })
@@ -99,6 +124,12 @@ Deno.serve(async (req) => {
     .single()
   if (insErr) {
     // Migration 050's unique index on (event_id, lower(email)).
+    // Offline, the race lost to the same email: hand back that guest.
+    if (insErr.code === '23505' && queued && parsed.row.email) {
+      const { data: won, error: wonErr } = await sb.from('leod_checkin_attendees')
+        .select(COLS).eq('event_id', event_id).ilike('email', likeEscape(parsed.row.email)).limit(1)
+      if (!wonErr && won && won.length) return json({ ok: true, attendee: won[0], merged: true })
+    }
     if (insErr.code === '23505') return json(ALREADY, 409)
     console.error('checkin-add-walk-in: insert failed for event', event_id, insErr.code)
     return json({ error: 'The walk-in was not added' }, 500)
