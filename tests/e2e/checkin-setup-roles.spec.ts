@@ -235,6 +235,25 @@ test('a failed alert save shows the server message', async ({ page }) => {
   await expect(page.locator('#al-err')).toHaveText('Only the event owner or an organizer can choose alert ticket types');
 });
 
+test('badges tab: Print a test badge goes to the paired print station, not the print dialog', async ({ page }) => {
+  const queued: { p_device_id: string; p_labels: { cut_mm: number }[] }[] = [];
+  await page.addInitScript(() => { (window as unknown as { __prints: number }).__prints = 0; window.print = () => { (window as unknown as { __prints: number }).__prints++; }; });
+  await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', [{ id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', company: 'Contoso', ticket_type: 'VIP', is_test: true, source: 'web', created_at: FIXED_NOW.toISOString() }]);
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', badge_design: { template: 'visa-next-full', w: 76, h: 62 } }]);
+    await rpc(page, 'checkin_tickets_overview', { is_owner: false, fee_bps: 0, payout: { connected: false, charges_enabled: false, details_submitted: false }, types: [], revenue: {} });
+    await rpc(page, 'checkin_orders_list', []);
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Desk printer', online: true, printer_info: { model: 'brother-ql' } }]);
+    await rpc(page, 'checkin_queue_print', (a) => { queued.push(a as never); return ['bbbbbbbb-0000-4000-8000-0000000000f1']; });
+    await table(page, 'leod_checkin_print_jobs', [{ id: 'bbbbbbbb-0000-4000-8000-0000000000f1', status: 'done', error: null }]);
+  });
+  await page.click('#bd-print');
+  await expect(page.locator('#bd-ok')).toHaveText('Printed on Desk printer.', { timeout: 10000 });
+  expect(queued[0].p_device_id).toBe('aaaaaaaa-0000-4000-8000-0000000000d1');
+  expect(queued[0].p_labels[0].cut_mm).toBe(76);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
 // ── Print stations in Setup (migrations 142, 143) ──
 test('an organizer sees the print stations, pairs one by its code and removes one', async ({ page }) => {
   let approved: Record<string, unknown> = {};

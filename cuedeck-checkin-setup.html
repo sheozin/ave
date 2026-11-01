@@ -585,7 +585,7 @@
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
-import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll } from '/checkin-badge.js';
+import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -1490,6 +1490,32 @@ $('bd-print').onclick = async () => {
   $('badge-sheet').replaceChildren(badgeElement(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }));
   await Promise.all([...$('badge-sheet').querySelectorAll('img')].map(i => i.decode().catch(() => {})));
   $('bd-ok').textContent = ''; $('bd-err').textContent = '';
+  // A paired print station first (migration 142): the one this device's desk
+  // prints to, else the first online one. The print dialog cannot offer
+  // label sizes like 62 x 76 mm, so a station is the way to test them.
+  const { data: stations } = await sb.rpc('checkin_print_stations', { p_event_id: EVENT_ID });
+  let pref = ''; try { pref = localStorage.getItem('ck_print_to:' + EVENT_ID) || ''; } catch (_) {}
+  const list = stations || [];
+  const station = list.find(x => 'station:' + x.id === pref) || list.find(x => x.online) || null;
+  if (station && pref !== 'browser') {
+    if (!fitsPrinter(BD, station.printer_info)) { $('bd-err').textContent = 'This badge (' + BD.w + ' x ' + BD.h + ' mm) does not fit ' + station.label + '. Pick a stock it can print, or print with the dialog from the desk.'; return; }
+    $('bd-print').disabled = true;
+    try {
+      const l = await badgePng(badgeGuests()[0], { design: BD, brand: brandColor(), logoUrl: badgeLogo(), test: !isLive() }, { printer: station.printer_info });
+      const { data: ids, error } = await sb.rpc('checkin_queue_print', { p_event_id: EVENT_ID, p_device_id: station.id, p_labels: [{ attendee_id: null, png: l.png, cut_mm: l.cut_mm }] });
+      if (error || !Array.isArray(ids)) { $('bd-err').textContent = 'Not printed: ' + ((error && error.message) || 'CueDeck did not take it'); return; }
+      $('bd-ok').textContent = 'Sent to ' + station.label + (station.online ? '…' : '. It is offline: it prints when the station is running again.');
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 1200));
+        const { data: jobs } = await sb.from('leod_checkin_print_jobs').select('status, error').in('id', ids);
+        const j = jobs && jobs[0];
+        if (j && j.status === 'done') { $('bd-ok').textContent = 'Printed on ' + station.label + '.'; return; }
+        if (j && j.status === 'failed') { $('bd-ok').textContent = ''; $('bd-err').textContent = 'Not printed: ' + (j.error || 'the printer did not print'); return; }
+      }
+      $('bd-ok').textContent = 'Still waiting for ' + station.label + '. Is the print station running?';
+    } finally { $('bd-print').disabled = false; }
+    return;
+  }
   // Same path as the desk: a badge that fits the 62 mm roll goes to the
   // print helper when this laptop uses one (the desk's "Print straight to
   // a Brother" switch).
