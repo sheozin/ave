@@ -1745,7 +1745,10 @@ async function deskSession() {
   }
   const cut = got.late || !navigator.onLine || (got.error && (got.error.name === 'AuthRetryableFetchError' || got.error.status === 0));
   const s = cut ? stored() : null;
-  if (s) noServer = true;
+  // Slow is not offline: a check that was only late (a browser just
+  // restarted) leaves the desk asking CueDeck as usual. Only a token that
+  // has expired and could not be renewed means every request would hang.
+  if (s && s.expires_at * 1000 <= Date.now()) noServer = true;
   return s;
 }
 // True from an offline start until supabase-js renews the sign-in. While
@@ -2398,7 +2401,7 @@ const LAN_HOST = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1
 async function printOverLan(st, labels) {
   const lan = st.printer_info && st.printer_info.lan;
   if (!lan || !LAN_HOST.test(String(lan.host)) || !Number.isInteger(lan.port) || lan.port < 1024 || lan.port > 65535 || !/^[0-9a-f]{32}$/.test(String(lan.token))) {
-    return { ok: false, error: 'this device is offline' };
+    return { ok: false, error: 'CueDeck could not be reached, and this desk does not know where ' + st.label + ' is on the venue network yet. Open the desk once with the internet working, then try again' };
   }
   try {
     const r = await fetch('http://' + lan.host + ':' + lan.port + '/print', {

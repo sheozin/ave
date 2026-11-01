@@ -937,7 +937,7 @@ test('a venue-network address that is not private is never contacted', async ({ 
   await search(page, 'Ben');
   await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
   await page.locator('#primary').click();
-  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: this device is offline', { timeout: 10000 });
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: CueDeck could not be reached', { timeout: 10000 });
   expect(contacted).toBe(0);
 });
 
@@ -948,7 +948,7 @@ test('with no internet and no venue-network address, the station badge says it w
   await search(page, 'Ben');
   await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
   await page.locator('#primary').click();
-  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: this device is offline', { timeout: 10000 });
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: CueDeck could not be reached', { timeout: 10000 });
   expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
 });
 
@@ -1211,4 +1211,36 @@ test('a desk queued behind another tab\'s pending upgrade says so too', async ({
   await first.close();
   await old.close();
   await expect(page.locator('#station')).toBeVisible();
+});
+
+test('a slow sign-in check at start (a browser just restarted) does not put an online desk on saved copies', async ({ page }) => {
+  test.setTimeout(45000);
+  // supabase-js answering the first getSession after 7 s, past the desk's wait.
+  // The UMD build assigns window.supabase first and createClient onto it after.
+  await page.addInitScript(() => {
+    let lib: Record<string, unknown> | undefined;
+    Object.defineProperty(window, 'supabase', { configurable: true, get: () => lib, set: (v) => {
+      let create: ((...a: unknown[]) => { auth: { getSession: () => Promise<unknown> } }) | undefined;
+      const wrap = (...a: unknown[]) => {
+        const c = create!(...a);
+        const get = c.auth.getSession.bind(c.auth);
+        const until = performance.now() + 7000;
+        c.auth.getSession = async () => { const wait = until - performance.now(); if (wait > 0) { (window as unknown as { slowed: boolean }).slowed = true; await new Promise(r => setTimeout(r, wait)); } return get(); };
+        return c;
+      };
+      if (typeof v.createClient === 'function') create = v.createClient;
+      Object.defineProperty(v, 'createClient', { configurable: true, enumerable: true, get: () => (create ? wrap : undefined), set: (f) => { create = f; } });
+      lib = v;
+    } });
+  });
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup }).catch(() => {});
+  await expect(page.locator('#station')).toBeVisible({ timeout: 15000 });
+  expect(await page.evaluate(() => (window as unknown as { slowed: boolean }).slowed)).toBe(true);
+  expect(await page.evaluate('noServer')).toBe(false);
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer.', { timeout: 10000 });
+  expect(st.queued).toHaveLength(1);
 });
