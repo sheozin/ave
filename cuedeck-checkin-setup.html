@@ -462,7 +462,7 @@
       <div class="field"><button class="btn btn-p" id="inv-btn">Invite</button></div>
     </form>
     <div class="err" id="inv-err"></div><div class="ok" id="inv-ok"></div>
-    <table class="tbl" style="margin-top:12px"><thead><tr><th>Person</th><th>Role</th><th></th></tr></thead><tbody id="staff-body"></tbody></table>
+    <table class="tbl" style="margin-top:12px"><thead><tr><th>Person</th><th>Role</th><th>Status</th><th></th></tr></thead><tbody id="staff-body"></tbody></table>
   </section>
 
   <section class="panel" id="p-kiosk" hidden>
@@ -1881,19 +1881,63 @@ function renderStaff() {
     const tr = el('tr');
     const p = el('td'); p.append(el('div', 'nm', s.name || s.email || 'Invited user')); if (s.name && s.email) p.appendChild(el('div', 'em', s.email));
     const r = el('td', null, roleLabel(s.is_owner ? 'owner' : s.role));
+    const stat = staffStatus(s);
     const x = el('td');
     // The server's rule (removeVerdict): never the owner; a desk lead removes desk staff only.
     const mayRemove = !s.is_owner && (can(ROLE, 'invite_any') || (can(ROLE, 'invite_crew') && s.role === 'crew'));
     if (mayRemove) { const b = el('button', 'link', 'Remove'); b.onclick = () => removeStaff(s); x.appendChild(b); }
-    tr.append(p, r, x); body.appendChild(tr);
+    tr.append(p, r, stat, x); body.appendChild(tr);
   }
+}
+// "1 Nov, 14:05", or "today 14:05": when something happened, always shown
+// next to its state (migration 148).
+function atText(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const hm = d.toLocaleTimeString(navigator.language || 'en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return 'today ' + hm;
+  if (d.toDateString() === new Date(now - 864e5).toDateString()) return 'yesterday ' + hm;
+  return d.toLocaleDateString(navigator.language || 'en-GB', { day: 'numeric', month: 'short' }) + ', ' + hm;
+}
+function staffStatus(s) {
+  const td = el('td');
+  const line = (text, tone) => { const b = el('div', 'st-line', text); b.style.color = { ok: 'var(--gn)', wait: 'var(--am)', muted: 'var(--t2)' }[tone]; b.style.fontWeight = '600'; td.appendChild(b); };
+  const sub = (text) => td.appendChild(el('div', 'em', text));
+  if (s.is_owner) { line('Owner', 'muted'); return td; }
+  if (s.last_sign_in_at) {
+    line('Joined', 'ok');
+    sub('Active ' + sinceText(s.last_sign_in_at) + ' ago' + (s.invited_at ? ' · invited ' + atText(s.invited_at) : ''));
+    return td;
+  }
+  if (s.invited_at) {
+    line('Invitation sent', 'wait');
+    sub(atText(s.invited_at) + (s.invite_count > 1 ? ' · sent ' + s.invite_count + ' times' : '') + ' · not accepted yet');
+  } else {
+    line(s.last_sign_in_at === undefined ? 'Added' : 'Not joined yet', 'muted');
+    sub('Added ' + atText(s.added_at) + ' · has not signed in');
+  }
+  // Same rule as Remove: who may manage this person may send it again.
+  const mayInvite = can(ROLE, 'invite_any') || (can(ROLE, 'invite_crew') && s.role === 'crew');
+  if (mayInvite && s.email) {
+    const b = el('button', 'link', 'Send again'); b.type = 'button';
+    b.onclick = async () => {
+      b.disabled = true; b.textContent = 'Sending…';
+      const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'invite', email: s.email, role: s.role } });
+      if (error) { b.disabled = false; b.textContent = 'Send again'; $('inv-err').textContent = await fnError(error); return; }
+      $('inv-ok').textContent = data && data.sent === false ? s.email + ' has already joined, so no email was needed.' : 'Invitation sent again to ' + s.email + ', ' + atText(new Date().toISOString()) + '.';
+      await loadStaff(); renderStaff();
+    };
+    td.appendChild(b);
+  }
+  return td;
 }
 $('f-inv').addEventListener('submit', async (e) => {
   e.preventDefault(); $('inv-err').textContent = ''; $('inv-ok').textContent = ''; $('inv-btn').disabled = true;
-  const { error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'invite', email: $('inv-email').value, role: $('inv-role').value } });
+  const to = $('inv-email').value.trim();
+  const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'invite', email: to, role: $('inv-role').value } });
   $('inv-btn').disabled = false;
   if (error) { $('inv-err').textContent = await fnError(error); return; }
-  $('inv-ok').textContent = 'Invitation sent.';
+  $('inv-ok').textContent = data && data.sent === false ? to + ' is already on the team and has signed in, so no email was needed.' : 'Invitation sent to ' + to + ', ' + atText(new Date().toISOString()) + '. They show as waiting until they accept.';
   $('inv-email').value = ''; await loadStaff(); renderStaff(); renderChrome();
 });
 async function removeStaff(s) {

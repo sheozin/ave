@@ -31,8 +31,8 @@ test('a desk lead sees the Desk staff step only and invites desk staff only', as
   await expect(page.locator('.st:visible')).toHaveCount(1);
   await expect(page.locator('#inv-role option')).toHaveText(['Desk staff']);
   await expect(page.locator('#role-help li')).toHaveCount(1);
-  await expect(page.locator('#staff-body button')).toHaveCount(1);
-  await expect(page.locator('#staff-body tr', { hasText: 'Cris Crew' }).locator('button')).toHaveText('Remove');
+  await expect(page.locator('#staff-body').getByRole('button', { name: 'Remove' })).toHaveCount(1);
+  await expect(page.locator('#staff-body tr', { hasText: 'Cris Crew' }).getByRole('button', { name: 'Remove' })).toBeVisible();
   await expect(page.locator('#banner')).toBeHidden();
 });
 
@@ -42,7 +42,7 @@ test('an organizer invites any role and sees role labels', async ({ page }) => {
   await expect(page.locator('#inv-role')).toHaveValue('crew');
   await expect(page.locator('#staff-body tr').nth(0)).toContainText('Owner');
   await expect(page.locator('#staff-body tr').nth(2)).toContainText('Desk lead');
-  await expect(page.locator('#staff-body button')).toHaveCount(4);
+  await expect(page.locator('#staff-body').getByRole('button', { name: 'Remove' })).toHaveCount(4);
 });
 
 test('an organizer who is not the owner is told who can go live', async ({ page }) => {
@@ -252,6 +252,32 @@ test('badges tab: Print a test badge goes to the paired print station, not the p
   expect(queued[0].p_device_id).toBe('aaaaaaaa-0000-4000-8000-0000000000d1');
   expect(queued[0].p_labels[0].cut_mm).toBe(76);
   expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('desk staff show when their invitation went out, whether they joined, and can be sent it again', async ({ page }) => {
+  const calls: Record<string, unknown>[] = [];
+  const ago = (min: number) => new Date(FIXED_NOW.getTime() - min * 60000).toISOString();
+  const staff = [
+    { ...STAFF[0] },
+    { ...STAFF[2], added_at: ago(3000), invited_at: ago(2900), invite_count: 1, last_sign_in_at: ago(180) },
+    { ...STAFF[3], added_at: ago(60), invited_at: ago(30), invite_count: 2, last_sign_in_at: null },
+    { ...STAFF[4], added_at: ago(5000), invited_at: null, invite_count: 0, last_sign_in_at: null },
+  ];
+  await open(page, { role: 'organizer' }, 'staff', staff, async () => {
+    await fn(page, 'checkin-invite-staff', (b) => { calls.push(b); return { body: b.action === 'list' ? { ok: true, staff } : { ok: true, sent: true } }; });
+  });
+  const rows = page.locator('#staff-body tr');
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0)).toContainText('Owner');
+  await expect(rows.nth(1)).toContainText('Joined');
+  await expect(rows.nth(1)).toContainText('Active 3 h ago');
+  await expect(rows.nth(2)).toContainText('Invitation sent');
+  await expect(rows.nth(2)).toContainText('sent 2 times · not accepted yet');
+  await expect(rows.nth(3)).toContainText('Not joined yet');
+  await rows.nth(2).getByRole('button', { name: 'Send again' }).click();
+  await expect(page.locator('#inv-ok')).toContainText('Invitation sent again to cris@cuedeck-test.io');
+  expect(calls.find(c => c.action === 'invite')).toEqual({ event_id: EVENT_ID, action: 'invite', email: 'cris@cuedeck-test.io', role: 'crew' });
+  await expect(rows.nth(1).getByRole('button', { name: 'Send again' })).toHaveCount(0);
 });
 
 // ── Print stations in Setup (migrations 142, 143) ──

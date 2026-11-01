@@ -1923,3 +1923,33 @@ Deno.test('checkin-kiosk-pair: an IPv6 caller is one bucket per /64, however man
   const keys = new Set(world.rpcCalls.filter(x => x.name === 'checkin_kiosk_pair_rate_check').map(x => x.args.p_ip_hash))
   assert(keys.size === 1 && keys.has(await sha256('2a02:a311:4000:1e00::/64')), JSON.stringify([...keys]))
 })
+
+// ── staff invitation status (migration 148) ──
+Deno.test(`${IS} invite: each email sent is stamped with its time, count and sender`, async () => {
+  staffSetup('organizer')
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: null, last_sign_in_at: null, aud: 'authenticated' }
+  let r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
+  assert(r.status === 200 && r.body.sent === true, JSON.stringify(r))
+  let row = ops().find(o => o.user_id === CREW)!
+  assert(typeof row.invited_at === 'string' && row.invite_count === 1 && row.invited_by === USER, JSON.stringify(row))
+  r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
+  row = ops().find(o => o.user_id === CREW)!
+  assert(r.status === 200 && row.invite_count === 2, 'sent again counts: ' + JSON.stringify(row))
+})
+Deno.test(`${IS} invite: someone who already joined gets no email and the reply says so`, async () => {
+  staffSetup('organizer')
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: '2026-01-01T00:00:00Z', last_sign_in_at: '2026-10-30T09:00:00Z', aud: 'authenticated' }
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
+  assert(r.status === 200 && r.body.sent === false && r.body.already === 'joined' && world.emails!.length === 0, JSON.stringify(r))
+  assert(!ops().find(o => o.user_id === CREW)!.invited_at, 'no send, no stamp')
+})
+Deno.test(`${IS} list: each person comes with when they were invited and whether they have signed in`, async () => {
+  staffSetup('organizer')
+  Object.assign(ops().find(o => o.user_id === CREW)!, { created_at: '2026-10-29T08:00:00Z', invited_at: '2026-10-30T14:05:00Z', invite_count: 2 })
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', last_sign_in_at: null, aud: 'authenticated' }
+  world.authUsers![LEAD] = { id: LEAD, email: 'lead@stub.test', last_sign_in_at: '2026-10-31T10:00:00Z', aud: 'authenticated' }
+  const r = await call(IS, { event_id: EVENT, action: 'list' })
+  const crew = (r.body.staff as Row[]).find(x => x.user_id === CREW)!, lead = (r.body.staff as Row[]).find(x => x.user_id === LEAD)!
+  assert(crew.invited_at === '2026-10-30T14:05:00Z' && crew.invite_count === 2 && crew.added_at === '2026-10-29T08:00:00Z' && crew.last_sign_in_at === null, JSON.stringify(crew))
+  assert(lead.last_sign_in_at === '2026-10-31T10:00:00Z', JSON.stringify(lead))
+})

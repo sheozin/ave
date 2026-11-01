@@ -65,9 +65,9 @@ Deno.serve(async (req) => {
   if (!live.ok) return refuse(live)
 
   const { data: ops, error: opsErr } = await sb.from('leod_checkin_operators')
-    .select('user_id, role').eq('event_id', event_id).in('role', GRANT_ROLES)
+    .select('user_id, role, created_at, invited_at, invite_count').eq('event_id', event_id).in('role', GRANT_ROLES)
   if (opsErr) return json({ error: opsErr.message }, 500)
-  const team: { user_id: string; role: string }[] = ops || []
+  const team: { user_id: string; role: string; created_at?: string; invited_at?: string | null; invite_count?: number }[] = ops || []
 
   if (action === 'list') {
     const shown = visibleStaff(role, user.id, team)
@@ -85,9 +85,24 @@ Deno.serve(async (req) => {
       comp = new Set((comps || []).map((c: { user_id: string }) => c.user_id))
     }
     const byId = new Map((people || []).map((p: { id: string; email: string | null; name: string | null }) => [p.id, p]))
+    // Whether each person has signed in yet, and when last (migration 148):
+    // that is what turns "invited" into "joined". Auth users are not in a
+    // table this client can join, so one admin read per person; a failed
+    // read leaves it unknown rather than failing the list.
+    const signIns = new Map<string, string | null>()
+    await Promise.all(ids.map(async (id) => {
+      const { data, error } = await sb.auth.admin.getUserById(id)
+      if (error) console.warn('checkin-invite-staff: sign-in read failed', error.status ?? error.code)
+      else signIns.set(id, data?.user?.last_sign_in_at ?? null)
+    }))
+    const full = new Map(team.map(t => [t.user_id, t]))
     return json({ ok: true, staff: shown.map(o => ({
       user_id: o.user_id, role: o.role,
       email: byId.get(o.user_id)?.email ?? null, name: byId.get(o.user_id)?.name ?? null,
+      added_at: full.get(o.user_id)?.created_at ?? null,
+      invited_at: full.get(o.user_id)?.invited_at ?? null,
+      invite_count: full.get(o.user_id)?.invite_count ?? 0,
+      last_sign_in_at: signIns.has(o.user_id) ? signIns.get(o.user_id) : undefined,
       is_owner: o.user_id === ev.created_by,
       ...(role === 'owner' ? { is_comp: comp.has(o.user_id) } : {}),
     })) })
@@ -212,7 +227,7 @@ Deno.serve(async (req) => {
     unconfirmed = !au.user.email_confirmed_at
     alreadyGranted = !!cur
     // Same role, already signed in before: nothing to do.
-    if (alreadyGranted && !needsLink) return json({ ok: true })
+    if (alreadyGranted && !needsLink) return json({ ok: true, sent: false, already: 'joined' })
     const logFail = await logInvite()
     if (logFail) return logFail
   } else {
@@ -239,6 +254,18 @@ Deno.serve(async (req) => {
     if (grantErr) return json({ error: grantErr.message }, 500)
   }
 
+  // When the invitation went out, how often, by whom (migration 148). After
+  // the email is sent, never before, so the time shown is a real send. A
+  // failed stamp is logged, not fatal: the email already left.
+  const stampSent = async () => {
+    const { data: row, error: rErr } = await sb.from('leod_checkin_operators').select('invite_count').eq('event_id', event_id).eq('user_id', userId).maybeSingle()
+    if (rErr) { console.error('checkin-invite-staff: invite count read failed', rErr.code); return }
+    const { error: sErr } = await sb.from('leod_checkin_operators')
+      .update({ invited_at: new Date().toISOString(), invite_count: (row?.invite_count ?? 0) + 1, invited_by: user.id })
+      .eq('event_id', event_id).eq('user_id', userId)
+    if (sErr) console.error('checkin-invite-staff: invite time not recorded', sErr.code)
+  }
+
   const mail = {
     to: email, product: 'checkin' as const, eventName: ev.name, eventDate: ev.date ?? null,
     inviterName: caller.name || caller.email || null, roleText: 'access to ' + what,
@@ -250,6 +277,7 @@ Deno.serve(async (req) => {
       console.error('checkin-invite-staff: invite email failed for event', event_id, mailErr)
       return json({ error: 'Could not send the invitation' }, 502)
     }
+    await stampSent()
   } else if (needsLink) {
     const { data: link, error: linkErr } = await sb.auth.admin.generateLink({
       type: unconfirmed ? 'invite' : 'recovery',
@@ -266,12 +294,14 @@ Deno.serve(async (req) => {
       console.error('checkin-invite-staff: invite link email failed for event', event_id, mailErr)
       return json({ error: 'Could not send the invitation' }, 502)
     }
+    await stampSent()
   } else {
     const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: `${appUrl}/checkin`, actionLabel: 'Open CueDeck Check-in', existingAccount: true })
     // The grant is in place; a lost notice is not worth failing the
     // request over, but it must be visible.
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)
+    else await stampSent()
   }
 
-  return json({ ok: true })
+  return json({ ok: true, sent: true })
 })
