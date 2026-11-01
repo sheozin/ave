@@ -924,6 +924,22 @@ test('when CueDeck cannot be reached, the badge goes straight to the station ove
   expect(await page.evaluate((id) => localStorage.getItem('ck-stations:' + id), EVENT_ID)).toContain('192.168.1.130');
 });
 
+test('a venue-network address that is not private is never contacted', async ({ page }) => {
+  const st = await withStation(page, () => ({ status: 'done', error: null }));
+  let contacted = 0;
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: async () => {
+    await st.setup();
+    await rpc(page, 'checkin_print_stations', [{ id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online: true, printer_info: { model: 'brother-ql', lan: { host: 'evil.example', port: 7842, token: 'c'.repeat(32) } } }]);
+  } });
+  await page.route(/\/rest\/v1\/rpc\/checkin_queue_print/, r => r.abort('failed'));
+  await page.route(/evil\.example/, r => { contacted++; return r.abort('failed'); });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: this device is offline', { timeout: 10000 });
+  expect(contacted).toBe(0);
+});
+
 test('with no internet and no venue-network address, the station badge says it was not printed', async ({ page }) => {
   const st = await withStation(page, () => ({ status: 'done', error: null }));
   await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: st.setup });

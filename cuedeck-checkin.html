@@ -2277,9 +2277,15 @@ async function loadPrintStations() {
 // Straight to the station over the venue network, for when CueDeck cannot
 // be reached. Chrome asks once whether this page may reach devices on the
 // local network; Safari never lets it, so iPads need the internet.
+// Checked here too, not only by checkin-print-station: the row and this
+// device's cache can be written by other paths, and badges carry names and
+// QR codes. Only a private address, a sane port and a token of the right shape.
+const LAN_HOST = /^(10\.\d{1,3}|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}$/;
 async function printOverLan(st, labels) {
   const lan = st.printer_info && st.printer_info.lan;
-  if (!lan) return { ok: false, error: 'this device is offline' };
+  if (!lan || !LAN_HOST.test(String(lan.host)) || !Number.isInteger(lan.port) || lan.port < 1024 || lan.port > 65535 || !/^[0-9a-f]{32}$/.test(String(lan.token))) {
+    return { ok: false, error: 'this device is offline' };
+  }
   try {
     const r = await fetch('http://' + lan.host + ':' + lan.port + '/print', {
       method: 'POST', targetAddressSpace: 'local', signal: AbortSignal.timeout(15000),
