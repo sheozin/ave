@@ -125,22 +125,18 @@ const MAX_LABEL = 60
 
 const PAIRING_TTL_MS = 10 * 60 * 1000
 
-// The source address, for the claim limiter. Supabase sets
-// x-forwarded-for at the edge; the first entry is the client. Hashed
-// before it reaches the database (migration 056 section 5) so the
-// counter table never holds an address.
+// The source address, for the per-source limiters. Hashed before it reaches
+// the database (migration 056 section 5) so no table holds an address.
 //
-// 'unknown' when the header is absent puts every header-less caller in
-// one shared bucket, which is the conservative direction: it cannot
-// lock out a real venue, because a real venue always arrives through
-// the edge with the header set.
-// Caller-settable (the first X-Forwarded-For entry is whatever the client
-// sent), so per-source limits are only a first filter. What actually bounds
-// guessing is the service-wide ceiling on wrong codes and the per-person
-// limits below (migration 145), none of which trust this value.
+// cf-connecting-ip: Cloudflare sets it in front of Supabase and refuses a
+// request that sends its own (checked 2026-11-01: a forged CF-Connecting-IP
+// got Cloudflare error 1000). x-real-ip: Supabase overwrites it with the same
+// address. NOT x-forwarded-for: a forged value arrives untouched, so it
+// gave anyone unlimited buckets. checkin-register reads the same header.
+// 'unknown' (one shared bucket) only if both are missing, which a request
+// through the edge never is.
 function sourceAddress(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for')
-  return xff?.split(',')[0]?.trim() || 'unknown'
+  return (req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '').trim() || 'unknown'
 }
 
 // Service-wide ceiling on wrong pairing codes (migration 145). Fails closed.

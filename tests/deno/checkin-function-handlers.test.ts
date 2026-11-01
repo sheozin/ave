@@ -1900,3 +1900,15 @@ Deno.test('checkin-kiosk-pair: print stations cannot flood codes, and signed-in 
   const c = world.rpcCalls.filter(x => x.name === 'checkin_kiosk_pair_rate_check').at(-1)!
   assert(c.args.p_ip_hash === await sha256('user:' + USER), 'keyed on the person, not an address: ' + JSON.stringify(c))
 })
+Deno.test('checkin-kiosk-pair: limits key on Cloudflare\'s address, never on a forged X-Forwarded-For', async () => {
+  setup('none', { ent: { checkin_core: true, status: 'test', self_registration: true } })
+  world.rpcResult.checkin_kiosk_claim_pairing = []
+  for (const xff of ['203.0.113.1', '198.51.100.2, 10.0.0.1']) {
+    await handlers['checkin-kiosk-pair'](new Request('http://stub.local/functions/v1/checkin-kiosk-pair', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': xff, 'CF-Connecting-IP': '109.243.146.124', Origin: 'https://app.cuedeck.io' },
+      body: JSON.stringify({ action: 'claim', code: 'ABCD-EFGH' }) }))
+  }
+  const keys = world.rpcCalls.filter(x => x.name === 'checkin_kiosk_pair_rate_check').map(x => x.args.p_ip_hash)
+  const want = await sha256('109.243.146.124')
+  assert(keys.length === 2 && keys.every(k => k === want), 'one bucket for one real address: ' + JSON.stringify(keys))
+})
