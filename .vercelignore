@@ -8,6 +8,7 @@
 !/display-manifest.json
 !/console-sw.js
 !/display-sw.js
+!/checkin-sw.js
 !/cuedeck-console.html
 !/cuedeck-admin.html
 !/cuedeck-display.html

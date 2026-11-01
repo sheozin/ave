@@ -17,7 +17,10 @@ function refs(file: string): string[] {
   const s = readFileSync(file, 'utf8');
   const out = new Set<string>();
   for (const re of [/<script[^>]*\bsrc="\/([^"/][^"]*)"/g, /<link[^>]*\bhref="\/([^"/][^"]*\.(?:css|js))"/g,
-                    /\bimport\s[^'"]*?from\s*['"]\/([^'"]+)['"]/g, /\bimport\(\s*['"]\/([^'"]+)['"]\s*\)/g]) {
+                    /\bimport\s[^'"]*?from\s*['"]\/([^'"]+)['"]/g, /\bimport\(\s*['"]\/([^'"]+)['"]\s*\)/g,
+                    // A service worker the page registers: missing, the page still works online
+                    // and silently never opens offline (checkin-sw.js, 2026-11-01).
+                    /\bserviceWorker\.register\(\s*['"]\/([^'"]+)['"]/g]) {
     for (const m of s.matchAll(re)) out.add(m[1].split(/[?#]/)[0]);
   }
   return [...out];
