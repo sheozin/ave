@@ -799,6 +799,36 @@ test('guests tab: invitations go out in batches and answers show on each guest',
   await expect(page.locator('#gi-sum')).toContainText('3 invited');
 });
 
+test('guests tab: each guest shows when things happened: invited, answered, cancelled, QR sent, checked in, badge printed', async ({ page }) => {
+  const ago = (min: number) => new Date(FIXED_NOW.getTime() - min * 60000).toISOString();
+  const g = (id: string, first: string, extra: Record<string, unknown> = {}) => ({ id, first_name: first, last_name: 'X', email: first.toLowerCase() + '@example.invalid', company: null, ticket_type: 'attendee', source: 'import', is_test: false, created_at: ago(9000), ...extra });
+  let inv: Record<string, unknown> = {
+    g1: { sent_at: ago(2000), sent_count: 1, rsvp: 'going', rsvp_at: ago(120), revoked_at: null },
+    g2: { sent_at: ago(90), sent_count: 3, rsvp: null, rsvp_at: null, revoked_at: null },
+    g3: { sent_at: ago(500), sent_count: 1, rsvp: null, rsvp_at: null, revoked_at: null },
+  };
+  await open(page, { role: 'organizer', status: 'live' }, 'attendees', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', registration_mode: 'invite' }]);
+    await table(page, 'leod_checkin_attendees', [
+      g('g1', 'Gina', { qr_email_sent_at: ago(1500), checked_in_at: ago(30), badge_printed_at: ago(29) }),
+      g('g2', 'Hal'), g('g3', 'Ivy')]);
+    await rpc(page, 'checkin_invite_status', () => inv);
+    await rpc(page, 'checkin_speaker_links', { enabled: true, people: [] });
+    await rpc(page, 'checkin_invite_revoke', () => { inv = { ...inv, g3: { ...(inv.g3 as object), revoked_at: FIXED_NOW.toISOString() } }; return true; });
+  });
+  const row = (n: string) => page.locator('#att-body tr', { hasText: n });
+  await expect(row('Gina')).toContainText('Coming');
+  await expect(row('Gina')).toContainText('replied today');
+  await expect(row('Gina')).toContainText('badge printed today');
+  await expect(row('Hal')).toContainText('Invited');
+  await expect(row('Hal')).toContainText('3 times');
+  const cancel = row('Ivy').getByRole('button', { name: 'Cancel link' });
+  await cancel.click(); await row('Ivy').getByRole('button', { name: 'Click again' }).click();
+  await expect(row('Ivy')).toContainText('Link cancelled');
+  await expect(row('Ivy')).toContainText('cancelled today');
+  await expect(row('Ivy').getByRole('button', { name: 'Cancel link' })).toHaveCount(0);
+});
+
 test('registration tab: the automatic waitlist switch shows with the waitlist and saves', async ({ page }) => {
   const set: Record<string, unknown>[] = [];
   await open(page, { role: 'organizer' }, 'register', STAFF, async () => {

@@ -870,6 +870,8 @@ async function renderWebhooks() {
     const tr = el('tr');
     const a = el('td'); a.append(el('div', 'nm', w.url.replace(/^https:\/\//, '')));
     const last = el('td'); last.append(el('span', 'tag ' + (!w.last_status ? 't-wait' : w.last_status === 'ok' ? 't-in' : 't-test'), !w.last_status ? 'None yet' : w.last_status === 'ok' ? 'Delivered' : 'Failing'));
+    if (w.last_at) last.append(el('div', 'em', (w.last_status === 'ok' ? 'last delivered ' : 'last tried ') + atText(w.last_at)));
+    if (w.pending) last.append(el('div', 'em', w.pending + ' waiting to send'));
     if (w.last_status && w.last_status !== 'ok') last.append(el('div', 'em', w.last_status));
     if (w.failed) last.append(el('div', 'em', w.failed + ' gave up after retries'));
     const acts = el('td'); acts.style.whiteSpace = 'nowrap';
@@ -1025,8 +1027,12 @@ $('ot-delete').onclick = async () => {
 
 // ── 2. attendees ─────────────────────────────────────────
 function statusTag(a) {
-  if (a.checked_in_at) return el('span', 'tag ' + (isLive() ? 't-in' : 't-test'), isLive() ? 'Checked in' : 'Test check-in');
-  return el('span', 'em', 'Expected');
+  if (!a.checked_in_at) return el('span', 'em', 'Expected');
+  // When they arrived and when their badge printed, under the state.
+  const box = el('div');
+  box.append(el('span', 'tag ' + (isLive() ? 't-in' : 't-test'), isLive() ? 'Checked in' : 'Test check-in'),
+    el('div', 'em', atText(a.checked_in_at) + (a.badge_printed_at ? ' · badge printed ' + atText(a.badge_printed_at) : '')));
+  return box;
 }
 // ── speakers linked to the console (migration 112) ──
 async function renderSpeakers() {
@@ -1077,8 +1083,16 @@ function inviteCell(td, a) {
   const iv = INV[a.id];
   if (!iv && !(ENT.registration_mode === 'invite' && a.source === 'import' && a.email && isLive())) return;
   const line = el('div'); line.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px';
-  if (iv) line.append(el('span', 'tag ' + (iv.rsvp === 'going' ? 't-in' : iv.rsvp === 'not_going' ? 't-test' : 't-wait'),
-    iv.rsvp === 'going' ? 'Coming' : iv.rsvp === 'not_going' ? 'Not coming' : 'Invited'));
+  // State and when (migration 149): cancelled, answered, or sent and how often.
+  const cancelled = iv && iv.revoked_at && (!iv.sent_at || iv.revoked_at >= iv.sent_at);
+  if (iv) {
+    line.append(el('span', 'tag ' + (cancelled ? 't-test' : iv.rsvp === 'going' ? 't-in' : iv.rsvp === 'not_going' ? 't-test' : 't-wait'),
+      cancelled ? 'Link cancelled' : iv.rsvp === 'going' ? 'Coming' : iv.rsvp === 'not_going' ? 'Not coming' : 'Invited'));
+    const when = cancelled ? 'cancelled ' + atText(iv.revoked_at)
+      : iv.rsvp ? 'replied ' + atText(iv.rsvp_at) + ' · invited ' + atText(iv.sent_at)
+      : 'sent ' + atText(iv.sent_at) + (iv.sent_count > 1 ? ' · ' + iv.sent_count + ' times' : '');
+    line.append(el('span', 'em', when));
+  }
   if (isLive() && a.email && a.source === 'import') {
     const again = el('button', 'link', iv ? 'Invite again' : 'Invite'); again.type = 'button';
     again.onclick = async () => {
@@ -1086,17 +1100,18 @@ function inviteCell(td, a) {
       const { error } = await sb.functions.invoke('checkin-invite-guests', { body: { event_id: EVENT_ID, action: 'resend', attendee_ids: [a.id] } });
       again.disabled = false;
       if (error) { $('gi-err').textContent = await fnError(error); return; }
-      $('gi-ok').textContent = 'Invitation sent to ' + a.email + '.'; await loadInvites(); renderInviteBar(); renderAttendees();
+      $('gi-ok').textContent = 'Invitation sent to ' + a.email + ', ' + atText(new Date().toISOString()) + '.'; await loadInvites(); renderInviteBar(); renderAttendees();
     };
     line.append(again);
   }
-  if (iv) {
+  if (iv && !cancelled) {
     const cancel = el('button', 'link', 'Cancel link'); cancel.type = 'button'; cancel.title = 'Stop every invitation link of this guest from working, for example if it was forwarded';
     cancel.onclick = async () => {
       if (cancel.dataset.armed !== '1') { cancel.dataset.armed = '1'; cancel.textContent = 'Click again'; setTimeout(() => { cancel.dataset.armed = ''; cancel.textContent = 'Cancel link'; }, 3500); return; }
       const { error } = await sb.rpc('checkin_invite_revoke', { p_event_id: EVENT_ID, p_attendee_id: a.id });
       if (error) { $('gi-err').textContent = error.message; return; }
       $('gi-ok').textContent = 'Their invitation link no longer works. Use Invite again to send a new one.';
+      await loadInvites(); renderAttendees();
     };
     line.append(cancel);
   }
@@ -1142,6 +1157,7 @@ function renderAttendees() {
     if (!a.email) n.lastChild.style.color = 'var(--rd)';
     inviteCell(n, a);
     const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
+    if (a.qr_email_sent_at) qr.append(el('div', 'em', atText(a.qr_email_sent_at)));
     if (isLive() && a.email) {
       const rs = el('button', 'link', 'Resend QR'); rs.dataset.resend = a.id;
       const out = el('div', 'em');
@@ -1164,7 +1180,7 @@ async function resendQr(a, btn, out) {
   btn.disabled = false;
   if (error) { out.style.color = 'var(--rd)'; out.textContent = await fnError(error); return; }
   const s = data.summary || {};
-  if (s.sent) { out.textContent = 'Sent to ' + a.email; a.qr_email_sent_at = a.qr_email_sent_at || new Date().toISOString(); }
+  if (s.sent) { a.qr_email_sent_at = new Date().toISOString(); out.textContent = 'Sent to ' + a.email + ', ' + atText(a.qr_email_sent_at); }
   else { out.style.color = 'var(--rd)'; out.textContent = 'Not sent. Try again.'; }
 }
 document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
@@ -1613,6 +1629,10 @@ function renderTickets() {
       acts.append(rf);
     }
     const tag = el('td'); tag.append(el('span', 'tag ' + st[1], st[0]));
+    // When: paid, refunded, or when checkout started.
+    const when = o.status === 'refunded' ? 'refunded ' + atText(o.refunded_at) + (o.paid_at ? ' · paid ' + atText(o.paid_at) : '')
+      : o.status === 'paid' ? atText(o.paid_at) : 'started ' + atText(o.created_at);
+    tag.append(el('div', 'em', when));
     tr.append(who, el('td', null, o.ticket_name), el('td', null, fmtMoney(o.amount_cents, o.currency)), tag, acts);
     return tr;
   }));
