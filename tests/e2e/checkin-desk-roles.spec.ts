@@ -1145,3 +1145,42 @@ test('a desk unused for over 12 hours does not open offline on its stored sign-i
   await expect(desk.locator('#signin')).toBeVisible({ timeout: 10000 });
   await context.setOffline(false);
 });
+
+test('a desk tab from before an update holds the database: the new desk says so, then opens once it closes', async ({ page, context }) => {
+  // The older desk: version 1 of the database, held open as that code did.
+  const old = await context.newPage();
+  await old.goto('/favicon.svg');
+  await old.evaluate(() => new Promise<void>((ok, no) => {
+    const r = indexedDB.open('cuedeck-checkin', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('roster', { keyPath: 'id' }); r.result.createObjectStore('outbox', { keyPath: 'client_id' }); };
+    r.onsuccess = () => { (window as unknown as { held: IDBDatabase }).held = r.result; ok(); };
+    r.onerror = () => no(r.error);
+  }));
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_desk_heartbeat', () => 'Desk 1');
+  await rpc(page, 'checkin_recent_alerts', () => []);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'crew' })]);
+  await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status: 'live' }]);
+  await table(page, 'leod_checkin_attendees', [ANA, BEN]);
+  await page.goto('/cuedeck-checkin.html?event=' + EVENT_ID);
+  await expect(page.locator('#db-blocked')).toContainText('Close it (or reload it)');
+  await expect(page.locator('#station')).toBeHidden();
+  await old.close();
+  await expect(page.locator('#station')).toBeVisible();
+  await expect(page.locator('#db-blocked')).toHaveCount(0);
+  await search(page, 'Ben');
+  await expect(page.locator('.ck-res-row', { hasText: 'Ben Probe' })).toBeVisible();
+});
+
+test('the desk gives up its database connection when a newer desk needs to upgrade it', async ({ page, context }) => {
+  await open(page, { role: 'crew' });
+  const next = await context.newPage();
+  await next.goto('/favicon.svg');
+  const upgraded = await next.evaluate(() => new Promise<string>((ok) => {
+    const r = indexedDB.open('cuedeck-checkin', 3);
+    r.onblocked = () => ok('blocked');
+    r.onsuccess = () => { r.result.close(); ok('upgraded'); };
+  }));
+  expect(upgraded).toBe('upgraded');
+});
