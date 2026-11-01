@@ -645,6 +645,24 @@ async function loadStaff() {
   const { data, error } = await sb.functions.invoke('checkin-invite-staff', { body: { event_id: EVENT_ID, action: 'list' } });
   if (error) throw new Error(await fnError(error));
   STAFF = data.staff || [];
+  await loadMail();
+}
+// Whether each check-in email arrived (migration 150): delivered, opened,
+// bounced. Read with the lists it annotates; unknown when it cannot be read.
+let MAIL = { guests: {}, staff: {} };
+async function loadMail() {
+  const { data, error } = await sb.rpc('checkin_email_status', { p_event_id: EVENT_ID });
+  MAIL = error || !data ? { guests: {}, staff: {} } : data;
+}
+// One line for an email's fate, coloured: nothing while it is only "sent".
+function mailFate(m, sentAt) {
+  if (!m || (sentAt && m.at && m.at < sentAt && m.status === 'sent')) return null;
+  const t = { delivered: ['delivered', 'var(--gn)'], opened: ['opened', 'var(--gn)'], clicked: ['opened', 'var(--gn)'],
+    bounced: ['bounced: check the email address', 'var(--rd)'], complained: ['marked as spam', 'var(--rd)'],
+    failed: ['not delivered', 'var(--rd)'], delivery_delayed: ['delivery delayed', 'var(--am)'] }[m.status];
+  if (!t) return null;
+  const d = el('div', 'em', t[0] + (m.at ? ' ' + atText(m.at) : '')); d.style.color = t[1]; d.style.fontWeight = '600';
+  return d;
 }
 
 async function loadPrice() {
@@ -1066,6 +1084,7 @@ $('sp-on').onchange = async () => {
 let INV = {};
 const invitable = () => ATT.filter(a => a.source === 'import' && a.email && (!a.is_test || !isLive()));
 async function loadInvites() {
+  await loadMail();
   const { data, error } = await sb.rpc('checkin_invite_status', { p_event_id: EVENT_ID });
   INV = error ? {} : (data || {});
   if (error) $('gi-err').textContent = error.message;
@@ -1092,6 +1111,7 @@ function inviteCell(td, a) {
       : iv.rsvp ? 'replied ' + atText(iv.rsvp_at) + ' · invited ' + atText(iv.sent_at)
       : 'sent ' + atText(iv.sent_at) + (iv.sent_count > 1 ? ' · ' + iv.sent_count + ' times' : '');
     line.append(el('span', 'em', when));
+    const f = !cancelled && mailFate((MAIL.guests[a.id] || {}).guest_invite); if (f) line.append(f);
   }
   if (isLive() && a.email && a.source === 'import') {
     const again = el('button', 'link', iv ? 'Invite again' : 'Invite'); again.type = 'button';
@@ -1158,6 +1178,7 @@ function renderAttendees() {
     inviteCell(n, a);
     const qr = el('td'); qr.appendChild(a.email ? el('span', 'tag ' + (a.qr_email_sent_at ? 't-sent' : 't-wait'), a.qr_email_sent_at ? 'Sent' : 'Not sent') : el('span', 'em', 'n/a'));
     if (a.qr_email_sent_at) qr.append(el('div', 'em', atText(a.qr_email_sent_at)));
+    const qf = a.qr_email_sent_at && mailFate((MAIL.guests[a.id] || {}).qr); if (qf) qr.append(qf);
     if (isLive() && a.email) {
       const rs = el('button', 'link', 'Resend QR'); rs.dataset.resend = a.id;
       const out = el('div', 'em');
@@ -1932,6 +1953,7 @@ function staffStatus(s) {
   if (s.invited_at) {
     line('Invitation sent', 'wait');
     sub(atText(s.invited_at) + (s.invite_count > 1 ? ' · sent ' + s.invite_count + ' times' : '') + ' · not accepted yet');
+    const f = mailFate(MAIL.staff[s.user_id]); if (f) td.appendChild(f);
   } else {
     line(s.last_sign_in_at === undefined ? 'Added' : 'Not joined yet', 'muted');
     sub('Added ' + atText(s.added_at) + ' · has not signed in');

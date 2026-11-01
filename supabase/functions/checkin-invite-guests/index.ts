@@ -16,6 +16,7 @@
 // (/r/<code>#i=<token>), so it stays out of server logs.
 
 import { adminClient } from '../_shared/client.ts'
+import { logCheckinEmail } from '../_shared/checkin-email-log.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { sendEmail }    from '../_shared/resend.ts'
 import { withBrand, escapeHtml } from '../_shared/qr-email.ts'
@@ -144,7 +145,7 @@ Deno.serve(async (req) => {
     if (out.status !== 'issued') continue
     const langs = await langsFor(sb, event_id, [String(out.email)])
     const m = inviteEmail(e, String(out.first_name), base + '#i=' + token, langs.get(String(out.email).toLowerCase()) ?? 'en')
-    const { error: mailErr } = await sendEmail({ to: String(out.email), subject: m.subject, html: m.html, fromName })
+    const { error: mailErr, id: resendId } = await sendEmail({ to: String(out.email), subject: m.subject, html: m.html, fromName })
     if (mailErr) {
       failed++
       console.error('checkin-invite-guests: send failed, attendee', id)
@@ -152,6 +153,7 @@ Deno.serve(async (req) => {
       if (unErr) console.error('checkin-invite-guests: unissue failed', unErr.code)
       continue
     }
+    await logCheckinEmail(sb, { event_id, kind: 'guest_invite', resend_id: resendId, attendee_id: id })
     sent++
   }
   console.log('checkin-invite-guests:', action, 'sent', sent, 'failed', failed, 'event', event_id)

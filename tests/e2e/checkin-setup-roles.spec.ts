@@ -265,6 +265,7 @@ test('desk staff show when their invitation went out, whether they joined, and c
   ];
   await open(page, { role: 'organizer' }, 'staff', staff, async () => {
     await fn(page, 'checkin-invite-staff', (b) => { calls.push(b); return { body: b.action === 'list' ? { ok: true, staff } : { ok: true, sent: true } }; });
+    await rpc(page, 'checkin_email_status', { guests: {}, staff: { [STAFF[3].user_id]: { status: 'bounced', at: ago(20) } } });
   });
   const rows = page.locator('#staff-body tr');
   await expect(rows).toHaveCount(4);
@@ -273,6 +274,7 @@ test('desk staff show when their invitation went out, whether they joined, and c
   await expect(rows.nth(1)).toContainText('Active 3 h ago');
   await expect(rows.nth(2)).toContainText('Invitation sent');
   await expect(rows.nth(2)).toContainText('sent 2 times · not accepted yet');
+  await expect(rows.nth(2)).toContainText('bounced: check the email address');
   await expect(rows.nth(3)).toContainText('Not joined yet');
   await rows.nth(2).getByRole('button', { name: 'Send again' }).click();
   await expect(page.locator('#inv-ok')).toContainText('Invitation sent again to cris@cuedeck-test.io');
@@ -815,11 +817,15 @@ test('guests tab: each guest shows when things happened: invited, answered, canc
     await rpc(page, 'checkin_invite_status', () => inv);
     await rpc(page, 'checkin_speaker_links', { enabled: true, people: [] });
     await rpc(page, 'checkin_invite_revoke', () => { inv = { ...inv, g3: { ...(inv.g3 as object), revoked_at: FIXED_NOW.toISOString() } }; return true; });
+    await rpc(page, 'checkin_email_status', { guests: { g1: { qr: { status: 'delivered', at: ago(1490) }, guest_invite: { status: 'opened', at: ago(1900) } }, g2: { guest_invite: { status: 'bounced', at: ago(80) } } }, staff: {} });
   });
   const row = (n: string) => page.locator('#att-body tr', { hasText: n });
   await expect(row('Gina')).toContainText('Coming');
   await expect(row('Gina')).toContainText('replied today');
   await expect(row('Gina')).toContainText('badge printed today');
+  await expect(row('Gina')).toContainText('delivered');
+  await expect(row('Gina')).toContainText('opened');
+  await expect(row('Hal')).toContainText('bounced: check the email address');
   await expect(row('Hal')).toContainText('Invited');
   await expect(row('Hal')).toContainText('3 times');
   const cancel = row('Ivy').getByRole('button', { name: 'Cancel link' });

@@ -95,9 +95,9 @@ export function renderInviteEmail(m: InviteEmail): { subject: string; html: stri
   return { subject, html, text }
 }
 
-export async function sendInviteEmail(m: InviteEmail): Promise<{ error?: string }> {
+export async function sendInviteEmail(m: InviteEmail): Promise<{ error?: string; id?: string }> {
   const { subject, html, text } = renderInviteEmail(m)
   const fromName = m.product === 'checkin' ? 'CueDeck Check-in' : 'CueDeck'
-  const { error } = await sendEmail({ to: m.to, subject, html, text, fromName, tags: [{ name: 'type', value: 'invite_' + m.product }] })
-  return error ? { error } : {}
+  const { error, id } = await sendEmail({ to: m.to, subject, html, text, fromName, tags: [{ name: 'type', value: 'invite_' + m.product }] })
+  return error ? { error } : { id }
 }

@@ -17,6 +17,7 @@
 import { adminClient } from '../_shared/client.ts'
 import { corsHeaders }  from '../_shared/cors.ts'
 import { sendInviteEmail } from '../_shared/invite-email.ts'
+import { logCheckinEmail } from '../_shared/checkin-email-log.ts'
 import { isUuid, loadCallerRole, removeVerdict, GRANT_ROLES, type GrantRole } from '../_shared/checkin-roles.ts'
 import {
   archivedVerdict, archiveVerdict, inviteRoleVerdict, likeEscape, normalizeInviteEmail, removeResponse, staffGate,
@@ -257,11 +258,12 @@ Deno.serve(async (req) => {
   // When the invitation went out, how often, by whom (migration 148). After
   // the email is sent, never before, so the time shown is a real send. A
   // failed stamp is logged, not fatal: the email already left.
-  const stampSent = async () => {
+  const stampSent = async (resendId?: string) => {
+    await logCheckinEmail(sb, { event_id, kind: 'staff_invite', resend_id: resendId, user_id: userId })
     const { data: row, error: rErr } = await sb.from('leod_checkin_operators').select('invite_count').eq('event_id', event_id).eq('user_id', userId).maybeSingle()
     if (rErr) { console.error('checkin-invite-staff: invite count read failed', rErr.code); return }
     const { error: sErr } = await sb.from('leod_checkin_operators')
-      .update({ invited_at: new Date().toISOString(), invite_count: (row?.invite_count ?? 0) + 1, invited_by: user.id })
+      .update({ invited_at: new Date().toISOString(), invite_count: (row?.invite_count ?? 0) + 1, invite_sent_by: user.id })
       .eq('event_id', event_id).eq('user_id', userId)
     if (sErr) console.error('checkin-invite-staff: invite time not recorded', sErr.code)
   }
@@ -272,12 +274,12 @@ Deno.serve(async (req) => {
   }
 
   if (isNew) {
-    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: newLink, actionLabel: 'Accept the invitation' })
+    const { error: mailErr, id: resendId } = await sendInviteEmail({ ...mail, actionUrl: newLink, actionLabel: 'Accept the invitation' })
     if (mailErr) {
       console.error('checkin-invite-staff: invite email failed for event', event_id, mailErr)
       return json({ error: 'Could not send the invitation' }, 502)
     }
-    await stampSent()
+    await stampSent(resendId)
   } else if (needsLink) {
     const { data: link, error: linkErr } = await sb.auth.admin.generateLink({
       type: unconfirmed ? 'invite' : 'recovery',
@@ -289,18 +291,18 @@ Deno.serve(async (req) => {
       console.error('checkin-invite-staff: invite link failed', linkErr?.code ?? linkErr?.status ?? 'no link')
       return json({ error: 'Could not send the invitation' }, 502)
     }
-    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: actionLink, actionLabel: 'Accept the invitation' })
+    const { error: mailErr, id: resendId } = await sendInviteEmail({ ...mail, actionUrl: actionLink, actionLabel: 'Accept the invitation' })
     if (mailErr) {
       console.error('checkin-invite-staff: invite link email failed for event', event_id, mailErr)
       return json({ error: 'Could not send the invitation' }, 502)
     }
-    await stampSent()
+    await stampSent(resendId)
   } else {
-    const { error: mailErr } = await sendInviteEmail({ ...mail, actionUrl: `${appUrl}/checkin`, actionLabel: 'Open CueDeck Check-in', existingAccount: true })
+    const { error: mailErr, id: resendId } = await sendInviteEmail({ ...mail, actionUrl: `${appUrl}/checkin`, actionLabel: 'Open CueDeck Check-in', existingAccount: true })
     // The grant is in place; a lost notice is not worth failing the
     // request over, but it must be visible.
     if (mailErr) console.error('checkin-invite-staff: notice email failed for event', event_id, mailErr)
-    else await stampSent()
+    else await stampSent(resendId)
   }
 
   return json({ ok: true, sent: true })

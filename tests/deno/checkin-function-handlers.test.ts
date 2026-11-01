@@ -58,7 +58,7 @@ function ilikeMatch(pattern: string, value: string): boolean {
   return new RegExp('^' + re + '$', 'is').test(value)
 }
 
-// eq, in and ilike are the filters the handlers use; anything else is ignored.
+// eq, in, ilike and lt/lte/gt/gte are the filters the handlers use; anything else is ignored.
 function rowFilter(url: URL): (r: Row) => boolean {
   const tests: ((r: Row) => boolean)[] = []
   for (const [k, v] of url.searchParams) {
@@ -69,6 +69,10 @@ function rowFilter(url: URL): (r: Row) => boolean {
     } else if (v.startsWith('ilike.')) {
       const pattern = v.slice(6)
       tests.push(r => ilikeMatch(pattern, String(r[k] ?? '')))
+    } else if (/^(lt|lte|gt|gte)\./.test(v)) {
+      // Timestamps compare as ISO strings, as Postgres compares them.
+      const [op, val] = [v.slice(0, v.indexOf('.')), v.slice(v.indexOf('.') + 1)]
+      tests.push(r => r[k] != null && (op === 'lt' ? String(r[k]) < val : op === 'lte' ? String(r[k]) <= val : op === 'gt' ? String(r[k]) > val : String(r[k]) >= val))
     }
   }
   return (r: Row) => tests.every(t => t(r))
@@ -82,6 +86,12 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   const method = (init?.method ?? req?.method ?? 'GET').toUpperCase()
   const headers = new Headers(init?.headers ?? req?.headers)
   if (url.host === 'api.resend.com') {
+    // GET /emails/:id: what checkin-email-status asks (migration 150).
+    if (method === 'GET' && url.pathname.startsWith('/emails/')) {
+      const id = decodeURIComponent(url.pathname.slice(8))
+      const ev = (world as World & { resendEvents?: Record<string, string> }).resendEvents?.[id]
+      return ev ? reply(200, { id, last_event: ev }) : reply(404, { message: 'not found' })
+    }
     ;(world.emails ??= []).push(JSON.parse(String(init?.body ?? '{}')))
     return reply(200, { id: 'email-stub' })
   }
@@ -186,7 +196,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -1931,7 +1941,7 @@ Deno.test(`${IS} invite: each email sent is stamped with its time, count and sen
   let r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
   assert(r.status === 200 && r.body.sent === true, JSON.stringify(r))
   let row = ops().find(o => o.user_id === CREW)!
-  assert(typeof row.invited_at === 'string' && row.invite_count === 1 && row.invited_by === USER, JSON.stringify(row))
+  assert(typeof row.invited_at === 'string' && row.invite_count === 1 && row.invite_sent_by === USER, JSON.stringify(row))
   r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
   row = ops().find(o => o.user_id === CREW)!
   assert(r.status === 200 && row.invite_count === 2, 'sent again counts: ' + JSON.stringify(row))
@@ -1952,4 +1962,38 @@ Deno.test(`${IS} list: each person comes with when they were invited and whether
   const crew = (r.body.staff as Row[]).find(x => x.user_id === CREW)!, lead = (r.body.staff as Row[]).find(x => x.user_id === LEAD)!
   assert(crew.invited_at === '2026-10-30T14:05:00Z' && crew.invite_count === 2 && crew.added_at === '2026-10-29T08:00:00Z' && crew.last_sign_in_at === null, JSON.stringify(crew))
   assert(lead.last_sign_in_at === '2026-10-31T10:00:00Z', JSON.stringify(lead))
+})
+
+// ── email delivery (migration 150) ──
+Deno.test(`${IS} invite: the invitation email is recorded with its Resend id, so its delivery can be followed`, async () => {
+  staffSetup('organizer')
+  world.authUsers![CREW] = { id: CREW, email: 'crew@stub.test', email_confirmed_at: null, last_sign_in_at: null, aud: 'authenticated' }
+  world.tables.leod_checkin_emails = []
+  const r = await call(IS, { event_id: EVENT, action: 'invite', email: 'crew@stub.test', role: 'crew' })
+  assert(r.status === 200, JSON.stringify(r))
+  const row = world.tables.leod_checkin_emails[0]
+  assert(row && row.kind === 'staff_invite' && row.user_id === CREW && row.resend_id === 'email-stub' && row.event_id === EVENT, JSON.stringify(world.tables.leod_checkin_emails))
+})
+Deno.test('checkin-email-status: only the cron may run it; it records what Resend says became of each email', async () => {
+  setup('none')
+  world.rpcResult.checkin_email_status_cron_ok = false
+  let r = await call('checkin-email-status', {})
+  assert(r.status === 401, JSON.stringify(r))
+  world.rpcResult.checkin_email_status_cron_ok = true
+  world.tables.leod_checkin_job_runs = []
+  const recent = new Date().toISOString()
+  world.tables.leod_checkin_emails = [
+    { id: 1, resend_id: 're_a', status: 'sent', sent_at: recent, checked_at: null },
+    { id: 2, resend_id: 're_b', status: 'sent', sent_at: recent, checked_at: null },
+    { id: 3, resend_id: 're_c', status: 'delivery_delayed', sent_at: recent, checked_at: null },
+  ]
+  ;(world as World & { resendEvents?: Record<string, string> }).resendEvents = { re_a: 'delivered', re_b: 'bounced', re_c: 'nonsense' }
+  r = await call('checkin-email-status', {})
+  assert(r.status === 200 && String(r.body.detail).startsWith('checked 3, changed 2'), JSON.stringify(r))
+  const by = (id: number) => world.tables.leod_checkin_emails.find(x => x.id === id)!
+  assert(by(1).status === 'delivered' && by(1).status_at && by(1).checked_at, JSON.stringify(by(1)))
+  assert(by(2).status === 'bounced', JSON.stringify(by(2)))
+  assert(by(3).status === 'delivery_delayed' && !by(3).status_at && by(3).checked_at, 'an unknown event keeps the state: ' + JSON.stringify(by(3)))
+  const run = world.tables.leod_checkin_job_runs[0]
+  assert(run && run.job_name === 'checkin-email-status' && run.status === 'ok', JSON.stringify(run))
 })

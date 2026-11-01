@@ -9,6 +9,7 @@
 
 import qrcode from 'https://esm.sh/qrcode-generator@1.4.4'
 import { sendEmail } from './resend.ts'
+import { logCheckinEmail } from './checkin-email-log.ts'
 import { et, emailDate, dirOf, langsFor, type Lang } from './email-i18n.ts'
 
 export interface QrEmailAttendee {
@@ -155,7 +156,7 @@ export async function sendQrEmailsForAttendees(
       const lang = langs.get(to.toLowerCase()) ?? 'en'
       const html = renderQrEmailHtml(event, attendee, qrDataUrl, opts.guestOf, lang)
 
-      const { error } = await sendEmail({
+      const { error, id: resendId } = await sendEmail({
         to,
         subject: opts.guestOf ? et(lang, 'Ticket for {name}: {event}', { name: attendee.first_name, event: event.name })
           : et(lang, 'Your check-in QR code: {event}', { event: event.name }),
@@ -178,6 +179,11 @@ export async function sendQrEmailsForAttendees(
           // for visibility rather than silently losing the discrepancy.
           console.error('sendQrEmailsForAttendees: qr_email_sent_at update failed for', attendee.id, updateErr.message)
         }
+      }
+      // Delivery followed by checkin-email-status (migration 150); not for a
+      // test sent to the organizer, which is not this guest's email.
+      if (opts.recordSent !== false && !opts.overrideTo && event.event_id) {
+        await logCheckinEmail(sb, { event_id: event.event_id, kind: 'qr', resend_id: resendId, attendee_id: attendee.id })
       }
       results.push({ attendee_id: attendee.id, status: 'sent' })
     } catch (err) {
