@@ -1497,3 +1497,52 @@ test('the guest list shows at most 200 rows and points to search for the rest', 
   await expect(page.locator('#guests .ck-res-row')).toHaveCount(200);
   await expect(page.locator('#guests .ck-res-note')).toHaveText('Showing 200 of 205. Search above to find anyone else.');
 });
+
+// Printing without checking in: badges printed ahead of the doors, and a
+// second copy for someone already here. Neither may send a check-in.
+async function openCountingPrints(page, roster: Record<string, unknown>[]) {
+  const sent: string[] = [];
+  await page.addInitScript(() => { (window as unknown as { __prints: string[] }).__prints = []; window.print = () => {
+    (window as unknown as { __prints: string[] }).__prints.push(document.getElementById('badge-sheet')!.textContent || ''); }; });
+  await open(page, { role: 'crew', roster, scanResult: (i) => { sent.push(i.action); return 'ok'; } });
+  return sent;
+}
+const prints = (page) => page.evaluate(() => (window as unknown as { __prints: string[] }).__prints);
+
+test('print badge only prints the ticked guest and leaves them not checked in', async ({ page }) => {
+  const sent = await openCountingPrints(page, [ANA, BEN]);
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await expect(page.locator('#printonly')).toHaveText('Print 1 badge only');
+  await page.locator('#printonly').click();
+  await expect.poll(() => prints(page)).toHaveLength(1);
+  expect((await prints(page))[0]).toContain('Ben');
+  await expect(page.locator('#verdict')).toContainText('Badge for Ben Probe sent to print');
+  await expect(page.locator('#verdict')).toContainText('not checked in');
+  await expect(page.locator('#party .prow', { hasText: 'Ben Probe' }).locator('.pill-un')).toHaveText('not here yet');
+  await expect(page.locator('#printonly')).toBeDisabled();
+  await page.waitForTimeout(300);
+  expect(sent).toEqual([]);
+});
+
+test('an arrived guest gets a second badge from their row, with no new check-in', async ({ page }) => {
+  const sent = await openCountingPrints(page, [ANA, BEN]);
+  await search(page, 'Ana');
+  await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
+  const row = page.locator('#party .prow', { hasText: 'Ana Probe' });
+  await row.locator('.ck-reprint').click();
+  await expect.poll(() => prints(page)).toHaveLength(1);
+  expect((await prints(page))[0]).toContain('Ana');
+  await expect(page.locator('#verdict')).toContainText('Badge for Ana Probe sent to print');
+  await expect(row.locator('.pill-in')).toContainText('arrived');
+  await page.waitForTimeout(300);
+  expect(sent).toEqual([]);
+});
+
+test('print badge only is off until someone is ticked', async ({ page }) => {
+  await openCountingPrints(page, [ANA, BEN]);
+  await search(page, 'Ana');
+  await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
+  await expect(page.locator('#printonly')).toBeDisabled();
+  await expect(page.locator('#printonly')).toHaveText('Print badge only');
+});

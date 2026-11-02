@@ -295,7 +295,8 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 /* A printed badge cannot be un-printed, so a name corrected afterwards
    leaves the attendee wearing the old spelling. Amber and quiet: it
    sits under the name it contradicts, states the fact, and asks for
-   nothing. There is deliberately no reprint control here.          */
+   nothing. A second badge is printed from the row's own
+   "Print badge again" control, not from this note.                */
 .pstale{font-size:12px;font-weight:600;color:var(--am);margin-top:3px;overflow-wrap:anywhere}
 
 /* ── DESK ACTIONS ── */
@@ -675,6 +676,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
       <div class="ck-actions" id="actions" style="display:none">
         <button class="ck-btn" type="button" id="primary"></button>
         <button class="ck-btn ghost" type="button" id="secondary">Check in without printing</button>
+        <button class="ck-btn ghost" type="button" id="printonly">Print badge only</button>
       </div>
       <!-- The whole guest list, under the search: who is still to come,
            who is in. Hidden while a name is being searched, so the
@@ -2365,6 +2367,10 @@ scanInput.addEventListener('input', () => {
 
 document.getElementById('primary').addEventListener('click', () => commitTicked({ print: true }));
 document.getElementById('secondary').addEventListener('click', () => commitTicked({ print: false }));
+document.getElementById('printonly').addEventListener('click', () => {
+  if (!S.party) return;
+  printWithoutCheckin(S.party.members.filter(m => S.party.ticked.has(m.id)));
+});
 
 // ═══════════════════════════════════════════════════
 // BADGE PRINTING
@@ -2900,6 +2906,24 @@ async function undoCheckin(attendee) {
   // rather than at the next 60-second refresh.
   Promise.resolve(flushOutbox()).then(() => { if (alertEvent) loadDeskAlerts(); });
   return true;
+}
+
+// Badges printed with no check-in: ahead of the doors, or a second copy
+// for someone already here. Nothing goes to the outbox, so the test-mode
+// cap and the check-in window do not apply; printBadges stamps
+// badge_printed_at exactly as it does after a check-in.
+async function printWithoutCheckin(people) {
+  if (!people.length) return;
+  await printBadges(people);
+  if (S.party) people.forEach(m => S.party.ticked.delete(m.id));
+  renderParty();
+  const names = people.map(fullName).join(', ');
+  const arrived = people.filter(p => p.checked_in_at);
+  showVerdict('ok', (people.length === 1 ? 'Badge for ' : 'Badges for ') + names + ' sent to print',
+    arrived.length === people.length
+      ? (people.length === 1 ? 'Their check-in at ' + atTime(people[0].checked_in_at) + ' is unchanged.' : 'Their check-ins are unchanged.')
+      : 'They are not checked in. Check them in when they arrive.');
+  scanInput.focus();
 }
 
 async function commitTicked(opts) {
@@ -3618,6 +3642,17 @@ function partyRow(attendee, ticked, onToggle) {
   // and the person who made it is looking straight at this card.
   if (mayUndoHere(attendee)) row.appendChild(undoButton(attendee, 'Undo check-in'));
 
+  // Arrived rows cannot be ticked, so their second badge has its own control.
+  if (attendee.checked_in_at && !KIOSK) {
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.className = 'ck-fix ck-reprint';
+    again.textContent = 'Print badge again';
+    again.setAttribute('aria-label', 'Print another badge for ' + fullName(attendee));
+    again.addEventListener('click', () => printWithoutCheckin([attendee]));
+    row.appendChild(again);
+  }
+
   // A wrong spelling is worth correcting whether or not they have already
   // arrived: the badge has not necessarily been printed yet, and the
   // roster is what the delegate list is built from either way.
@@ -3730,6 +3765,9 @@ function renderPrimary(count) {
         ? 'Check in 1 · Print 1 badge'
         : `Check in ${count} · Print ${count} badges`);
   btn.disabled = count === 0;
+  const only = document.getElementById('printonly');
+  only.textContent = count === 0 ? 'Print badge only' : (count === 1 ? 'Print 1 badge only' : `Print ${count} badges only`);
+  only.disabled = count === 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════
