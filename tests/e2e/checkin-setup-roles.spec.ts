@@ -956,3 +956,75 @@ test('reports: a desk lead sees no export and the activity is never fetched', as
   await expect(page.locator('#xp-box')).toBeHidden();
   expect(called).toBe(false);
 });
+
+const HUNDRED = Array.from({ length: 100 }, (_, i) => ({ id: 'g' + i, first_name: 'Guest', last_name: String(i), email: null, company: null, ticket_type: null,
+  checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'import', created_at: '2026-10-01T00:00:00Z' }));
+
+test('staffing plan: with no past events the organizer types estimates, sees the plan and saves it', async ({ page }) => {
+  let sent: Record<string, unknown> | null = null;
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', HUNDRED);
+    await rpc(page, 'checkin_activity_export', []);
+    await rpc(page, 'checkin_arrival_history', []);
+    await rpc(page, 'checkin_save_staffing_plan', (a) => { sent = a; return { ...(a.p_plan as object), saved_at: '2026-10-10T10:00:00Z' }; });
+  });
+  await expect(page.locator('#pl-src')).toHaveText('Enter your own estimates. After your first live event with 30 or more check-ins, these fill in from what really happened.');
+  await expect(page.locator('#pl-turnout')).toHaveValue('');
+  await expect(page.locator('#pl-need')).toContainText('To see the plan, enter how many will come, seconds per guest');
+  await expect(page.locator('#pl-save')).toBeDisabled();
+  await page.locator('#pl-turnout').fill('80');
+  await page.locator('#pl-secs').fill('20');
+  await page.locator('#pl-before').fill('30');
+  await page.locator('#pl-after').fill('30');
+  await expect(page.locator('#pl-need')).toHaveText('About 80 of 100 guests expected. At most 1 desk at once.');
+  await expect(page.locator('#pl-adv li')).toHaveCount(2);
+  await expect(page.locator('#pl-adv li').first()).toContainText('08:30');
+  await expect(page.locator('#pl-adv li').first()).toContainText('Open with 1 desk');
+  await expect(page.locator('#pl-adv li').last()).toContainText('The plan expects everyone by 09:30.');
+  await expect(page.locator('#pl-strip .pl-col')).toHaveCount(4);
+  await page.locator('#pl-save').click();
+  await expect(page.locator('#pl-state')).toHaveText('Saved. The dashboard shows this plan against real arrivals.');
+  expect(sent).toEqual({ p_event_id: EVENT_ID, p_plan: { turnout_pct: 80, seconds_per_guest: 20, before_min: 30, after_min: 30 } });
+  await expect(page.locator('#pl-clear')).toBeVisible();
+});
+
+test('staffing plan: a past live event fills the numbers and the arrival times', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', HUNDRED);
+    await rpc(page, 'checkin_activity_export', []);
+    await rpc(page, 'checkin_arrival_history', [{ event_id: 'p1', name: 'Spring Forum', date: '2026-03-12', registered: 50, checked_in: 40,
+      buckets: [{ o: -1, n: 20 }, { o: 0, n: 20 }], desk_busiest: [30, 3] }]);
+  });
+  await expect(page.locator('#pl-src')).toHaveText('Filled from what happened at Spring Forum (12 Mar 2026). Change any number.');
+  await expect(page.locator('#pl-turnout')).toHaveValue('80');
+  await expect(page.locator('#pl-secs')).toHaveValue('30');
+  await expect(page.locator('#pl-shape-note')).toBeVisible();
+  await expect(page.locator('#pl-before')).toBeHidden();
+  await expect(page.locator('#pl-need')).toHaveText('About 80 of 100 guests expected. At most 2 desks at once.');
+  await page.locator('#pl-own-window').click();
+  await expect(page.locator('#pl-before')).toBeVisible();
+});
+
+test('staffing plan: a desk lead does not see it and past events are never asked for', async ({ page }) => {
+  let asked = false;
+  await open(page, { role: 'lead' }, 'reports', STAFF, () =>
+    page.route(/\/rest\/v1\/rpc\/checkin_arrival_history/, async (r) => { asked = true; await r.fulfill({ status: 200, body: '[]' }); }));
+  await page.waitForTimeout(800);
+  await expect(page.locator('#pl-box')).toBeHidden();
+  expect(asked).toBe(false);
+});
+
+test('staffing plan: numbers typed before past events load are kept', async ({ page }) => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>(r => { release = r; });
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', HUNDRED);
+    await rpc(page, 'checkin_activity_export', []);
+    await page.route(/\/rest\/v1\/rpc\/checkin_arrival_history/, async (r) => { await gate; await r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ event_id: 'p1', name: 'Spring Forum', date: '2026-03-12', registered: 50, checked_in: 40, buckets: [{ o: 0, n: 40 }], desk_busiest: [30] }]) }); });
+  });
+  await page.locator('#pl-turnout').fill('65');
+  release();
+  await expect(page.locator('#pl-src')).toContainText('Spring Forum');
+  await expect(page.locator('#pl-turnout')).toHaveValue('65');
+});

@@ -89,6 +89,18 @@
 .xp-f input,.xp-f select{height:36px;border-radius:10px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:13.5px;padding:0 10px;color:var(--t1)}
 .xp-tw{overflow-x:auto}.xp-tw td,.xp-tw th{white-space:nowrap}
 .xp-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
+/* Staffing plan (migration 153) */
+.pl-src{font-size:12.5px;color:var(--t2);margin:10px 0 0}
+.pl-strip{display:flex;align-items:flex-end;gap:3px;height:120px;margin:16px 0 4px;padding-bottom:20px;position:relative;overflow-x:auto}
+.pl-col{flex:1 0 22px;max-width:56px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;position:relative}
+.pl-col i{display:block;width:100%;border-radius:5px 5px 2px 2px;background:var(--acsf);min-height:2px}
+.pl-col b{font-size:11px;font-weight:600;color:var(--ac);margin-bottom:3px}
+.pl-col span{position:absolute;bottom:-18px;font-size:10.5px;color:var(--t2);white-space:nowrap}
+.pl-adv{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.pl-adv li{display:grid;grid-template-columns:52px 1fr;gap:10px;padding:10px 12px;border-radius:12px;background:var(--pg);font-size:13px}
+.pl-adv li.warn{background:var(--amsf)}
+.pl-adv .tm{font-variant-numeric:tabular-nums;font-weight:600}
+.pl-adv p{margin:2px 0 0;color:var(--t2);font-size:12.5px}
 .sc-p{margin:0 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
 .sc-tbl{margin-top:12px}
 .tbl .hide-lg{display:none}
@@ -248,6 +260,25 @@
       <a class="rep-card" id="rp-dash" href="#"><b>Live dashboard</b><span>Arrivals over time, desks, companies and arrival alerts.</span></a>
       <a class="rep-card" id="rp-report" href="#"><b>Post-event report</b><span>Turnout by ticket type, busiest moments, desks. Emailed to you after check-in closes.</span></a>
       <button class="rep-card" id="rp-export" type="button"><b>Export guests</b><span>CSV with arrival times, sources and registration answers.</span></button>
+    </div>
+    <div id="pl-box">
+      <h3 class="sc-h">Staffing plan</h3>
+      <p class="sc-p">How many desks to open, and when, so no one waits more than 5 minutes.</p>
+      <p class="pl-src" id="pl-src"></p>
+      <div class="xp-f">
+        <label>Guests who will come (%)<input type="number" id="pl-turnout" min="1" max="100" step="1" inputmode="numeric"></label>
+        <label>Seconds per guest at a desk<input type="number" id="pl-secs" min="3" max="600" step="1" inputmode="numeric"></label>
+        <label class="pl-win">Arrivals from (minutes before start)<input type="number" id="pl-before" min="0" max="480" step="5" inputmode="numeric"></label>
+        <label class="pl-win">Until (minutes after start)<input type="number" id="pl-after" min="0" max="480" step="5" inputmode="numeric"></label>
+      </div>
+      <p class="small" id="pl-shape-note" hidden>Arrival times follow your past events. <button class="link" id="pl-own-window" type="button">Use my own window instead</button></p>
+      <p class="small" id="pl-need"></p>
+      <div id="pl-out" hidden>
+        <div class="pl-strip" id="pl-strip" role="img"></div>
+        <ul class="pl-adv" id="pl-adv"></ul>
+      </div>
+      <div class="xp-foot"><span class="small" id="pl-state"></span><span style="flex:1"></span><button class="link" id="pl-clear" type="button" hidden>Remove the plan</button><button class="btn btn-p" id="pl-save" type="button" disabled>Save plan</button></div>
+      <div class="err" id="pl-err"></div>
     </div>
     <div id="xp-box">
       <h3 class="sc-h">Export guest data</h3>
@@ -638,6 +669,8 @@
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { attendanceTable, activityTable, exportOptions } from '/checkin-export.js';
+import { historyProfile, buildPlan } from '/checkin-forecast.js';
+import { eventStartUtc } from '/checkin-dashboard.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
 import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
 
@@ -842,12 +875,92 @@ function renderReports() {
   $('rp-export').hidden = !can(ROLE, 'export');
   $('xp-box').hidden = !can(ROLE, 'export');
   if (can(ROLE, 'export')) loadActivity();
+  $('pl-box').hidden = ROLE !== 'organizer' && ROLE !== 'owner';
+  if (!$('pl-box').hidden) loadPlan();
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
   renderAnalytics();
   $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
+
+// ── staffing plan (migration 153) ──
+// The inputs are the organizer's, or filled from their own past events.
+// Nothing is prefilled from anywhere else: no history, empty fields.
+let PL_SHAPE = null, PL_HIST = null, PL_TOUCHED = false;
+const plNum = (id) => { const v = $(id).value.trim(); return v === '' ? null : Number(v); };
+async function loadPlan() {
+  $('pl-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_arrival_history', { p_event_id: EVENT_ID });
+  PL_HIST = error ? null : historyProfile(data);
+  const saved = ENT && ENT.staffing_plan;
+  // Typing wins: the lookup can finish after the organizer started, and
+  // coming back to this tab must not throw unsaved numbers away.
+  if (!PL_TOUCHED) {
+    const src = saved ? saved : PL_HIST ? { turnout_pct: PL_HIST.turnoutPct, seconds_per_guest: PL_HIST.secondsPerGuest, shape: PL_HIST.shape } : {};
+    $('pl-turnout').value = src.turnout_pct ?? ''; $('pl-secs').value = src.seconds_per_guest ?? '';
+    $('pl-before').value = src.before_min ?? ''; $('pl-after').value = src.after_min ?? '';
+    PL_SHAPE = src.shape || null;
+  }
+  const names = PL_HIST ? PL_HIST.events.map(e => e.name + ' (' + fmtDate(e.date) + ')').join(', ') : '';
+  $('pl-src').textContent = saved ? 'Your saved plan.' + (PL_HIST ? ' Your past events: ' + names + '.' : '')
+    : PL_HIST ? 'Filled from what happened at ' + names + '. Change any number.'
+    : 'Enter your own estimates. After your first live event with 30 or more check-ins, these fill in from what really happened.';
+  if (error) $('pl-err').textContent = 'Could not load your past events: ' + error.message;
+  $('pl-clear').hidden = !saved;
+  $('pl-state').textContent = saved ? 'The dashboard shows this plan against real arrivals.' : '';
+  renderPlan();
+}
+function planInput() {
+  const p = { turnout_pct: plNum('pl-turnout'), seconds_per_guest: plNum('pl-secs'), before_min: plNum('pl-before') ?? 0, after_min: plNum('pl-after') ?? 0 };
+  if (PL_SHAPE) p.shape = PL_SHAPE;
+  return p;
+}
+function renderPlan() {
+  const p = planInput();
+  document.querySelectorAll('.pl-win').forEach(x => { x.hidden = !!PL_SHAPE; });
+  $('pl-shape-note').hidden = !PL_SHAPE;
+  const start = eventStartUtc(EV.date, EV.event_start, EV.timezone);
+  const missing = [];
+  if (!(p.turnout_pct >= 1 && p.turnout_pct <= 100)) missing.push('how many will come');
+  if (!(p.seconds_per_guest >= 3 && p.seconds_per_guest <= 600)) missing.push('seconds per guest');
+  if (!PL_SHAPE && p.before_min + p.after_min < 15) missing.push('an arrival window of at least 15 minutes');
+  const plan = missing.length || !start ? null : buildPlan(p, ATT.length, start.getTime(), EV.timezone);
+  $('pl-need').textContent = !start ? 'Set the event date and start time in Details first.'
+    : !ATT.length ? 'Add guests first: the plan is built from the guest list.'
+    : missing.length ? 'To see the plan, enter ' + missing.join(', ') + '.'
+    : 'About ' + plan.expectedTotal + ' of ' + ATT.length + ' guests expected. At most ' + plan.peakDesks + (plan.peakDesks === 1 ? ' desk' : ' desks') + ' at once.';
+  $('pl-out').hidden = !plan;
+  $('pl-save').disabled = !plan;
+  if (!plan) return;
+  const max = Math.max(...plan.staffed.map(s => s.expected), 1);
+  const fmt = (ms) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: EV.timezone }).format(new Date(ms));
+  $('pl-strip').setAttribute('aria-label', 'Expected arrivals and desks needed per 15 minutes');
+  $('pl-strip').replaceChildren(...plan.staffed.map((s, i) => {
+    const c = el('div', 'pl-col'); c.title = fmt(s.t) + ': about ' + Math.round(s.expected) + ' guests, ' + s.desks + (s.desks === 1 ? ' desk' : ' desks');
+    const bar = el('i'); bar.style.height = Math.round(80 * s.expected / max) + '%';
+    c.append(el('b', null, s.desks ? String(s.desks) : ''), bar);
+    if (i % 2 === 0) c.append(el('span', null, fmt(s.t)));
+    return c;
+  }));
+  $('pl-adv').replaceChildren(...plan.advice.map(a => {
+    const li = el('li', a.tone === 'warn' ? 'warn' : null); const d = el('div');
+    d.append(el('b', null, a.title), el('p', null, a.detail));
+    li.append(el('span', 'tm', fmt(a.t)), d); return li;
+  }));
+}
+for (const id of ['pl-turnout', 'pl-secs', 'pl-before', 'pl-after']) $(id).addEventListener('input', () => { PL_TOUCHED = true; $('pl-state').textContent = ''; renderPlan(); });
+$('pl-own-window').onclick = () => { PL_TOUCHED = true; PL_SHAPE = null; renderPlan(); $('pl-before').focus(); };
+async function savePlan(plan) {
+  $('pl-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_save_staffing_plan', { p_event_id: EVENT_ID, p_plan: plan });
+  if (error) { $('pl-err').textContent = error.message; return; }
+  ENT.staffing_plan = data;
+  $('pl-clear').hidden = !data;
+  $('pl-state').textContent = data ? 'Saved. The dashboard shows this plan against real arrivals.' : 'Plan removed.';
+}
+$('pl-save').onclick = () => savePlan(planInput());
+$('pl-clear').onclick = () => savePlan(null);
 
 // ── export guest data: attendance and activity log (migration 152) ──
 let ACT = [], XP_TYPE = 'att';

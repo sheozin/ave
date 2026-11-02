@@ -88,6 +88,11 @@
       <ul class="gaps" id="gaps"></ul>
       <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
     </section>
+    <section class="ops" id="plan" hidden aria-label="Plan against arrivals">
+      <h2>Plan against arrivals</h2>
+      <p class="meta-line" id="plan-line"></p>
+      <div class="cv"><canvas id="c-plan" role="img" aria-label="Planned and real arrivals per 15 minutes"></canvas></div>
+    </section>
     <section class="ops" id="alerts" hidden aria-label="Arrival alerts">
       <h2>Arrival alerts</h2>
       <ul class="gaps" id="alert-list" aria-live="polite"></ul>
@@ -135,6 +140,7 @@ import {
   arrivalRate, fmtRate, clientView, fmtClock, BUCKET_S, PACE_MIN_CHECKINS,
   deskRows, gapLines, paceMessages, eventStartUtc, companyRows, alertLine,
 } from '/checkin-dashboard.js';
+import { buildPlan, planVsActual } from '/checkin-forecast.js';
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -154,7 +160,7 @@ const EVENT_ID = params.get('event');
 const REFRESH_MS = 30000;
 // The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
 const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
-let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false;
+let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, PLAN = null;
 let CB_FILTER = 'all', BOARD = null, alertChan = null;
 const charts = {};
 
@@ -269,6 +275,27 @@ function renderFull(s, closed) {
   upsertChart('c-source', barsConfig(sourceBars(s), C.ac));
   upsertChart('c-qr', barsConfig(qrBars(s), [C.gn, C.am, C.bd2]));
   renderOps(s);
+  renderPlan(s);
+}
+
+// The organizer's staffing plan (Reports tab, migration 153) against real
+// arrivals. Shown only when a plan was saved; the numbers in it are the
+// organizer's own, never ours.
+function renderPlan(s) {
+  const plan = PLAN && START_MS !== null ? buildPlan(PLAN, s.registered, START_MS, EV.timezone) : null;
+  const now = Date.parse(s.generated_at);
+  const v = plan ? planVsActual(plan.staffed, s.arrivals, now, EV.timezone) : null;
+  $('plan').hidden = !v;
+  if (!v) return;
+  const fmt = (n) => n + (n === 1 ? ' guest' : ' guests');
+  $('plan-line').textContent = v.expectedByNow === 0 && v.arrivedByNow === 0
+    ? 'The plan expects about ' + plan.expectedTotal + ' guests, with at most ' + plan.peakDesks + (plan.peakDesks === 1 ? ' desk' : ' desks') + ' at once.'
+    : 'So far the plan expected about ' + fmt(v.expectedByNow) + ' and ' + v.arrivedByNow + ' arrived.'
+      + (v.arrivedByNow > v.expectedByNow * 1.2 + 5 ? ' Busier than planned.' : v.arrivedByNow < v.expectedByNow * 0.8 - 5 ? ' Quieter than planned.' : '');
+  upsertChart('c-plan', { type: 'bar', data: { labels: v.labels, datasets: [
+    { type: 'bar', label: 'Arrived', data: v.actual, backgroundColor: C.ac, borderRadius: 4 },
+    { type: 'line', label: 'Planned', data: v.plan, borderColor: C.am, backgroundColor: C.am, borderDash: [5, 4], pointRadius: 0, tension: 0.3 },
+  ] }, options: { ...BASE, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
 }
 
 function renderClient(s) {
@@ -393,6 +420,11 @@ async function refresh() {
     $('setup-link').href = '/checkin/setup?event=' + q;
     $('desk-link').hidden = !can(ROLE, 'desk');
     $('desk-link').href = '/checkin/desk?event=' + q;
+  }
+  if (!CLIENT && can(ROLE, 'desk_health')) {
+    const { data, error } = await sb.from('leod_checkin_entitlements').select('staffing_plan').eq('event_id', EVENT_ID).maybeSingle();
+    if (error) console.warn('[checkin] staffing plan not loaded:', error.message);
+    PLAN = (data && data.staffing_plan) || null;
   }
   await refresh();
   if (!CLIENT) subscribeAlerts();

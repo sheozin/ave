@@ -339,3 +339,28 @@ test('a failed board call says so instead of an empty table', async ({ page }) =
   await openWith(page, 'organizer', { message: 'boom' }, [], 500);
   await expect(page.locator('#cb-empty')).toContainText('Could not refresh companies');
 });
+
+test('a saved staffing plan is drawn against real arrivals for the organizer', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'organizer' })]);
+  await rpc(page, 'checkin_event_stats', STATS());
+  await page.route(/\/rest\/v1\/leod_checkin_entitlements/, (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ staffing_plan: { turnout_pct: 50, seconds_per_guest: 20, before_min: 0, after_min: 120 } }) }));
+  await page.goto(URL_);
+  await expect(page.locator('#plan')).toBeVisible();
+  // 60 of 120 expected over 09:00 to 11:00; by 11:00 all eight slots have ended. 45 arrived.
+  await expect(page.locator('#plan-line')).toHaveText('So far the plan expected about 60 guests and 45 arrived.');
+  await expect.poll(() => page.evaluate(() => Object.keys((window as any).Chart.instances).length)).toBe(6);
+});
+
+test('without a saved plan the plan panel stays hidden', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'organizer' })]);
+  await rpc(page, 'checkin_event_stats', STATS());
+  await page.route(/\/rest\/v1\/leod_checkin_entitlements/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ staffing_plan: null }) }));
+  await page.goto(URL_);
+  await expect(page.locator('#t-reg')).toHaveText('120');
+  await expect(page.locator('#plan')).toBeHidden();
+});
