@@ -57,9 +57,10 @@ AS $$
 DECLARE
   v_event UUID;
   v_old   TEXT;
+  v_printed TIMESTAMPTZ;
   v_new   TEXT := replace(gen_random_uuid()::text, '-', '');
 BEGIN
-  SELECT event_id, qr_token INTO v_event, v_old
+  SELECT event_id, qr_token, badge_printed_at INTO v_event, v_old, v_printed
     FROM leod_checkin_attendees WHERE id = p_attendee_id FOR UPDATE;
   IF v_event IS NULL THEN
     RAISE EXCEPTION 'Guest not found' USING ERRCODE = 'P0002';
@@ -69,10 +70,18 @@ BEGIN
      AND checkin_role_for_event(v_event) IS DISTINCT FROM 'crew' THEN
     RAISE EXCEPTION 'Only desk staff can print a new badge' USING ERRCODE = '42501';
   END IF;
-  -- A reprint is rare at a real desk. The cap stops one account from
-  -- blocking a whole guest list's badges and email codes in a loop.
+  -- Only a badge that was printed can be replaced.
+  IF v_printed IS NULL THEN
+    RAISE EXCEPTION 'This guest has no printed badge to replace' USING ERRCODE = 'P0001';
+  END IF;
+  -- A reprint is rare at a real desk. The caps stop one account, or a few
+  -- together, from blocking a whole guest list's badges and email codes in
+  -- a loop. Counted under a per-event lock so parallel calls cannot slip past.
+  PERFORM pg_advisory_xact_lock(hashtext('checkin_reissue:' || v_event::text));
   IF (SELECT count(*) FROM leod_checkin_old_badges
-       WHERE replaced_by = auth.uid() AND replaced_at > now() - interval '10 minutes') >= 20 THEN
+       WHERE replaced_by = auth.uid() AND replaced_at > now() - interval '10 minutes') >= 20
+     OR (SELECT count(*) FROM leod_checkin_old_badges
+       WHERE event_id = v_event AND replaced_at > now() - interval '10 minutes') >= 100 THEN
     RAISE EXCEPTION 'Too many new badges in 10 minutes. Wait a few minutes, or ask the organizer.' USING ERRCODE = 'P0001';
   END IF;
 
