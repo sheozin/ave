@@ -904,3 +904,55 @@ test('settings tab: a webhook is added, its secret shown once, and tested', asyn
   await expect(page.locator('#wh-ok')).toContainText('Test queued');
   expect(tested).toBe(1);
 });
+
+test('reports: an organizer previews and downloads attendance and the activity log, in event time', async ({ page }) => {
+  const att = [
+    { id: 'a1', first_name: 'Ana', last_name: 'Nowak', email: 'ana@x.pl', company: 'Contoso', ticket_type: 'VIP', checked_in_at: '2026-10-18T07:41:12Z', badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+    { id: 'a2', first_name: 'Ben', last_name: 'Lis', email: 'ben@x.pl', company: null, ticket_type: 'attendee', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'web', created_at: '2026-10-01T00:00:00Z' },
+  ];
+  const act = [
+    { at: '2026-10-18T07:41:12Z', kind: 'ok', attendee_id: 'a1', first_name: 'Ana', last_name: 'Nowak', email: 'ana@x.pl', company: 'Contoso', ticket_type: 'VIP', desk: 'Desk 2', place: null, device: null, staff: 'Marek' },
+    { at: '2026-10-18T08:02:00Z', kind: 'duplicate', attendee_id: 'a1', first_name: 'Ana', last_name: 'Nowak', email: 'ana@x.pl', company: 'Contoso', ticket_type: 'VIP', desk: null, place: 'Main door', device: 'Door phone', staff: null },
+  ];
+  let ranges: string[] = [];
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', att);
+    await page.route(/\/rest\/v1\/rpc\/checkin_activity_export/, async (r) => {
+      ranges.push(r.request().headers()['range'] || r.request().url());
+      await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(act) });
+    });
+  });
+  await expect(page.locator('#xp-box')).toBeVisible();
+  await expect(page.locator('#xp-count')).toHaveText('2 rows match.');
+  await expect(page.locator('#xp-body tr').first()).toContainText('09:41:12');
+  await expect(page.locator('#xp-body tr').first()).toContainText('Desk 2');
+  expect(ranges.length).toBe(1);
+
+  await page.locator('#xp-status').selectOption('out');
+  await expect(page.locator('#xp-count')).toHaveText('1 row matches.');
+  await page.locator('#xp-status').selectOption('');
+
+  let [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#xp-csv').click()]);
+  expect(dl.suggestedFilename()).toBe('probe-summit-attendance.csv');
+  let lines = readFileSync(await dl.path(), 'utf8').replace(/^﻿/, '').split('\r\n');
+  expect(lines[0]).toBe('First name;Last name;Email;Company;Ticket;Source;Checked in (date);Checked in (time);Desk or door;Checked in by;Badge printed at;Badges replaced');
+  expect(lines[1]).toBe('Ana;Nowak;ana@x.pl;Contoso;VIP;Imported;2026-10-18;09:41:12;Desk 2;Marek;;0');
+
+  await page.locator('#xp-type button[data-t="log"]').click();
+  await expect(page.locator('#xp-what-l')).toBeVisible();
+  await page.locator('#xp-what').selectOption('problems');
+  await expect(page.locator('#xp-count')).toHaveText('1 row matches.');
+  [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#xp-csv').click()]);
+  expect(dl.suggestedFilename()).toBe('probe-summit-activity-log.csv');
+  lines = readFileSync(await dl.path(), 'utf8').replace(/^﻿/, '').split('\r\n');
+  expect(lines[1]).toBe('2026-10-18;10:02:00;Ana;Nowak;ana@x.pl;Contoso;VIP;Scanned again, already checked in;Main door (Door phone);');
+});
+
+test('reports: a desk lead sees no export and the activity is never fetched', async ({ page }) => {
+  let called = false;
+  await open(page, { role: 'lead' }, 'reports', STAFF, () =>
+    page.route(/\/rest\/v1\/rpc\/checkin_activity_export/, async (r) => { called = true; await r.fulfill({ status: 200, body: '[]' }); }));
+  await page.waitForTimeout(800);
+  await expect(page.locator('#xp-box')).toBeHidden();
+  expect(called).toBe(false);
+});

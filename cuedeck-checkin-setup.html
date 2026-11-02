@@ -80,6 +80,15 @@
 .chip{height:36px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--t1);color:#fff}
 .sc-h{margin:26px 0 4px;font-size:15px;letter-spacing:-.2px}
+/* Export guest data (attendance and activity log) */
+.xp-seg{display:inline-flex;gap:4px;padding:3px;border-radius:12px;background:var(--pg)}
+.xp-seg button{height:32px;padding:0 12px;border-radius:9px;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--t2);cursor:pointer}
+.xp-seg button[aria-pressed="true"]{background:#fff;color:var(--t1);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.xp-f{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:14px 0}
+.xp-f label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--t2)}
+.xp-f input,.xp-f select{height:36px;border-radius:10px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:13.5px;padding:0 10px;color:var(--t1)}
+.xp-tw{overflow-x:auto}.xp-tw td,.xp-tw th{white-space:nowrap}
+.xp-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
 .sc-p{margin:0 0 10px;font-size:13px;color:var(--t2);line-height:1.5}
 .sc-tbl{margin-top:12px}
 .tbl .hide-lg{display:none}
@@ -239,6 +248,24 @@
       <a class="rep-card" id="rp-dash" href="#"><b>Live dashboard</b><span>Arrivals over time, desks, companies and arrival alerts.</span></a>
       <a class="rep-card" id="rp-report" href="#"><b>Post-event report</b><span>Turnout by ticket type, busiest moments, desks. Emailed to you after check-in closes.</span></a>
       <button class="rep-card" id="rp-export" type="button"><b>Export guests</b><span>CSV with arrival times, sources and registration answers.</span></button>
+    </div>
+    <div id="xp-box">
+      <h3 class="sc-h">Export guest data</h3>
+      <p class="sc-p">Who came, when, through which desk or door, and every scan along the way. Times are in the event's timezone.</p>
+      <div class="xp-seg" role="group" aria-label="What to export" id="xp-type">
+        <button type="button" aria-pressed="true" data-t="att">Guest attendance</button><button type="button" aria-pressed="false" data-t="log">Activity log</button></div>
+      <div class="xp-f">
+        <label>Day<select id="xp-day"><option value="">All days</option></select></label>
+        <label>From<input type="time" id="xp-from"></label>
+        <label>To<input type="time" id="xp-to"></label>
+        <label>Ticket<select id="xp-ticket"><option value="">All tickets</option></select></label>
+        <label id="xp-st-l">Status<select id="xp-status"><option value="">Everyone</option><option value="in">Checked in</option><option value="out">Not here</option></select></label>
+        <label id="xp-what-l" hidden>What happened<select id="xp-what"><option value="">Everything</option><option value="checkins">Check-ins and undos</option><option value="problems">Problems at the door</option><option value="badges">New badges</option></select></label>
+        <label>Desk or door<select id="xp-place"><option value="">All</option></select></label>
+      </div>
+      <div class="xp-tw"><table class="tbl"><thead id="xp-head"></thead><tbody id="xp-body"></tbody></table></div>
+      <div class="xp-foot"><span class="small" id="xp-count"></span><span style="flex:1"></span><button class="btn btn-s" id="xp-csv" type="button">Download CSV</button></div>
+      <div class="err" id="xp-err"></div>
     </div>
     <h3 class="sc-h">Where your guests came from</h3>
     <div class="src" id="rp-src"></div>
@@ -610,6 +637,7 @@
 <script type="module">
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
+import { attendanceTable, activityTable, exportOptions } from '/checkin-export.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
 import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
 
@@ -812,12 +840,63 @@ function renderReports() {
   $('rp-dash').href = '/checkin/dashboard?event=' + EVENT_ID;
   $('rp-report').href = '/checkin/report?event=' + EVENT_ID;
   $('rp-export').hidden = !can(ROLE, 'export');
+  $('xp-box').hidden = !can(ROLE, 'export');
+  if (can(ROLE, 'export')) loadActivity();
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
   renderAnalytics();
   $('rp-src').replaceChildren(box('Imported', n(['import'])), box('Registration page', n(['web'])), ...(n(['plus_one']) ? [box('Plus-ones', n(['plus_one']))] : []), box('Kiosk', n(['kiosk'])), box('Walk-in', n(['walk_in'])));
 }
 $('rp-export').onclick = () => $('att-export').click();
+
+// ── export guest data: attendance and activity log (migration 152) ──
+let ACT = [], XP_TYPE = 'att';
+async function loadActivity() {
+  $('xp-err').textContent = '';
+  const all = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.rpc('checkin_activity_export', { p_event_id: EVENT_ID }).range(from, from + 999);
+    if (error) { $('xp-err').textContent = 'Could not load the activity: ' + error.message; break; }
+    all.push(...data);
+    if (data.length < 1000) break;
+  }
+  ACT = all;
+  const o = exportOptions(ATT, ACT, EV.timezone);
+  const fill = (id, first, values) => $(id).replaceChildren(el('option', null, first), ...values.map(v => { const x = el('option', null, v); x.value = v; return x; }));
+  fill('xp-day', 'All days', o.days); $('xp-day').firstChild.value = '';
+  fill('xp-ticket', 'All tickets', o.tickets); $('xp-ticket').firstChild.value = '';
+  fill('xp-place', 'All', o.places); $('xp-place').firstChild.value = '';
+  renderExport();
+}
+function xpTable() {
+  const o = { day: $('xp-day').value, from: $('xp-from').value, to: $('xp-to').value, ticket: $('xp-ticket').value, place: $('xp-place').value };
+  return XP_TYPE === 'att'
+    ? attendanceTable(ATT, ACT, EV.timezone, { ...o, status: $('xp-status').value })
+    : activityTable(ACT, EV.timezone, { ...o, what: $('xp-what').value });
+}
+function renderExport() {
+  const t = xpTable();
+  const tr = el('tr'); t.head.forEach(h => tr.appendChild(el('th', null, h))); $('xp-head').replaceChildren(tr);
+  $('xp-body').replaceChildren(...t.rows.slice(0, 8).map(r => { const x = el('tr'); r.forEach(v => x.appendChild(el('td', null, v === '' ? '–' : String(v)))); return x; }));
+  $('xp-count').textContent = t.rows.length === 0 ? 'Nothing matches these filters.'
+    : t.rows.length + (t.rows.length === 1 ? ' row matches.' : ' rows match') + (t.rows.length > 8 ? ', showing the first 8. The file has them all.' : t.rows.length === 1 ? '' : '.');
+  $('xp-csv').disabled = t.rows.length === 0;
+}
+$('xp-type').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  XP_TYPE = b.dataset.t;
+  [...$('xp-type').children].forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  $('xp-st-l').hidden = XP_TYPE !== 'att'; $('xp-what-l').hidden = XP_TYPE === 'att';
+  renderExport();
+};
+for (const id of ['xp-day', 'xp-from', 'xp-to', 'xp-ticket', 'xp-status', 'xp-what', 'xp-place']) $(id).addEventListener('input', renderExport);
+$('xp-csv').onclick = () => {
+  const t = xpTable();
+  const url = URL.createObjectURL(new Blob(['\uFEFF' + toCsv([t.head, ...t.rows])], { type: 'text/csv;charset=utf-8' }));
+  const a = el('a'); a.href = url;
+  a.download = EV.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() + (XP_TYPE === 'att' ? '-attendance' : '-activity-log') + '.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+};
 
 // ── registration analytics (migration 125) ──
 const SRC_NAMES = { direct: 'Direct link', embed: 'Form on your website', invite: 'Invitations' };

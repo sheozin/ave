@@ -29,6 +29,7 @@
 !/checkin-window.js
 !/checkin-clock.js
 !/checkin-csv.js
+!/checkin-export.js
 !/checkin-roles.js
 !/checkin-dashboard.js
 !/checkin-report.js
