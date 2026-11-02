@@ -152,6 +152,7 @@ const drop = (...ks) => ks.forEach(k => { try { localStorage.removeItem(k); } ca
 
 let DEV = read(STORE, null);
 let tokenSet = new Set();
+let oldSet = new Set();   // codes replaced by a reprinted badge
 let clockOffset = null, allowed = false, flushing = false;
 const seen = new Map();
 
@@ -167,7 +168,7 @@ async function call(fn, body) {
 function forget(message) {
   stopCamera();
   drop(STORE, TOKENS, OUTBOX);
-  DEV = null; tokenSet = new Set();
+  DEV = null; tokenSet = new Set(); oldSet = new Set();
   showPair(message || '');
 }
 
@@ -209,6 +210,7 @@ async function showScan() {
   $('pair').hidden = true; $('scan').hidden = false;
   $('dev-label').textContent = DEV.label ? 'This phone: ' + DEV.label : '';
   tokenSet = new Set((read(TOKENS, {}).event_id === DEV.event_id && read(TOKENS, {}).tokens) || []);
+  oldSet = new Set((read(TOKENS, {}).event_id === DEV.event_id && read(TOKENS, {}).old_tokens) || []);
   renderNet();
   await refresh();
   flush();
@@ -238,7 +240,8 @@ async function refresh() {
     const t = await call('checkin-scanner', { action: 'tokens', event_id: DEV.event_id, device_key: DEV.device_key });
     if (t.status === 200 && Array.isArray(t.data.tokens)) {
       tokenSet = new Set(t.data.tokens);
-      write(TOKENS, { event_id: DEV.event_id, tokens: t.data.tokens });
+      oldSet = new Set(Array.isArray(t.data.old_tokens) ? t.data.old_tokens : []);
+      write(TOKENS, { event_id: DEV.event_id, tokens: t.data.tokens, old_tokens: [...oldSet] });
     } else if (t.status === 401) { forget('This phone was unpaired from the desk. Ask for a new code to pair it again.'); return; }
   } catch { /* keep the saved list */ }
   renderNet();
@@ -328,7 +331,7 @@ async function handle(raw, fromCamera) {
   if (!shouldAccept(seen, tok, Date.now())) return;
   // Offline the phone can only say whether the code is on the list; the
   // server decides first scan or repeat (spec, Offline model).
-  if (!tokenSet.has(tok)) { show(verdictFor('not_listed')); }
+  if (!tokenSet.has(tok)) { show(verdictFor(oldSet.has(tok) ? 'revoked' : 'not_listed')); }
   const item = { client_id: crypto.randomUUID(), qr_token: tok, scanned_at: correctedIso(Date.now(), clockOffset), action: 'checkin' };
   write(OUTBOX, [...read(OUTBOX, []), item]);
   renderNet();

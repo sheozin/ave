@@ -980,7 +980,7 @@ let sb = null;
 // in the two inputs because renderParty() replaces every row — a flush
 // reconcile, a tick on a colleague or an undo would otherwise wipe a
 // half-typed name with nobody having touched the editor.
-var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map(), deskId: null, deskLabel: null, clockOffset: null };  // var → window.S for E2E tests
+var S = { user: null, event: null, role: null, roster: [], party: null, scanPointId: null, editing: null, own: new Map(), oldBadges: new Map(), deskId: null, deskLabel: null, clockOffset: null };  // var → window.S for E2E tests
 
 // ═══════════════════════════════════════════════════
 // OFFLINE CACHE (IndexedDB)
@@ -1093,7 +1093,22 @@ async function idbClearOtherEvents(eventId) {
 // ═══════════════════════════════════════════════════
 // ROSTER
 // ═══════════════════════════════════════════════════
+// Codes replaced by a reprinted badge (migration 151): token -> guest id.
+// Kept with the roster so an old badge is named as old even offline.
+const OLD_BADGES_KEY = (eventId) => 'ck-old-badges:' + eventId;
+async function loadOldBadges(eventId) {
+  const { data, error } = noServer ? NO_ANSWER : await within(8000, sb
+    .from('leod_checkin_old_badges').select('qr_token,attendee_id').eq('event_id', eventId));
+  if (error) {
+    S.oldBadges = new Map(savedCopy(OLD_BADGES_KEY(eventId)) || []);
+    return;
+  }
+  S.oldBadges = new Map(data.map(o => [o.qr_token, o.attendee_id]));
+  saveCopy(OLD_BADGES_KEY(eventId), [...S.oldBadges]);
+}
+
 async function loadRoster(eventId) {
+  loadOldBadges(eventId);   // not awaited: the roster must not wait on it
   const { data, error } = noServer ? NO_ANSWER : await within(20000, sb   // a dead venue network can hang instead of failing
     .from('leod_checkin_attendees')
     .select('id,event_id,first_name,last_name,email,company,role_title,ticket_type,qr_token,checked_in_at,badge_printed_at')
@@ -2761,8 +2776,34 @@ async function stampBadgePrinted(ids, when) {
 // it — and that is a physical failure the operator is looking straight
 // at, not one the database can help with.
 let lanFirstUntil = 0;
+// A badge printed a second time replaces the first: the guest gets a new
+// code (checkin_reissue_badge), and the old one, on the first badge and in
+// their QR email, stops working. This is the one print that waits on the
+// network, briefly, because the new code has to be on the badge. With no
+// answer the badge prints with the code it has, and the old one still works.
+async function reissueBadges(attendees) {
+  const out = { blocked: [], kept: [] };
+  for (const a of attendees) {
+    if (!a.badge_printed_at || KIOSK) continue;
+    const { data, error } = (!navigator.onLine || noServer) ? NO_ANSWER
+      : await within(6000, sb.rpc('checkin_reissue_badge', { p_attendee_id: a.id }));
+    if (error || typeof data !== 'string') { out.kept.push(a); if (error && error.code) out.refused = error.message; continue; }
+    S.oldBadges.set(a.qr_token, a.id);
+    saveCopy(OLD_BADGES_KEY(S.event.id), [...S.oldBadges]);
+    a.qr_token = data;
+    await idbPutAll(STORE_ROSTER, [a]);
+    out.blocked.push(a);
+  }
+  if (out.kept.length) {
+    console.warn('checkin: badge reprinted without a new code for', out.kept.length, 'guest(s)');
+  }
+  return out;
+}
+
 async function printBadges(attendees) {
   if (!attendees.length) return;
+  const reissue = await reissueBadges(attendees);
+  S.lastReissue = reissue;
 
   if (S.badge && S.badge.design.template) await window.CK_BADGE.loadBadgeFonts().catch(() => {});
   document.getElementById('badge-sheet').replaceChildren(...attendees.map(badgeNode));
@@ -2914,15 +2955,22 @@ async function undoCheckin(attendee) {
 // badge_printed_at exactly as it does after a check-in.
 async function printWithoutCheckin(people) {
   if (!people.length) return;
+  S.lastReissue = null;
   await printBadges(people);
   if (S.party) people.forEach(m => S.party.ticked.delete(m.id));
   renderParty();
   const names = people.map(fullName).join(', ');
   const arrived = people.filter(p => p.checked_in_at);
-  showVerdict('ok', (people.length === 1 ? 'Badge for ' : 'Badges for ') + names + ' sent to print',
-    arrived.length === people.length
-      ? (people.length === 1 ? 'Their check-in at ' + atTime(people[0].checked_in_at) + ' is unchanged.' : 'Their check-ins are unchanged.')
-      : 'They are not checked in. Check them in when they arrive.');
+  const r = S.lastReissue || { blocked: [], kept: [] };
+  const parts = [arrived.length === people.length
+    ? (people.length === 1 ? 'Their check-in at ' + atTime(people[0].checked_in_at) + ' is unchanged.' : 'Their check-ins are unchanged.')
+    : 'They are not checked in. Check them in when they arrive.'];
+  if (r.blocked.length) parts.push(r.blocked.length === 1 && people.length === 1 ? 'The old badge and the QR in their email no longer work.'
+    : 'Old badges and email QR codes no longer work for ' + r.blocked.map(fullName).join(', ') + '.');
+  if (r.kept.length) parts.push(r.refused
+    ? 'CueDeck did not give a new code (' + r.refused + '), so the old badge still works for ' + r.kept.map(fullName).join(', ') + '.'
+    : 'CueDeck could not be reached, so the old badge still works for ' + r.kept.map(fullName).join(', ') + '. Print again when the internet is back to block it.');
+  showVerdict(r.kept.length ? 'dup' : 'ok', (people.length === 1 ? 'Badge for ' : 'Badges for ') + names + ' sent to print', parts.join(' '));
   scanInput.focus();
 }
 
@@ -3158,6 +3206,22 @@ function handleScan(raw) {
   const res = resolveToken(raw, S.roster);
 
   if (res.kind === 'unknown_token') {
+    const oldOwner = S.oldBadges.get(raw.trim());
+    const guest = oldOwner && S.roster.find(a => a.id === oldOwner);
+    if (guest) {
+      showVerdict('bad', 'Old badge for ' + fullName(guest),
+        'A newer badge was printed for them, so this one no longer works. Check it is them, then use their row below.');
+      showParty(guest);
+      renderCount();
+      return;
+    }
+    // Another desk may have just reprinted this guest's badge: one fresh
+    // read of the list before calling the code a stranger's.
+    if (!S.unknownRetry && navigator.onLine && !noServer) {
+      S.unknownRetry = true;
+      reconcileRoster().then(() => handleScan(raw)).finally(() => { S.unknownRetry = false; });
+      return;
+    }
     S.party = null;
     renderParty();
     const box = showVerdict('bad', "That code isn't for this event.",

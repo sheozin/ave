@@ -265,6 +265,7 @@ Deno.serve(async (req) => {
   // after the scan, and only if it checked the guest in.
   const nameEligible = !!deviceId && valid.length === 1
     && Math.abs(Date.now() - Date.parse(valid[0].scanned_at)) <= NAME_FRESH_MS
+  const oldByToken = new Map<string, string>()
   if (deviceId && valid.length) {
     const tokens = [...new Set(valid.map(it => it.qr_token as string))]
     const { data: rows, error: tokErr } = await sb.from('leod_checkin_attendees')
@@ -272,6 +273,15 @@ Deno.serve(async (req) => {
     if (tokErr) return fail(500, tokErr.message)
     const byToken = new Map<string, { id: string; first_name: string | null; ticket_type: string | null }>()
     for (const r of rows ?? []) byToken.set(r.qr_token, r)
+    // A code replaced by a reprinted badge (migration 151) is answered as
+    // revoked, with its guest, rather than as a stranger's code.
+    const missing = tokens.filter(t => !byToken.has(t))
+    if (missing.length) {
+      const { data: old, error: oldErr } = await sb.from('leod_checkin_old_badges')
+        .select('qr_token, attendee_id').eq('event_id', event_id).in('qr_token', missing)
+      if (oldErr) return fail(500, oldErr.message)
+      for (const o of old ?? []) oldByToken.set(o.qr_token, o.attendee_id)
+    }
     for (const it of valid) {
       const hit = byToken.get(it.qr_token as string)
       it.attendee_id = hit ? hit.id : crypto.randomUUID()
@@ -282,6 +292,11 @@ Deno.serve(async (req) => {
   const ordered = valid.sort((a, b) => Date.parse(a.scanned_at) - Date.parse(b.scanned_at))
 
   for (const it of ordered) {
+    const oldOwner = deviceId ? oldByToken.get(it.qr_token as string) : undefined
+    if (oldOwner) {
+      results[it.client_id] = await recordOldBadge(it, oldOwner)
+      continue
+    }
     // Computed in test mode too: SQL ignores it while the event is test,
     // but the event can go live between our entitlement read and the RPC.
     const p_live_time_ok = liveTimeOk(Date.parse(it.scanned_at), nowMs)
@@ -345,6 +360,24 @@ Deno.serve(async (req) => {
       if (quotaErr) console.warn('checkin-record-scans: name quota failed', quotaErr.message)
       else if (quotaOk === true) who[it.client_id] = whoByAttendee[it.attendee_id]
     }
+  }
+
+  // Written here, not by checkin_apply_scan: nobody is checked in, the
+  // scan is only recorded. A replayed client_id answers with its stored row.
+  async function recordOldBadge(it: Item, attendeeId: string): Promise<string> {
+    const { error } = await sb.from('leod_checkin_scan_events').insert({
+      id: crypto.randomUUID(), client_id: it.client_id, event_id, attendee_id: attendeeId,
+      scan_point_id, device_id: deviceId, scanned_at: it.scanned_at, result: 'revoked', is_test: isTest,
+    })
+    if (!error) return 'revoked'
+    if (error.code === '23505') {
+      const { data: raced } = await sb.from('leod_checkin_scan_events')
+        .select('result, event_id').eq('client_id', it.client_id).maybeSingle()
+      if (raced?.event_id === event_id && raced.result) return raced.result
+    }
+    console.error('checkin-record-scans: old badge scan not recorded', it.client_id, error.message)
+    errors.push({ client_id: it.client_id, stage: 'apply', error: error.message })
+    return 'error'
   }
 
   return new Response(JSON.stringify({ ok: errors.length === 0, results, errors, ...(deviceId ? { who } : {}) }), {

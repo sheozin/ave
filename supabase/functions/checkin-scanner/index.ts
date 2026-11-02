@@ -89,5 +89,11 @@ Deno.serve(async (req) => {
     .select('qr_token').eq('event_id', event_id).not('qr_token', 'is', null).limit(MAX_TOKENS + 1)
   if (tokErr) return json({ error: tokErr.message }, 500)
   if ((rows ?? []).length > MAX_TOKENS) return json({ error: 'Guest list too large for the offline list' }, 413)
-  return json({ tokens: (rows ?? []).map((r: { qr_token: string }) => r.qr_token), generated_at: new Date().toISOString() })
+  // Codes replaced by a reprinted badge (migration 151), so an offline
+  // phone can say "old badge" instead of "not on the list".
+  const { data: old, error: oldErr } = await sb.from('leod_checkin_old_badges')
+    .select('qr_token').eq('event_id', event_id).order('replaced_at', { ascending: false }).limit(MAX_TOKENS)
+  if (oldErr) return json({ error: oldErr.message }, 500)
+  return json({ tokens: (rows ?? []).map((r: { qr_token: string }) => r.qr_token),
+    old_tokens: (old ?? []).map((r: { qr_token: string }) => r.qr_token), generated_at: new Date().toISOString() })
 })

@@ -53,6 +53,7 @@ export function verdictFor(result, who) {
     case 'ok':             return { tone: 'ok',   title: 'Checked in', text: name || 'Welcome in.' };
     case 'duplicate':      return { tone: 'warn', title: 'Already checked in', text: name ? name + '. Let them through if it is the same person.' : 'Let them through if it is the same person.' };
     case 'unknown_token':  return { tone: 'stop', title: 'Not on the list', text: 'Send them to the desk.' };
+    case 'revoked':        return { tone: 'stop', title: 'Old badge', text: 'A newer badge was printed for this guest, so this one no longer works. Send them to the desk.' };
     case 'wrong_event':    return { tone: 'stop', title: 'Code for another event', text: 'Send them to the desk.' };
     case 'outside_window': return { tone: 'stop', title: 'Check-in is closed', text: 'Check-in is not open for this event right now. Ask the organizer.' };
     case 'test_cap':       return { tone: 'stop', title: 'Test check-ins used up', text: 'This event is in test mode. Ask the organizer to go live.' };

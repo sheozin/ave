@@ -31,6 +31,9 @@ describe('verdictFor', () => {
     expect(page.verdictFor('unknown_token', undefined)).toEqual({ tone: 'stop', title: 'Not on the list', text: 'Send them to the desk.' });
     expect(page.verdictFor('queued', undefined).tone).toBe('wait');
   });
+  it('an old badge replaced by a reprint is a stop that says why', () => {
+    expect(page.verdictFor('revoked', undefined)).toEqual({ tone: 'stop', title: 'Old badge', text: 'A newer badge was printed for this guest, so this one no longer works. Send them to the desk.' });
+  });
   it('anything unexpected is a stop, never a green', () => {
     expect(page.verdictFor('error', undefined).tone).toBe('stop');
     expect(page.verdictFor('something new', undefined).tone).toBe('stop');

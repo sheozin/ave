@@ -9,8 +9,8 @@ const BEN = { ...ANA, id: 'a0000000-0000-4000-8000-000000000002', first_name: 'B
 
 type Opts = { role: string; scanResult?: (item: { action: string }) => string; roster?: Record<string, unknown>[];
   heartbeat?: (args: Record<string, unknown>) => unknown; isOwner?: boolean; status?: string;
-  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown; badgeDesign?: Record<string, unknown>; before?: () => Promise<void> };
-async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow, badgeDesign, before }: Opts) {
+  alerts?: (args: Record<string, unknown>) => unknown; serverNow?: () => unknown; badgeDesign?: Record<string, unknown>; before?: () => Promise<void>; oldBadges?: Record<string, unknown>[] };
+async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], heartbeat = () => 'Desk 1', isOwner = false, status = 'live', alerts = () => [], serverNow, badgeDesign, before, oldBadges = [] }: Opts) {
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   await rpc(page, 'checkin_desk_heartbeat', heartbeat);
@@ -19,6 +19,7 @@ async function open(page, { role, scanResult = () => 'ok', roster = [ANA, BEN], 
   await rpc(page, 'checkin_my_events', [myEventsRow({ role, is_owner: isOwner, status })]);
   await table(page, 'leod_checkin_entitlements', [{ checkin_core: true, status, ...(badgeDesign ? { badge_design: badgeDesign, registration_brand_color: '#0F766E' } : {}) }]);
   await table(page, 'leod_checkin_attendees', roster);
+  await table(page, 'leod_checkin_old_badges', oldBadges);
   await fn(page, 'checkin-record-scans', (b) => ({ body: {
     ok: true, errors: [],
     results: Object.fromEntries((b.items as { client_id: string; action: string }[]).map(i => [i.client_id, scanResult(i)])),
@@ -1545,4 +1546,65 @@ test('print badge only is off until someone is ticked', async ({ page }) => {
   await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
   await expect(page.locator('#printonly')).toBeDisabled();
   await expect(page.locator('#printonly')).toHaveText('Print badge only');
+});
+
+// A second badge replaces the first (migration 151): new code on the badge,
+// the old code blocked here and at the door.
+test('a second badge gets a new code, and the old code is then named as an old badge', async ({ page }) => {
+  const calls: unknown[] = [];
+  const printed = { ...ANA, badge_printed_at: '2026-10-18T08:30:05.000Z' };
+  await openCountingPrints(page, [printed, BEN]);
+  await rpc(page, 'checkin_reissue_badge', (args) => { calls.push(args); return 'newtoken0000000000000000000000ab'; });
+  await search(page, 'Ana');
+  await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#party .prow', { hasText: 'Ana Probe' }).locator('.ck-reprint').click();
+  await expect.poll(() => prints(page)).toHaveLength(1);
+  expect(calls).toEqual([{ p_attendee_id: ANA.id }]);
+  await expect(page.locator('#verdict')).toContainText('The old badge and the QR in their email no longer work.');
+  expect(await page.evaluate((id) => (window as unknown as { S: { roster: { id: string; qr_token: string }[] } }).S.roster.find(a => a.id === id)!.qr_token, ANA.id))
+    .toBe('newtoken0000000000000000000000ab');
+  await page.locator('#scan').fill('tok-ana');
+  await page.locator('#scan').press('Enter');
+  await expect(page.locator('#verdict')).toContainText('Old badge for Ana Probe');
+  await expect(page.locator('#party .prow', { hasText: 'Ana Probe' })).toBeVisible();
+});
+
+test('a first badge never asks for a new code', async ({ page }) => {
+  let called = 0;
+  await openCountingPrints(page, [ANA, BEN]);
+  await rpc(page, 'checkin_reissue_badge', () => { called++; return 'x'; });
+  await search(page, 'Ana');
+  await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#party .prow', { hasText: 'Ana Probe' }).locator('.ck-reprint').click();
+  await expect.poll(() => prints(page)).toHaveLength(1);
+  expect(called).toBe(0);
+  await expect(page.locator('#verdict')).not.toContainText('no longer work');
+});
+
+test('when CueDeck refuses a new code, the badge still prints and the desk says the old one still works', async ({ page }) => {
+  await openCountingPrints(page, [{ ...ANA, badge_printed_at: '2026-10-18T08:30:05.000Z' }, BEN]);
+  await rpc(page, 'checkin_reissue_badge', { code: '42501', message: 'Only desk staff can print a new badge' }, 403);
+  await search(page, 'Ana');
+  await page.locator('.ck-res-row', { hasText: 'Ana Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#party .prow', { hasText: 'Ana Probe' }).locator('.ck-reprint').click();
+  await expect.poll(() => prints(page)).toHaveLength(1);
+  await expect(page.locator('#verdict')).toContainText('the old badge still works for Ana Probe');
+});
+
+test('an old code from another desk is named as an old badge, even offline', async ({ page, context }) => {
+  await open(page, { role: 'crew', oldBadges: [{ qr_token: 'tok-ana-old', attendee_id: ANA.id }] });
+  await expect.poll(() => page.evaluate(() => (window as unknown as { S: { oldBadges: Map<string, string> } }).S.oldBadges.size)).toBe(1);
+  await context.setOffline(true);
+  await page.locator('#scan').fill('tok-ana-old');
+  await page.locator('#scan').press('Enter');
+  await expect(page.locator('#verdict')).toContainText('Old badge for Ana Probe');
+});
+
+test('a code another desk just issued is found by reading the list again', async ({ page }) => {
+  const roster = [ANA, { ...BEN }];
+  await open(page, { role: 'crew', roster });
+  roster[1].qr_token = 'tok-ben-new';
+  await page.locator('#scan').fill('tok-ben-new');
+  await page.locator('#scan').press('Enter');
+  await expect(page.locator('#verdict')).toContainText('Ben Probe is on the list');
 });

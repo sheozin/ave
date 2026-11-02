@@ -15,13 +15,13 @@ const CONFIG = (over: Record<string, unknown> = {}) => ({
   server_now: new Date().toISOString(), ...over,
 });
 
-async function paired(page, opts: { config?: unknown; configStatus?: number; tokens?: string[] } = {}) {
+async function paired(page, opts: { config?: unknown; configStatus?: number; tokens?: string[]; oldTokens?: string[] } = {}) {
   await page.addInitScript(([k, ev]) => {
     localStorage.setItem('cuedeck.scanner.v1', JSON.stringify({ device_key: k, event_id: ev, label: 'Door phone' }));
   }, [KEY, EVENT_ID]);
   await fn(page, 'checkin-scanner', (b) => b.action === 'config'
     ? { status: opts.configStatus ?? 200, body: opts.config ?? CONFIG() }
-    : { body: { tokens: opts.tokens ?? [TOK], generated_at: new Date().toISOString() } });
+    : { body: { tokens: opts.tokens ?? [TOK], old_tokens: opts.oldTokens ?? [], generated_at: new Date().toISOString() } });
 }
 
 test('an unpaired phone pairs with a code, then shows where it scans', async ({ page }) => {
@@ -154,3 +154,19 @@ test('not on the list shows a red cross', async ({ page }) => {
   await expect(page.locator('#v-ic path.draw')).toHaveAttribute('d', 'M18 18l16 16M34 18L18 34');
 });
 
+
+test('an old badge replaced by a reprint says so, online and offline', async ({ page, context }) => {
+  await paired(page, { oldTokens: [OTHER] });
+  await fn(page, 'checkin-record-scans', (b) => { const cid = (b.items as { client_id: string }[])[0].client_id; return { body: { ok: true, errors: [], results: { [cid]: 'revoked' } } }; });
+  await page.goto(URL_);
+  await expect(page.locator('#net')).toContainText('1 code on this phone');
+  await page.locator('#man-code').fill(OTHER);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Old badge');
+  await expect(page.locator('#verdict')).toHaveClass(/stop/);
+  await context.setOffline(true);
+  await page.waitForTimeout(1600);   // past the repeat-scan cooldown
+  await page.locator('#man-code').fill(OTHER);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Old badge');
+});
