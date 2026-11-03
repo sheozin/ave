@@ -22,18 +22,30 @@ import { decodePng, toLines, fitLength, rasterJob, parseStatus, STATUS_REQUEST, 
 import { zplLabel, zplText, ZEBRA_QUERY, parseZebraInfo } from './zebra-zpl.mjs';
 import { textImage } from './label-text.mjs';
 
-export const VERSION = '1.5.0';
+export const VERSION = '1.5.1';
 export const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const PUBLIC_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';   // the app's public key, same as the pages
 const ALLOWED = [/^https:\/\/app\.cuedeck\.io$/, /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // The address desks on the venue network reach: a private IPv4 of this computer.
 const PRIVATE_V4 = /^(10\.\d+|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d+\.\d+$/;
-export function lanAddress(ifaces = os.networkInterfaces()) {
+// The address desks are told to use when CueDeck cannot be reached. A
+// station on two networks (a phone hotspot for internet, the venue network
+// for the printer) must give the one the printer is on: that is the
+// network the desks share when the internet is gone. Otherwise the first
+// private address.
+const v4 = (ip) => { const p = String(ip).split('.').map(Number); return p.length === 4 && p.every(n => Number.isInteger(n) && n >= 0 && n <= 255) ? ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3] : null; };
+export function lanAddress(ifaces = os.networkInterfaces(), printer = null) {
+  const all = [];
   for (const list of Object.values(ifaces)) for (const a of list || []) {
-    if ((a.family === 'IPv4' || a.family === 4) && !a.internal && PRIVATE_V4.test(a.address)) return a.address;
+    if ((a.family === 'IPv4' || a.family === 4) && !a.internal && PRIVATE_V4.test(a.address)) all.push(a);
   }
-  return null;
+  const pr = printer ? v4(printer) : null;
+  if (pr !== null) {
+    const same = all.find(a => { const ip = v4(a.address), m = v4(a.netmask); return ip !== null && m !== null && ((ip & m) >>> 0) === ((pr & m) >>> 0); });
+    if (same) return same.address;
+  }
+  return all.length ? all[0].address : null;
 }
 // Derived from the device key, so it survives restarts and changes when the
 // station is paired again.
@@ -83,7 +95,7 @@ export function createStation(opts) {
   let lanPort = null;
   const info = () => {
     const i = { model: profile.model, dpi: profile.dpi, width_mm: Math.round(profile.widthDots / profile.dpi * 25.4), name: profile.name, host: o.printer };
-    const host = lanPort && state.cfg && (o.lanHost || lanAddress());
+    const host = lanPort && state.cfg && (o.lanHost || lanAddress(undefined, o.printer));
     if (host) i.lan = { host, port: lanPort, token: lanToken(state.cfg.device_key) };
     return i;
   };

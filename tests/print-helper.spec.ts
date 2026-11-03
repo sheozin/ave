@@ -75,7 +75,7 @@ describe('print helper server', () => {
 
   it('reports the printer and the loaded roll', async () => {
     const r = await (await fetch(url('/status'), { headers: { Origin: 'https://app.cuedeck.io' } })).json();
-    expect(r).toMatchObject({ ok: true, version: '1.5.0', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
+    expect(r).toMatchObject({ ok: true, version: '1.5.1', status: { media: { width_mm: 62, type: 'continuous' } }, warning: null });
   });
   it('answers Chrome\'s private network preflight for CueDeck only', async () => {
     const ok = await fetch(url('/print'), { method: 'OPTIONS', headers: { Origin: 'https://app.cuedeck.io', 'Access-Control-Request-Private-Network': 'true' } });
@@ -302,5 +302,21 @@ describe('venue network route (offline printing)', () => {
       expect(r.headers.get('access-control-allow-private-network')).toBe('true');
       expect(r.headers.get('access-control-allow-headers')).toContain('X-CueDeck-Token');
     } finally { lan.close(); prn.close(); }
+  });
+});
+
+import { lanAddress } from '../print-helper/station-core.mjs';
+describe('lanAddress', () => {
+  const hotspot = { address: '172.20.10.2', netmask: '255.255.255.240', family: 'IPv4', internal: false };
+  const venue = { address: '192.168.1.20', netmask: '255.255.255.0', family: 'IPv4', internal: false };
+  const lo = { address: '127.0.0.1', netmask: '255.0.0.0', family: 'IPv4', internal: true };
+  it('gives the address on the printer network, not the hotspot listed first', () => {
+    expect(lanAddress({ lo0: [lo], en0: [hotspot], en7: [venue] }, '192.168.1.2')).toBe('192.168.1.20');
+  });
+  it('falls back to the first private address when no network holds the printer', () => {
+    expect(lanAddress({ en0: [hotspot], en7: [venue] }, '10.0.0.9')).toBe('172.20.10.2');
+    expect(lanAddress({ en0: [hotspot], en7: [venue] }, 'printer.local')).toBe('172.20.10.2');
+    expect(lanAddress({ en0: [hotspot] })).toBe('172.20.10.2');
+    expect(lanAddress({ lo0: [lo] })).toBeNull();
   });
 });
