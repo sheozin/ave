@@ -290,9 +290,18 @@
       <div class="xp-foot"><span class="small" id="pl-state"></span><span style="flex:1"></span><button class="link" id="pl-clear" type="button" hidden>Remove the plan</button><button class="btn btn-p" id="pl-save" type="button" disabled>Save plan</button></div>
       <div class="err" id="pl-err"></div>
     </div>
+    <div id="cr-box" hidden>
+      <h3 class="sc-h">Report for your client</h3>
+      <p class="sc-p">At 08:00 the morning after the event, we email the headline numbers and arrivals by ticket type to these addresses. Replies come to you. Live events only.</p>
+      <div class="field"><label for="cr-to">Email addresses <span class="small">(up to 5, separated by commas)</span></label><input id="cr-to" maxlength="1300" placeholder="name@client.com" autocomplete="off" inputmode="email"></div>
+      <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="cr-csv" style="margin-top:3px"><span>Attach the guest list as a CSV: names, companies, ticket types and arrival times. Guests' names leave CueDeck in this file, so only tick this if your client may have them.</span></label>
+      <div class="xp-foot"><span class="small" id="cr-state"></span><span style="flex:1"></span><button class="btn btn-p" id="cr-save" type="button">Save</button></div>
+      <div class="ok" id="cr-ok"></div><div class="err" id="cr-err"></div>
+    </div>
     <div id="xp-box">
       <h3 class="sc-h">Export guest data</h3>
       <p class="sc-p">Who came, when, through which desk or door, and every scan along the way. Times are in the event's timezone.</p>
+      <p class="small" id="xp-days" hidden></p>
       <div class="xp-seg" role="group" aria-label="What to export" id="xp-type">
         <button type="button" aria-pressed="true" data-t="att">Guest attendance</button><button type="button" aria-pressed="false" data-t="log">Activity log</button></div>
       <div class="xp-f">
@@ -639,6 +648,8 @@
     <div class="toggle"><div><b>Thank-you after the event</b><p id="ty-when">Goes out 2 hours after the event ends, only to guests who checked in.</p></div><label class="sw"><input type="checkbox" id="ty-on"><span></span></label></div>
     <div class="field"><label for="ty-msg">Note in the thank-you <span class="small">(optional)</span></label><textarea id="ty-msg" maxlength="600" rows="3" style="width:100%;border-radius:10px;padding:10px 12px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:14px;resize:vertical" placeholder="Thanks for coming. The slides and photos are online."></textarea></div>
     <div class="field"><label for="ty-link">Link in the thank-you <span class="small">(optional: survey, slides, photos)</span></label><input id="ty-link" maxlength="500" placeholder="https://" autocomplete="off"></div>
+    <div class="toggle"><div><b>Certificate of attendance</b><p>The thank-you links to each guest's own certificate: their name, the event, when they checked in and the rooms they were scanned into. They can save it as a PDF. Saved as soon as you switch it.</p></div><label class="sw"><input type="checkbox" data-set="certificate_enabled" id="cert-on"><span></span></label></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><button class="btn btn-s" id="cert-preview" type="button">Preview a certificate</button><span class="small" id="cert-note"></span></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
       <button class="btn btn-p" id="rm-save" type="button">Save</button>
       <button class="btn btn-s" id="rm-test" type="button">Send me the reminder</button>
@@ -702,7 +713,7 @@
 <script type="module">
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
-import { attendanceTable, activityTable, exportOptions } from '/checkin-export.js';
+import { attendanceTable, activityTable, exportOptions, dayCounts } from '/checkin-export.js';
 import { historyProfile, buildPlan } from '/checkin-forecast.js';
 import { eventStartUtc } from '/checkin-dashboard.js';
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
@@ -911,6 +922,8 @@ function renderReports() {
   if (can(ROLE, 'export')) loadActivity();
   $('pl-box').hidden = ROLE !== 'organizer' && ROLE !== 'owner';
   if (!$('pl-box').hidden) loadPlan();
+  $('cr-box').hidden = $('pl-box').hidden;
+  if (!$('cr-box').hidden) loadClientReport();
   const n = (src) => ATT.filter(a => src.includes(a.source)).length;
   const box = (label, v) => { const d = el('div', 'stat'); d.append(el('span', null, label), el('b', null, String(v))); return d; };
   renderAnalytics();
@@ -950,6 +963,36 @@ function planInput() {
   if (PL_SHAPE) p.shape = PL_SHAPE;
   return p;
 }
+// ── report for the client (migration 157) ──
+function clientReportState(d) {
+  if (d.sent_at) return 'Sent ' + whenText(d.sent_at) + '.';
+  if (d.failed) return 'Not sent yet: ' + (d.last_error || 'the email was refused') + '. We try again every 15 minutes, up to 5 times.';
+  if (!d.recipients.length) return '';
+  if (!d.sends_at) return 'Set the event date and time zone in Details so we know when to send it.';
+  return 'Goes out ' + whenText(d.sends_at) + ' (your time)' + (isLive() ? '.' : ', once the event is live.');
+}
+function showClientReport(d) {
+  $('cr-to').value = d.recipients.join(', ');
+  $('cr-csv').checked = !!d.attach_guests;
+  $('cr-state').textContent = clientReportState(d);
+}
+async function loadClientReport() {
+  $('cr-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_client_report_get', { p_event_id: EVENT_ID });
+  if (error) { $('cr-err').textContent = error.message; return; }
+  showClientReport(data);
+}
+$('cr-save').onclick = async () => {
+  $('cr-ok').textContent = ''; $('cr-err').textContent = '';
+  const list = $('cr-to').value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  if (list.length > 5) { $('cr-err').textContent = 'Up to 5 addresses.'; return; }
+  $('cr-save').disabled = true;
+  const { data, error } = await sb.rpc('checkin_client_report_set', { p_event_id: EVENT_ID, p_recipients: list, p_attach_guests: $('cr-csv').checked });
+  $('cr-save').disabled = false;
+  if (error) { $('cr-err').textContent = error.message; return; }
+  showClientReport(data);
+  $('cr-ok').textContent = 'Saved.';
+};
 function renderPlan() {
   const p = planInput();
   document.querySelectorAll('.pl-win').forEach(x => { x.hidden = !!PL_SHAPE; });
@@ -1011,6 +1054,12 @@ async function loadActivity() {
   const o = exportOptions(ATT, ACT, EV.timezone);
   const fill = (id, first, values) => $(id).replaceChildren(el('option', null, first), ...values.map(v => { const x = el('option', null, v); x.value = v; return x; }));
   fill('xp-day', 'All days', o.days); $('xp-day').firstChild.value = '';
+  // Several days: how many guests were here on each (a guest checked in on
+  // day 1 counts on day 2 when scanned again that day).
+  const perDay = dayCounts(ATT, ACT, EV.timezone);
+  const dayName = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString(navigator.language || 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  $('xp-days').hidden = perDay.length < 2;
+  $('xp-days').textContent = perDay.length < 2 ? '' : 'Guests here each day: ' + perDay.map(d => dayName(d.date) + ': ' + d.count).join(', ') + '. Choose a day below to list who was there.';
   fill('xp-ticket', 'All tickets', o.tickets); $('xp-ticket').firstChild.value = '';
   fill('xp-place', 'All', o.places); $('xp-place').firstChild.value = '';
   renderExport();
@@ -2504,13 +2553,15 @@ async function removeScanPoint(sp, btn) {
   await loadScanPoints();
 }
 document.querySelectorAll('[data-set]').forEach(i => i.addEventListener('change', async () => {
-  $('set-err').textContent = ''; i.disabled = true;
+  const errEl = i.closest('section')?.querySelector('.err') || $('set-err');
+  errEl.textContent = ''; i.disabled = true;
   const { data, error } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: EVENT_ID, settings: { [i.dataset.set]: i.checked } } });
   i.disabled = false;
-  if (error) { i.checked = !i.checked; $('set-err').textContent = await fnError(error); return; }
+  if (error) { i.checked = !i.checked; errEl.textContent = await fnError(error); return; }
   // A settings save never changes the status (only the explicit go-live
   // call does), but take what the server reports so the page cannot drift.
   ENT[i.dataset.set] = i.checked; if (data?.status) ENT.status = data.status; renderChrome();
+  if (i.dataset.set === 'certificate_enabled') renderCert();
 }));
 
 // ── 5. QR emails ─────────────────────────────────────────
@@ -2542,8 +2593,31 @@ for (const [btn, kind] of [['rm-test', 'reminder'], ['ty-test', 'thankyou']]) {
     $('rm-ok').textContent = 'Sent to ' + data.to + '. It uses your saved settings, so save first if you changed anything.';
   };
 }
+// ── certificates of attendance (migration 156) ──
+// The page only shows a certificate for a real guest who checked in at a
+// live event with certificates on, so the preview waits for all three.
+const certGuest = () => ATT.find(a => a.checked_in_at && !a.is_test);
+function renderCert() {
+  $('cert-on').checked = !!ENT.certificate_enabled;
+  const g = certGuest(), ready = isLive() && !!ENT.certificate_enabled && !!g;
+  $('cert-preview').disabled = !ready;
+  $('cert-note').textContent = ready ? 'Opens ' + (g.first_name + ' ' + g.last_name).trim() + '\'s certificate.'
+    : !isLive() ? 'The preview opens once the event is live and a guest has checked in.'
+    : !ENT.certificate_enabled ? 'Switch certificates on to preview one.'
+    : 'The preview opens once a guest has checked in.';
+}
+$('cert-preview').onclick = async () => {
+  const g = certGuest(); if (!g) return;
+  $('rm-err').textContent = '';
+  const tab = window.open('', '_blank');
+  const { data, error } = await sb.rpc('checkin_certificate_link', { p_event_id: EVENT_ID, p_attendee_id: g.id });
+  if (error || !/^[0-9a-f]{32}$/.test(data || '')) { if (tab) tab.close(); $('rm-err').textContent = error ? error.message : 'Could not open the certificate.'; return; }
+  const url = '/c/' + data;
+  if (tab) { tab.opener = null; tab.location = url; } else location.href = url;
+};
 function renderQr() {
   renderReminders();
+  renderCert();
   const unsent = ATT.filter(a => a.email && !a.qr_email_sent_at).length;
   $('qr-sub').textContent = isLive()
     ? unsent + ' guests with an email address have not been sent their QR code yet.'

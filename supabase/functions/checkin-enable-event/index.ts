@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
   // Operational settings: what the organizer chose for this event.
   const s = (body.settings as Record<string, unknown>) || {}
   const patch: Record<string, boolean> = {}
-  for (const k of ['self_registration', 'kiosk_self_print', 'auto_send_qr_email']) {
+  for (const k of ['self_registration', 'kiosk_self_print', 'auto_send_qr_email', 'certificate_enabled']) {
     if (typeof s[k] === 'boolean') patch[k] = s[k] as boolean
   }
   // Commercial entitlements: what was bought. Admin only. Before this

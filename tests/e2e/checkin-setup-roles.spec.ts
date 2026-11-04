@@ -675,6 +675,41 @@ test('emails tab: automatic reminder and thank-you settings save, and a test goe
   expect(tests[0]).toMatchObject({ event_id: EVENT_ID, action: 'test', kind: 'thankyou' });
 });
 
+test('emails tab: certificates switch on, then preview a real checked-in guest in a new tab', async ({ page, context }) => {
+  const saved: Record<string, unknown>[] = [];
+  const links: Record<string, unknown>[] = [];
+  await open(page, { role: 'organizer', status: 'live' }, 'qr', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', certificate_enabled: false }]);
+    await table(page, 'leod_checkin_attendees', [
+      { id: 't1', first_name: 'Test', last_name: 'Guest', is_test: true, checked_in_at: FIXED_NOW.toISOString(), source: 'import', created_at: FIXED_NOW.toISOString() },
+      { id: 'g1', first_name: 'Maya', last_name: 'Lindqvist', is_test: false, checked_in_at: FIXED_NOW.toISOString(), source: 'import', created_at: FIXED_NOW.toISOString() }]);
+    await rpc(page, 'checkin_reminder_status', { reminder_from: null, thankyou_from: null, reminder_sent: 0, thankyou_sent: 0 });
+    await fn(page, 'checkin-enable-event', (b) => { saved.push(b); return { body: { ok: true, status: 'live' } }; });
+    await rpc(page, 'checkin_certificate_link', (a) => { links.push(a); return '0123456789abcdef0123456789abcdef'; });
+  });
+  await expect(page.locator('#cert-on')).not.toBeChecked();
+  await expect(page.locator('#cert-preview')).toBeDisabled();
+  await expect(page.locator('#cert-note')).toHaveText('Switch certificates on to preview one.');
+  await page.locator('#cert-on').evaluate((e: HTMLInputElement) => e.click());
+  await expect(page.locator('#cert-preview')).toBeEnabled();
+  expect(saved[0]).toMatchObject({ event_id: EVENT_ID, settings: { certificate_enabled: true } });
+  await expect(page.locator('#cert-note')).toHaveText("Opens Maya Lindqvist's certificate.");
+  await context.route(/\/c\/[0-9a-f]{32}$/, (r) => r.fulfill({ contentType: 'text/html', body: '<p>cert</p>' }));
+  const [tab] = await Promise.all([context.waitForEvent('page'), page.click('#cert-preview')]);
+  await tab.waitForURL(/\/c\/0123456789abcdef0123456789abcdef$/);
+  expect(links[0]).toEqual({ p_event_id: EVENT_ID, p_attendee_id: 'g1' });
+});
+
+test('emails tab: no certificate preview in test mode', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'qr', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'test', certificate_enabled: true }]);
+    await rpc(page, 'checkin_reminder_status', { reminder_from: null, thankyou_from: null, reminder_sent: 0, thankyou_sent: 0 });
+  });
+  await expect(page.locator('#cert-on')).toBeChecked();
+  await expect(page.locator('#cert-preview')).toBeDisabled();
+  await expect(page.locator('#cert-note')).toHaveText('The preview opens once the event is live and a guest has checked in.');
+});
+
 test('badges tab: the designer previews at the stock size and saves the design', async ({ page }) => {
   const saved: Record<string, unknown>[] = [];
   await open(page, { role: 'organizer' }, 'badges', STAFF, async () => {
@@ -948,6 +983,30 @@ test('reports: an organizer previews and downloads attendance and the activity l
   expect(lines[1]).toBe('2026-10-18;10:02:00;Ana;Nowak;ana@x.pl;Contoso;VIP;Scanned again, already checked in;Main door (Door phone);');
 });
 
+test('reports: a two-day event shows who was here each day, and the file has a column per day', async ({ page }) => {
+  const g = (id: string, first: string, at: string | null) => ({ id, first_name: first, last_name: 'X', email: null, company: null, ticket_type: 'attendee',
+    checked_in_at: at, badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'import', created_at: '2026-10-01T00:00:00Z' });
+  const att = [g('a1', 'Ana', '2026-10-18T07:41:12Z'), g('a2', 'Ben', '2026-10-18T08:00:00Z'), g('a3', 'Cy', '2026-10-19T08:00:00Z')];
+  const s = (at: string, kind: string, id: string, first: string) => ({ at, kind, attendee_id: id, first_name: first, last_name: 'X', email: null, company: null,
+    ticket_type: 'attendee', desk: 'Desk 1', place: null, device: null, staff: null });
+  const act = [s('2026-10-18T07:41:12Z', 'ok', 'a1', 'Ana'), s('2026-10-18T08:00:00Z', 'ok', 'a2', 'Ben'),
+    s('2026-10-19T07:30:00Z', 'duplicate', 'a1', 'Ana'), s('2026-10-19T08:00:00Z', 'ok', 'a3', 'Cy')];
+  await open(page, { role: 'organizer' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', att);
+    await rpc(page, 'checkin_activity_export', act);
+    await rpc(page, 'checkin_arrival_history', []);
+  });
+  await expect(page.locator('#xp-days')).toBeVisible();
+  await expect(page.locator('#xp-days')).toContainText(': 2, ');
+  await expect(page.locator('#xp-days')).toContainText('Choose a day below to list who was there.');
+  await page.locator('#xp-day').selectOption('2026-10-19');
+  await expect(page.locator('#xp-count')).toHaveText('2 rows match.');
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#xp-csv').click()]);
+  const lines = readFileSync(await dl.path(), 'utf8').replace(/^\uFEFF/, '').split('\r\n');
+  expect(lines[0].endsWith(';Here on 2026-10-18;Here on 2026-10-19')).toBe(true);
+  expect(lines.slice(1).map(l => l.split(';')[0] + ' ' + l.split(';').slice(-2).join(','))).toEqual(['Ana Yes,Yes', 'Cy ,Yes']);
+});
+
 test('reports: a desk lead sees no export and the activity is never fetched', async ({ page }) => {
   let called = false;
   await open(page, { role: 'lead' }, 'reports', STAFF, () =>
@@ -1011,6 +1070,51 @@ test('staffing plan: a desk lead does not see it and past events are never asked
     page.route(/\/rest\/v1\/rpc\/checkin_arrival_history/, async (r) => { asked = true; await r.fulfill({ status: 200, body: '[]' }); }));
   await page.waitForTimeout(800);
   await expect(page.locator('#pl-box')).toBeHidden();
+  expect(asked).toBe(false);
+});
+
+test('client report: an organizer names the client, sees when it goes, and opts in to the guest list', async ({ page }) => {
+  const sent: Record<string, unknown>[] = [];
+  const state = { recipients: [] as string[], attach_guests: false, sent_at: null, failed: false, last_error: null, sends_at: '2026-10-19T06:00:00Z' };
+  await open(page, { role: 'organizer', status: 'live' }, 'reports', STAFF, async () => {
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live' }]);
+    await rpc(page, 'checkin_activity_export', []);
+    await rpc(page, 'checkin_arrival_history', []);
+    await rpc(page, 'checkin_client_report_get', () => state);
+    await rpc(page, 'checkin_client_report_set', (a) => { sent.push(a); return { ...state, recipients: a.p_recipients, attach_guests: a.p_attach_guests }; });
+  });
+  await expect(page.locator('#cr-box')).toBeVisible();
+  await expect(page.locator('#cr-to')).toHaveValue('');
+  await expect(page.locator('#cr-state')).toHaveText('');
+  await page.fill('#cr-to', 'Anna@Client.com,  ben@client.com ; ');
+  await page.locator('#cr-csv').check();
+  await page.click('#cr-save');
+  await expect(page.locator('#cr-ok')).toHaveText('Saved.');
+  expect(sent[0]).toEqual({ p_event_id: EVENT_ID, p_recipients: ['Anna@Client.com', 'ben@client.com'], p_attach_guests: true });
+  await expect(page.locator('#cr-state')).toContainText('Goes out ');
+  await expect(page.locator('#cr-state')).toContainText('(your time).');
+  await page.fill('#cr-to', 'a@x.io, b@x.io, c@x.io, d@x.io, e@x.io, f@x.io');
+  await page.click('#cr-save');
+  await expect(page.locator('#cr-err')).toHaveText('Up to 5 addresses.');
+  expect(sent).toHaveLength(1);
+});
+
+test('client report: a failed send says why', async ({ page }) => {
+  await open(page, { role: 'organizer', status: 'live' }, 'reports', STAFF, async () => {
+    await rpc(page, 'checkin_activity_export', []);
+    await rpc(page, 'checkin_arrival_history', []);
+    await rpc(page, 'checkin_client_report_get', { recipients: ['anna@client.com'], attach_guests: false, sent_at: null, failed: true, last_error: 'The recipient address is invalid', sends_at: '2026-10-19T06:00:00Z' });
+  });
+  await expect(page.locator('#cr-to')).toHaveValue('anna@client.com');
+  await expect(page.locator('#cr-state')).toHaveText('Not sent yet: The recipient address is invalid. We try again every 15 minutes, up to 5 times.');
+});
+
+test('client report: a desk lead does not see it and it is never asked for', async ({ page }) => {
+  let asked = false;
+  await open(page, { role: 'lead' }, 'reports', STAFF, () =>
+    page.route(/\/rest\/v1\/rpc\/checkin_client_report_get/, async (r) => { asked = true; await r.fulfill({ status: 200, body: '{}' }); }));
+  await page.waitForTimeout(800);
+  await expect(page.locator('#cr-box')).toBeHidden();
   expect(asked).toBe(false);
 });
 

@@ -196,7 +196,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status', 'checkin-post-event-report']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -1690,6 +1690,103 @@ Deno.test(`${RM}: a failed language lookup still sends, in English`, async () =>
   const r = await call(RM, {})
   const m = world.emails![0] as { subject: string }
   assert(r.status === 200 && m.subject === 'Thank you for coming to Stub event', m.subject)
+})
+
+// ── certificates of attendance (156) ──
+const CERT_TOK = '0123456789abcdef0123456789abcdef'
+Deno.test(`${RM}: with certificates on, the thank-you links to the guest's own certificate in their language`, async () => {
+  remSetup()
+  world.tables.leod_checkin_entitlements[0].certificate_enabled = true
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'thankyou', event_id: EVENT, first_name: 'Ola', email: 'ola@stub.test', qr_token: 'tok1' }]
+  world.rpcResult.checkin_web_langs = [{ email: 'ola@stub.test', lang: 'pl' }]
+  world.rpcResult.checkin_certificate_token = CERT_TOK
+  const r = await call(RM, {})
+  assert(r.status === 200, JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_certificate_token')
+  assert(c && c.args.p_attendee_id === ATT, JSON.stringify(world.rpcCalls))
+  const m = world.emails![0] as { html: string }
+  assert(m.html.includes('https://app.cuedeck.io/c/' + CERT_TOK + '?l=pl'), 'no certificate link')
+})
+Deno.test(`${RM}: with certificates off, no token is made and no link is sent`, async () => {
+  remSetup()
+  world.rpcResult.checkin_claim_reminders = [{ attendee_id: ATT, kind: 'thankyou', event_id: EVENT, first_name: 'Ola', email: 'ola@stub.test', qr_token: 'tok1' }]
+  world.rpcResult.checkin_certificate_token = CERT_TOK
+  const r = await call(RM, {})
+  assert(r.status === 200, JSON.stringify(r))
+  assert(!world.rpcCalls.some(x => x.name === 'checkin_certificate_token'), 'made a token with certificates off')
+  assert(!(world.emails![0] as { html: string }).html.includes('/c/'), 'sent a certificate link')
+})
+Deno.test('checkin-enable-event: an organizer switches certificates on for a live event, and it stays live', async () => {
+  setup('organizer', { ent: { checkin_core: true, status: 'live', certificate_enabled: false } })
+  const r = await call('checkin-enable-event', { event_id: EVENT, settings: { certificate_enabled: true, certificate_extra: true } })
+  assert(r.status === 200 && r.body.status === 'live', JSON.stringify(r))
+  const e = world.tables.leod_checkin_entitlements[0]
+  assert(e.certificate_enabled === true && !('certificate_extra' in e), JSON.stringify(e))
+})
+// ── report for the client (157) ──
+const PR = 'checkin-post-event-report'
+function crSetup(attach: boolean) {
+  setup('none', { ent: { checkin_core: true, status: 'live', registration_host_name: 'AVE Events' } })
+  world.rpcResult.checkin_report_cron_ok = true
+  world.rpcResult.checkin_reports_due = []
+  world.rpcResult.checkin_client_reports_due = [{ event_id: EVENT, owner_id: OTHER, recipients: ['a@client.test', 'b@client.test'], attach_guests: attach }]
+  world.rpcResult.checkin_claim_client_report = true
+  world.rpcResult.checkin_event_report_data = { registered: 10, checked_in: 7, walk_ins: 1, peak: { t: 0, n: 4 }, desks: [],
+    event: { date: '2099-06-01', name: 'Stub <b>event</b>', timezone: 'Europe/Warsaw' },
+    by_ticket: [{ ticket_type: 'VIP', registered: 4, checked_in: 4, no_shows: 0 }] }
+  world.rpcResult.checkin_client_report_guests = [
+    { first_name: 'Ola', last_name: 'Nowak', company: '=HYPERLINK("x")', ticket_type: 'VIP', checked_in_at: '2099-06-01T07:05:00Z' },
+    { first_name: 'Ben', last_name: 'Ng', company: null, ticket_type: null, checked_in_at: null }]
+  world.authUsers = { [OTHER]: { id: OTHER, email: 'owner@stub.test', aud: 'authenticated' } }
+}
+const b64 = (s: string) => new TextDecoder('utf-8', { ignoreBOM: true }).decode(Uint8Array.from(atob(s), c => c.charCodeAt(0)))
+Deno.test(`${PR}: the client gets the numbers, replies reach the owner, and the guest list when ticked`, async () => {
+  crSetup(true)
+  const r = await call(PR, {})
+  assert(r.status === 200, JSON.stringify(r))
+  const m = (world.emails ?? []) as { to: string; from: string; reply_to: string; subject: string; html: string; attachments?: { filename: string; content: string }[] }[]
+  assert(m.length === 2 && m[0].to === 'a@client.test' && m[1].to === 'b@client.test', JSON.stringify(m.map(x => x.to)))
+  assert(m[0].reply_to === 'owner@stub.test', m[0].reply_to)
+  assert(m[0].from.startsWith('"Stub b event /b Check-in" <'), m[0].from)
+  assert(m[0].subject === 'Check-in report: Stub <b>event</b>, 1 June 2099', m[0].subject)
+  assert(!m[0].html.includes('<b>event</b>') && m[0].html.includes('7 of 10 checked in (70%)') && m[0].html.includes('AVE Events'), 'html')
+  const csv = b64(m[0].attachments![0].content)
+  assert(m[0].attachments![0].filename === 'guest-list.csv', 'filename')
+  assert(csv.startsWith('\uFEFFFirst name;Last name;Company;Ticket type;Checked in;Date;Time\r\n'), JSON.stringify(csv.slice(0, 80)))
+  assert(csv.includes('Ola;Nowak;"\'=HYPERLINK(""x"")";VIP;Yes;2099-06-01;09:05'), csv)
+  assert(csv.includes('Ben;Ng;;;No;;'), csv)
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_client_report_failed'), 'marked failed')
+})
+Deno.test(`${PR}: no tick, no guest list: the names are never even read`, async () => {
+  crSetup(false)
+  const r = await call(PR, {})
+  assert(r.status === 200, JSON.stringify(r))
+  assert((world.emails ?? []).every(e => !(e as Row).attachments), 'attached a file')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_client_report_guests'), 'read the guest list')
+})
+Deno.test(`${PR}: a failure gives the claim back and sends nothing`, async () => {
+  crSetup(true)
+  world.authUsers = {}
+  const r = await call(PR, {})
+  assert(r.status === 500 && !(world.emails?.length), JSON.stringify(r))
+  const f = world.rpcCalls.find(c => c.name === 'checkin_client_report_failed')
+  assert(f && f.args.p_event_id === EVENT, JSON.stringify(world.rpcCalls))
+})
+Deno.test(`${PR}: a claim lost to another run sends nothing`, async () => {
+  crSetup(true)
+  world.rpcResult.checkin_claim_client_report = false
+  const r = await call(PR, {})
+  assert(r.status === 200 && !(world.emails?.length), JSON.stringify(r))
+})
+
+Deno.test('thankyouEmail: only a CueDeck certificate address becomes a link', async () => {
+  const { thankyouEmail } = await import('../../supabase/functions/_shared/reminder-email.ts')
+  const ev = { name: 'Summit', date: '2026-11-03', venue: 'Hall A', white_label: false, start: '09:00', timezone: 'Europe/Warsaw', address: null, reminder_message: null, thankyou_message: null, thankyou_link: null }
+  const good = thankyouEmail(ev, { first_name: 'Ada' }, 'de', 'https://app.cuedeck.io/c/' + CERT_TOK + '?l=de').html
+  assert(good.includes('/c/' + CERT_TOK + '?l=de') && good.includes('Ihre Teilnahmebestätigung') && good.includes('Bestätigung öffnen'), 'good link missing')
+  for (const bad of ['https://evil.example/c/' + CERT_TOK, 'https://app.cuedeck.io/c/' + CERT_TOK + '"><script>', 'javascript:alert(1)']) {
+    assert(!thankyouEmail(ev, { first_name: 'Ada' }, 'en', bad).html.includes('Open your certificate'), 'linked ' + bad)
+  }
 })
 
 Deno.test(`${RG} register: the language of a form is not stored for an address nobody has confirmed`, async () => {

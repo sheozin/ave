@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Certificate of attendance</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: 'Geist'; src: url('/fonts/geist-var.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+:root { --ink: #16181D; --soft: #5B616E; --line: #E3E1DA; --paper: #FFFFFF; --page: #EFEDE7; --accent: #1F3A5F; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.bar { max-width: 1123px; margin: 0 auto; padding: 20px 16px 12px; display: flex; align-items: center; gap: 12px; }
+.bar p { margin: 0; flex: 1; color: var(--soft); font-size: 14px; }
+.bar button { font: inherit; font-weight: 650; font-size: 15px; padding: 11px 18px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.bar button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.wrap { padding: 0 16px 40px; }
+.wrap.scaled { overflow: hidden; padding-bottom: 0; margin-bottom: 40px; }
+.wrap.scaled .cert { transform-origin: top left; margin: 0; }
+[dir="rtl"] .wrap.scaled .cert { transform-origin: top right; }
+/* A4 landscape, drawn at 1 mm = 3.78 px; scaled to fit the screen. */
+.cert { width: 297mm; height: 210mm; margin: 0 auto; background: var(--paper); position: relative; overflow: hidden;
+        box-shadow: 0 10px 40px rgba(22,24,29,.12); transform-origin: top center; }
+.frame { position: absolute; inset: 12mm; border: 0.6mm solid var(--accent); }
+.frame::after { content: ''; position: absolute; inset: 2.4mm; border: 0.25mm solid var(--line); }
+.in { position: absolute; inset: 24mm 30mm 20mm; display: flex; flex-direction: column; }
+.top { display: flex; align-items: center; justify-content: space-between; min-height: 16mm; }
+.top img { max-height: 16mm; max-width: 70mm; object-fit: contain; }
+.kind { font-size: 4.2mm; font-weight: 650; color: var(--accent); letter-spacing: .02em; }
+.mid { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.lead { font-size: 4.6mm; color: var(--soft); margin: 0 0 3mm; }
+.name { font-size: 15mm; line-height: 1.05; font-weight: 700; letter-spacing: -.02em; margin: 0; overflow-wrap: anywhere; }
+.co { font-size: 5mm; color: var(--soft); margin: 2.5mm 0 0; }
+.rule { width: 34mm; height: 0.8mm; background: var(--accent); margin: 8mm 0 7mm; }
+.what { font-size: 5.4mm; line-height: 1.45; margin: 0; max-width: 200mm; }
+.what b { font-weight: 650; }
+.rooms { margin: 4mm 0 0; font-size: 4mm; color: var(--soft); line-height: 1.5; max-width: 220mm; }
+.foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10mm; font-size: 3.4mm; color: var(--soft); line-height: 1.5; }
+.foot .host { color: var(--ink); font-weight: 650; font-size: 4mm; }
+.foot .check { text-align: end; }
+.foot .code { font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--ink); font-weight: 650; }
+[dir="rtl"] .rule { margin-inline-start: 0; }
+.msg { max-width: 520px; margin: 12vh auto; background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 10px 40px rgba(22,24,29,.08); }
+.msg h1 { margin: 0 0 8px; font-size: 22px; }
+.msg p { margin: 0; color: var(--soft); line-height: 1.55; }
+@media print {
+  @page { size: A4 landscape; margin: 0; }
+  body { background: #fff; }
+  .bar { display: none !important; }
+  .wrap, .wrap.scaled { padding: 0; margin: 0; height: auto !important; overflow: visible; }
+  .cert { box-shadow: none; transform: none !important; margin: 0; }
+}
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"><p class="msg" style="text-align:center">…</p></div>
+<script type="module" src="/checkin-certificate.js"></script>
+</body>
+</html>

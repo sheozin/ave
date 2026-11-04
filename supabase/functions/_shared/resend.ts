@@ -13,6 +13,7 @@ export interface EmailPayload {
   // Resend drops a repeat send with the same key for 24 hours, so a
   // response lost after Resend accepted the email cannot cause a duplicate.
   idempotencyKey?: string
+  attachments?: { filename: string; content: string; content_type?: string }[]   // content base64
 }
 
 export interface ResendResponse {
@@ -48,6 +49,7 @@ export async function sendEmail(payload: EmailPayload): Promise<ResendResponse> 
         text: payload.text,
         reply_to: payload.replyTo || fromEmail,
         tags: payload.tags,
+        ...(payload.attachments ? { attachments: payload.attachments } : {}),
       }),
     })
 

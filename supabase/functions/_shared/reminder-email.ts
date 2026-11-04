@@ -79,7 +79,9 @@ export function reminderEmail(e: ReminderEvent, g: ReminderGuest, lang: Lang = '
   return { subject: et(lang, 'Reminder: {event}, {date}', { event: e.name, date: day }), html: frame(e, e.name, body, lang) }
 }
 
-export function thankyouEmail(e: ReminderEvent, g: Pick<ReminderGuest, 'first_name'>, lang: Lang = 'en'): { subject: string; html: string } {
+// certUrl: the guest's certificate of attendance (migration 156), when the
+// organizer switched certificates on.
+export function thankyouEmail(e: ReminderEvent, g: Pick<ReminderGuest, 'first_name'>, lang: Lang = 'en', certUrl: string | null = null): { subject: string; html: string } {
   const accent = accentOf(e)
   const link = safeLink(e.thankyou_link)
   const body = `
@@ -92,6 +94,11 @@ export function thankyouEmail(e: ReminderEvent, g: Pick<ReminderGuest, 'first_na
         ${e.thankyou_message ? `<p dir="auto" style="text-align:${alignOf(lang)};margin:0 0 18px;">${note(e.thankyou_message)}</p>` : ''}
         ${link ? `<p style="margin:0;text-align:center;"><a href="${escapeHtml(link)}" style="display:inline-block;background:${accent};color:#ffffff;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px;text-decoration:none;">${escapeHtml(et(lang, 'Open the link'))}</a></p>
         <p style="margin:8px 0 0;font-size:12px;color:#9ca3af;text-align:center;word-break:break-all;">${escapeHtml(link)}</p>` : ''}
+        ${certUrl && /^https:\/\/app\.cuedeck\.io\/c\/[0-9a-f]{32}(\?l=[a-z]{2})?$/.test(certUrl) ? `<div style="margin:${link ? '22px' : '4px'} 0 0;padding:16px;border:1px solid #e5e7eb;border-radius:12px;text-align:center;">
+          <div style="font-weight:700;color:#111827;margin-bottom:4px;">${escapeHtml(et(lang, 'Your certificate of attendance'))}</div>
+          <div style="font-size:13px;color:#6b7280;margin-bottom:12px;">${escapeHtml(et(lang, 'Open it to save or print it as a PDF.'))}</div>
+          <a href="${escapeHtml(certUrl)}" style="display:inline-block;background:#ffffff;color:${accent};border:2px solid ${accent};font-weight:700;font-size:15px;padding:10px 20px;border-radius:10px;text-decoration:none;">${escapeHtml(et(lang, 'Open your certificate'))}</a>
+        </div>` : ''}
       </div>`
   return { subject: et(lang, 'Thank you for coming to {event}', { event: e.name }), html: frame(e, e.name, body, lang) }
 }

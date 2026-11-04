@@ -26,10 +26,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type Sb = ReturnType<typeof adminClient>
 
-async function loadEvent(sb: Sb, eventId: string): Promise<ReminderEvent> {
+async function loadEvent(sb: Sb, eventId: string): Promise<ReminderEvent & { certificates: boolean }> {
   const [{ data: ev, error: evErr }, { data: ent, error: entErr }] = await Promise.all([
     sb.from('leod_events').select('name, date, venue, timezone, event_start').eq('id', eventId).single(),
-    sb.from('leod_checkin_entitlements').select('registration_address, reminder_message, thankyou_message, thankyou_link').eq('event_id', eventId).single(),
+    sb.from('leod_checkin_entitlements').select('registration_address, reminder_message, thankyou_message, thankyou_link, certificate_enabled').eq('event_id', eventId).single(),
   ])
   if (evErr || !ev) throw new Error('event read: ' + (evErr?.message ?? 'missing'))
   if (entErr || !ent) throw new Error('entitlement read: ' + (entErr?.message ?? 'missing'))
@@ -38,7 +38,15 @@ async function loadEvent(sb: Sb, eventId: string): Promise<ReminderEvent> {
     ...base, start: typeof ev.event_start === 'string' ? ev.event_start.slice(0, 5) : null, timezone: ev.timezone ?? null,
     address: ent.registration_address ?? null, reminder_message: ent.reminder_message ?? null,
     thankyou_message: ent.thankyou_message ?? null, thankyou_link: ent.thankyou_link ?? null,
+    certificates: ent.certificate_enabled === true,
   }
+}
+// The guest's certificate page (migration 156), in their language.
+const CERT_URL = 'https://app.cuedeck.io/c/'
+async function certUrl(sb: Sb, attendeeId: string, lang: Lang): Promise<string> {
+  const { data, error } = await sb.rpc('checkin_certificate_token', { p_attendee_id: attendeeId })
+  if (error || typeof data !== 'string') throw new Error('certificate: ' + (error?.message ?? 'no token'))
+  return CERT_URL + data + (lang === 'en' ? '' : '?l=' + lang)
 }
 const fromName = (name: string) => (name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck') + ' Check-in'
 
@@ -65,10 +73,19 @@ Deno.serve(async (req) => {
     if (!kind) return json({ error: 'Bad request' }, 400)
     const gate = functionGate('checkin-reminders', await loadCallerRole(sb, event_id, user.id))
     if (!gate.ok) return json(gate.body, gate.status)
-    let ev: ReminderEvent
+    let ev: Awaited<ReturnType<typeof loadEvent>>
     try { ev = await loadEvent(sb, event_id) } catch (e) { return json({ error: (e as Error).message }, 500) }
     const first = String(user.user_metadata?.first_name ?? user.user_metadata?.name ?? '').split(' ')[0] || 'there'
-    const m = kind === 'reminder' ? reminderEmail(ev, { first_name: first, qr_token: 'SAMPLE' + crypto.randomUUID().replace(/-/g, '') }) : thankyouEmail(ev, { first_name: first })
+    // The sample certificate is a real guest's who checked in, as each guest
+    // gets their own; none yet, and the test email has no certificate.
+    let sampleCert: string | null = null
+    if (kind === 'thankyou' && ev.certificates) {
+      const { data: g, error: gErr } = await sb.from('leod_checkin_attendees').select('id').eq('event_id', event_id)
+        .not('checked_in_at', 'is', null).eq('is_test', false).order('checked_in_at').limit(1).maybeSingle()
+      if (gErr) return json({ error: 'guest read: ' + gErr.message }, 500)
+      if (g) { try { sampleCert = await certUrl(sb, g.id, 'en') } catch (e) { return json({ error: (e as Error).message }, 500) } }
+    }
+    const m = kind === 'reminder' ? reminderEmail(ev, { first_name: first, qr_token: 'SAMPLE' + crypto.randomUUID().replace(/-/g, '') }) : thankyouEmail(ev, { first_name: first }, 'en', sampleCert)
     const { error } = await sendEmail({ to: user.email, subject: '[Test] ' + m.subject, html: m.html, fromName: fromName(ev.name) })
     if (error) return json({ error: 'The email could not be sent: ' + error }, 502)
     return json({ ok: true, to: user.email })
@@ -93,7 +110,7 @@ Deno.serve(async (req) => {
   try {
     const { data: due, error: dueErr } = await sb.rpc('checkin_claim_reminders', { p_limit: BATCH })
     if (dueErr) throw new Error('claim: ' + dueErr.message)
-    const events = new Map<string, Promise<ReminderEvent>>()
+    const events = new Map<string, ReturnType<typeof loadEvent>>()
     // (123) Each guest's language, one lookup per event in the batch.
     const rows = (due ?? []) as { event_id: string; email: string }[]
     const langs = new Map<string, Map<string, Lang>>()
@@ -103,7 +120,8 @@ Deno.serve(async (req) => {
         if (!events.has(d.event_id)) events.set(d.event_id, loadEvent(sb, d.event_id))
         const ev = await events.get(d.event_id)!
         const lang = langs.get(d.event_id)?.get(String(d.email).toLowerCase()) ?? 'en'
-        const m = d.kind === 'reminder' ? reminderEmail(ev, d, lang) : thankyouEmail(ev, d, lang)
+        const cert = d.kind === 'thankyou' && ev.certificates ? await certUrl(sb, d.attendee_id, lang) : null
+        const m = d.kind === 'reminder' ? reminderEmail(ev, d, lang) : thankyouEmail(ev, d, lang, cert)
         const { error } = await sendEmail({ to: d.email, subject: m.subject, html: m.html, fromName: fromName(ev.name) })
         if (error) throw new Error(error)
         counts[d.kind]++

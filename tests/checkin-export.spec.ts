@@ -1,6 +1,6 @@
 // tests/checkin-export.spec.ts: the attendance and activity exports.
 import { describe, it, expect } from 'vitest';
-import { localParts, attendanceTable, activityTable, exportOptions } from '../checkin-export.js';
+import { localParts, attendanceTable, activityTable, exportOptions, presenceByDay, dayCounts } from '../checkin-export.js';
 
 const TZ = 'Europe/Warsaw';
 const ANA = { id: 'a', first_name: 'Ana', last_name: 'Nowak', email: 'ana@x.io', company: 'Contoso', ticket_type: 'VIP', source: 'import',
@@ -33,9 +33,9 @@ describe('attendanceTable', () => {
   it('one row per guest, with the desk and staff of the check-in that stands', () => {
     const t = attendanceTable([ANA, BEN, CAL], ACT, TZ, {});
     expect(t.head).toEqual(['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Source', 'Checked in (date)', 'Checked in (time)',
-      'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced']);
+      'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', 'Here on 2026-12-09', 'Here on 2026-12-10']);
     expect(t.rows).toHaveLength(3);
-    expect(t.rows[0]).toEqual(['Ana', 'Nowak', 'ana@x.io', 'Contoso', 'VIP', 'Imported', '2026-12-09', '08:41:12', 'Desk 2', 'Marek', '2026-12-09 08:41:20', 1]);
+    expect(t.rows[0]).toEqual(['Ana', 'Nowak', 'ana@x.io', 'Contoso', 'VIP', 'Imported', '2026-12-09', '08:41:12', 'Desk 2', 'Marek', '2026-12-09 08:41:20', 1, 'Yes', '']);
     expect(t.rows[1].slice(6, 10)).toEqual(['', '', '', '']);
     expect(t.rows[2].slice(8, 10)).toEqual(['Hall B (Hall phone)', '']);
   });
@@ -47,6 +47,43 @@ describe('attendanceTable', () => {
     expect(names({ from: '09:00' })).toEqual(['Ben', 'Cal']);
     expect(names({ ticket: 'VIP' })).toEqual(['Ana']);
     expect(names({ place: 'Desk 2' })).toEqual(['Ana']);
+  });
+});
+
+describe('attendance per day', () => {
+  // Ana: checked in on day 1, scanned again at the door on day 2.
+  // Dan: checked in on day 1, then on day 2 his check-in was undone.
+  // Eve: checked in on day 2 only. An old badge of hers was blocked on day 1.
+  const DAN = { ...BEN, id: 'd', first_name: 'Dan', checked_in_at: '2026-12-09T08:00:00Z' };
+  const EVE = { ...BEN, id: 'e', first_name: 'Eve', checked_in_at: '2026-12-10T10:00:00Z' };
+  const MULTI = [
+    row('2026-12-09T07:41:12Z', 'ok', ANA), row('2026-12-10T07:50:00Z', 'duplicate', ANA, { place: 'Main door' }),
+    row('2026-12-09T08:00:00Z', 'ok', DAN), row('2026-12-10T08:00:00Z', 'duplicate', DAN), row('2026-12-10T08:05:00Z', 'undo', DAN),
+    row('2026-12-09T09:00:00Z', 'revoked', EVE), row('2026-12-10T10:00:00Z', 'ok', EVE),
+  ];
+  it('a day counts when the last scan that day stands', () => {
+    const p = presenceByDay(MULTI, TZ);
+    expect([...p.get('a')]).toEqual(['2026-12-09', '2026-12-10']);
+    expect([...p.get('d')]).toEqual(['2026-12-09']);
+    expect([...p.get('e')]).toEqual(['2026-12-10']);
+  });
+  it('counts guests here each day', () => {
+    expect(dayCounts([ANA, DAN, EVE, BEN], MULTI, TZ)).toEqual([{ date: '2026-12-09', count: 2 }, { date: '2026-12-10', count: 2 }]);
+  });
+  it('the day filter means here that day, and each day has a column', () => {
+    const t = attendanceTable([ANA, DAN, EVE], MULTI, TZ, { day: '2026-12-10' });
+    expect(t.rows.map(r => r[0])).toEqual(['Ana', 'Eve']);
+    expect(t.head.slice(-2)).toEqual(['Here on 2026-12-09', 'Here on 2026-12-10']);
+    expect(t.rows[0].slice(-2)).toEqual(['Yes', 'Yes']);
+  });
+  it('a one-day event gets no extra columns', () => {
+    const t = attendanceTable([ANA], [row('2026-12-09T07:41:12Z', 'ok', ANA)], TZ, {});
+    expect(t.head[t.head.length - 1]).toBe('Badges replaced');
+  });
+  it('the time filter applies to the check-in day only', () => {
+    const names = (o) => attendanceTable([ANA, DAN, EVE], MULTI, TZ, o).rows.map(r => r[0]);
+    expect(names({ day: '2026-12-10', from: '10:30' })).toEqual(['Ana', 'Eve']);
+    expect(names({ day: '2026-12-10', from: '11:30' })).toEqual(['Ana']);
   });
 });
 

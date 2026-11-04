@@ -20,6 +20,8 @@ import { corsHeaders }  from '../_shared/cors.ts'
 import { adminClient }  from '../_shared/client.ts'
 import { sendEmail }    from '../_shared/resend.ts'
 import { reportEmail }  from '../_shared/checkin-report-email.ts'
+import { clientReportEmail, guestCsv, base64Utf8 } from '../_shared/client-report-email.ts'
+import { fromDisplayName } from '../_shared/host-email.ts'
 
 const JOB = 'checkin-post-event-report'
 const APP = 'https://app.cuedeck.io'
@@ -87,6 +89,53 @@ Deno.serve(async (req) => {
       }
     }
     detail = (due ?? []).length + ' due, ' + sent + ' sent'
+  } catch (e) {
+    failures.push(msg(e))
+  }
+
+  // The client's copy (migration 157): 08:00 event time the morning after,
+  // to the addresses the organizer named. Same claim, give-back and park
+  // rules as the owner's report above.
+  let clientSent = 0
+  try {
+    const { data: due, error: dueErr } = await sb.rpc('checkin_client_reports_due')
+    if (dueErr) throw new Error('client_reports_due: ' + dueErr.message)
+    for (const d of (due ?? []) as { event_id: string; owner_id: string; recipients: string[]; attach_guests: boolean }[]) {
+      const { data: won, error: claimErr } = await sb.rpc('checkin_claim_client_report', { p_event_id: d.event_id })
+      if (claimErr) { failures.push(d.event_id + ' client claim: ' + claimErr.message); continue }
+      if (won !== true) continue
+      try {
+        const { data: rep, error: repErr } = await sb.rpc('checkin_event_report_data', { p_event_id: d.event_id, p_people: false })
+        if (repErr) throw new Error('report: ' + repErr.message)
+        const { data: ent, error: entErr } = await sb.from('leod_checkin_entitlements')
+          .select('registration_host_name').eq('event_id', d.event_id).single()
+        if (entErr) throw new Error('host: ' + entErr.message)
+        const { data: owner, error: ownerErr } = await sb.auth.admin.getUserById(d.owner_id)
+        if (ownerErr) throw new Error('owner: ' + ownerErr.message)
+        const replyTo = owner?.user?.email
+        if (!replyTo) throw new Error('owner has no email')
+        let attachments: { filename: string; content: string; content_type: string }[] | undefined
+        if (d.attach_guests) {
+          const { data: guests, error: gErr } = await sb.rpc('checkin_client_report_guests', { p_event_id: d.event_id })
+          if (gErr) throw new Error('guests: ' + gErr.message)
+          attachments = [{ filename: 'guest-list.csv', content_type: 'text/csv; charset=utf-8',
+                           content: base64Utf8(guestCsv(guests ?? [], rep?.event?.timezone || 'UTC')) }]
+        }
+        const m = clientReportEmail(rep, ent?.registration_host_name ?? null)
+        for (const to of d.recipients) {
+          const res = await sendEmail({ to, replyTo, subject: m.subject, html: m.html, text: m.text, attachments,
+                                        fromName: fromDisplayName(rep?.event?.name ?? ''), tags: [{ name: 'type', value: 'checkin_client_report' }],
+                                        idempotencyKey: 'checkin-client-report-' + d.event_id + '-' + to })
+          if (res.error) throw new Error('send: ' + res.error)
+        }
+        clientSent++
+      } catch (e) {
+        failures.push(d.event_id + ' client ' + msg(e))
+        const { error: backErr } = await sb.rpc('checkin_client_report_failed', { p_event_id: d.event_id, p_error: msg(e) })
+        if (backErr) failures.push(d.event_id + ' record client failure: ' + backErr.message)
+      }
+    }
+    detail = (detail ? detail + '; ' : '') + (due ?? []).length + ' client due, ' + clientSent + ' sent'
   } catch (e) {
     failures.push(msg(e))
   }

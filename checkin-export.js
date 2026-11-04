@@ -46,14 +46,57 @@ function inWindow(time, o) {
   return (!o.from || hm >= o.from) && (!o.to || hm <= o.to);
 }
 
+// Which days each guest was here, for events that run over several days.
+// A guest is checked in once; on later days they show up as repeat scans
+// ('duplicate'), or as check-ins at session doors. A day counts when the
+// last of their ok / duplicate / undo scans that day is not an undo. A
+// blocked old badge ('revoked') is not the guest.
+export function presenceByDay(activity, timeZone) {
+  const last = new Map();
+  const sorted = activity.filter(r => r.attendee_id && (r.kind === 'ok' || r.kind === 'duplicate' || r.kind === 'undo'))
+    .sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
+  for (const r of sorted) last.set(r.attendee_id + '|' + localParts(r.at, timeZone).date, r.kind);
+  const out = new Map();
+  for (const [k, kind] of last) {
+    if (kind === 'undo') continue;
+    const [id, day] = k.split('|');
+    if (!out.has(id)) out.set(id, new Set());
+    out.get(id).add(day);
+  }
+  return out;
+}
+
+// Guests here on each day, for a guest list and its activity. Only guests
+// still checked in count; days in order.
+export function dayCounts(attendees, activity, timeZone) {
+  const here = presenceByDay(activity, timeZone), n = new Map();
+  for (const a of attendees) {
+    if (!a.checked_in_at) continue;
+    const days = new Set(here.get(a.id) || []);
+    days.add(localParts(a.checked_in_at, timeZone).date);
+    for (const d of days) n.set(d, (n.get(d) || 0) + 1);
+  }
+  return [...n].sort((x, y) => x[0].localeCompare(y[0])).map(([date, count]) => ({ date, count }));
+}
+
 export function attendanceTable(attendees, activity, timeZone, o) {
   const lastIn = new Map(), replaced = new Map();
   for (const r of activity) {
     if (r.kind === 'ok') lastIn.set(r.attendee_id, r);
     if (r.kind === 'new_badge') replaced.set(r.attendee_id, (replaced.get(r.attendee_id) || 0) + 1);
   }
+  const presence = presenceByDay(activity, timeZone);
+  const hereOn = (a) => {
+    if (!a.checked_in_at) return new Set();
+    const d = new Set(presence.get(a.id) || []);
+    d.add(localParts(a.checked_in_at, timeZone).date);
+    return d;
+  };
+  // A column per day, only when guests came on more than one day.
+  const days = dayCounts(attendees, activity, timeZone).map(x => x.date);
+  const perDay = days.length > 1 ? days : [];
   const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Source', 'Checked in (date)', 'Checked in (time)',
-    'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced'];
+    'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', ...perDay.map(d => 'Here on ' + d)];
   const rows = [];
   for (const a of attendees) {
     if (o.ticket && a.ticket_type !== o.ticket) continue;
@@ -63,14 +106,18 @@ export function attendanceTable(attendees, activity, timeZone, o) {
     const at = localParts(a.checked_in_at, timeZone);
     const how = arrived ? lastIn.get(a.id) : null;
     const place = how ? placeOf(how) : '';
+    const here = hereOn(a);
     if (arrived) {
-      if (o.day && at.date !== o.day) continue;
-      if (!inWindow(at.time, o)) continue;
+      // The day filter means "here that day", not "first checked in that day".
+      if (o.day && !here.has(o.day)) continue;
+      // From/To filter the check-in time, so only on the day of the check-in.
+      if ((!o.day || o.day === at.date) && !inWindow(at.time, o)) continue;
       if (o.place && place !== o.place) continue;
     } else if (o.day || o.place) continue;
     const pr = localParts(a.badge_printed_at, timeZone);
     rows.push([a.first_name, a.last_name, a.email || '', a.company || '', a.ticket_type, SOURCE[a.source] || a.source || '',
-      at.date, at.time, place, (how && how.staff) || '', pr.date ? pr.date + ' ' + pr.time : '', replaced.get(a.id) || 0]);
+      at.date, at.time, place, (how && how.staff) || '', pr.date ? pr.date + ' ' + pr.time : '', replaced.get(a.id) || 0,
+      ...perDay.map(d => here.has(d) ? 'Yes' : '')]);
   }
   return { head, rows };
 }
