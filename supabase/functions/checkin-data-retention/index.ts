@@ -6,7 +6,8 @@
 //   warn   claim the warning (checkin_retention_claim_warning, so two runs
 //          never both send), then email the owner. A failed send gives the
 //          claim back and the next run tries again. An owner without an
-//          email address keeps the claim: there is nobody to warn, and the
+//          email address (or one at a reserved test domain) keeps the
+//          claim: there is nobody to warn, and the
 //          14 days run from here. Guard G22 reports any event whose data
 //          outlives its deletion date by a week, so a warning that never
 //          goes out cannot postpone deletion unnoticed.
@@ -62,7 +63,8 @@ Deno.serve(async (req) => {
       if (evErr || !ev) throw new Error('event: ' + (evErr?.message ?? 'not found'))
       const { data: owner, error: ownerErr } = await sb.auth.admin.getUserById(d.owner_id)
       if (ownerErr) throw new Error('owner: ' + ownerErr.message)
-      const to = owner?.user?.email
+      // A reserved test domain (RFC 2606) can never receive mail: same as none.
+      const to = owner?.user?.email && !/\.(test|invalid|example|localhost)$/i.test(owner.user.email) ? owner.user.email : ''
       if (!to) { failures.push(d.event_id + ' owner has no email: deleting without a warning'); continue }
       const m = retentionEmail(ev.date, new Date(purgeAt as string), ev.timezone || 'UTC', APP + '/checkin/setup?event=' + d.event_id + '&step=reports')
       const res = await sendEmail({ to, subject: m.subject, html: m.html, text: m.text,

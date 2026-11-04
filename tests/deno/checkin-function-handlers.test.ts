@@ -2328,7 +2328,7 @@ function drSetup(due: Row[]) {
   world.rpcResult.checkin_retention_due = due
   world.rpcResult.checkin_retention_claim_warning = '2026-11-18T19:00:00+00:00'
   world.rpcResult.checkin_purge_event = { guests: 5 }
-  world.authUsers = { [OTHER]: { id: OTHER, email: 'owner@stub.test', aud: 'authenticated' } }
+  world.authUsers = { [OTHER]: { id: OTHER, email: 'owner@stub-owner.io', aud: 'authenticated' } }
 }
 Deno.test(`${DR}: refuses a call without the cron secret`, async () => {
   drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'purge' }])
@@ -2342,7 +2342,7 @@ Deno.test(`${DR}: warns the owner with the dates and a link, never the event nam
   const r = await drCall()
   assert(r.status === 200, JSON.stringify(r))
   const m = (world.emails ?? []) as { to: string; subject: string; html: string; text: string }[]
-  assert(m.length === 1 && m[0].to === 'owner@stub.test', JSON.stringify(m.map(x => x.to)))
+  assert(m.length === 1 && m[0].to === 'owner@stub-owner.io', JSON.stringify(m.map(x => x.to)))
   const all = m[0].subject + m[0].html + m[0].text
   assert(!all.includes('Secret Gala'), 'event name in the email')
   assert(m[0].subject.includes('11 March 2026') && m[0].subject.includes('18 November 2026'), m[0].subject)
@@ -2363,6 +2363,11 @@ Deno.test(`${DR}: an owner without an email keeps the claim, so deletion is not 
   assert(!(world.emails?.length), 'sent somewhere')
   assert(!world.rpcCalls.some(c => c.name === 'checkin_retention_release_warning'), 'released the claim')
   assert(r.body.detail.includes('owner has no email'), JSON.stringify(r))
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'warn' }])
+  world.authUsers = { [OTHER]: { id: OTHER, email: 'director@leod.test', aud: 'authenticated' } }
+  await drCall()
+  assert(!(world.emails?.length), 'sent to a reserved test domain')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_retention_release_warning'), 'released the claim for a test domain')
 })
 Deno.test(`${DR}: purges what is due and records the run`, async () => {
   drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'purge' }])
