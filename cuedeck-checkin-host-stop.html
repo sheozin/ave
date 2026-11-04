@@ -8,23 +8,29 @@
 <title>Arrival emails · CueDeck</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="/checkin-app.css">
+<link rel="stylesheet" href="/checkin-ui.css">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+.topbar{display:flex;align-items:center;padding:16px 28px;border-bottom:1px solid var(--line)}
+.topbar .brand{color:var(--t1);padding:0}.topbar .brand small{color:var(--t2)}
 .hs{max-width:460px;margin:48px auto;padding:0 16px}
-.hs .card{background:var(--sf);border-radius:16px;box-shadow:var(--shadow);padding:28px}
+.hs .card{padding:28px}
 .hs h1{font-size:22px;margin:0 0 8px;letter-spacing:-.3px}
 .hs p{color:var(--t2);font-size:14.5px;line-height:1.55;margin:0 0 20px}
+.btn{width:100%;height:44px;border-radius:10px;border:0;background:var(--blue);color:#fff;font-weight:600;font-size:14px}
+.btn:disabled{opacity:.55;cursor:default}
+.err{margin-top:10px}.err:empty{display:none}
 </style>
 </head>
 <body>
-<nav class="nav">
-  <span class="logo"><span class="mk"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck<span class="tag">Check-in</span></span>
+<nav class="topbar">
+  <span class="brand"><span class="mk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck <small>Check-in</small></span>
 </nav>
 <main class="hs">
   <div class="card">
     <h1 id="hs-title">Arrival emails</h1>
     <p id="hs-text">Checking your link…</p>
-    <button class="btn btn-p full" id="hs-go" type="button" hidden>Stop these emails</button>
+    <button class="btn" id="hs-go" type="button" hidden>Stop these emails</button>
     <div class="err" id="hs-err"></div>
   </div>
 </main>
