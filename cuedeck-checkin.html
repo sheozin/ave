@@ -6,35 +6,47 @@
 <title>CueDeck Check-in</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="apple-touch-icon" href="/favicon.svg">
-<meta name="theme-color" content="#F5F5F7">
+<meta name="theme-color" content="#13233F">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/cuedeck-auth.js"></script>
 <!-- QR codes on badges (checkin-badge.js). Local, so badges print offline. -->
 <script src="/vendor/qrcode-generator-1.4.4.js"></script>
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/checkin-ui.css">
+<script>
+  // Light by default: the desk lives in a bright lobby. Dark only when chosen
+  // with the header button. The kiosk is a public screen and is always light.
+  try {
+    const kiosk = new URLSearchParams(location.search).get('mode') === 'kiosk';
+    const t = kiosk ? null : localStorage.getItem('ck-theme');
+    document.documentElement.dataset.theme = t === 'dark' ? 'dark' : 'light';
+  } catch (_) { document.documentElement.dataset.theme = 'light'; }
+</script>
 <style>
 /* ── DESIGN TOKENS — LIGHT ──────────────────────────
    The check-in desk lives in a bright hotel lobby, so this page is
    light while the console/display are dark. Do not port dark tokens
    in from the other pages.                                        */
 :root {
-  --pg:#F5F5F7; --sf:#FFFFFF; --wm:#FBFBFD;
-  --t1:#1D1D1F; --t2:#6E6E73; --t3:#A1A1A6;
-  --bd:#E8E8ED; --bd2:#D2D2D7;
-  --ac:#0071E3; --acsf:#EAF3FE;
-  --gn:#1D8348; --gnsf:#E8F6EE; --gnbd:#B7E4C9;
-  --am:#9A5B00; --amsf:#FEF6E7; --ambd:#F5D9A8;
-  --rd:#B3261E; --rdsf:#FDECEA; --rdbd:#F5C3BD;
-  --radius:16px; --radius-lg:22px;
-  --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
+  /* Aliases onto checkin-ui.css, so the desk follows the app design and its
+     dark mode. Light unless the operator picks dark (see the head script). */
+  --pg:var(--bg); --sf:var(--card); --wm:var(--soft);
+  --bd:var(--line); --bd2:var(--line2);
+  --ac:var(--blue); --acsf:var(--blue-s);
+  --gn:var(--in-t); --gnsf:var(--in-s); --gnbd:transparent;
+  --am:var(--exp-t); --amsf:var(--exp-s); --ambd:transparent;
+  --rd:var(--alert-t); --rdsf:var(--alert-s); --rdbd:transparent;
+  --radius:14px; --radius-lg:18px;
+  --shadow:none;
 }
 
 /* ── RESET & BASE ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;min-height:100%;background:var(--pg)}
 body{
-  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  font-family:var(--font);
   -webkit-font-smoothing:antialiased;color:var(--t1);
   font-size:15px;line-height:1.5;
 }
@@ -73,7 +85,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-btn:active{transform:scale(.99)}
 .ck-btn:disabled{opacity:.5;cursor:default;transform:none}
 .ck-err{
-  color:#B3261E;font-size:13px;min-height:19px;margin-bottom:10px;
+  color:var(--rd);font-size:13px;min-height:19px;margin-bottom:10px;
 }
 .ck-note{
   background:var(--amsf);border:1px solid var(--ambd);color:var(--am);
@@ -105,7 +117,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ck-empty{color:var(--t2);font-size:14px;padding:6px 0 20px}
 .ck-test{background:var(--amsf);border-bottom:1px solid var(--ambd);color:var(--am);font-size:13px;padding:10px 24px;display:flex;justify-content:space-between;gap:12px}
 .ck-test[hidden]{display:none}
-.ck-test b{color:#7A4700}
+.ck-test b{color:var(--am)}
 .ck-test a{color:var(--am);font-weight:600}
 .ck-preview{margin-top:16px;border:1px solid var(--bd);border-radius:var(--radius);padding:14px;background:var(--wm)}
 .ck-preview[hidden]{display:none}
@@ -344,8 +356,8 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .ks-p{font-size:14px;color:var(--t2);line-height:1.5}
 .ks-lbl{display:block;font-size:12px;font-weight:600;color:var(--t2);margin:22px 0 7px}
 .ks-kinds{display:flex;gap:6px;margin:0 0 14px}
-.ks-kind{flex:1;height:38px;border-radius:10px;border:1px solid var(--bd2,#D2D2D7);background:#fff;font:inherit;font-size:13.5px;font-weight:600;color:var(--t2);cursor:pointer}
-.ks-kind[aria-pressed="true"]{background:var(--t1,#1D1D1F);border-color:var(--t1,#1D1D1F);color:#fff}
+.ks-kind{flex:1;height:38px;border-radius:10px;border:1px solid var(--bd2);background:var(--sf);font:inherit;font-size:13.5px;font-weight:600;color:var(--t2);cursor:pointer}
+.ks-kind[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
 .ks-hint{font-size:13px;color:var(--t2);margin-top:-6px}
 
 /* ★ READ FROM ACROSS A ROOM ★
@@ -604,6 +616,52 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
 .im-help{color:var(--t2);font-size:13px;line-height:1.5;margin:0 0 14px}
 .im-sum{font-size:14px;line-height:1.5;color:var(--t1);margin:0 0 8px;white-space:pre-line}
 a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
+/* ── NEW DESIGN (checkin-ui.css) ──────────────────
+   The station header is the app's ink bar, so the desk reads as the same
+   product as the dashboard and Setup. Everything under it stays the
+   bright working surface it always was. */
+.ck-header{background:var(--ink);color:#fff;border-bottom:none;padding:14px 22px;gap:16px}
+.ck-hd-brand{flex:none;display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;font-size:15px;text-decoration:none}
+.ck-hd-brand .mk{width:28px;height:28px;border-radius:9px;background:var(--blue);display:grid;place-items:center}
+.ck-hd-eyebrow{color:var(--ink-t2);letter-spacing:0;text-transform:none;font-size:12px;font-weight:500}
+.ck-hd-name{color:#fff;font-size:18px}
+.ck-hd-main{min-width:200px}
+.ck-hd-actions{margin-left:auto;justify-content:flex-end}
+.ck-count{background:var(--ink2);border:none;border-radius:12px;padding:8px 16px}
+.ck-count-num{color:#7EE2A8}
+.ck-count-lbl{color:var(--ink-t);letter-spacing:0;text-transform:none;font-size:12px;opacity:1}
+.ck-sync{border:none}
+.ck-sync.clear{background:rgba(126,226,168,.14);color:#7EE2A8}
+.ck-sync.wait{background:rgba(242,184,75,.18);color:#F6C76B}
+.ck-hd-actions .ck-quiet{background:var(--ink2);border-color:transparent;color:var(--ink-t)}
+.ck-hd-actions .ck-quiet:hover{background:#26406B;color:#fff}
+.ck-hd-actions .ck-quiet[aria-pressed="true"]{color:#fff}
+.ck-test{border-bottom:none}
+.ck-panel{border-color:var(--line);box-shadow:none}
+.ck-card{border-color:var(--line);box-shadow:0 1px 2px rgba(19,35,63,.05)}
+.ck-logo span,.kk-brand span{color:var(--blue)}
+.ck-sub{letter-spacing:0;text-transform:none;font-size:14px;color:var(--t2)}
+.kk-header{background:var(--ink);border-bottom:none}
+.kk-brand{color:#fff}
+.kk-place{color:var(--ink-t);letter-spacing:0;text-transform:none;font-size:14px}
+.kk-step{border-color:var(--line);box-shadow:none}
+.kk-eyebrow,.ks-eyebrow{letter-spacing:0;text-transform:none;font-size:13px;font-weight:500}
+.ck-modal{background:rgba(13,23,41,.5)}
+.ck-modal-card{border-color:var(--line)}
+.ck-btn.ghost:hover,.kk-btn.ghost:hover{border-color:var(--t3)}
+.ck-preview .badge{color:#14213D}
+@media (max-width:760px){
+  .ck-header{padding:12px 16px}
+  .ck-hd-brand span{display:none}
+  .ck-hd-main{min-width:0}
+  .ck-hd-actions{margin-left:0;justify-content:flex-start}
+  .ck-body{padding:16px 12px}
+  .ck-panel{padding:20px 16px}
+  .ck-res-btn{flex-wrap:wrap}
+  .ck-res-main{flex:1 1 140px}
+  .ck-res-row{flex-wrap:wrap;justify-content:flex-end}
+  .ck-res-row .ck-res-btn{flex:1 1 100%}
+}
 </style>
 </head>
 <body>
@@ -640,6 +698,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
   <div class="ck-test" id="st-notice" hidden></div>
   <div class="ck-test" id="st-clock" hidden></div>
   <header class="ck-header">
+    <div class="ck-hd-brand"><span class="mk"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span>CueDeck</span></div>
     <div class="ck-hd-main">
       <div class="ck-hd-eyebrow">Check-in desk</div>
       <div class="ck-hd-name" id="st-event"></div>
@@ -661,6 +720,7 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
       <button class="ck-quiet" type="button" id="st-kiosk" style="display:none">Kiosk or scanner</button>
       <a class="ck-quiet" id="st-dash" href="#">Dashboard</a>
       <button class="ck-quiet" type="button" id="st-switch">Switch event</button>
+      <button class="ck-quiet" type="button" id="theme" aria-pressed="false"><span>Dark mode</span></button>
     </div>
   </header>
   <div class="ck-body">
@@ -957,6 +1017,10 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
 <script type="module">
   import { badgePdf, rollPage, isIOS } from '/checkin-badge-pdf.js';
   window.CK_PDF = { badgePdf, rollPage, isIOS };
+</script>
+<script type="module">
+  import { initTheme } from '/checkin-theme.js';
+  initTheme();
 </script>
 <script>
 // ═══════════════════════════════════════════════════
@@ -2540,12 +2604,12 @@ function renderPrinterChip() {
   if (!S.stations.length && !fits && S.printTo === 'browser') { if (chip) chip.remove(); renderStationDown(null); return; }
   if (!chip) {
     chip = document.createElement('div'); chip.id = 'ck-printer';
-    chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;width:300px;max-width:calc(100vw - 28px);padding:10px 12px;border-radius:12px;background:#fff;'
-      + 'font:500 12.5px/1.4 system-ui,sans-serif;color:#1D1D1F;box-shadow:0 4px 18px rgba(0,0,0,.14)';
+    chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;width:300px;max-width:calc(100vw - 28px);padding:10px 12px;border-radius:12px;background:var(--card);border:1px solid var(--line);'
+      + 'font:500 12.5px/1.4 var(--font);color:var(--t1);box-shadow:0 4px 18px rgba(0,0,0,.14)';
     const lbl = document.createElement('label'); lbl.htmlFor = 'ck-print-to'; lbl.textContent = 'Badges print on';
     lbl.style.cssText = 'display:block;font-weight:700;margin-bottom:4px';
     const sel = document.createElement('select'); sel.id = 'ck-print-to';
-    sel.style.cssText = 'width:100%;font:inherit;padding:6px 8px;border:1px solid #D2D2D7;border-radius:8px;background:#fff';
+    sel.style.cssText = 'width:100%;font:inherit;padding:6px 8px;border:1px solid var(--line2);border-radius:8px;background:var(--card)';
     sel.addEventListener('change', () => {
       S.printTo = sel.value; S.printMsg = null;
       try { localStorage.setItem(printPrefKey(), sel.value); } catch (_) {}
@@ -2580,7 +2644,7 @@ function renderPrinterChip() {
   }
   const msg = document.getElementById('ck-print-msg');
   msg.textContent = text || '';
-  msg.style.color = { ok: '#1D8348', warn: '#9A5B00', err: '#B3261E', muted: '#6E6E73' }[tone];
+  msg.style.color = { ok: 'var(--in-t)', warn: 'var(--exp-t)', err: 'var(--alert-t)', muted: 'var(--t2)' }[tone];
   renderStationAddr(st && fits ? st : null);
   renderUnprinted(chip, st);
   renderStationDown(st && fits && navigator.onLine && !noServer && !st.online ? st : null);
@@ -2636,10 +2700,10 @@ function renderUnprinted(chip, st) {
     box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #E5E5EA;display:flex;flex-wrap:wrap;align-items:center;gap:6px';
     const t = document.createElement('div'); t.id = 'ck-unprinted-t'; t.style.cssText = 'flex:1 1 100%;font-weight:700;color:#9A5B00';
     const go = document.createElement('button'); go.type = 'button'; go.id = 'ck-unprinted-go';
-    go.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border-radius:8px;border:0;background:#0071E3;color:#fff;cursor:pointer';
+    go.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border-radius:8px;border:0;background:var(--blue);color:#fff;cursor:pointer';
     go.addEventListener('click', () => { const l = unprintedNow(); if (l.length) printBadges(l); });
     const clr = document.createElement('button'); clr.type = 'button'; clr.id = 'ck-unprinted-clear'; clr.textContent = 'Clear the list';
-    clr.style.cssText = 'font:inherit;padding:6px 10px;border-radius:8px;border:1px solid #D2D2D7;background:#fff;cursor:pointer';
+    clr.style.cssText = 'font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--line2);background:var(--card);color:var(--t1);cursor:pointer';
     clr.addEventListener('click', () => { writeUnprinted([]); renderPrinterChip(); });
     box.append(t, go, clr);
     chip.appendChild(box);
@@ -2649,7 +2713,7 @@ function renderUnprinted(chip, st) {
   const go = document.getElementById('ck-unprinted-go');
   const waiting = st && navigator.onLine && !noServer && !st.online;
   go.disabled = !!waiting;
-  go.style.background = waiting ? '#E5E5EA' : '#0071E3'; go.style.color = waiting ? '#6E6E73' : '#fff'; go.style.cursor = waiting ? 'default' : 'pointer';
+  go.style.background = waiting ? 'var(--line)' : 'var(--blue)'; go.style.color = waiting ? 'var(--t2)' : '#fff'; go.style.cursor = waiting ? 'default' : 'pointer';
   go.textContent = waiting ? 'Waiting for ' + st.label : (list.length === 1 ? 'Print it' : 'Print all ' + list.length);
 }
 
@@ -2686,9 +2750,9 @@ function stationAddrBox() {
   form.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
   const inp = document.createElement('input'); inp.id = 'ck-st-addr-in'; inp.autocomplete = 'off'; inp.inputMode = 'decimal';
   inp.placeholder = '192.168.1.3:7842'; inp.setAttribute('aria-label', 'Station address on this network');
-  inp.style.cssText = 'flex:1 1 140px;min-width:0;font:inherit;padding:6px 8px;border:1px solid #D2D2D7;border-radius:8px';
+  inp.style.cssText = 'flex:1 1 140px;min-width:0;font:inherit;padding:6px 8px;border:1px solid var(--line2);border-radius:8px';
   const save = document.createElement('button'); save.type = 'submit'; save.id = 'ck-st-addr-save'; save.textContent = 'Save and test';
-  save.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border:0;border-radius:8px;background:#0071E3;color:#fff;cursor:pointer';
+  save.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border:0;border-radius:8px;background:var(--blue);color:#fff;cursor:pointer';
   const clear = document.createElement('button'); clear.type = 'button'; clear.id = 'ck-st-addr-clear'; clear.textContent = 'Clear';
   clear.style.cssText = 'font:inherit;padding:6px 8px;border:0;background:none;color:#0071E3;cursor:pointer';
   const note = document.createElement('div'); note.id = 'ck-st-addr-note'; note.setAttribute('role', 'status');
@@ -2726,7 +2790,7 @@ async function saveStationAddr() {
   const lan = st && st.printer_info && st.printer_info.lan;
   if (!st || !lan || !/^[0-9a-f]{32}$/.test(String(lan.token))) return;
   const a = parseStationAddr(document.getElementById('ck-st-addr-in').value, Number.isInteger(lan.port) ? lan.port : 7842);
-  if (!a) { note.style.color = '#B3261E'; note.textContent = 'Type an address on this network, like 192.168.1.3:7842.'; return; }
+  if (!a) { note.style.color = 'var(--alert-t)'; note.textContent = 'Type an address on this network, like 192.168.1.3:7842.'; return; }
   try { localStorage.setItem(STATION_ADDR_KEY(st.id), JSON.stringify(a)); } catch (_) {}
   renderPrinterChip();
   note.style.color = '#6E6E73'; note.textContent = 'Looking for ' + st.label + ' at ' + a.host + ':' + a.port + '…';
@@ -3052,10 +3116,10 @@ function pdfSheet(attendees, send) {
   const p = document.createElement('p'); p.style.cssText = 'margin:0 0 16px;color:#6E6E73';
   p.textContent = labelSize() + '. Tap Print, then Print again and choose the Brother.';
   const go = document.createElement('button'); go.type = 'button'; go.id = 'ck-pdf-go'; go.textContent = 'Print';
-  go.style.cssText = 'display:block;width:100%;font:inherit;font-weight:700;padding:12px;border-radius:12px;border:0;background:#0071E3;color:#fff;margin-bottom:8px';
+  go.style.cssText = 'display:block;width:100%;font:inherit;font-weight:700;padding:12px;border-radius:12px;border:0;background:var(--blue);color:#fff;margin-bottom:8px';
   go.addEventListener('click', () => send());
   const no = document.createElement('button'); no.type = 'button'; no.textContent = 'Not now';
-  no.style.cssText = 'display:block;width:100%;font:inherit;padding:10px;border-radius:12px;border:1px solid #D2D2D7;background:#fff';
+  no.style.cssText = 'display:block;width:100%;font:inherit;padding:10px;border-radius:12px;border:1px solid var(--line2);background:var(--card);color:var(--t1)';
   no.addEventListener('click', () => { pdfSheet(null); addUnprinted(attendees); printNote('warn', 'Badge not printed. It is on the not printed list below.'); });
   card.append(h, p, go, no);
   sh.replaceChildren(card);

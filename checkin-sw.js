@@ -17,6 +17,7 @@ const PUBLIC_IMAGES = '/storage/v1/object/public/checkin-public/';
 const SHELL = ['/checkin/desk', '/cuedeck-checkin.html', '/cuedeck-auth.js', '/favicon.svg',
   '/vendor/qrcode-generator-1.4.4.js', '/vendor/fonts/montserrat-latin-ext.woff2',
   '/checkin-window.js', '/checkin-clock.js', '/checkin-badge.js', '/checkin-badge-pdf.js', '/checkin-roles.js', '/checkin-dashboard.js', '/checkin-csv.js',
+  '/checkin-ui.css', '/checkin-theme.js', '/fonts/geist-var.woff2',
   SUPABASE_JS];
 // A venue router with no uplink often lets a request hang instead of
 // failing it. With a saved copy in hand, wait this long and use it; the
