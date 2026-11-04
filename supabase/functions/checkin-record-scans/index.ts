@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
   const who: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
   const whoByAttendee: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
   // Names only for one fresh scan (see the header); the quota is claimed
-  // after the scan, and only if it checked the guest in (or, at an exit, saw them out).
+  // after the scan, and only if it checked the guest in (never at an exit).
   const nameEligible = !!deviceId && valid.length === 1
     && Math.abs(Date.now() - Date.parse(valid[0].scanned_at)) <= NAME_FRESH_MS
   const oldByToken = new Map<string, string>()
@@ -354,7 +354,9 @@ Deno.serve(async (req) => {
       continue
     }
     results[it.client_id] = String(result)
-    if (deviceId && (result === 'ok' || result === 'out') && whoByAttendee[it.attendee_id]) {
+    // Never at an exit: an exit scan changes nothing, so a phone holding the
+    // code list could read every guest's name there, one code at a time.
+    if (deviceId && result === 'ok' && whoByAttendee[it.attendee_id]) {
       // checkin_apply_scan answers a known client_id with its stored result
       // and inserts nothing, so 'ok' alone does not prove THIS token was
       // checked in: a replayed client_id with another guest's token would

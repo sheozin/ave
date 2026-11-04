@@ -73,7 +73,7 @@ test('a code on the list checks in and shows the name the server sent', async ({
   await expect(page.locator('#net')).not.toContainText('waiting');
 });
 
-test('at an exit: says goodbye, never stops anyone, and words offline as saved', async ({ page, context }) => {
+test('at an exit: records leaving with no name, never stops anyone, and words offline as saved', async ({ page, context }) => {
   await paired(page, { config: CONFIG({ scan_point: { name: 'Hall exit', kind: 'exit' } }) });
   const results = ['out', 'not_in'];
   await fn(page, 'checkin-record-scans', (b) => {
@@ -86,7 +86,7 @@ test('at an exit: says goodbye, never stops anyone, and words offline as saved',
   await page.locator('#man-code').fill(TOK);
   await page.locator('#man-btn').click();
   await expect(page.locator('#v-title')).toHaveText('Left');
-  await expect(page.locator('#v-text')).toHaveText('Goodbye, Ewa.');
+  await expect(page.locator('#v-text')).toHaveText('Their exit is recorded.');
   await page.waitForTimeout(2600);   // the same code again only after it left view
   await page.locator('#man-code').fill(TOK);
   await page.locator('#man-btn').click();

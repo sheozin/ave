@@ -79,7 +79,7 @@ describe('feedback', () => {
 
 describe('exit points (migration 159)', () => {
   it('records leaving, never stops anyone, and words offline right', () => {
-    expect(page.verdictFor('out', { first_name: 'Ola', ticket_type: null }, 'exit')).toEqual({ tone: 'ok', title: 'Left', text: 'Goodbye, Ola.' });
+    expect(page.verdictFor('out', { first_name: 'Ola', ticket_type: null }, 'exit')).toEqual({ tone: 'ok', title: 'Left', text: 'Their exit is recorded.' });
     expect(page.verdictFor('not_in', null, 'exit').tone).toBe('warn');
     expect(page.verdictFor('not_in', null, 'exit').text).toContain('Let them out');
     for (const r of ['unknown_token', 'not_listed', 'revoked', 'wrong_event']) expect(page.verdictFor(r, null, 'exit').tone).toBe('warn');

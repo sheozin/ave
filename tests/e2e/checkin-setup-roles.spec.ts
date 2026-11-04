@@ -1116,11 +1116,11 @@ test('client report: once sent it links the client\'s page, and an unpaid event 
     await rpc(page, 'checkin_activity_export', []);
     await rpc(page, 'checkin_arrival_history', []);
     await rpc(page, 'checkin_client_report_get', { recipients: ['anna@client.com'], attach_guests: false, sent_at: '2026-10-19T06:00:30Z', failed: false,
-      last_error: null, sends_at: '2026-10-19T06:00:00Z', page_token: '0123456789abcdef0123456789abcdef', own_domain_only: true });
+      last_error: null, sends_at: '2026-10-19T06:00:00Z', page_token: '0123456789abcdef0123456789abcdef', owner_only: true });
   });
   await expect(page.locator('#cr-page-a')).toHaveAttribute('href', '/cr/0123456789abcdef0123456789abcdef');
   await expect(page.locator('#cr-own')).toBeVisible();
-  await expect(page.locator('#cr-own')).toHaveText('Until this event is paid for, the report can only go to addresses at your own company.');
+  await expect(page.locator('#cr-own')).toHaveText('Until this event is paid for, the report can only go to the event owner\'s own email address.');
 });
 
 test('client report: a desk lead does not see it and it is never asked for', async ({ page }) => {

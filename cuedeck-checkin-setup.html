@@ -293,7 +293,7 @@
     <div id="cr-box" hidden>
       <h3 class="sc-h">Report for your client</h3>
       <p class="sc-p">At 08:00 the morning after the event, we email the headline numbers and arrivals by ticket type to these addresses, with a link to the same report as a page they can save as a PDF. Replies come to you. Live events only.</p>
-      <p class="small" id="cr-own" hidden>Until this event is paid for, the report can only go to addresses at your own company.</p>
+      <p class="small" id="cr-own" hidden>Until this event is paid for, the report can only go to the event owner's own email address.</p>
       <div class="field"><label for="cr-to">Email addresses <span class="small">(up to 5, separated by commas)</span></label><input id="cr-to" maxlength="1300" placeholder="name@client.com" autocomplete="off" inputmode="email"></div>
       <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="cr-csv" style="margin-top:3px"><span>Attach the guest list as a CSV: names, companies, ticket types and arrival times. Guests' names leave CueDeck in this file, so only tick this if your client may have them.</span></label>
       <div class="xp-foot"><span class="small" id="cr-state"></span><span style="flex:1"></span><button class="btn btn-p" id="cr-save" type="button">Save</button></div>
@@ -979,7 +979,7 @@ function showClientReport(d) {
   $('cr-to').value = d.recipients.join(', ');
   $('cr-csv').checked = !!d.attach_guests;
   $('cr-state').textContent = clientReportState(d);
-  $('cr-own').hidden = !d.own_domain_only;
+  $('cr-own').hidden = !d.owner_only;
   // (158) The page the client got, once sent; a token is 32 hex characters.
   const tok = /^[0-9a-f]{32}$/.test(d.page_token || '') ? d.page_token : null;
   $('cr-page').hidden = !tok;

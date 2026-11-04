@@ -2216,7 +2216,7 @@ Deno.test(`${IMP}: without queued, desk ids in a row are ignored and no results 
 
 // ── exit scans (159) ──
 const EXIT = 'aaaaaaaa-0000-4000-8000-000000000004'
-Deno.test('checkin-record-scans scanner: an exit records leaving through its own function, never a check-in', async () => {
+Deno.test('checkin-record-scans scanner: an exit records leaving through its own function, never a check-in, and names nobody', async () => {
   await setupScanner({ point: EXIT })
   world.tables.leod_checkin_scan_points.push({ id: EXIT, event_id: EVENT, name: 'Hall exit', kind: 'exit' })
   world.rpcResult.checkin_apply_exit_scan = 'out'
@@ -2227,7 +2227,8 @@ Deno.test('checkin-record-scans scanner: an exit records leaving through its own
   assert(!world.rpcCalls.some(c => c.name === 'checkin_apply_scan'), 'checked someone in at an exit')
   const c = world.rpcCalls.find(x => x.name === 'checkin_apply_exit_scan')!
   assert(c.args.p_scan_point_id === EXIT && c.args.p_device_id === DEV && c.args.p_attendee_id === ATT, JSON.stringify(c))
-  assert(((r.body.who as Row)[item.client_id] as Row)?.first_name === 'Ewa', 'no goodbye name')
+  assert(!(item.client_id in (r.body.who as Row)), 'named a guest at an exit')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_device_name_quota'), 'spent name quota at an exit')
 })
 Deno.test('checkin-record-scans scanner: an exit follows the door switch', async () => {
   await setupScanner({ point: EXIT, ent: { entrance_scanning: false } })

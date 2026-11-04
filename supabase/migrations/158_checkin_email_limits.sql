@@ -9,9 +9,11 @@
 --   2. Events nobody paid for. A live event with no paid purchase, whose
 --      owner is not a comp account with full_email, could be used to send
 --      CueDeck email to anyone. On such an event the client report goes
---      only to the owner's own domain (only the owner's own address when
---      that domain is a public mail provider), and host emails stop at 100
---      a day (checkin-host-notices). Comp accounts start without
+--      only to the owner's own address (fails closed: a same-domain rule
+--      would need a list of every public mail provider, which can never be
+--      complete), and host emails stop at 100 a day (checkin-host-notices).
+--      Host emails are only sent for live events, and a user cannot make an
+--      event live without paying, so the cap is per event. Comp accounts start without
 --      full_email; the existing one (the founder's) keeps it.
 --
 --   3. The client report as a page. Each client report gets a random
@@ -152,27 +154,19 @@ $$;
 REVOKE ALL ON FUNCTION checkin_event_full_email(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION checkin_event_full_email(uuid) TO service_role;
 
--- Where an unpaid event's client report may go: the owner's own domain,
--- or only the owner's address when that domain is a public mail provider
--- (otherwise "gmail.com" would mean anyone). NULL owner email: nowhere.
+-- Where an unpaid event's client report may go: the owner's own address
+-- only. NULL owner email: nowhere.
 CREATE OR REPLACE FUNCTION checkin_client_report_allowed(p_event_id uuid, p_email text)
 RETURNS boolean
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE v_owner text; v_dom text;
+DECLARE v_owner text;
 BEGIN
   IF checkin_event_full_email(p_event_id) THEN RETURN true; END IF;
   SELECT lower(u.email) INTO v_owner FROM leod_events e JOIN auth.users u ON u.id = e.created_by WHERE e.id = p_event_id;
   IF v_owner IS NULL OR p_email IS NULL THEN RETURN false; END IF;
-  IF lower(p_email) = v_owner THEN RETURN true; END IF;
-  v_dom := split_part(v_owner, '@', 2);
-  IF v_dom IN ('gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com',
-               'icloud.com', 'me.com', 'mac.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'gmx.de',
-               'gmx.net', 'web.de', 'wp.pl', 'o2.pl', 'onet.pl', 'interia.pl', 'yandex.ru', 'mail.ru', 'zoho.com') THEN
-    RETURN false;
-  END IF;
-  RETURN split_part(lower(p_email), '@', 2) = v_dom;
+  RETURN lower(btrim(p_email)) = v_owner;
 END;
 $$;
 REVOKE ALL ON FUNCTION checkin_client_report_allowed(uuid, text) FROM PUBLIC, anon, authenticated;
@@ -199,10 +193,10 @@ BEGIN
   IF cardinality(v_list) > 5 THEN
     RAISE EXCEPTION 'Up to 5 addresses' USING ERRCODE = '22023';
   END IF;
-  -- CHANGED (158): an unpaid event reports only inside the owner's domain.
+  -- CHANGED (158): an unpaid event reports only to the owner.
   SELECT x INTO v_bad FROM unnest(v_list) x WHERE NOT checkin_client_report_allowed(p_event_id, x) LIMIT 1;
   IF v_bad IS NOT NULL THEN
-    RAISE EXCEPTION 'Until the event is paid for, the client report can only go to addresses at your own company: % is outside it', left(v_bad, 80)
+    RAISE EXCEPTION 'Until the event is paid for, the client report can only go to the event owner''s own address, not %', left(v_bad, 80)
       USING ERRCODE = '22023';
   END IF;
   INSERT INTO leod_checkin_client_reports AS c (event_id, recipients, attach_guests)
@@ -298,7 +292,7 @@ REVOKE ALL ON FUNCTION checkin_client_report_view(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION checkin_client_report_view(text) TO anon, authenticated;
 
 -- The organizer's view gains the page's token once the report is sent, and
--- whether this event may report outside the owner's company.
+-- whether this event may report to anyone but the owner.
 CREATE OR REPLACE FUNCTION checkin_client_report_get(p_event_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -318,7 +312,7 @@ BEGIN
     'last_error', CASE WHEN r.sent_at IS NULL THEN r.last_error END,
     'sends_at', checkin_client_report_at(p_event_id),
     'page_token', CASE WHEN r.sent_at IS NOT NULL THEN r.token END,   -- CHANGED (158)
-    'own_domain_only', NOT checkin_event_full_email(p_event_id));       -- CHANGED (158)
+    'owner_only', NOT checkin_event_full_email(p_event_id));            -- CHANGED (158)
 END;
 $$;
 REVOKE ALL ON FUNCTION checkin_client_report_get(uuid) FROM PUBLIC, anon;
