@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
   if (runErr || !run) return json({ error: 'could not record the run' }, 500)
 
   const failures: string[] = []
+  const notes: string[] = []   // worth saying, not a failure
   let warned = 0, purged = 0, due: { event_id: string; owner_id: string; action: string }[] = []
   try {
     const { data, error } = await sb.rpc('checkin_retention_due')
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
       if (ownerErr) throw new Error('owner: ' + ownerErr.message)
       // A reserved test domain (RFC 2606) can never receive mail: same as none.
       const to = owner?.user?.email && !/\.(test|invalid|example|localhost)$/i.test(owner.user.email) ? owner.user.email : ''
-      if (!to) { failures.push(d.event_id + ' owner has no email: deleting without a warning'); continue }
+      if (!to) { notes.push(d.event_id + ' owner has no email: deleting without a warning'); continue }
       const m = retentionEmail(ev.date, new Date(purgeAt as string), ev.timezone || 'UTC', APP + '/checkin/setup?event=' + d.event_id + '&step=reports')
       const res = await sendEmail({ to, subject: m.subject, html: m.html, text: m.text,
                                     tags: [{ name: 'type', value: 'checkin_retention' }],
@@ -80,7 +81,7 @@ Deno.serve(async (req) => {
   }
 
   const status = failures.length ? 'failed' : 'ok'
-  const detail = (due.length + ' due, ' + warned + ' warned, ' + purged + ' deleted' + (failures.length ? '; ' + failures.join('; ') : '')).slice(0, 1000)
+  const detail = (due.length + ' due, ' + warned + ' warned, ' + purged + ' deleted' + [...failures, ...notes].map(x => '; ' + x).join('')).slice(0, 1000)
   const { error: finErr } = await sb.from('leod_checkin_job_runs')
     .update({ status, detail, finished_at: new Date().toISOString() }).eq('id', run.id)
   if (finErr) console.error('checkin-data-retention: could not close the run', finErr.message)

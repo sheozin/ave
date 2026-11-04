@@ -2363,6 +2363,7 @@ Deno.test(`${DR}: an owner without an email keeps the claim, so deletion is not 
   assert(!(world.emails?.length), 'sent somewhere')
   assert(!world.rpcCalls.some(c => c.name === 'checkin_retention_release_warning'), 'released the claim')
   assert(r.body.detail.includes('owner has no email'), JSON.stringify(r))
+  assert(r.status === 200 && r.body.status === 'ok', 'a missing owner email failed the run')
   drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'warn' }])
   world.authUsers = { [OTHER]: { id: OTHER, email: 'director@leod.test', aud: 'authenticated' } }
   await drCall()
