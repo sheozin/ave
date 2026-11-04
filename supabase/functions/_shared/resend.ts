@@ -18,6 +18,7 @@ export interface EmailPayload {
 export interface ResendResponse {
   id?: string
   error?: string
+  status?: number   // HTTP status when Resend refused it; absent for network errors
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<ResendResponse> {
@@ -54,7 +55,7 @@ export async function sendEmail(payload: EmailPayload): Promise<ResendResponse> 
 
     if (!response.ok) {
       console.error('Resend API error:', data)
-      return { error: data.message || 'Failed to send email' }
+      return { error: data.message || 'Failed to send email', status: response.status }
     }
 
     return { id: data.id }
@@ -121,7 +122,7 @@ export async function sendEmailWithAttachment(
 
     if (!response.ok) {
       console.error('Resend API error:', data)
-      return { error: data.message || 'Failed to send email' }
+      return { error: data.message || 'Failed to send email', status: response.status }
     }
 
     return { id: data.id }

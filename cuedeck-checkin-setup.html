@@ -115,6 +115,16 @@
 .sc-add{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .sc-add .search{flex:1;min-width:160px}
 .al-opts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+/* Hosts (migration 154) */
+.ho-form{border:1px solid var(--bd);border-radius:14px;padding:16px;margin:12px 0;display:grid;gap:12px}
+.ho-form .row2{margin:0}
+.ho-pick{display:flex;gap:8px;align-items:center}
+.ho-pick input{flex:1;height:36px;border-radius:10px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:13.5px;padding:0 10px}
+.ho-chips{display:flex;gap:6px;flex-wrap:wrap}
+.ho-miss{font-size:12px;color:var(--am);margin-top:2px}
+.ho-chips button{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:9px;border:0;background:var(--acsf);color:var(--ac);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.ho-chips button::after{content:'×';font-size:14px;line-height:1}
+.ho-sub{font-size:12px;color:var(--t2);margin-top:2px}
 .al-opts label{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;background:var(--pg);color:var(--t1);cursor:pointer}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:10px;border-bottom:1px solid #F0F0F3}
@@ -335,6 +345,30 @@
       <div class="al-opts" id="al-types"></div><p class="small" id="al-none" hidden>Import guests with ticket types to choose from.</p></div>
       <div><button class="btn btn-s" id="al-save" type="button">Save alerts</button><span class="ok" id="al-ok"></span></div></div>
     <div class="err" id="al-err"></div>
+    <div id="ho-box" hidden style="margin-top:18px">
+      <div class="toggle"><div><b>Hosts</b>
+        <p>Email a host the moment their guests check in: a sales lead and their clients, or speaker care and the speakers. Hosts get each guest's name, company and arrival time, nothing else, and can stop the emails with one click. Test mode sends nothing and shows who would have been told.</p></div>
+        <div><button class="btn btn-s" id="ho-add" type="button">Add host</button></div></div>
+      <form class="ho-form" id="ho-form" hidden>
+        <div class="row2">
+          <div class="field"><label for="ho-name">Name</label><input id="ho-name" maxlength="120" autocomplete="off"></div>
+          <div class="field"><label for="ho-email">Email</label><input id="ho-email" type="email" maxlength="254" autocomplete="off"></div>
+        </div>
+        <div><b style="font-size:13px">Their guests</b><p class="small" style="margin:2px 0 0">Anyone matching one of these. Ticket types and companies also catch guests added later.</p></div>
+        <div id="ho-tix-f"><span class="small">Ticket types</span><div class="al-opts" id="ho-tix"></div></div>
+        <div><span class="small">Companies</span>
+          <div class="ho-pick"><input id="ho-comp-in" list="ho-comp-list" placeholder="Type a company" aria-label="Add a company"><button class="btn btn-g" id="ho-comp-add" type="button">Add</button></div>
+          <datalist id="ho-comp-list"></datalist><div class="ho-chips" id="ho-comps" style="margin-top:8px"></div></div>
+        <div><span class="small">Guests</span>
+          <div class="ho-pick"><input id="ho-guest-in" list="ho-guest-list" placeholder="Type a guest's name" aria-label="Add a guest"><button class="btn btn-g" id="ho-guest-add" type="button">Add</button></div>
+          <datalist id="ho-guest-list"></datalist><div class="ho-chips" id="ho-guests" style="margin-top:8px"></div></div>
+        <div style="display:flex;gap:10px;align-items:center"><button class="btn btn-p" id="ho-save" type="submit">Save host</button><button class="btn btn-g" id="ho-cancel" type="button">Cancel</button></div>
+        <div class="err" id="ho-ferr"></div>
+      </form>
+      <table class="tbl" id="ho-tbl" hidden><thead><tr><th>Host</th><th>Their guests</th><th>Told</th><th></th></tr></thead><tbody id="ho-body"></tbody></table>
+      <p class="small" id="ho-empty" hidden>No hosts yet.</p>
+      <div class="err" id="ho-err"></div>
+    </div>
     <div id="owner-tools" hidden style="margin-top:18px">
       <div class="toggle"><div><b>Transfer ownership</b><p>Hand this event to another organizer. You stay on as an organizer, and only the new owner can go live, transfer or delete it.</p></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><select id="ot-target" class="search" style="flex:none;min-width:200px" aria-label="New owner"></select><button class="btn btn-s" id="ot-transfer" type="button">Transfer</button></div></div>
@@ -1155,6 +1189,7 @@ function renderDetails() {
   if (dateLocked) { $('d-date').disabled = true; $('d-tz').disabled = true; }
   renderOwnerTools();
   renderAlertTypes();
+  renderHosts();
   $('det-note').textContent = consoleLocked ? 'Only the event owner can edit a console event.'
     : !editable ? 'Only the event owner or an organizer can change these details.'
     : dateLocked ? 'The date and timezone are locked now the event is live. Contact support@cuedeck.io to move it.'
@@ -1211,6 +1246,102 @@ $('al-save').addEventListener('click', async () => {
   ENT.alert_ticket_types = data || [];
   renderAlertTypes();
   $('al-ok').textContent = ' Saved';
+});
+
+// ── hosts (migration 154) ────────────────────────────────
+// Organizer only, like the RPCs. The stop token never reaches the page.
+let HOSTS = [], HO_EDIT = null, HO_COMPS = [], HO_GUESTS = [], HO_GUESTS_BY_LABEL = new Map();
+const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
+const guestLabel = (a) => norm([a.first_name, a.last_name].filter(Boolean).join(' ')) + (a.company ? ' (' + norm(a.company) + ')' : '');
+async function renderHosts() {
+  const show = ROLE === 'owner' || ROLE === 'organizer';
+  $('ho-box').hidden = !show;
+  if (!show) return;
+  $('ho-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_hosts_list', { p_event_id: EVENT_ID });
+  if (error) { $('ho-err').textContent = 'Could not load hosts: ' + error.message; return; }
+  HOSTS = data || [];
+  const body = $('ho-body'); body.replaceChildren();
+  const live = ENT && ENT.status === 'live';
+  for (const h of HOSTS) {
+    const tr = el('tr');
+    const who = el('td'); who.append(el('b', null, h.name), el('div', 'ho-sub', h.email));
+    const rule = [...h.ticket_types, ...h.companies].join(', ') + (h.attendee_ids.length ? (h.ticket_types.length || h.companies.length ? ', ' : '') + h.attendee_ids.length + (h.attendee_ids.length === 1 ? ' guest' : ' guests') + ' picked' : '');
+    const g = el('td'); g.append(el('div', null, h.guests + (h.guests === 1 ? ' guest' : ' guests')), el('div', 'ho-sub', rule));
+    const told = el('td', null, h.stopped_at ? 'Stopped the emails' : live ? (h.told ? h.told + ' told' : 'None yet') : (h.would_tell ? h.would_tell + ' would have been told' : 'None yet'));
+    // Arrivals held back by the daily limit, a refused address, or a send over 2 hours late.
+    if (live && h.not_sent && !h.stopped_at) told.appendChild(el('div', 'ho-miss', h.not_sent + ' not sent'));
+    const act = el('td'); act.style.whiteSpace = 'nowrap';
+    const ed = el('button', 'link', 'Edit'); ed.type = 'button'; ed.onclick = () => openHostForm(h);
+    const rm = el('button', 'link', 'Remove'); rm.type = 'button'; rm.style.marginLeft = '12px';
+    rm.onclick = async () => {
+      if (rm.dataset.sure !== '1') { rm.dataset.sure = '1'; rm.textContent = 'Remove ' + h.name + '?'; return; }
+      const { error: dErr } = await sb.rpc('checkin_host_delete', { p_event_id: EVENT_ID, p_host_id: h.id });
+      if (dErr) { $('ho-err').textContent = dErr.message; return; }
+      renderHosts();
+    };
+    act.append(ed, rm);
+    tr.append(who, g, told, act); body.appendChild(tr);
+  }
+  $('ho-tbl').hidden = HOSTS.length === 0;
+  $('ho-empty').hidden = HOSTS.length > 0 || !$('ho-form').hidden;
+}
+function chips(boxId, list, label) {
+  $(boxId).replaceChildren(...list.map((v, i) => {
+    const b = el('button', null, label(v)); b.type = 'button'; b.setAttribute('aria-label', 'Remove ' + label(v));
+    b.onclick = () => { list.splice(i, 1); chips(boxId, list, label); };
+    return b;
+  }));
+}
+const guestName = (id) => { const a = ATT.find(x => x.id === id); return a ? guestLabel(a) : 'A removed guest'; };
+function openHostForm(h) {
+  HO_EDIT = h ? h.id : null;
+  $('ho-ferr').textContent = '';
+  $('ho-name').value = h ? h.name : ''; $('ho-email').value = h ? h.email : '';
+  HO_COMPS = h ? [...h.companies] : []; HO_GUESTS = h ? [...h.attendee_ids] : [];
+  const tix = new Map();
+  for (const t of [...ATT.map(a => norm(a.ticket_type)), ...(h ? h.ticket_types : [])]) if (t && !tix.has(t.toLowerCase())) tix.set(t.toLowerCase(), t);
+  const chosen = new Set((h ? h.ticket_types : []).map(t => t.toLowerCase()));
+  $('ho-tix').replaceChildren(...[...tix].map(([k, t]) => { const lab = el('label'); const cb = el('input'); cb.type = 'checkbox'; cb.value = t; cb.checked = chosen.has(k); lab.append(cb, document.createTextNode(t)); return lab; }));
+  $('ho-tix-f').hidden = tix.size === 0;
+  const comps = new Map(); for (const a of ATT) { const c = norm(a.company); if (c && !comps.has(c.toLowerCase())) comps.set(c.toLowerCase(), c); }
+  $('ho-comp-list').replaceChildren(...[...comps.values()].sort().map(c => { const o = el('option'); o.value = c; return o; }));
+  HO_GUESTS_BY_LABEL = new Map(ATT.map(a => [guestLabel(a), a.id]));
+  $('ho-guest-list').replaceChildren(...[...HO_GUESTS_BY_LABEL.keys()].sort().map(l => { const o = el('option'); o.value = l; return o; }));
+  chips('ho-comps', HO_COMPS, c => c); chips('ho-guests', HO_GUESTS, guestName);
+  $('ho-form').hidden = false; $('ho-add').hidden = true; $('ho-empty').hidden = true;
+  $('ho-name').focus();
+}
+function closeHostForm() { $('ho-form').hidden = true; $('ho-add').hidden = false; $('ho-empty').hidden = HOSTS.length > 0; }
+$('ho-add').onclick = () => openHostForm(null);
+$('ho-cancel').onclick = closeHostForm;
+function addComp() {
+  const c = norm($('ho-comp-in').value); if (!c) return;
+  if (!HO_COMPS.some(x => x.toLowerCase() === c.toLowerCase())) HO_COMPS.push(c);
+  $('ho-comp-in').value = ''; chips('ho-comps', HO_COMPS, x => x);
+}
+function addGuest() {
+  const id = HO_GUESTS_BY_LABEL.get($('ho-guest-in').value);
+  if (!id) { $('ho-ferr').textContent = 'Pick a guest from the list.'; return; }
+  $('ho-ferr').textContent = '';
+  if (!HO_GUESTS.includes(id)) HO_GUESTS.push(id);
+  $('ho-guest-in').value = ''; chips('ho-guests', HO_GUESTS, guestName);
+}
+$('ho-comp-add').onclick = addComp; $('ho-guest-add').onclick = addGuest;
+$('ho-comp-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addComp(); } });
+$('ho-guest-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addGuest(); } });
+$('ho-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('ho-ferr').textContent = '';
+  // A company typed but not added yet still counts.
+  if (norm($('ho-comp-in').value)) addComp();
+  const tix = [...document.querySelectorAll('#ho-tix input:checked')].map(i => i.value);
+  $('ho-save').disabled = true;
+  const { error } = await sb.rpc('checkin_host_save', { p_event_id: EVENT_ID, p_host_id: HO_EDIT, p_name: $('ho-name').value,
+    p_email: $('ho-email').value, p_companies: HO_COMPS, p_ticket_types: tix, p_attendee_ids: HO_GUESTS });
+  $('ho-save').disabled = false;
+  if (error) { $('ho-ferr').textContent = error.message; return; }
+  closeHostForm(); renderHosts();
 });
 
 // ── owner tools (rulings 2 and 3) ────────────────────────

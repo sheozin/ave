@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Arrival emails · CueDeck</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/checkin-app.css">
+<style>
+.hs{max-width:460px;margin:48px auto;padding:0 16px}
+.hs .card{background:var(--sf);border-radius:16px;box-shadow:var(--shadow);padding:28px}
+.hs h1{font-size:22px;margin:0 0 8px;letter-spacing:-.3px}
+.hs p{color:var(--t2);font-size:14.5px;line-height:1.55;margin:0 0 20px}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <span class="logo"><span class="mk"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck<span class="tag">Check-in</span></span>
+</nav>
+<main class="hs">
+  <div class="card">
+    <h1 id="hs-title">Arrival emails</h1>
+    <p id="hs-text">Checking your link…</p>
+    <button class="btn btn-p full" id="hs-go" type="button" hidden>Stop these emails</button>
+    <div class="err" id="hs-err"></div>
+  </div>
+</main>
+<script>
+// Linked from every host arrival email (migration 154). Opening the link
+// stops nothing: a mail scanner opening it must not. The button does.
+const sb = supabase.createClient('https://sawekpguemzvuvvulfbc.supabase.co', 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB');
+const $ = (id) => document.getElementById(id);
+const token = new URLSearchParams(location.search).get('t') || '';
+const show = (r) => {
+  if (!r) {
+    $('hs-title').textContent = 'This link does not work';
+    $('hs-text').textContent = 'It may be incomplete, or the organizer removed you as a host, in which case no more arrival emails will come.';
+    $('hs-go').hidden = true;
+    return;
+  }
+  $('hs-title').textContent = r.stopped ? 'Emails stopped' : 'Stop arrival emails?';
+  $('hs-text').textContent = r.stopped
+    ? 'You will not get more arrival emails for ' + r.event + '.'
+    : 'You get an email when your guests check in at ' + r.event + '. Stop them for this event?';
+  $('hs-go').hidden = r.stopped;
+};
+async function call(confirm) {
+  $('hs-err').textContent = '';
+  const { data, error } = await sb.rpc('checkin_host_stop', { p_token: token, p_confirm: confirm });
+  if (error) { $('hs-err').textContent = 'Could not reach CueDeck. Try again in a moment.'; return; }
+  show(data);
+}
+$('hs-go').onclick = async () => { $('hs-go').disabled = true; await call(true); $('hs-go').disabled = false; };
+call(false);
+</script>
+</body>
+</html>

@@ -1028,3 +1028,90 @@ test('staffing plan: numbers typed before past events load are kept', async ({ p
   await expect(page.locator('#pl-src')).toContainText('Spring Forum');
   await expect(page.locator('#pl-turnout')).toHaveValue('65');
 });
+
+const GUESTS3 = [
+  { id: 'h1', first_name: 'Marta', last_name: 'Kowalczyk', email: null, company: 'Nordlight', ticket_type: 'Speaker', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+  { id: 'h2', first_name: 'Jan', last_name: 'Nowak', email: null, company: 'Fabrikam', ticket_type: 'attendee', checked_in_at: null, badge_printed_at: null, qr_email_sent_at: null, is_test: true, source: 'import', created_at: '2026-10-01T00:00:00Z' },
+];
+
+test('hosts: an organizer adds a host by ticket type, company and a picked guest', async ({ page }) => {
+  let sent: Record<string, unknown> | null = null;
+  let list: unknown[] = [];
+  await open(page, { role: 'organizer' }, 'details', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', GUESTS3);
+    await rpc(page, 'checkin_hosts_list', () => list);
+    await rpc(page, 'checkin_host_save', (a) => {
+      sent = a;
+      list = [{ id: 'x1', name: 'Anna Lis', email: 'anna@example.test', companies: ['Fabrikam'], ticket_types: ['Speaker'], attendee_ids: ['h2'],
+        stopped_at: null, guests: 2, told: 0, would_tell: 1, last_told_at: null }];
+      return 'x1';
+    });
+  });
+  await expect(page.locator('#ho-box')).toBeVisible();
+  await expect(page.locator('#ho-empty')).toHaveText('No hosts yet.');
+  await page.locator('#ho-add').click();
+  await page.locator('#ho-name').fill('Anna Lis');
+  await page.locator('#ho-email').fill('anna@example.test');
+  await page.locator('#ho-tix label', { hasText: 'Speaker' }).locator('input').check();
+  await page.locator('#ho-comp-in').fill('Fabrikam');
+  await page.locator('#ho-comp-in').press('Enter');
+  await expect(page.locator('#ho-comps button')).toHaveText(['Fabrikam']);
+  await page.locator('#ho-guest-in').fill('Jan Nowak (Fabrikam)');
+  await page.locator('#ho-guest-add').click();
+  await expect(page.locator('#ho-guests button')).toHaveText(['Jan Nowak (Fabrikam)']);
+  await page.locator('#ho-save').click();
+  await expect(page.locator('#ho-form')).toBeHidden();
+  expect(sent).toEqual({ p_event_id: EVENT_ID, p_host_id: null, p_name: 'Anna Lis', p_email: 'anna@example.test',
+    p_companies: ['Fabrikam'], p_ticket_types: ['Speaker'], p_attendee_ids: ['h2'] });
+  const row = page.locator('#ho-body tr').first();
+  await expect(row).toContainText('Anna Lis');
+  await expect(row).toContainText('2 guests');
+  await expect(row).toContainText('Speaker, Fabrikam, 1 guest picked');
+  // Test mode: nothing is sent, the organizer sees who would have been told.
+  await expect(row).toContainText('1 would have been told');
+});
+
+test('hosts: a refused save shows the server message, and a guest must come from the list', async ({ page }) => {
+  await open(page, { role: 'organizer' }, 'details', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', GUESTS3);
+    await rpc(page, 'checkin_hosts_list', []);
+    await rpc(page, 'checkin_host_save', { code: '22023', message: "Choose which guests are this host's: a company, a ticket type or guests", details: null, hint: null }, 400);
+  });
+  await page.locator('#ho-add').click();
+  await page.locator('#ho-guest-in').fill('Nobody');
+  await page.locator('#ho-guest-add').click();
+  await expect(page.locator('#ho-ferr')).toHaveText('Pick a guest from the list.');
+  await page.locator('#ho-name').fill('A'); await page.locator('#ho-email').fill('a@example.test');
+  await page.locator('#ho-save').click();
+  await expect(page.locator('#ho-ferr')).toHaveText("Choose which guests are this host's: a company, a ticket type or guests");
+});
+
+test('hosts: removing asks once in place, and a stopped host says so', async ({ page }) => {
+  let deleted: Record<string, unknown> | null = null;
+  await open(page, { role: 'organizer', status: 'live' }, 'details', STAFF, async () => {
+    await table(page, 'leod_checkin_attendees', GUESTS3);
+    await table(page, 'leod_checkin_entitlements', [{ event_id: EVENT_ID, checkin_core: true, status: 'live', self_registration: false, kiosk_self_print: false, auto_send_qr_email: false }]);
+    await rpc(page, 'checkin_hosts_list', () => deleted ? [] : [
+      { id: 'x1', name: 'Anna Lis', email: 'anna@example.test', companies: [], ticket_types: ['Speaker'], attendee_ids: [], stopped_at: null, guests: 1, told: 3, would_tell: 0, not_sent: 2, last_told_at: null },
+      { id: 'x2', name: 'Ewa Maj', email: 'ewa@example.test', companies: ['Fabrikam'], ticket_types: [], attendee_ids: [], stopped_at: '2026-10-18T08:00:00Z', guests: 1, told: 1, would_tell: 0, last_told_at: null }]);
+    await rpc(page, 'checkin_host_delete', (a) => { deleted = a; return null; });
+  });
+  await expect(page.locator('#ho-body tr').nth(1)).toContainText('Stopped the emails');
+  await expect(page.locator('#ho-body tr').first()).toContainText('3 told2 not sent');
+  const rm = page.locator('#ho-body tr').first().getByRole('button', { name: 'Remove' });
+  await rm.click();
+  await expect(page.locator('#ho-body tr').first().getByRole('button', { name: 'Remove Anna Lis?' })).toBeVisible();
+  expect(deleted).toBeNull();
+  await page.locator('#ho-body tr').first().getByRole('button', { name: 'Remove Anna Lis?' }).click();
+  await expect(page.locator('#ho-tbl')).toBeHidden();
+  expect(deleted).toEqual({ p_event_id: EVENT_ID, p_host_id: 'x1' });
+});
+
+test('hosts: a desk lead does not see hosts and the list is never asked for', async ({ page }) => {
+  let asked = false;
+  await open(page, { role: 'lead' }, 'details', STAFF, () =>
+    page.route(/\/rest\/v1\/rpc\/checkin_hosts_list/, async (r) => { asked = true; await r.fulfill({ status: 200, body: '[]' }); }));
+  await page.waitForTimeout(800);
+  await expect(page.locator('#ho-box')).toBeHidden();
+  expect(asked).toBe(false);
+});
