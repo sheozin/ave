@@ -212,8 +212,10 @@
       <div class="ov-acts"><button class="btn btn-s" id="ov-share" type="button">Share registration link</button><a class="btn btn-s" id="ov-dash" href="#">Live dashboard</a><a class="btn btn-p" id="ov-desk" href="#">Open the desk</a></div></div>
     <div class="stats" id="ov-stats"></div>
     <div class="ov-grid">
-      <div class="ov-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3>Get ready</h3><span class="small" id="ov-count"></span></div>
-        <div class="prog"><i id="ov-prog" style="width:0"></i></div><div id="ov-todo"></div></div>
+      <div class="ov-card"><div style="display:flex;justify-content:space-between;align-items:baseline"><h3 id="ov-todo-h">Get ready</h3><span class="small" id="ov-count"></span></div>
+        <div class="prog"><i id="ov-prog" style="width:0"></i></div><div id="ov-todo"></div>
+        <div id="ov-wrap" hidden><p class="small" id="ov-keep" style="margin:12px 0 0;line-height:1.55"></p>
+          <button class="btn btn-s" id="ov-copy" type="button" style="margin-top:12px">Copy to a new event</button></div></div>
       <div style="display:grid;gap:16px;align-content:start">
         <div class="ov-card"><h3>Registration page</h3><div class="link-row"><i id="ov-reg-dot"></i><span id="ov-reg-link"></span></div>
           <div style="display:flex;gap:8px"><button class="btn btn-s" id="ov-reg-copy" type="button" style="flex:1">Copy link</button><a class="btn btn-s" id="ov-reg-open" target="_blank" rel="noopener" style="flex:1">Preview</a></div>
@@ -714,6 +716,17 @@
   </form>
 </dialog>
 
+<dialog id="dlg-copy">
+  <form id="f-copy" method="dialog">
+    <h3 style="margin:0 0 6px">Copy to a new event</h3>
+    <p class="small" style="margin:0 0 14px;line-height:1.55">Copies the settings, branding, badge design, emails, ticket types and doors. Not the guests, the team or the registration link.</p>
+    <div class="field"><label for="cp-name">Event name</label><input id="cp-name" required maxlength="200"></div>
+    <div class="field"><label for="cp-date">Date</label><input id="cp-date" type="date" required></div>
+    <div class="err" id="cp-err"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button type="button" class="btn btn-s" id="cp-cancel">Cancel</button><button class="btn btn-p" id="cp-save">Create the copy</button></div>
+  </form>
+</dialog>
+
 <script type="module">
 import { checkinWindow, isWindowClosed, TEST_CAP } from '/checkin-window.js';
 import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
@@ -737,6 +750,21 @@ const fmtDay = (d, tz) => d.toLocaleDateString('en-GB', { day: 'numeric', month:
 const isLive = () => ENT?.status === 'live';
 // Complimentary account: no price, no test banner, no paid go-live.
 const isComp = () => !!EV?.is_comp;
+// Finished (migration 160): when the check-in window closes, date + 3 at
+// midnight in the event's zone. Guest details go 90 days later, and never
+// sooner than 14 days after the owner was emailed. Same rule as
+// checkin_purge_at; the server decides, this only explains.
+const finishesAt = () => checkinWindow(EV.date, EV.timezone)?.closesAt || null;
+const isFinished = () => { const f = finishesAt(); return !!f && Date.now() >= f.getTime(); };
+const DAY = 864e5;
+function purgeAt() {
+  const f = finishesAt(); if (!f) return null;
+  const w = ENT.purge_warned_at ? new Date(ENT.purge_warned_at) : null;
+  const from = w && w >= f ? w.getTime() : Math.max(Date.now(), f.getTime() + 76 * DAY);
+  return new Date(Math.max(f.getTime() + 90 * DAY, from + 14 * DAY));
+}
+const isPurged = () => { const f = finishesAt(); return !!(f && ENT.data_purged_at && new Date(ENT.data_purged_at) >= f); };
+const longDate = (d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: EV.timezone || 'UTC' });
 async function fnError(error) {
   // supabase-js puts the Response on error.context for non-2xx replies.
   try { const b = await error.context.json(); if (b?.error) return b.error; } catch (_) { /* unreadable body */ }
@@ -814,7 +842,7 @@ async function loadPrice() {
 // ── chrome: banner, rail, header ─────────────────────────
 function renderChrome() {
   $('crumb-ev').textContent = EV.name; $('side-name').textContent = EV.name;
-  $('side-meta').textContent = fmtDate(EV.date) + ' · ' + (isLive() ? 'Live' : 'Test mode');
+  $('side-meta').textContent = fmtDate(EV.date) + ' · ' + (isFinished() ? 'Finished' : isLive() ? 'Live' : 'Test mode');
   $('desk-link').href = '/checkin/desk?event=' + EVENT_ID;
   $('dash-link').href = '/checkin/dashboard?event=' + EVENT_ID;
   $('desk-link').textContent = isLive() ? 'Open desk' : 'Try the desk';
@@ -863,6 +891,74 @@ function markInto(box, path, name, color) {
   if (path) { const i = el('img'); i.src = rgPublicUrl(path); i.alt = ''; box.append(i); } else box.textContent = initials2(name);
 }
 
+// The wrap-up list that replaces "Get ready" once the event has finished.
+// The client report's state is read once, then the overview redraws.
+let WRAP_CR;
+function wrapItems() {
+  const org = ROLE === 'organizer' || ROLE === 'owner';
+  if (org && WRAP_CR === undefined) {
+    WRAP_CR = null;
+    sb.rpc('checkin_client_report_get', { p_event_id: EVENT_ID }).then(({ data, error }) => {
+      WRAP_CR = error ? { failed: true } : (data || {});
+      if (!$('p-overview').hidden) renderOverview();
+    });
+  }
+  const f = finishesAt(), purged = isPurged();
+  const items = [
+    { step: 'reports', t: 'Check-in closed', s: 'Closed ' + longDate(f) + '. No more check-ins or new guests.', ok: true },
+    { href: '/checkin/report?event=' + EVENT_ID, t: 'Your post-event report',
+      s: ENT.report_sent_at ? 'Emailed to the owner ' + atText(ENT.report_sent_at) : isLive() ? 'Emailed to the owner when check-in closes' : 'Live events only. Open it to see the numbers.',
+      ok: !!ENT.report_sent_at },
+  ];
+  if (org) items.push({ step: 'reports', t: 'Report for your client', opt: true,
+    s: !WRAP_CR ? 'Checking…' : WRAP_CR.failed ? 'Could not check. Open Reports.' : WRAP_CR.sent_at ? 'Sent ' + atText(WRAP_CR.sent_at)
+      : (WRAP_CR.recipients || []).length ? 'Goes out at 08:00 the morning after the event' : "Not set up. Add your client's address in Reports.",
+    ok: !!(WRAP_CR && WRAP_CR.sent_at) });
+  items.push({ step: 'qr', t: 'Certificates of attendance', opt: true,
+    s: ENT.certificate_enabled ? "On: each guest's thank-you email links to theirs" : 'Off. Guests who checked in can get one.', ok: !!ENT.certificate_enabled });
+  if (can(ROLE, 'export')) items.push({ step: 'reports', t: 'Download the guest list',
+    s: purged ? 'Guest details have been deleted. The numbers are still in Reports.' : 'Before ' + longDate(purgeAt()) + ', when guest details are deleted',
+    ok: purged });
+  return items;
+}
+
+// Copy to a new event: the same path as a new event on /checkin (insert,
+// then checkin-enable-event), then checkin_copy_event_setup (migration 160).
+// A retry after a half-finished copy reuses the event it already made.
+let COPY_ID = null;
+$('ov-copy').onclick = () => {
+  COPY_ID = null; $('cp-err').textContent = '';
+  const y = Number(String(EV.date).slice(0, 4));
+  $('cp-name').value = String(EV.name).replace(String(y), String(y + 1));
+  $('cp-date').value = (y + 1) + String(EV.date).slice(4);
+  $('cp-save').disabled = false; $('cp-save').textContent = 'Create the copy';
+  $('dlg-copy').showModal();
+};
+$('cp-cancel').onclick = () => $('dlg-copy').close();
+$('f-copy').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('cp-err').textContent = '';
+  const btn = $('cp-save'); btn.disabled = true; btn.textContent = 'Copying…';
+  const fail = (m) => { btn.disabled = false; btn.textContent = 'Try again'; $('cp-err').textContent = m; };
+  if (!COPY_ID) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return fail('You are signed out. Sign in again and retry.');
+    const { data: ev, error } = await sb.from('leod_events').insert({
+      name: $('cp-name').value.trim(), date: $('cp-date').value,
+      event_start: EV.event_start, event_end: EV.event_end, venue: EV.venue || null, timezone: EV.timezone,
+      active: true, created_by: session.user.id, created_via: 'checkin',
+    }).select('id').single();
+    if (error) return fail(error.message);
+    COPY_ID = ev.id;
+  }
+  // Safe to repeat, as the retry on /checkin does.
+  const { error: enErr } = await sb.functions.invoke('checkin-enable-event', { body: { event_id: COPY_ID } });
+  if (enErr) return fail('The new event was made, but check-in could not be set up for it: ' + await fnError(enErr));
+  const { error: cpErr } = await sb.rpc('checkin_copy_event_setup', { p_from: EVENT_ID, p_to: COPY_ID });
+  if (cpErr) return fail('The new event was made, but the settings could not be copied: ' + cpErr.message);
+  location.href = '/checkin/setup?event=' + COPY_ID;
+});
+
 function renderOverview() {
   $('ov-name').textContent = EV.name;
   $('ov-meta').textContent = [fmtDate(EV.date), EV.event_start && EV.event_end ? EV.event_start.slice(0, 5) + ' to ' + EV.event_end.slice(0, 5) : '', EV.venue].filter(Boolean).join(' · ');
@@ -888,6 +984,16 @@ function renderOverview() {
     { step: 'qr', t: 'Send QR codes', s: withEmail.length && sent === withEmail.length ? 'Everyone with an email has theirs' : (withEmail.length - sent) + ' guests have not received theirs', ok: withEmail.length > 0 && sent === withEmail.length },
     { step: 'golive', t: isComp() ? 'Included in your plan' : 'Go live', s: isLive() || isComp() ? 'Real check-ins are on' : 'Real check-ins and guest emails', ok: isLive() || isComp() },
   ];
+  const wrap = isFinished() && can(ROLE, 'test_setup');
+  if (wrap) items.splice(0, items.length, ...wrapItems());
+  $('ov-todo-h').textContent = wrap ? 'Wrap up' : 'Get ready';
+  $('ov-wrap').hidden = !wrap;
+  if (wrap) {
+    const p = purgeAt();
+    $('ov-keep').textContent = isPurged()
+      ? "Guests' names, email addresses and other personal details were deleted " + longDate(new Date(ENT.data_purged_at)) + '. The numbers are kept.'
+      : "On " + longDate(p) + " we delete guests' names, email addresses and other personal details, 90 days after the event. The numbers are kept. The owner gets an email 14 days before.";
+  }
   const done = items.filter(i => i.ok).length;
   $('ov-count').textContent = done + ' of ' + items.length + ' done';
   $('ov-prog').style.width = Math.round(done / items.length * 100) + '%';
@@ -895,7 +1001,7 @@ function renderOverview() {
     const b = el('button', 'todo' + (i.ok ? ' ok' : '')); b.type = 'button';
     const ck = el('span', 'ck'); if (i.ok) ck.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
     const txt = el('span'); txt.style.flex = '1'; const t = el('b', null, i.t); if (i.opt) t.append(el('span', 'opt', 'optional')); txt.append(t, el('span', 's', i.s));
-    b.append(ck, txt); b.onclick = () => go(i.step); return b;
+    b.append(ck, txt); b.onclick = () => i.href ? location.assign(i.href) : go(i.step); return b;
   }));
   const code = ENT.registration_code, on = !!ENT.registration_enabled;
   $('ov-reg-dot').style.background = on ? 'var(--gn)' : 'var(--bd2)';

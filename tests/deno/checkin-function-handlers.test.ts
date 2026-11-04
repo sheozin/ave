@@ -196,7 +196,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status', 'checkin-post-event-report', 'checkin-host-notices']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status', 'checkin-post-event-report', 'checkin-host-notices', 'checkin-data-retention']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -2308,4 +2308,69 @@ Deno.test(`${RG} config: says hosts may be told only when a host on names is act
     const r = await guest({ action: 'config', code: 'VTQBZ3ENFV' })
     assert(r.status === 200 && r.body.hosts_notice === want, JSON.stringify([hosts, r.body.hosts_notice, r.status]))
   }
+})
+
+// ── data retention (160) ──
+const DR = 'checkin-data-retention'
+async function drCall(secret = 's'.repeat(64)) {
+  const res = await handlers[DR](new Request('http://stub.local/functions/v1/' + DR, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': secret }, body: '{}',
+  }))
+  return { status: res.status, body: await res.json() }
+}
+function drSetup(due: Row[]) {
+  setup('none', { ent: { checkin_core: true, status: 'live' } })
+  world.tables.leod_events[0].name = 'Secret Gala'
+  world.tables.leod_events[0].date = '2026-03-11'
+  world.tables.leod_events[0].timezone = 'Europe/Warsaw'
+  world.tables.leod_checkin_job_runs = []
+  world.rpcResult.checkin_retention_cron_ok = true
+  world.rpcResult.checkin_retention_due = due
+  world.rpcResult.checkin_retention_claim_warning = '2026-11-18T19:00:00+00:00'
+  world.rpcResult.checkin_purge_event = { guests: 5 }
+  world.authUsers = { [OTHER]: { id: OTHER, email: 'owner@stub.test', aud: 'authenticated' } }
+}
+Deno.test(`${DR}: refuses a call without the cron secret`, async () => {
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'purge' }])
+  world.rpcResult.checkin_retention_cron_ok = false
+  const r = await drCall('wrong')
+  assert(r.status === 401, JSON.stringify(r))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_purge_event'), 'purged without the secret')
+})
+Deno.test(`${DR}: warns the owner with the dates and a link, never the event name`, async () => {
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'warn' }])
+  const r = await drCall()
+  assert(r.status === 200, JSON.stringify(r))
+  const m = (world.emails ?? []) as { to: string; subject: string; html: string; text: string }[]
+  assert(m.length === 1 && m[0].to === 'owner@stub.test', JSON.stringify(m.map(x => x.to)))
+  const all = m[0].subject + m[0].html + m[0].text
+  assert(!all.includes('Secret Gala'), 'event name in the email')
+  assert(m[0].subject.includes('11 March 2026') && m[0].subject.includes('18 November 2026'), m[0].subject)
+  assert(all.includes('https://app.cuedeck.io/checkin/setup?event=' + EVENT + '&amp;step=reports') || all.includes('https://app.cuedeck.io/checkin/setup?event=' + EVENT + '&step=reports'), 'no link')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_purge_event'), 'purged on a warning')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_retention_release_warning'), 'released a sent warning')
+})
+Deno.test(`${DR}: a warning another run claimed is not sent twice`, async () => {
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'warn' }])
+  world.rpcResult.checkin_retention_claim_warning = null
+  const r = await drCall()
+  assert(r.status === 200 && !(world.emails?.length), JSON.stringify(r))
+})
+Deno.test(`${DR}: an owner without an email keeps the claim, so deletion is not postponed forever`, async () => {
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'warn' }])
+  world.authUsers = { [OTHER]: { id: OTHER, email: '', aud: 'authenticated' } }
+  const r = await drCall()
+  assert(!(world.emails?.length), 'sent somewhere')
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_retention_release_warning'), 'released the claim')
+  assert(r.body.detail.includes('owner has no email'), JSON.stringify(r))
+})
+Deno.test(`${DR}: purges what is due and records the run`, async () => {
+  drSetup([{ event_id: EVENT, owner_id: OTHER, action: 'purge' }])
+  const r = await drCall()
+  assert(r.status === 200, JSON.stringify(r))
+  const c = world.rpcCalls.find(x => x.name === 'checkin_purge_event')
+  assert(c && c.args.p_event_id === EVENT, JSON.stringify(world.rpcCalls))
+  assert(!(world.emails?.length), 'emailed on a purge')
+  const run = world.tables.leod_checkin_job_runs[0]
+  assert(run && run.job_name === DR && run.status === 'ok' && String(run.detail).includes('1 deleted'), JSON.stringify(run))
 })
