@@ -29,6 +29,8 @@
 !/cuedeck-agent-2-cue-engine.js
 !/cuedeck-agent-3-report-generator.js
 !/checkin-app.css
+!/checkin-ui.css
+!/checkin-theme.js
 !/checkin-window.js
 !/checkin-clock.js
 !/checkin-csv.js

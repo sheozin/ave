@@ -17,6 +17,7 @@ MUST_200=(
   /favicon.svg /console-manifest.json /console-sw.js /checkin-window.js
   /checkin/setup /checkin-app.css /checkin-csv.js /cuedeck-auth.js
   /checkin-roles.js /checkin-dashboard.js /checkin/dashboard
+  /checkin-ui.css /checkin-theme.js /checkin/report /fonts/geist-var.woff2
 )
 # Vercel's bot protection answers scripted clients with 403 + x-vercel-mitigated
 # on every path. That says nothing about the deploy, so it must not read as a
