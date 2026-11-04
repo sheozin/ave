@@ -8,11 +8,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="/vendor/qrcode-generator-1.4.4.js"></script>
 <link rel="stylesheet" href="/checkin-app.css">
+<link rel="stylesheet" href="/checkin-ui.css">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+try { const t = localStorage.getItem('ck-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (_) {}
+</script>
 <style>
 .crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
 .crumb a{color:var(--t2);text-decoration:none}.crumb b{color:var(--t1);font-weight:600}
 .banner{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 28px 0;padding:12px 16px;border-radius:12px;background:var(--amsf);border:1px solid var(--ambd);color:var(--am);font-size:13px}
-.banner b{color:#7A4700}
+.banner b{color:var(--exp-t)}
 .layout{display:grid;grid-template-columns:240px 1fr;gap:22px;padding:20px 28px 40px;max-width:1240px;margin:0 auto}
 .steps{background:#fff;border-radius:18px;padding:10px;box-shadow:var(--shadow);align-self:start;position:sticky;top:76px}
 .steps .ttl{padding:10px 12px 6px}.steps .ttl h3{margin:0;font-size:15px;letter-spacing:-.2px;overflow-wrap:anywhere}.steps .ttl p{margin:2px 0 0;font-size:12px;color:var(--t2)}
@@ -23,7 +28,7 @@
 .field label.btn{display:inline-flex;margin:0;font-size:13.5px}
 .st[aria-current="step"]{background:var(--acsf);color:var(--ac);font-weight:600}.st[aria-current="step"] .dot{color:var(--ac)}
 .st small{margin-left:auto;font-size:11.5px;color:var(--t3);font-weight:500}
-.st.golive{margin-top:6px;border-top:1px solid #F0F0F3;border-radius:0 0 11px 11px;padding-top:14px;color:var(--t1)}
+.st.golive{margin-top:6px;border-top:1px solid var(--line);border-radius:0 0 11px 11px;padding-top:14px;color:var(--t1)}
 .st.golive .dot{border-radius:50%;background:var(--t1);color:#fff}
 /* Event admin (2026-10-06): overview, branding preview, reports */
 .ov-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px}
@@ -37,8 +42,8 @@
 .ov-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
 .ov-card{border:1px solid var(--bd);border-radius:16px;padding:18px}
 .ov-card h3{margin:0 0 10px;font-size:15px}
-.prog{height:6px;border-radius:99px;background:#F0F0F3;overflow:hidden;margin:4px 0 6px}.prog i{display:block;height:100%;background:var(--ac);border-radius:99px}
-.todo{display:flex;align-items:center;gap:12px;padding:11px 2px;border-top:1px solid #F0F0F3;width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.prog{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:4px 0 6px}.prog i{display:block;height:100%;background:var(--ac);border-radius:99px}
+.todo{display:flex;align-items:center;gap:12px;padding:11px 2px;border-top:1px solid var(--line);width:100%;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;cursor:pointer;font:inherit;color:inherit}
 .todo:first-of-type{border-top:0}
 .todo .ck{width:22px;height:22px;border-radius:50%;flex:none;border:2px solid var(--bd2);display:grid;place-items:center;color:#fff}
 .todo.ok .ck{background:var(--gn);border-color:var(--gn)}
@@ -68,11 +73,11 @@
 .uses span{font-size:12px;font-weight:600;padding:5px 10px;border-radius:999px;background:var(--gnsf);color:var(--gn)}
 .br-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(280px,1fr);gap:22px;align-items:start}
 .rep-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.rep-card{border:1px solid var(--bd);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;background:#fff;font:inherit;text-align:left;cursor:pointer}
+.rep-card{border:1px solid var(--bd);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;text-decoration:none;color:inherit;background:var(--card);font:inherit;text-align:left;cursor:pointer}
 .rep-card:hover{border-color:var(--bd2)}
 .rep-card b{font-size:14px}.rep-card span{font-size:12.5px;color:var(--t2)}
 .src{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:16px}
-.panel{background:#fff;border-radius:18px;padding:24px;box-shadow:var(--shadow);min-width:0}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;min-width:0}
 .ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;flex-wrap:wrap}
 .ph h2{margin:0 0 4px;font-size:22px;letter-spacing:-.6px}.ph p{margin:0;font-size:13.5px;color:var(--t2)}
 .tools{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
@@ -83,7 +88,7 @@
 /* Export guest data (attendance and activity log) */
 .xp-seg{display:inline-flex;gap:4px;padding:3px;border-radius:12px;background:var(--pg)}
 .xp-seg button{height:32px;padding:0 12px;border-radius:9px;border:0;background:none;font:inherit;font-size:12.5px;font-weight:600;color:var(--t2);cursor:pointer}
-.xp-seg button[aria-pressed="true"]{background:#fff;color:var(--t1);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.xp-seg button[aria-pressed="true"]{background:var(--card);color:var(--t1);box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .xp-f{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:14px 0}
 .xp-f label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--t2)}
 .xp-f input,.xp-f select{height:36px;border-radius:10px;border:1px solid var(--bd2);background:var(--wm);font:inherit;font-size:13.5px;padding:0 10px;color:var(--t1)}
@@ -127,8 +132,8 @@
 .ho-sub{font-size:12px;color:var(--t2);margin-top:2px}
 .al-opts label{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;background:var(--pg);color:var(--t1);cursor:pointer}
 .tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:10px;border-bottom:1px solid #F0F0F3}
-.tbl td{padding:12px 10px;border-bottom:1px solid #F5F5F7;vertical-align:top}
+.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:10px;border-bottom:1px solid var(--line)}
+.tbl td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 .nm{font-weight:600}.em{color:var(--t2);font-size:12px;overflow-wrap:anywhere}
 .tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .t-sent{background:var(--acsf);color:var(--ac)}.t-wait{background:var(--pg);color:var(--t2)}.t-in{background:var(--gnsf);color:var(--gn)}.t-test{background:var(--amsf);color:var(--am)}
@@ -141,7 +146,7 @@
 .rg-img{height:140px;border-radius:12px;border:1px dashed var(--bd2);background:var(--wm);display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;padding:8px}
 .rg-img img{width:100%;height:100%;object-fit:cover;border-radius:8px}
 .rg-img-logo img{object-fit:contain}
-.toggle{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid #F5F5F7}
+.toggle{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 0;border-bottom:1px solid var(--line)}
 .toggle b{font-size:14px}.toggle p{margin:3px 0 0;font-size:12.5px;color:var(--t2);max-width:520px}
 .sw{position:relative;width:44px;height:26px;flex:none}
 .sw input{opacity:0;width:0;height:0}
@@ -152,7 +157,7 @@
 .inc{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin:18px 0 20px}
 .inc div{display:flex;gap:9px;font-size:13px;line-height:1.4}.inc svg{flex:none;color:var(--gn);margin-top:1px}
 .facts{border:1px solid var(--bd);border-radius:14px;overflow:hidden;font-size:13px}
-.facts .r{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid #F0F0F3}.facts .r:last-child{border:0}
+.facts .r{display:flex;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line)}.facts .r:last-child{border:0}
 .facts .r span:first-child{color:var(--t2)}.facts .r b{font-weight:600;text-align:right}
 .bigprice{display:flex;align-items:baseline;gap:8px;margin:4px 0}.bigprice b{font-size:34px;letter-spacing:-1px}.bigprice span{color:var(--t2);font-size:13px}
 .fine{font-size:12px;color:var(--t2);line-height:1.5;text-align:left;margin-top:0}
@@ -162,14 +167,47 @@
   .steps .ttl{display:none}.st{width:auto;flex:none;padding:9px 12px}.st small{margin-left:4px}.st.golive{margin:0;border:0;padding-top:9px;border-radius:11px}
   .stats,.src{grid-template-columns:repeat(2,minmax(0,1fr))}.ov-grid,.br-grid,.rep-grid{grid-template-columns:1fr}.bp{position:static}.gl,.inc{grid-template-columns:1fr}.banner{margin:16px 16px 0}.tbl .hide-sm{display:none}.tbl .hide-lg{display:block}}
 #page-err:empty{display:none}
+/* New design (checkin-ui.css): the old token names point at the new ones, so every
+   rule above follows light and dark. */
+:root{--pg:var(--bg);--sf:var(--card);--wm:var(--soft);--bd:var(--line);--bd2:var(--line2);--ac:var(--blue);--acsf:var(--blue-s);
+  --gn:var(--in-t);--gnsf:var(--in-s);--am:var(--exp-t);--amsf:var(--exp-s);--ambd:transparent;--rd:var(--alert-t);--rdsf:var(--alert-s);--shadow:none}
+textarea{font:inherit;color:inherit}
+.btn-p{background:var(--blue);color:#fff}.btn-s{background:var(--card);color:var(--t1);border:1px solid var(--line2)}.btn-g{background:var(--blue-s);color:var(--blue-t)}
+.field input,.field select,.field textarea,.search{background:var(--soft);color:var(--t1);border-color:var(--line2)}
+dialog{background:var(--card);color:var(--t1);border:1px solid var(--line)}
+dialog::backdrop{background:rgba(10,18,32,.45)}
+.banner{margin:18px 28px 0}
+.rail .st{color:var(--ink-t);font-weight:500;padding:9px 10px;border-radius:10px;gap:11px;font-size:14px}
+.rail .st .dot{color:inherit;width:18px;height:18px}
+.rail .st:hover{background:var(--ink2);color:#fff}
+.rail .st[aria-current="step"]{background:#fff;color:#13233F;font-weight:600}
+.rail .st[aria-current="step"] .dot{color:#13233F}
+:root[data-theme="dark"] .rail .st[aria-current="step"],:root[data-theme="dark"] .rail .st[aria-current="step"] .dot{background:var(--blue);color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .rail .st[aria-current="step"],:root:not([data-theme="light"]) .rail .st[aria-current="step"] .dot{background:var(--blue);color:#fff}}
+.rail .st.done .dot{color:#5BE39A}
+.rail .st small{color:var(--ink-t2)}
+.rail .st[aria-current="step"] small{color:inherit;opacity:.7}
+.rail .st.golive{margin-top:6px;border-top:1px solid var(--ink2);border-radius:10px;padding-top:12px;color:#fff}
+.rail .st.golive .dot{background:var(--blue);border-radius:50%;width:20px;height:20px;color:#fff}
+.rail .st.golive[aria-current="step"]{background:var(--blue);color:#fff}.rail .st.golive[aria-current="step"] .dot{background:rgba(255,255,255,.22)}
+.top .sp{flex:1}
+.setup-main{display:block}
+.rail{gap:12px}
+.rail .st,.rail .menu a{padding:7px 10px}
+.rail .menu p{margin:8px 10px 2px}
+.stat span{text-transform:none;letter-spacing:0;font-size:12.5px;font-weight:500}
+.tbl th{text-transform:none;letter-spacing:0;font-size:12px}
+/* Previews of what guests and printers get stay light in dark mode. */
+.bp,.bd-prev .bd-card{--t1:#14213D;--t2:#5B6B85;--t3:#8C9AB0;--card:#fff;--line:#E3E8F0;--soft:#F2F5F9;color:#14213D;color-scheme:light}
+@media (max-width:760px){.rail .st{flex:none;width:auto;white-space:nowrap;padding:7px 10px}.rail .st.golive{margin:0;border:0;padding:7px 10px}.top,.banner{margin-left:16px;margin-right:16px}.top{margin:0;padding-left:16px;padding-right:16px}}
 .roles{margin:0 0 16px;padding:0;list-style:none;display:grid;gap:6px;font-size:13px;color:var(--t2)}.roles b{color:var(--t1);font-weight:600}
 @media (max-width:600px){#f-inv{grid-template-columns:1fr!important}.nav{padding:14px 16px}.crumb{display:none}}
 .bd-wrap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:22px;align-items:start}
 @media (max-width:980px){.bd-wrap{grid-template-columns:1fr}}
-.bd-prev{position:sticky;top:76px;background:#E9E7E1;border-radius:16px;padding:18px;display:grid;gap:14px;justify-items:center;overflow:hidden}
+.bd-prev{position:sticky;top:76px;background:var(--soft);border-radius:16px;padding:18px;display:grid;gap:14px;justify-items:center;overflow:hidden}
 .bd-prev .bd-card{box-shadow:0 1px 2px rgba(0,0,0,.08),0 10px 28px rgba(0,0,0,.12);border-radius:2mm;overflow:hidden;transform-origin:top center}
 .seg{display:inline-flex;border:1px solid var(--bd2);border-radius:10px;overflow:hidden}
-.seg button{border:0;background:#fff;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--t2)}
+.seg button{border:0;background:var(--card);padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;color:var(--t2)}
 .seg button[aria-pressed=true]{background:var(--acsf);color:var(--ac)}
 .bd-colors{display:grid;gap:8px}
 .bd-colors .row{display:flex;align-items:center;gap:10px}
@@ -182,17 +220,18 @@
 </head>
 <body>
 <div id="badge-sheet"></div>
-<nav class="nav">
-  <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
-  <div class="nav-r"><a class="btn btn-s" id="dash-link" href="#">Dashboard</a><a class="btn btn-s" id="desk-link" href="#">Try the desk</a></div>
-</nav>
-<div class="banner" id="banner" hidden><span id="banner-t"></span><button class="btn btn-p" id="banner-go" style="height:32px">Go live</button></div>
 <div class="err" id="page-err" style="margin:16px 28px"></div>
 <p class="small" id="page-loading" style="margin:40px auto;text-align:center">Loading your event…</p>
 
-<div class="layout" id="layout" hidden>
-  <aside class="steps" aria-label="Event admin">
-    <div class="ttl"><h3 id="side-name"></h3><p id="side-meta"></p></div>
+<div class="app" id="layout" hidden>
+  <aside class="rail">
+    <a class="brand" href="/checkin"><span class="mk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck <small>Check-in</small></a>
+    <div class="evsw"><b id="side-name"></b><span id="side-meta"></span></div>
+    <nav class="menu" aria-label="Event admin">
+      <p>Event day</p>
+      <a id="dash-link" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 13h4v8H3zM10 3h4v18h-4zM17 9h4v12h-4z"/></svg>Dashboard</a>
+      <a id="desk-link" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span id="desk-link-t">Try the desk</span></a>
+      <p>Event admin</p>
     <button class="st" data-step="overview"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg></span>Overview</button>
     <button class="st" data-step="attendees"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8"/></svg></span>Guests<small id="n-att"></small></button>
     <button class="st" data-step="register"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM8 9h8M8 13h8M8 17h5"/></svg></span>Registration<small id="n-web"></small></button>
@@ -205,7 +244,17 @@
     <button class="st" data-step="reports"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Reports</button>
     <button class="st" data-step="details"><span class="dot"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span>Settings</button>
     <button class="st golive" data-step="golive"><span class="dot"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><span id="gl-rail">Go live</span><small id="gl-rail-price" data-price></small></button>
+      <p>More</p>
+      <a href="/checkin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Your events</a>
+    </nav>
+    <div class="rail-foot">
+      <button class="modet" id="theme" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Dark mode</span></button>
+    </div>
   </aside>
+  <main>
+    <div class="top"><div><h1 id="top-step">Event admin</h1><div class="sub" id="top-ev"></div></div></div>
+    <div class="banner" id="banner" hidden><span id="banner-t"></span><button class="btn btn-p" id="banner-go" style="height:32px">Go live</button></div>
+    <div class="dash setup-main">
 
   <section class="panel" id="p-overview" hidden>
     <div class="ov-h"><div><h2 id="ov-name"></h2><p id="ov-meta"></p></div>
@@ -252,7 +301,7 @@
         <div class="uses"><span>Registration page</span><span>Guest QR emails</span><span>Console displays (colour)</span></div>
       </div>
       <div>
-        <p class="small" style="margin:0 0 8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase">Live preview</p>
+        <p class="small" style="margin:0 0 8px;font-weight:600">Live preview</p>
         <div class="bp" aria-label="Preview of the registration page">
           <div class="bp-top"><div class="bp-mark" id="bp-mark"></div><b id="bp-host" style="font-size:12.5px"></b></div>
           <div class="bp-cover" id="bp-cover"></div>
@@ -703,6 +752,8 @@
       </div>
     </div>
   </section>
+    </div>
+  </main>
 </div>
 
 <dialog id="dlg-add">
@@ -733,6 +784,8 @@ import { parseCsv, mapRows, toCsv } from '/checkin-csv.js';
 import { attendanceTable, activityTable, exportOptions, dayCounts } from '/checkin-export.js';
 import { historyProfile, buildPlan } from '/checkin-forecast.js';
 import { eventStartUtc } from '/checkin-dashboard.js';
+import { initTheme } from '/checkin-theme.js';
+initTheme();
 import { effectiveRole, can, invitableRoles, roleLabel, ROLE_HELP, transferNote } from '/checkin-roles.js';
 import { BADGE_SIZES, BADGE_GROUPS, BADGE_TEMPLATES, normalizeDesign, badgeElement, pageCss, loadBadgeFonts, visaNextCanvas, badgePng, fitsRoll, fitsPrinter } from '/checkin-badge.js';
 
@@ -841,11 +894,11 @@ async function loadPrice() {
 
 // ── chrome: banner, rail, header ─────────────────────────
 function renderChrome() {
-  $('crumb-ev').textContent = EV.name; $('side-name').textContent = EV.name;
+  $('side-name').textContent = EV.name; $('top-ev').textContent = EV.name;
   $('side-meta').textContent = fmtDate(EV.date) + ' · ' + (isFinished() ? 'Finished' : isLive() ? 'Live' : 'Test mode');
   $('desk-link').href = '/checkin/desk?event=' + EVENT_ID;
   $('dash-link').href = '/checkin/dashboard?event=' + EVENT_ID;
-  $('desk-link').textContent = isLive() ? 'Open desk' : 'Try the desk';
+  $('desk-link-t').textContent = isLive() ? 'Open desk' : 'Try the desk';
   const office = can(ROLE, 'test_setup');
   $('banner').hidden = isLive() || isComp() || !office;
   // A desk lead sees the Desk staff step only (ruling 6).
@@ -877,6 +930,11 @@ function go(step) {
   if (!can(ROLE, 'test_setup')) step = 'staff';
   for (const s of ['overview', 'details', 'attendees', 'register', 'tickets', 'branding', 'badges', 'staff', 'kiosk', 'qr', 'reports', 'golive']) $('p-' + s).hidden = s !== step;
   document.querySelectorAll('.st').forEach(b => { if (b.dataset.step === step) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current'); });
+  // The page title follows the step: the step's own words in the rail.
+  const cur = document.querySelector('.st[data-step="' + step + '"]');
+  const words = cur && (step === 'golive' ? $('gl-rail').textContent : [...cur.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim());
+  $('top-step').textContent = words || 'Event admin';
+  if (cur && matchMedia('(max-width: 760px)').matches) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   ({ overview: renderOverview, details: renderDetails, attendees: async () => { renderAttendees(); renderSpeakers(); await loadInvites(); renderInviteBar(); renderAttendees(); }, register: async () => { renderRegister(); await loadHeld(); renderHeld(); }, tickets: openTickets, badges: renderBadges, branding: () => { renderDesign(); renderPreview(); },
      staff: renderStaff, kiosk: renderKiosk, qr: renderQr, reports: renderReports, golive: renderGolive })[step]();
   const u = new URL(location.href); u.searchParams.set('step', step); history.replaceState(null, '', u);
