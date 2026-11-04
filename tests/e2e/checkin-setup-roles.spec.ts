@@ -998,12 +998,12 @@ test('reports: a two-day event shows who was here each day, and the file has a c
   });
   await expect(page.locator('#xp-days')).toBeVisible();
   await expect(page.locator('#xp-days')).toContainText(': 2, ');
-  await expect(page.locator('#xp-days')).toContainText('Choose a day below to list who was there.');
+  await expect(page.locator('#xp-days')).toContainText('Choose a day below to list them.');
   await page.locator('#xp-day').selectOption('2026-10-19');
   await expect(page.locator('#xp-count')).toHaveText('2 rows match.');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('#xp-csv').click()]);
   const lines = readFileSync(await dl.path(), 'utf8').replace(/^\uFEFF/, '').split('\r\n');
-  expect(lines[0].endsWith(';Here on 2026-10-18;Here on 2026-10-19')).toBe(true);
+  expect(lines[0].endsWith(';Scanned on 2026-10-18;Scanned on 2026-10-19')).toBe(true);
   expect(lines.slice(1).map(l => l.split(';')[0] + ' ' + l.split(';').slice(-2).join(','))).toEqual(['Ana Yes,Yes', 'Cy ,Yes']);
 });
 
@@ -1086,6 +1086,8 @@ test('client report: an organizer names the client, sees when it goes, and opts 
   await expect(page.locator('#cr-box')).toBeVisible();
   await expect(page.locator('#cr-to')).toHaveValue('');
   await expect(page.locator('#cr-state')).toHaveText('');
+  await expect(page.locator('#cr-page')).toBeHidden();
+  await expect(page.locator('#cr-own')).toBeHidden();
   await page.fill('#cr-to', 'Anna@Client.com,  ben@client.com ; ');
   await page.locator('#cr-csv').check();
   await page.click('#cr-save');
@@ -1107,6 +1109,18 @@ test('client report: a failed send says why', async ({ page }) => {
   });
   await expect(page.locator('#cr-to')).toHaveValue('anna@client.com');
   await expect(page.locator('#cr-state')).toHaveText('Not sent yet: The recipient address is invalid. We try again every 15 minutes, up to 5 times.');
+});
+
+test('client report: once sent it links the client\'s page, and an unpaid event says where it may go', async ({ page }) => {
+  await open(page, { role: 'organizer', status: 'live' }, 'reports', STAFF, async () => {
+    await rpc(page, 'checkin_activity_export', []);
+    await rpc(page, 'checkin_arrival_history', []);
+    await rpc(page, 'checkin_client_report_get', { recipients: ['anna@client.com'], attach_guests: false, sent_at: '2026-10-19T06:00:30Z', failed: false,
+      last_error: null, sends_at: '2026-10-19T06:00:00Z', page_token: '0123456789abcdef0123456789abcdef', own_domain_only: true });
+  });
+  await expect(page.locator('#cr-page-a')).toHaveAttribute('href', '/cr/0123456789abcdef0123456789abcdef');
+  await expect(page.locator('#cr-own')).toBeVisible();
+  await expect(page.locator('#cr-own')).toHaveText('Until this event is paid for, the report can only go to addresses at your own company.');
 });
 
 test('client report: a desk lead does not see it and it is never asked for', async ({ page }) => {
@@ -1147,7 +1161,7 @@ test('hosts: an organizer adds a host by ticket type, company and a picked guest
     await rpc(page, 'checkin_host_save', (a) => {
       sent = a;
       list = [{ id: 'x1', name: 'Anna Lis', email: 'anna@example.test', companies: ['Fabrikam'], ticket_types: ['Speaker'], attendee_ids: ['h2'],
-        stopped_at: null, guests: 2, told: 0, would_tell: 1, last_told_at: null }];
+        detail: 'count', stopped_at: null, guests: 2, told: 0, would_tell: 1, last_told_at: null }];
       return 'x1';
     });
   });
@@ -1163,14 +1177,17 @@ test('hosts: an organizer adds a host by ticket type, company and a picked guest
   await page.locator('#ho-guest-in').fill('Jan Nowak (Fabrikam)');
   await page.locator('#ho-guest-add').click();
   await expect(page.locator('#ho-guests button')).toHaveText(['Jan Nowak (Fabrikam)']);
+  await expect(page.locator('#ho-detail')).toHaveValue('names');
+  await page.locator('#ho-detail').selectOption('count');
   await page.locator('#ho-save').click();
   await expect(page.locator('#ho-form')).toBeHidden();
   expect(sent).toEqual({ p_event_id: EVENT_ID, p_host_id: null, p_name: 'Anna Lis', p_email: 'anna@example.test',
-    p_companies: ['Fabrikam'], p_ticket_types: ['Speaker'], p_attendee_ids: ['h2'] });
+    p_companies: ['Fabrikam'], p_ticket_types: ['Speaker'], p_attendee_ids: ['h2'], p_detail: 'count' });
   const row = page.locator('#ho-body tr').first();
   await expect(row).toContainText('Anna Lis');
   await expect(row).toContainText('2 guests');
   await expect(row).toContainText('Speaker, Fabrikam, 1 guest picked');
+  await expect(row).toContainText('Told how many, no names');
   // Test mode: nothing is sent, the organizer sees who would have been told.
   await expect(row).toContainText('1 would have been told');
 });

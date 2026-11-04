@@ -47,8 +47,22 @@ export function normalizeToken(raw) {
 // What the phone shows. tone: ok (green), warn (amber), stop (red), wait
 // (grey, offline). `who` is { first_name, ticket_type } when the server sent
 // one (online, single scan); a scanner never holds names otherwise.
-export function verdictFor(result, who) {
+// kind is the scan point's: at an exit (migration 159) nobody is checked
+// in, and nobody is stopped from leaving.
+export function verdictFor(result, who, kind) {
   const name = who && who.first_name ? who.first_name + (who.ticket_type ? ' · ' + who.ticket_type : '') : '';
+  if (kind === 'exit') {
+    switch (result) {
+      case 'out':           return { tone: 'ok',   title: 'Left', text: name ? 'Goodbye, ' + name + '.' : 'Their exit is recorded.' };
+      case 'not_in':        return { tone: 'warn', title: 'Never checked in', text: (name ? name + ' is' : 'They are') + ' on the list but never checked in. Let them out.' };
+      case 'queued':        return { tone: 'wait', title: 'Saved', text: 'Offline: their exit is saved, and it will be sent when the connection is back.' };
+      case 'unknown_token':
+      case 'not_listed':    return { tone: 'warn', title: 'Not on the list', text: 'This code is not on the guest list. Let them out.' };
+      case 'revoked':       return { tone: 'warn', title: 'Old badge', text: 'A newer badge was printed for this guest. Let them out.' };
+      case 'wrong_event':   return { tone: 'warn', title: 'Code for another event', text: 'Let them out.' };
+      default:              return { tone: 'stop', title: 'Not recorded', text: 'Try again, or let them out.' };
+    }
+  }
   switch (result) {
     case 'ok':             return { tone: 'ok',   title: 'Checked in', text: name || 'Welcome in.' };
     case 'duplicate':      return { tone: 'warn', title: 'Already checked in', text: name ? name + '. Let them through if it is the same person.' : 'Let them through if it is the same person.' };

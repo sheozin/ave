@@ -227,7 +227,9 @@ async function refresh() {
   const c = cfg.data;
   const srv = Date.parse(c.server_now);
   if (Number.isFinite(srv)) clockOffset = srv - Date.now();
-  $('pt-name').textContent = c.scan_point.name + (c.scan_point.kind === 'interior' ? ' (session)' : '');
+  $('pt-name').textContent = c.scan_point.name + (c.scan_point.kind === 'interior' ? ' (session)' : c.scan_point.kind === 'exit' ? ' (exit)' : '');
+  // Kept with the pairing, so an offline phone still words an exit right.
+  if (DEV.kind !== c.scan_point.kind) { DEV.kind = c.scan_point.kind; write(STORE, DEV); }
   $('ev-name').textContent = c.event.name;
   $('mode-pill').textContent = c.status === 'test' ? 'Test mode' : 'Live';
   $('mode-pill').className = 'sx-pill' + (c.status === 'test' ? ' test' : '');
@@ -331,19 +333,19 @@ async function handle(raw, fromCamera) {
   if (!shouldAccept(seen, tok, Date.now())) return;
   // Offline the phone can only say whether the code is on the list; the
   // server decides first scan or repeat (spec, Offline model).
-  if (!tokenSet.has(tok)) { show(verdictFor(oldSet.has(tok) ? 'revoked' : 'not_listed')); }
+  if (!tokenSet.has(tok)) { show(verdictFor(oldSet.has(tok) ? 'revoked' : 'not_listed', null, DEV && DEV.kind)); }
   const item = { client_id: crypto.randomUUID(), qr_token: tok, scanned_at: correctedIso(Date.now(), clockOffset), action: 'checkin' };
   write(OUTBOX, [...read(OUTBOX, []), item]);
   renderNet();
-  if (!navigator.onLine) { if (tokenSet.has(tok)) show(verdictFor('queued')); return; }
+  if (!navigator.onLine) { if (tokenSet.has(tok)) show(verdictFor('queued', null, DEV && DEV.kind)); return; }
   // One fresh item on its own gets the guest's name back (record-scans).
   const res = await send([item]);
   if (res && res.results && item.client_id in res.results) {
     const r = res.results[item.client_id];
-    if (r !== 'error') show(verdictFor(r, res.who && res.who[item.client_id]));
-    else if (tokenSet.has(tok)) show(verdictFor('queued'));
+    if (r !== 'error') show(verdictFor(r, res.who && res.who[item.client_id], DEV && DEV.kind));
+    else if (tokenSet.has(tok)) show(verdictFor('queued', null, DEV && DEV.kind));
   } else if (tokenSet.has(tok)) {
-    show(verdictFor('queued'));
+    show(verdictFor('queued', null, DEV && DEV.kind));
   }
 }
 

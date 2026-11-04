@@ -76,3 +76,20 @@ describe('feedback', () => {
   });
 });
 
+
+describe('exit points (migration 159)', () => {
+  it('records leaving, never stops anyone, and words offline right', () => {
+    expect(page.verdictFor('out', { first_name: 'Ola', ticket_type: null }, 'exit')).toEqual({ tone: 'ok', title: 'Left', text: 'Goodbye, Ola.' });
+    expect(page.verdictFor('not_in', null, 'exit').tone).toBe('warn');
+    expect(page.verdictFor('not_in', null, 'exit').text).toContain('Let them out');
+    for (const r of ['unknown_token', 'not_listed', 'revoked', 'wrong_event']) expect(page.verdictFor(r, null, 'exit').tone).toBe('warn');
+    expect(page.verdictFor('queued', null, 'exit').title).toBe('Saved');
+    // A door still checks in.
+    expect(page.verdictFor('ok', null, 'entrance').title).toBe('Checked in');
+  });
+  it('an exit follows the door switch on the server', () => {
+    const on = { multi_point_scanning: false, entrance_scanning: true, session_scanning: false };
+    expect(server.scanPointRefusal('exit', on)).toBeNull();
+    expect(server.scanPointRefusal('exit', { ...on, entrance_scanning: false })).toMatch(/Door scanning is switched off/);
+  });
+});

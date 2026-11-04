@@ -5,7 +5,7 @@
 // equal by tests/checkin-scanner-policy.spec.ts). Plain TypeScript with no
 // imports so vitest and the browser copy can load it.
 
-export type ScanPointKind = 'entrance' | 'interior'
+export type ScanPointKind = 'entrance' | 'interior' | 'exit'
 
 export interface ScanSettings {
   multi_point_scanning: boolean   // commercial: what the plan permits (admin-set)
@@ -18,7 +18,8 @@ export interface ScanSettings {
 // refusal names the setting and says what to do: someone at a door needs
 // to know whether to fetch the organizer or walk to the desk.
 export function scanPointRefusal(kind: ScanPointKind, s: ScanSettings): string | null {
-  if (kind === 'entrance') {
+  // An exit (migration 159) is a door: it follows the door switch.
+  if (kind === 'entrance' || kind === 'exit') {
     return s.entrance_scanning ? null
       : 'Door scanning is switched off for this event. Ask the organizer to turn it on in Setup, or check people in at the desk.'
   }

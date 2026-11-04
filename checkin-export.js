@@ -16,9 +16,11 @@ export const WHAT = {
   forbidden: 'Undo refused',
   test_cap: 'Refused: test check-ins used up',
   outside_window: 'Refused: check-in closed',
+  out: 'Left (exit scan)',
+  not_in: 'Left, never checked in',
 };
 const GROUP = { checkins: ['ok', 'undo'], badges: ['new_badge'] };
-const isProblem = (k) => !GROUP.checkins.includes(k) && !GROUP.badges.includes(k);
+const isProblem = (k) => !GROUP.checkins.includes(k) && !GROUP.badges.includes(k) && k !== 'out';
 
 const fmtCache = new Map();
 export function localParts(iso, timeZone) {
@@ -46,14 +48,16 @@ function inWindow(time, o) {
   return (!o.from || hm >= o.from) && (!o.to || hm <= o.to);
 }
 
-// Which days each guest was here, for events that run over several days.
-// A guest is checked in once; on later days they show up as repeat scans
-// ('duplicate'), or as check-ins at session doors. A day counts when the
-// last of their ok / duplicate / undo scans that day is not an undo. A
-// blocked old badge ('revoked') is not the guest.
+// Which days each guest was scanned, for events that run over several
+// days. A guest is checked in once; on later days they show up as repeat
+// scans ('duplicate'), scans at session doors, or leaving through an exit
+// ('out', migration 159). A day counts when the last of those that day is
+// not an undo. A blocked old badge ('revoked') is not the guest. A guest
+// who walked past every scanner on a day is not seen that day: the export
+// says "Scanned on", not "Here on", for that reason.
 export function presenceByDay(activity, timeZone) {
   const last = new Map();
-  const sorted = activity.filter(r => r.attendee_id && (r.kind === 'ok' || r.kind === 'duplicate' || r.kind === 'undo'))
+  const sorted = activity.filter(r => r.attendee_id && (r.kind === 'ok' || r.kind === 'duplicate' || r.kind === 'out' || r.kind === 'undo'))
     .sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
   for (const r of sorted) last.set(r.attendee_id + '|' + localParts(r.at, timeZone).date, r.kind);
   const out = new Map();
@@ -96,7 +100,7 @@ export function attendanceTable(attendees, activity, timeZone, o) {
   const days = dayCounts(attendees, activity, timeZone).map(x => x.date);
   const perDay = days.length > 1 ? days : [];
   const head = ['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Source', 'Checked in (date)', 'Checked in (time)',
-    'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', ...perDay.map(d => 'Here on ' + d)];
+    'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', ...perDay.map(d => 'Scanned on ' + d)];
   const rows = [];
   for (const a of attendees) {
     if (o.ticket && a.ticket_type !== o.ticket) continue;
@@ -108,7 +112,7 @@ export function attendanceTable(attendees, activity, timeZone, o) {
     const place = how ? placeOf(how) : '';
     const here = hereOn(a);
     if (arrived) {
-      // The day filter means "here that day", not "first checked in that day".
+      // The day filter means "scanned that day", not "first checked in that day".
       if (o.day && !here.has(o.day)) continue;
       // From/To filter the check-in time, so only on the day of the check-in.
       if ((!o.day || o.day === at.date) && !inWindow(at.time, o)) continue;

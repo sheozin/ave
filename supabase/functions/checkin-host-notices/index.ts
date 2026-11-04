@@ -9,7 +9,8 @@
 //   test    the event is in test mode (the organizer sees "would have told")
 //   stopped the host pressed the stop link, or their address was changed
 //   undone  the guest's check-in was undone or redone since
-//   cap     the address had 60 emails today, or the event 600
+//   cap     the address had 60 emails today, or the event 600 (100 for an
+//           event nobody paid for, migration 158)
 //   failed  Resend refused the address for good (a 4xx other than 429)
 //   late    still unsent after 2 hours (Resend down, say): old news
 // Caps count leod_checkin_host_emails, one row per email, which deleting a
@@ -22,6 +23,7 @@ import { hostEmail, fromDisplayName } from '../_shared/host-email.ts'
 const JOB = 'checkin-host-notices'
 const HOST_DAY_CAP = 60
 const EVENT_DAY_CAP = 600
+const UNPAID_EVENT_DAY_CAP = 100
 const MAX_EMAILS_A_RUN = 40
 const MAX_GUESTS_AN_EMAIL = 25
 const STOP_URL = 'https://app.cuedeck.io/checkin/host-stop?t='
@@ -85,7 +87,7 @@ Deno.serve(async (req) => {
     const rows: Row[] = []
     for (let i = 0; i < claimedIds.length; i += 100) {
       const { data, error } = await sb.from('leod_checkin_host_notices')
-        .select('id, event_id, host_id, attendee_id, checked_in_at, created_at, leod_checkin_hosts(name, email, stop_token, stopped_at), leod_checkin_attendees(first_name, last_name, company, checked_in_at)')
+        .select('id, event_id, host_id, attendee_id, checked_in_at, created_at, leod_checkin_hosts(name, email, stop_token, stopped_at, detail), leod_checkin_attendees(first_name, last_name, company, checked_in_at)')
         .in('id', claimedIds.slice(i, i + 100))
       if (error) throw new Error('read: ' + error.message)
       rows.push(...(data ?? []))
@@ -117,24 +119,25 @@ Deno.serve(async (req) => {
       // One host's trouble must not stop the others: note it, move on.
       try {
         if (!events.has(eventId)) {
-          const [{ data: ev, error: evErr }, { data: ent, error: entErr }] = await Promise.all([
+          const [{ data: ev, error: evErr }, { data: ent, error: entErr }, { data: full, error: fullErr }] = await Promise.all([
             sb.from('leod_events').select('name, timezone').eq('id', eventId).maybeSingle(),
             sb.from('leod_checkin_entitlements').select('status, white_label').eq('event_id', eventId).maybeSingle(),
+            sb.rpc('checkin_event_full_email', { p_event_id: eventId }),
           ])
-          if (evErr || entErr) throw new Error('event: ' + (evErr || entErr)!.message)
-          events.set(eventId, ev && ent ? { ...ev, ...ent } : null)
+          if (evErr || entErr || fullErr) throw new Error('event: ' + (evErr || entErr || fullErr)!.message)
+          events.set(eventId, ev && ent ? { ...ev, ...ent, cap: full === true ? EVENT_DAY_CAP : UNPAID_EVENT_DAY_CAP } : null)
           eventSent.set(eventId, await countSent(eventId, day))
         }
         const ev = events.get(eventId)
         if (!ev || ev.status !== 'live') { await skip(ids, 'test'); continue }
         const h = list[0].leod_checkin_hosts
         const to = String(h.email).toLowerCase()
-        if ((eventSent.get(eventId) ?? 0) >= EVENT_DAY_CAP || await countSent(eventId, day, to) >= HOST_DAY_CAP) {
+        if ((eventSent.get(eventId) ?? 0) >= ev.cap || await countSent(eventId, day, to) >= HOST_DAY_CAP) {
           await skip(ids, 'cap'); continue
         }
         const m = hostEmail({
           hostName: h.name, eventName: ev.name, timeZone: ev.timezone, whiteLabel: !!ev.white_label,
-          stopUrl: STOP_URL + h.stop_token,
+          stopUrl: STOP_URL + h.stop_token, countOnly: h.detail === 'count',
           arrivals: list.map((r: Row) => ({
             name: [r.leod_checkin_attendees.first_name, r.leod_checkin_attendees.last_name].filter(Boolean).join(' ') || 'A guest',
             company: r.leod_checkin_attendees.company || null, at: r.checked_in_at,

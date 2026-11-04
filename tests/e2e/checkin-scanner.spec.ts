@@ -38,7 +38,8 @@ test('an unpaired phone pairs with a code, then shows where it scans', async ({ 
   await expect(page.locator('#ev-name')).toHaveText('Probe Summit');
   await expect(page.locator('#net')).toContainText('2 codes on this phone');
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('cuedeck.scanner.v1') || '{}'));
-  expect(stored).toEqual({ device_key: KEY, event_id: EVENT_ID, label: 'Door phone' });
+  // The point's kind is kept with the pairing, so an offline phone words an exit right.
+  expect(stored).toEqual({ device_key: KEY, event_id: EVENT_ID, label: 'Door phone', kind: 'entrance' });
 });
 
 test('a bad pairing code says so and pairs nothing', async ({ page }) => {
@@ -70,6 +71,35 @@ test('a code on the list checks in and shows the name the server sent', async ({
   expect(item.action).toBe('checkin');
   expect(item).not.toHaveProperty('attendee_id');
   await expect(page.locator('#net')).not.toContainText('waiting');
+});
+
+test('at an exit: says goodbye, never stops anyone, and words offline as saved', async ({ page, context }) => {
+  await paired(page, { config: CONFIG({ scan_point: { name: 'Hall exit', kind: 'exit' } }) });
+  const results = ['out', 'not_in'];
+  await fn(page, 'checkin-record-scans', (b) => {
+    const cid = (b.items as { client_id: string }[])[0].client_id;
+    const r = results.shift() ?? 'out';
+    return { body: { ok: true, errors: [], results: { [cid]: r }, who: r === 'out' ? { [cid]: { first_name: 'Ewa', ticket_type: null } } : {} } };
+  });
+  await page.goto(URL_);
+  await expect(page.locator('#pt-name')).toHaveText('Hall exit (exit)');
+  await page.locator('#man-code').fill(TOK);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Left');
+  await expect(page.locator('#v-text')).toHaveText('Goodbye, Ewa.');
+  await page.waitForTimeout(2600);   // the same code again only after it left view
+  await page.locator('#man-code').fill(TOK);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Never checked in');
+  await page.locator('#man-code').fill(OTHER);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Not on the list');
+  await expect(page.locator('#v-text')).toHaveText('This code is not on the guest list. Let them out.');
+  await context.setOffline(true);
+  await page.waitForTimeout(2600);
+  await page.locator('#man-code').fill(TOK);
+  await page.locator('#man-btn').click();
+  await expect(page.locator('#v-title')).toHaveText('Saved');
 });
 
 test('a code not on the list is a red stop, still recorded', async ({ page }) => {

@@ -196,6 +196,7 @@ Deno.serve(async (req) => {
   // Validated once here rather than per item: the migration 049 trigger
   // rejects a scan_point_id belonging to another event, which would
   // otherwise fail the insert for every item in the batch.
+  let isExit = false
   if (scan_point_id) {
     const { data: sp, error: spErr } = await sb.from('leod_checkin_scan_points')
       .select('id, kind').eq('id', scan_point_id).eq('event_id', event_id).maybeSingle()
@@ -217,6 +218,12 @@ Deno.serve(async (req) => {
       session_scanning: !!entRow.session_scanning,
     })
     if (refusal) return fail(403, refusal)
+    // An exit (migration 159) records guests leaving, from a paired
+    // scanner only: a desk checks people in, it does not see them out.
+    if (sp.kind === 'exit') {
+      if (!deviceId) return fail(400, 'An exit is scanned by a paired scanner, not at the desk.')
+      isExit = true
+    }
   } else if (deviceId) {
     return fail(403, 'This scanner is not paired to a scan point. Pair it again from the desk.')
   }
@@ -262,7 +269,7 @@ Deno.serve(async (req) => {
   const who: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
   const whoByAttendee: Record<string, { first_name: string | null; ticket_type: string | null }> = {}
   // Names only for one fresh scan (see the header); the quota is claimed
-  // after the scan, and only if it checked the guest in.
+  // after the scan, and only if it checked the guest in (or, at an exit, saw them out).
   const nameEligible = !!deviceId && valid.length === 1
     && Math.abs(Date.now() - Date.parse(valid[0].scanned_at)) <= NAME_FRESH_MS
   const oldByToken = new Map<string, string>()
@@ -301,7 +308,10 @@ Deno.serve(async (req) => {
     // but the event can go live between our entitlement read and the RPC.
     const p_live_time_ok = liveTimeOk(Date.parse(it.scanned_at), nowMs)
       && isWithinWindow(it.scanned_at, evRow.date, evRow.timezone)
-    const { data: result, error } = await sb.rpc('checkin_apply_scan', {
+    const { data: result, error } = isExit ? await sb.rpc('checkin_apply_exit_scan', {
+      p_event_id: event_id, p_client_id: it.client_id, p_attendee_id: it.attendee_id,
+      p_scanned_at: it.scanned_at, p_operator_id: operatorId, p_scan_point_id: scan_point_id, p_device_id: deviceId,
+    }) : await sb.rpc('checkin_apply_scan', {
       p_event_id: event_id,
       p_client_id: it.client_id,
       p_attendee_id: it.attendee_id,
@@ -344,7 +354,7 @@ Deno.serve(async (req) => {
       continue
     }
     results[it.client_id] = String(result)
-    if (deviceId && result === 'ok' && whoByAttendee[it.attendee_id]) {
+    if (deviceId && (result === 'ok' || result === 'out') && whoByAttendee[it.attendee_id]) {
       // checkin_apply_scan answers a known client_id with its stored result
       // and inserts nothing, so 'ok' alone does not prove THIS token was
       // checked in: a replayed client_id with another guest's token would

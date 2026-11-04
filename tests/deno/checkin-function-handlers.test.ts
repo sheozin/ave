@@ -196,7 +196,7 @@ Object.defineProperty(Deno, 'serve', {
   configurable: true, writable: true,
   value: (h: (req: Request) => Promise<Response>) => { captured = h; return { finished: Promise.resolve(), shutdown: async () => {} } },
 })
-for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status', 'checkin-post-event-report']) {
+for (const fn of ['checkin-create-checkout', 'checkin-enable-event', 'checkin-import-attendees', 'checkin-send-qr-emails', 'checkin-kiosk-pair', 'checkin-record-scans', 'checkin-invite-staff', 'checkin-add-walk-in', 'checkin-scanner', 'checkin-held', 'checkin-tickets', 'checkin-orders-sweep', 'checkin-register', 'checkin-reminders', 'checkin-invite-guests', 'checkin-webhooks', 'checkin-print-station', 'checkin-email-status', 'checkin-post-event-report', 'checkin-host-notices']) {
   captured = null
   await import(`${FN_DIR}${fn}/index.ts`)
   if (!captured) throw new Error('no handler captured for ' + fn)
@@ -2211,4 +2211,100 @@ Deno.test(`${IMP}: without queued, desk ids in a row are ignored and no results 
   const r = await call(IMP, { event_id: EVENT, rows: deskRows(), dry_run: false })
   assert(r.status === 200 && !('results' in r.body), JSON.stringify(r))
   assert(world.tables.leod_checkin_attendees.every(a => a.id !== IID1 && a.qr_token !== ITOK1), JSON.stringify(world.tables.leod_checkin_attendees))
+})
+
+
+// ── exit scans (159) ──
+const EXIT = 'aaaaaaaa-0000-4000-8000-000000000004'
+Deno.test('checkin-record-scans scanner: an exit records leaving through its own function, never a check-in', async () => {
+  await setupScanner({ point: EXIT })
+  world.tables.leod_checkin_scan_points.push({ id: EXIT, event_id: EVENT, name: 'Hall exit', kind: 'exit' })
+  world.rpcResult.checkin_apply_exit_scan = 'out'
+  const item = scanTok()
+  world.tables.leod_checkin_scan_events.push({ id: crypto.randomUUID(), client_id: item.client_id, event_id: EVENT, attendee_id: ATT, device_id: DEV, result: 'out' })
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [item] })
+  assert(r.status === 200 && (r.body.results as Row)[item.client_id] === 'out', JSON.stringify(r))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_apply_scan'), 'checked someone in at an exit')
+  const c = world.rpcCalls.find(x => x.name === 'checkin_apply_exit_scan')!
+  assert(c.args.p_scan_point_id === EXIT && c.args.p_device_id === DEV && c.args.p_attendee_id === ATT, JSON.stringify(c))
+  assert(((r.body.who as Row)[item.client_id] as Row)?.first_name === 'Ewa', 'no goodbye name')
+})
+Deno.test('checkin-record-scans scanner: an exit follows the door switch', async () => {
+  await setupScanner({ point: EXIT, ent: { entrance_scanning: false } })
+  world.tables.leod_checkin_scan_points.push({ id: EXIT, event_id: EVENT, name: 'Hall exit', kind: 'exit' })
+  const r = await call('checkin-record-scans', { event_id: EVENT, device_key: SCAN_KEY, items: [scanTok()] })
+  assert(r.status === 403 && String(r.body.error).startsWith('Door scanning is switched off'), JSON.stringify(r))
+})
+Deno.test('checkin-record-scans desk: an exit is refused at a desk', async () => {
+  setup('crew', { ent: { checkin_core: true, status: 'live', entrance_scanning: true } })
+  world.tables.leod_checkin_scan_points = [{ id: EXIT, event_id: EVENT, name: 'Hall exit', kind: 'exit' }]
+  world.tables.leod_checkin_attendees = [{ id: ATT, event_id: EVENT }]
+  const r = await call('checkin-record-scans', { event_id: EVENT, scan_point_id: EXIT, items: [scanItem()] })
+  assert(r.status === 400 && String(r.body.error).includes('paired scanner'), JSON.stringify(r))
+  assert(!world.rpcCalls.some(c => c.name === 'checkin_apply_scan' || c.name === 'checkin_apply_exit_scan'), 'applied')
+})
+
+// ── client report page link (158) ──
+Deno.test(`${PR}: the email links the report page when there is a token, and goes without one`, async () => {
+  crSetup(false)
+  world.rpcResult.checkin_client_report_token = '0123456789abcdef0123456789abcdef'
+  let r = await call(PR, {})
+  assert(r.status === 200, JSON.stringify(r))
+  const m = (world.emails ?? []) as { html: string; text: string }[]
+  assert(m[0].html.includes('href="https://app.cuedeck.io/cr/0123456789abcdef0123456789abcdef"'), 'no link')
+  crSetup(false)
+  world.rpcResult.checkin_client_report_token = 'not-a-token'
+  r = await call(PR, {})
+  assert(r.status === 200 && !(world.emails as { html: string }[])[0].html.includes('/cr/'), 'linked a bad token')
+})
+
+// ── host notices (154, 158) ──
+const HN = 'checkin-host-notices'
+async function hnCall() {
+  const res = await handlers[HN](new Request('http://stub.local/functions/v1/' + HN, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-cron-secret': 's'.repeat(64) }, body: '{}',
+  }))
+  return { status: res.status, body: await res.json() }
+}
+function hnSetup(detail: 'names' | 'count', full: boolean, sentToday = 0) {
+  setup('none', { ent: { checkin_core: true, status: 'live', white_label: false } })
+  world.rpcResult.checkin_host_notices_cron_ok = true
+  world.rpcResult.checkin_event_full_email = full
+  const at = new Date(Date.now() - 60000).toISOString()
+  world.rpcResult.checkin_host_notices_claim = [1]
+  world.tables.leod_checkin_job_runs = []
+  world.tables.leod_checkin_host_notices = [{ id: 1, event_id: EVENT, host_id: 'h1', attendee_id: ATT, checked_in_at: at, created_at: at,
+    leod_checkin_hosts: { name: 'Anna', email: 'anna@host.test', stop_token: 'f'.repeat(48), stopped_at: null, detail },
+    leod_checkin_attendees: { first_name: 'Marta', last_name: 'Kowalczyk', company: 'Nordlight', checked_in_at: at } }]
+  world.tables.leod_checkin_host_emails = Array.from({ length: sentToday }, (_, i) => ({ id: i, event_id: EVENT, email: 'x' + i + '@host.test', sent_at: at }))
+}
+Deno.test(`${HN}: a host on count gets how many and when, never a name`, async () => {
+  hnSetup('count', true)
+  const r = await hnCall()
+  assert(r.status === 200, JSON.stringify(r))
+  const m = (world.emails ?? []) as { to: string; subject: string; html: string; text: string }[]
+  assert(m.length === 1 && m[0].to === 'anna@host.test', JSON.stringify(m.map(x => x.to)))
+  for (const x of ['Marta', 'Kowalczyk', 'Nordlight']) assert(!(m[0].html + m[0].text + m[0].subject).includes(x), 'leaked ' + x)
+  assert(m[0].subject.startsWith('A guest of yours has arrived'), m[0].subject)
+})
+Deno.test(`${HN}: an event nobody paid for stops at 100 emails a day; a paid one does not`, async () => {
+  hnSetup('names', false, 100)
+  let r = await hnCall()
+  assert(r.status === 200 && !(world.emails?.length), JSON.stringify(r))
+  assert(world.tables.leod_checkin_host_notices[0].skipped === 'cap', JSON.stringify(world.tables.leod_checkin_host_notices[0]))
+  hnSetup('names', true, 100)
+  r = await hnCall()
+  assert(r.status === 200 && world.emails?.length === 1, JSON.stringify(r))
+  assert(String((world.emails![0] as Row).html).includes('Marta Kowalczyk'), 'name missing on names')
+})
+
+// ── registration page: hosts told by name (158) ──
+Deno.test(`${RG} config: says hosts may be told only when a host on names is active`, async () => {
+  for (const [hosts, want] of [[[], false], [[{ event_id: EVENT, stopped_at: null, detail: 'count' }], false],
+                               [[{ event_id: EVENT, stopped_at: null, detail: 'names' }], true]] as [Row[], boolean][]) {
+    regSetup()
+    world.tables.leod_checkin_hosts = hosts
+    const r = await guest({ action: 'config', code: 'VTQBZ3ENFV' })
+    assert(r.status === 200 && r.body.hosts_notice === want, JSON.stringify([hosts, r.body.hosts_notice, r.status]))
+  }
 })

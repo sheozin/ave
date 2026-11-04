@@ -4647,7 +4647,7 @@ async function ksLoadPoints(sel) {
   for (const r of rows) {
     const o = document.createElement('option');
     o.value = r.id;
-    o.textContent = r.name + (r.kind === 'interior' ? ' (session room)' : ' (door)');
+    o.textContent = r.name + (r.kind === 'interior' ? ' (session room)' : r.kind === 'exit' ? ' (exit)' : ' (door)');
     sel.appendChild(o);
   }
   sel.disabled = false;

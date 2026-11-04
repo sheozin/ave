@@ -22,6 +22,7 @@
 !/cuedeck-pair-printer.html
 !/cuedeck-register.html
 !/cuedeck-checkin-certificate.html
+!/cuedeck-checkin-client-report.html
 !/cuedeck-i18n.js
 !/cuedeck-auth.js
 !/cuedeck-agent-1-incident-advisor.js
@@ -43,6 +44,7 @@
 !/checkin-badge.js
 !/checkin-badge-pdf.js
 !/checkin-certificate.js
+!/checkin-client-report.js
 !/vendor
 !/print-helper
 !/embed.js

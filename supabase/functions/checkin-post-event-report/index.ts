@@ -121,7 +121,11 @@ Deno.serve(async (req) => {
           attachments = [{ filename: 'guest-list.csv', content_type: 'text/csv; charset=utf-8',
                            content: base64Utf8(guestCsv(guests ?? [], rep?.event?.timezone || 'UTC')) }]
         }
-        const m = clientReportEmail(rep, ent?.registration_host_name ?? null)
+        // The page link (158). A failed read sends the email without it.
+        const { data: tok, error: tokErr } = await sb.rpc('checkin_client_report_token', { p_event_id: d.event_id })
+        if (tokErr) failures.push(d.event_id + ' client page link: ' + tokErr.message)
+        const pageUrl = typeof tok === 'string' && /^[0-9a-f]{32}$/.test(tok) ? APP + '/cr/' + tok : null
+        const m = clientReportEmail(rep, ent?.registration_host_name ?? null, pageUrl)
         for (const to of d.recipients) {
           const res = await sendEmail({ to, replyTo, subject: m.subject, html: m.html, text: m.text, attachments,
                                         fromName: fromDisplayName(rep?.event?.name ?? ''), tags: [{ name: 'type', value: 'checkin_client_report' }],

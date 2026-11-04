@@ -5,6 +5,10 @@
 // guest's name is the point; the rest of the guest record stays out.
 // Every line carries the stop link. Plain imports only, so vitest can load
 // it (tests/checkin-host-email.spec.ts).
+//
+// A host on 'count' (migration 158) gets no names at all: how many of
+// their guests arrived and when. The organizer picks that when the host
+// only needs to know to come down to the lobby.
 
 export interface HostArrival { name: string; company: string | null; at: string }
 export interface HostEmailInput {
@@ -14,6 +18,7 @@ export interface HostEmailInput {
   arrivals: HostArrival[]
   stopUrl: string
   whiteLabel?: boolean
+  countOnly?: boolean
 }
 
 export function esc(s: string): string {
@@ -40,10 +45,12 @@ export function hostTime(iso: string, timeZone: string | null): string {
 }
 
 export function hostEmail(m: HostEmailInput): { subject: string; html: string; text: string } {
-  const list = [...m.arrivals].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  const sorted = [...m.arrivals].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  // No names past this line on 'count': every arrival becomes "A guest".
+  const list = m.countOnly ? sorted.map(a => ({ name: 'A guest', company: null, at: a.at })) : sorted
   const first = list[0]
   const subject = headerSafe(list.length === 1
-    ? first.name + ' has arrived at ' + m.eventName
+    ? (m.countOnly ? 'A guest of yours has arrived at ' : first.name + ' has arrived at ') + m.eventName
     : list.length + ' of your guests have arrived at ' + m.eventName, 160)
   const who = (a: HostArrival) => a.name + (a.company ? ' (' + a.company + ')' : '')
   const rows = list.map(a => `

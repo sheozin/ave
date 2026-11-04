@@ -33,7 +33,7 @@ describe('attendanceTable', () => {
   it('one row per guest, with the desk and staff of the check-in that stands', () => {
     const t = attendanceTable([ANA, BEN, CAL], ACT, TZ, {});
     expect(t.head).toEqual(['First name', 'Last name', 'Email', 'Company', 'Ticket', 'Source', 'Checked in (date)', 'Checked in (time)',
-      'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', 'Here on 2026-12-09', 'Here on 2026-12-10']);
+      'Desk or door', 'Checked in by', 'Badge printed at', 'Badges replaced', 'Scanned on 2026-12-09', 'Scanned on 2026-12-10']);
     expect(t.rows).toHaveLength(3);
     expect(t.rows[0]).toEqual(['Ana', 'Nowak', 'ana@x.io', 'Contoso', 'VIP', 'Imported', '2026-12-09', '08:41:12', 'Desk 2', 'Marek', '2026-12-09 08:41:20', 1, 'Yes', '']);
     expect(t.rows[1].slice(6, 10)).toEqual(['', '', '', '']);
@@ -67,13 +67,20 @@ describe('attendance per day', () => {
     expect([...p.get('d')]).toEqual(['2026-12-09']);
     expect([...p.get('e')]).toEqual(['2026-12-10']);
   });
+  it('leaving through an exit counts as scanned that day, and reads in plain words', () => {
+    const act = [row('2026-12-09T07:41:12Z', 'ok', ANA), row('2026-12-10T16:00:00Z', 'out', ANA, { place: 'Exit' })];
+    expect([...presenceByDay(act, TZ).get('a')]).toEqual(['2026-12-09', '2026-12-10']);
+    const t = activityTable(act, TZ, { what: 'problems' });
+    expect(t.rows).toEqual([]);
+    expect(activityTable(act, TZ, {}).rows[1][7]).toBe('Left (exit scan)');
+  });
   it('counts guests here each day', () => {
     expect(dayCounts([ANA, DAN, EVE, BEN], MULTI, TZ)).toEqual([{ date: '2026-12-09', count: 2 }, { date: '2026-12-10', count: 2 }]);
   });
   it('the day filter means here that day, and each day has a column', () => {
     const t = attendanceTable([ANA, DAN, EVE], MULTI, TZ, { day: '2026-12-10' });
     expect(t.rows.map(r => r[0])).toEqual(['Ana', 'Eve']);
-    expect(t.head.slice(-2)).toEqual(['Here on 2026-12-09', 'Here on 2026-12-10']);
+    expect(t.head.slice(-2)).toEqual(['Scanned on 2026-12-09', 'Scanned on 2026-12-10']);
     expect(t.rows[0].slice(-2)).toEqual(['Yes', 'Yes']);
   });
   it('a one-day event gets no extra columns', () => {

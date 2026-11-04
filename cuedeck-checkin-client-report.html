@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Check-in report</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: 'Geist'; src: url('/fonts/geist-var.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+:root { --ink: #16181D; --soft: #5B616E; --line: #E3E1DA; --paper: #FFFFFF; --page: #EFEDE7; --accent: #1F3A5F; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+.bar { max-width: 794px; margin: 0 auto; padding: 20px 16px 12px; display: flex; align-items: center; gap: 12px; }
+.bar p { margin: 0; flex: 1; color: var(--soft); font-size: 14px; }
+.bar button { font: inherit; font-weight: 650; font-size: 15px; padding: 11px 18px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
+.bar button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* A4 portrait on paper; on screen the same sheet, as wide as fits. */
+.sheet { max-width: 794px; margin: 0 auto 40px; background: var(--paper); padding: 48px 52px 40px; box-shadow: 0 10px 40px rgba(22,24,29,.12); }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 40px; border-bottom: 3px solid var(--accent); padding-bottom: 14px; }
+.top img { max-height: 44px; max-width: 200px; object-fit: contain; }
+.kind { font-size: 15px; font-weight: 650; color: var(--accent); }
+header h1 { font-size: 32px; line-height: 1.15; letter-spacing: -.01em; margin: 28px 0 6px; overflow-wrap: anywhere; }
+.sub { margin: 0; color: var(--soft); font-size: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 28px 0 0; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+.tile b { display: block; font-size: 34px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile span { display: block; margin-top: 8px; color: var(--soft); font-size: 14px; line-height: 1.4; }
+.span { color: var(--soft); font-size: 14px; margin: 16px 0 0; }
+h2 { font-size: 16px; margin: 32px 0 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: var(--soft); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+th:not(:first-child), td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 36px; color: var(--soft); font-size: 13px; }
+.msg { max-width: 520px; margin: 12vh auto; background: #fff; border-radius: 16px; padding: 28px; box-shadow: 0 10px 40px rgba(22,24,29,.08); }
+.msg h1 { margin: 0 0 8px; font-size: 22px; }
+.msg p { margin: 0; color: var(--soft); line-height: 1.55; }
+@media (max-width: 560px) {
+  .sheet { padding: 28px 18px; margin: 0 0 24px; }
+  header h1 { font-size: 26px; }
+  .tiles { grid-template-columns: 1fr; }
+  th, td { padding: 8px 6px; }
+}
+@media print {
+  @page { size: A4 portrait; margin: 14mm; }
+  body { background: #fff; }
+  .bar { display: none !important; }
+  .sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+  tr { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div id="app" aria-live="polite"><p class="msg" style="text-align:center">…</p></div>
+<script type="module" src="/checkin-client-report.js"></script>
+</body>
+</html>

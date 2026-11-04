@@ -292,10 +292,12 @@
     </div>
     <div id="cr-box" hidden>
       <h3 class="sc-h">Report for your client</h3>
-      <p class="sc-p">At 08:00 the morning after the event, we email the headline numbers and arrivals by ticket type to these addresses. Replies come to you. Live events only.</p>
+      <p class="sc-p">At 08:00 the morning after the event, we email the headline numbers and arrivals by ticket type to these addresses, with a link to the same report as a page they can save as a PDF. Replies come to you. Live events only.</p>
+      <p class="small" id="cr-own" hidden>Until this event is paid for, the report can only go to addresses at your own company.</p>
       <div class="field"><label for="cr-to">Email addresses <span class="small">(up to 5, separated by commas)</span></label><input id="cr-to" maxlength="1300" placeholder="name@client.com" autocomplete="off" inputmode="email"></div>
       <label class="small" style="display:flex;gap:8px;align-items:flex-start;margin-top:8px"><input type="checkbox" id="cr-csv" style="margin-top:3px"><span>Attach the guest list as a CSV: names, companies, ticket types and arrival times. Guests' names leave CueDeck in this file, so only tick this if your client may have them.</span></label>
       <div class="xp-foot"><span class="small" id="cr-state"></span><span style="flex:1"></span><button class="btn btn-p" id="cr-save" type="button">Save</button></div>
+      <p class="small" id="cr-page" hidden><a id="cr-page-a" target="_blank" rel="noopener">Open the report your client received</a></p>
       <div class="ok" id="cr-ok"></div><div class="err" id="cr-err"></div>
     </div>
     <div id="xp-box">
@@ -356,13 +358,15 @@
     <div class="err" id="al-err"></div>
     <div id="ho-box" hidden style="margin-top:18px">
       <div class="toggle"><div><b>Hosts</b>
-        <p>Email a host the moment their guests check in: a sales lead and their clients, or speaker care and the speakers. Hosts get each guest's name, company and arrival time, nothing else, and can stop the emails with one click. Test mode sends nothing and shows who would have been told.</p></div>
+        <p>Email a host the moment their guests check in: a sales lead and their clients, or speaker care and the speakers. Choose for each host: each guest's name, company and arrival time, or only how many arrived and when. Either way nothing else about the guest, and the host can stop the emails with one click. The registration page tells guests a host may be told when they arrive. Test mode sends nothing and shows who would have been told.</p></div>
         <div><button class="btn btn-s" id="ho-add" type="button">Add host</button></div></div>
       <form class="ho-form" id="ho-form" hidden>
         <div class="row2">
           <div class="field"><label for="ho-name">Name</label><input id="ho-name" maxlength="120" autocomplete="off"></div>
           <div class="field"><label for="ho-email">Email</label><input id="ho-email" type="email" maxlength="254" autocomplete="off"></div>
         </div>
+        <div class="field"><label for="ho-detail">What the host is told</label>
+          <select id="ho-detail"><option value="names">Each guest's name, company and arrival time</option><option value="count">Only how many arrived, and when (no names)</option></select></div>
         <div><b style="font-size:13px">Their guests</b><p class="small" style="margin:2px 0 0">Anyone matching one of these. Ticket types and companies also catch guests added later.</p></div>
         <div id="ho-tix-f"><span class="small">Ticket types</span><div class="al-opts" id="ho-tix"></div></div>
         <div><span class="small">Companies</span>
@@ -579,14 +583,14 @@
     <div class="err" id="set-err"></div>
     <h3 class="sc-h">Door scanners</h3>
     <p class="sc-p">A phone at a door scans guests' QR codes and checks them in, without a desk. Pair a phone from the desk with "Kiosk or scanner". It keeps only the list of codes, never names, so a phone left on a chair gives nothing away.</p>
-    <div class="toggle"><div><b>Door scanning</b><p>Scanner phones can check people in at the doors below.</p></div><label class="sw"><input type="checkbox" id="sc-door"><span></span></label></div>
+    <div class="toggle"><div><b>Door scanning</b><p>Scanner phones can check people in at the doors below. At an exit they record guests leaving instead, so certificates can show time at the event.</p></div><label class="sw"><input type="checkbox" id="sc-door"><span></span></label></div>
     <div class="toggle" id="sc-sess-row"><div><b>Session scanning</b><p id="sc-sess-p">Scanner phones at session rooms record who attended each session.</p></div><label class="sw"><input type="checkbox" id="sc-sess"><span></span></label></div>
     <div class="err" id="sc-err"></div>
     <table class="tbl sc-tbl"><thead><tr><th>Door or room</th><th>Kind</th><th class="hide-sm">People scanned</th><th></th></tr></thead><tbody id="sc-body"></tbody></table>
     <p class="small" id="sc-empty" hidden>No doors or rooms yet. Add the first one below.</p>
     <form id="sc-add" class="sc-add">
       <input class="search" id="sc-name" maxlength="60" placeholder="Main door" aria-label="Name of the door or room" autocomplete="off">
-      <select class="search" id="sc-kind" aria-label="Kind" style="flex:none"><option value="entrance">Door</option><option value="interior">Session room</option></select>
+      <select class="search" id="sc-kind" aria-label="Kind" style="flex:none"><option value="entrance">Door</option><option value="exit">Exit</option><option value="interior">Session room</option></select>
       <button class="btn btn-s" id="sc-add-btn">Add</button>
     </form>
     <div id="ps-section" hidden>
@@ -975,6 +979,11 @@ function showClientReport(d) {
   $('cr-to').value = d.recipients.join(', ');
   $('cr-csv').checked = !!d.attach_guests;
   $('cr-state').textContent = clientReportState(d);
+  $('cr-own').hidden = !d.own_domain_only;
+  // (158) The page the client got, once sent; a token is 32 hex characters.
+  const tok = /^[0-9a-f]{32}$/.test(d.page_token || '') ? d.page_token : null;
+  $('cr-page').hidden = !tok;
+  if (tok) $('cr-page-a').href = '/cr/' + tok;
 }
 async function loadClientReport() {
   $('cr-err').textContent = '';
@@ -1054,12 +1063,12 @@ async function loadActivity() {
   const o = exportOptions(ATT, ACT, EV.timezone);
   const fill = (id, first, values) => $(id).replaceChildren(el('option', null, first), ...values.map(v => { const x = el('option', null, v); x.value = v; return x; }));
   fill('xp-day', 'All days', o.days); $('xp-day').firstChild.value = '';
-  // Several days: how many guests were here on each (a guest checked in on
-  // day 1 counts on day 2 when scanned again that day).
+  // Several days: how many guests were scanned on each (a guest checked in
+  // on day 1 counts on day 2 only when scanned again that day).
   const perDay = dayCounts(ATT, ACT, EV.timezone);
   const dayName = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString(navigator.language || 'en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
   $('xp-days').hidden = perDay.length < 2;
-  $('xp-days').textContent = perDay.length < 2 ? '' : 'Guests here each day: ' + perDay.map(d => dayName(d.date) + ': ' + d.count).join(', ') + '. Choose a day below to list who was there.';
+  $('xp-days').textContent = perDay.length < 2 ? '' : 'Guests scanned each day: ' + perDay.map(d => dayName(d.date) + ': ' + d.count).join(', ') + '. A guest counts on a later day only if a desk, door, room or exit scanned them that day, so scan at the door every day for full numbers. Choose a day below to list them.';
   fill('xp-ticket', 'All tickets', o.tickets); $('xp-ticket').firstChild.value = '';
   fill('xp-place', 'All', o.places); $('xp-place').firstChild.value = '';
   renderExport();
@@ -1315,6 +1324,7 @@ async function renderHosts() {
   for (const h of HOSTS) {
     const tr = el('tr');
     const who = el('td'); who.append(el('b', null, h.name), el('div', 'ho-sub', h.email));
+    if (h.detail === 'count') who.append(el('div', 'ho-sub', 'Told how many, no names'));
     const rule = [...h.ticket_types, ...h.companies].join(', ') + (h.attendee_ids.length ? (h.ticket_types.length || h.companies.length ? ', ' : '') + h.attendee_ids.length + (h.attendee_ids.length === 1 ? ' guest' : ' guests') + ' picked' : '');
     const g = el('td'); g.append(el('div', null, h.guests + (h.guests === 1 ? ' guest' : ' guests')), el('div', 'ho-sub', rule));
     const told = el('td', null, h.stopped_at ? 'Stopped the emails' : live ? (h.told ? h.told + ' told' : 'None yet') : (h.would_tell ? h.would_tell + ' would have been told' : 'None yet'));
@@ -1347,6 +1357,7 @@ function openHostForm(h) {
   HO_EDIT = h ? h.id : null;
   $('ho-ferr').textContent = '';
   $('ho-name').value = h ? h.name : ''; $('ho-email').value = h ? h.email : '';
+  $('ho-detail').value = h && h.detail === 'count' ? 'count' : 'names';
   HO_COMPS = h ? [...h.companies] : []; HO_GUESTS = h ? [...h.attendee_ids] : [];
   const tix = new Map();
   for (const t of [...ATT.map(a => norm(a.ticket_type)), ...(h ? h.ticket_types : [])]) if (t && !tix.has(t.toLowerCase())) tix.set(t.toLowerCase(), t);
@@ -1387,7 +1398,7 @@ $('ho-form').addEventListener('submit', async (e) => {
   const tix = [...document.querySelectorAll('#ho-tix input:checked')].map(i => i.value);
   $('ho-save').disabled = true;
   const { error } = await sb.rpc('checkin_host_save', { p_event_id: EVENT_ID, p_host_id: HO_EDIT, p_name: $('ho-name').value,
-    p_email: $('ho-email').value, p_companies: HO_COMPS, p_ticket_types: tix, p_attendee_ids: HO_GUESTS });
+    p_email: $('ho-email').value, p_companies: HO_COMPS, p_ticket_types: tix, p_attendee_ids: HO_GUESTS, p_detail: $('ho-detail').value });
   $('ho-save').disabled = false;
   if (error) { $('ho-ferr').textContent = error.message; return; }
   closeHostForm(); renderHosts();
@@ -2517,7 +2528,7 @@ function renderScanPoints() {
     const del = el('button', 'btn btn-s', 'Remove'); del.type = 'button';
     del.onclick = () => removeScanPoint(sp, del);
     const tdDel = el('td'); tdDel.style.textAlign = 'right'; tdDel.appendChild(del);
-    tr.append(el('td', null, sp.name), el('td', null, sp.kind === 'interior' ? 'Session room' : 'Door'),
+    tr.append(el('td', null, sp.name), el('td', null, sp.kind === 'interior' ? 'Session room' : sp.kind === 'exit' ? 'Exit' : 'Door'),
               el('td', 'hide-sm', n == null ? '' : String(n)), tdDel);
     body.appendChild(tr);
   }

@@ -4,9 +4,10 @@
 // shows no certificate. Text nodes only: every value came from a guest
 // list or an organizer.
 //
-// It states what CueDeck recorded: checked in, when, and which rooms the
-// guest was scanned into. Never time spent: scans record entering a room,
-// not leaving it.
+// It states what CueDeck recorded: checked in, when, which rooms the guest
+// was scanned into, and time at the event only where exit scans recorded
+// them leaving (migration 159): the server adds up entry-to-exit stays and
+// leaves out a stay with no exit. Without exit scans there is no time line.
 
 const SB = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -16,22 +17,26 @@ export const T = {
         checkedIn: 'Checked in at {time}.', rooms: 'Also attended: {rooms}.', by: 'Organized by', check: 'Check this certificate at',
         code: 'Code', save: 'Save as PDF', hint: 'Save or print this certificate. It fits one A4 page.',
         noneH: 'This certificate is not available', noneP: 'The link may be incomplete, or the organizer has not issued certificates for this event.',
-        errH: 'Could not load the certificate', errP: 'Check your connection and reload the page.', powered: 'Check-in by CueDeck' },
+        errH: 'Could not load the certificate', errP: 'Check your connection and reload the page.', powered: 'Check-in by CueDeck',
+        time: 'Time at the event, from entry and exit scans: {list}.', range: '{from} to {to}', hm: '{h} h {m} min', m: '{m} min', total: 'Total {dur}.' },
   pl: { kind: 'Certyfikat uczestnictwa', lead: 'Niniejszym potwierdza się, że', attended: 'uczestniczył(a) w wydarzeniu {event}', at: 'w miejscu {venue}', on: 'w dniu {date}',
         checkedIn: 'Rejestracja o {time}.', rooms: 'Obecność także na: {rooms}.', by: 'Organizator', check: 'Sprawdź certyfikat pod adresem',
         code: 'Kod', save: 'Zapisz jako PDF', hint: 'Zapisz lub wydrukuj certyfikat. Mieści się na jednej stronie A4.',
         noneH: 'Ten certyfikat jest niedostępny', noneP: 'Link może być niepełny albo organizator nie wydaje certyfikatów dla tego wydarzenia.',
-        errH: 'Nie udało się wczytać certyfikatu', errP: 'Sprawdź połączenie i odśwież stronę.', powered: 'Rejestracja: CueDeck' },
+        errH: 'Nie udało się wczytać certyfikatu', errP: 'Sprawdź połączenie i odśwież stronę.', powered: 'Rejestracja: CueDeck',
+        time: 'Czas na wydarzeniu według skanów wejścia i wyjścia: {list}.', range: 'od {from} do {to}', hm: '{h} godz. {m} min', m: '{m} min', total: 'Łącznie {dur}.' },
   de: { kind: 'Teilnahmebestätigung', lead: 'Hiermit wird bestätigt, dass', attended: 'an {event} teilgenommen hat', at: 'in {venue}', on: 'am {date}',
         checkedIn: 'Eingecheckt um {time}.', rooms: 'Außerdem anwesend in: {rooms}.', by: 'Veranstalter', check: 'Diese Bestätigung prüfen unter',
         code: 'Code', save: 'Als PDF speichern', hint: 'Speichern oder drucken Sie diese Bestätigung. Sie passt auf eine A4-Seite.',
         noneH: 'Diese Bestätigung ist nicht verfügbar', noneP: 'Der Link ist vielleicht unvollständig, oder der Veranstalter stellt für diese Veranstaltung keine Bestätigungen aus.',
-        errH: 'Die Bestätigung konnte nicht geladen werden', errP: 'Prüfen Sie die Verbindung und laden Sie die Seite neu.', powered: 'Check-in mit CueDeck' },
+        errH: 'Die Bestätigung konnte nicht geladen werden', errP: 'Prüfen Sie die Verbindung und laden Sie die Seite neu.', powered: 'Check-in mit CueDeck',
+        time: 'Zeit auf der Veranstaltung laut Ein- und Ausgangsscans: {list}.', range: '{from} bis {to}', hm: '{h} Std. {m} Min.', m: '{m} Min.', total: 'Insgesamt {dur}.' },
   ar: { kind: 'شهادة حضور', lead: 'نشهد بأن', attended: 'حضر {event}', at: 'في {venue}', on: 'بتاريخ {date}',
         checkedIn: 'سجّل الحضور الساعة {time}.', rooms: 'حضر أيضًا: {rooms}.', by: 'المنظِّم', check: 'تحقق من هذه الشهادة على',
         code: 'الرمز', save: 'حفظ بصيغة PDF', hint: 'احفظ هذه الشهادة أو اطبعها. تتسع في صفحة A4 واحدة.',
         noneH: 'هذه الشهادة غير متاحة', noneP: 'قد يكون الرابط ناقصًا، أو أن المنظِّم لا يصدر شهادات لهذه الفعالية.',
-        errH: 'تعذّر تحميل الشهادة', errP: 'تحقق من الاتصال وأعد تحميل الصفحة.', powered: 'تسجيل الحضور عبر CueDeck' },
+        errH: 'تعذّر تحميل الشهادة', errP: 'تحقق من الاتصال وأعد تحميل الصفحة.', powered: 'تسجيل الحضور عبر CueDeck',
+        time: 'الوقت في الفعالية حسب مسح الدخول والخروج: {list}.', range: 'من {from} إلى {to}', hm: '{h} س {m} د', m: '{m} د', total: 'المجموع {dur}.' },
 };
 const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 const locale = (l) => (l === 'en' ? 'en-GB' : l);
@@ -58,6 +63,22 @@ export function fmtTime(iso, tz, l) {
   try { return d.toLocaleTimeString(locale(l), { ...o, timeZone: tz || 'UTC' }); }
   catch (_) { return d.toLocaleTimeString(locale(l), { ...o, timeZone: 'UTC' }) + ' UTC'; }
 }
+export function fmtMinutes(min, l) {
+  const t = T[l] || T.en, n = Math.max(0, Math.floor(Number(min) || 0));
+  return n >= 60 ? fill(t.hm, { h: Math.floor(n / 60), m: n % 60 }) : fill(t.m, { m: n });
+}
+// One part per day with a recorded stay; the date only when there are
+// several days. Empty when no exit scan closed a stay.
+export function timeText(c, l) {
+  const t = T[l] || T.en, v = Array.isArray(c.visits) ? c.visits.filter(x => x && x.minutes > 0) : [];
+  if (!v.length) return '';
+  const sep = l === 'ar' ? '، ' : '; ';
+  const parts = v.map(x => (v.length > 1 ? fmtDate(x.day, l) + ', ' : '')
+    + fill(t.range, { from: fmtTime(x.from, c.timezone, l), to: fmtTime(x.to, c.timezone, l) }) + ' (' + fmtMinutes(x.minutes, l) + ')');
+  const total = v.reduce((n, x) => n + x.minutes, 0);
+  return fill(t.time, { list: parts.join(sep) }) + (v.length > 1 ? ' ' + fill(t.total, { dur: fmtMinutes(total, l) }) : '');
+}
+
 // What the certificate says, as lines of text: tested without a DOM.
 export function certText(c, l) {
   const t = T[l] || T.en;
@@ -69,6 +90,7 @@ export function certText(c, l) {
     place,
     checkedIn: c.checked_in_at ? fill(t.checkedIn, { time: fmtTime(c.checked_in_at, c.timezone, l) }) : '',
     rooms: Array.isArray(c.rooms) && c.rooms.length ? fill(t.rooms, { rooms: c.rooms.map(r => r.name).join(sep) }) : '',
+    time: timeText(c, l),
     host: c.host || '', by: t.by,
     check: t.check, code: t.code + ' ' + c.code,
     powered: c.white_label ? '' : t.powered,
@@ -123,6 +145,7 @@ function render(c, l, token) {
   if (x.company) mid.append(el('p', 'co', x.company));
   mid.append(el('div', 'rule'), el('p', 'what', x.place + (x.checkedIn ? ' ' + x.checkedIn : '')));
   if (x.rooms) mid.append(el('p', 'rooms', x.rooms));
+  if (x.time) mid.append(el('p', 'rooms', x.time));
   const foot = el('div', 'foot');
   const left = el('div');
   if (x.host) left.append(el('div', null, x.by), el('div', 'host', x.host));

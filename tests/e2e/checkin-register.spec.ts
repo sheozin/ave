@@ -66,6 +66,7 @@ test('renders the event and its questions, and registers', async ({ page }) => {
   await expect(page.locator('#plist .prow')).toHaveCount(1);
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe('#0F766E');
   await expect(page.locator('#test-note')).toBeHidden();
+  await expect(page.locator('#host-note')).toBeHidden();
   await expect(page.locator('[name="q:diet"]')).toBeVisible();
   await fill(page);
   await page.fill('[name="q:diet"]', 'Vegetarian');
@@ -93,6 +94,12 @@ test('checks the form before sending anything', async ({ page }) => {
   await expect(page.locator('[data-f="q:track"] .err')).toHaveText('Please answer this question.');
   await expect(page.locator('[data-f=consent]')).toHaveClass(/bad/);
   expect(sent).toHaveLength(0);
+});
+
+test('an event with hosts told by name says so before the guest registers', async ({ page }) => {
+  await setup(page, { config: CONFIG({ hosts_notice: true }) });
+  await page.goto(URL_);
+  await expect(page.locator('#host-note')).toHaveText('If someone at this event is hosting you, they may get an email with your name when you arrive.');
 });
 
 test('test mode says so, and the answer names no code (same for a new and a listed address)', async ({ page }) => {

@@ -15,6 +15,17 @@ describe('hostEmail', () => {
     expect(m.text).toContain('09:12  Marta Kowalczyk (Nordlight)');
     expect(m.text).toContain('Stop them: https://app.cuedeck.io/checkin/host-stop?t=abc');
   });
+  it('count only: no name or company anywhere, just how many and when', () => {
+    const one = hostEmail({ ...BASE, countOnly: true, arrivals: [{ name: 'Marta Kowalczyk', company: 'Nordlight', at: '2026-12-09T08:12:00Z' }] });
+    expect(one.subject).toBe('A guest of yours has arrived at Spring Forum');
+    const two = hostEmail({ ...BASE, countOnly: true, arrivals: [
+      { name: 'Marta Kowalczyk', company: 'Nordlight', at: '2026-12-09T08:12:00Z' }, { name: 'Jan Nowak', company: 'Acme', at: '2026-12-09T08:14:00Z' }] });
+    for (const m of [one, two]) {
+      for (const x of ['Marta', 'Kowalczyk', 'Nordlight', 'Jan', 'Nowak', 'Acme']) { expect(m.html).not.toContain(x); expect(m.text).not.toContain(x); expect(m.subject).not.toContain(x); }
+    }
+    expect(two.subject).toBe('2 of your guests have arrived at Spring Forum');
+    expect(two.text).toContain('09:14  A guest');
+  });
   it('several guests in one email, earliest first', () => {
     const m = hostEmail({ ...BASE, arrivals: [
       { name: 'B', company: null, at: '2026-12-09T08:13:00Z' },

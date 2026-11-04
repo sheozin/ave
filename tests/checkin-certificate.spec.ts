@@ -1,7 +1,7 @@
 // tests/checkin-certificate.spec.ts: the certificate of attendance page
 // (checkin-certificate.js, migration 156).
 import { describe, it, expect } from 'vitest';
-import { T, langOf, tokenOf, fmtDate, fmtTime, certText } from '../checkin-certificate.js';
+import { T, langOf, tokenOf, fmtDate, fmtTime, certText, fmtMinutes } from '../checkin-certificate.js';
 
 const CERT = {
   guest: 'Ola Nowak', company: 'Acme', event: 'Med Summit', venue: 'Hall A', date: '2026-11-03', timezone: 'Europe/Warsaw',
@@ -19,7 +19,7 @@ describe('certificate page', () => {
     expect(langOf('?l=fr')).toBe('en');
     expect(langOf('')).toBe('en');
   });
-  it('states what was recorded, in the event time zone, and never a duration', () => {
+  it('states what was recorded, in the event time zone, and no duration without exit scans', () => {
     const x = certText(CERT, 'en');
     expect(x.name).toBe('Ola Nowak');
     expect(x.place).toBe('attended Med Summit at Hall A on 3 November 2026.');
@@ -27,7 +27,20 @@ describe('certificate page', () => {
     expect(x.rooms).toBe('Also attended: Plenary, Workshop B.');
     expect(x.code).toBe('Code 0123-4567');
     expect(x.powered).toBe('Check-in by CueDeck');
-    expect(JSON.stringify(x)).not.toMatch(/hour|minute|duration/i);
+    expect(x.time).toBe('');
+    expect(JSON.stringify(x)).not.toMatch(/ h |min|duration/i);
+  });
+  it('time at the event comes only from closed stays, per day, in the event zone', () => {
+    const one = certText({ ...CERT, visits: [{ day: '2026-11-03', from: '2026-11-03T08:12:00Z', to: '2026-11-03T16:40:00Z', minutes: 448 }] }, 'en');
+    expect(one.time).toBe('Time at the event, from entry and exit scans: 09:12 to 17:40 (7 h 28 min).');
+    const two = certText({ ...CERT, visits: [
+      { day: '2026-11-03', from: '2026-11-03T08:12:00Z', to: '2026-11-03T16:40:00Z', minutes: 388 },
+      { day: '2026-11-04', from: '2026-11-04T08:00:00Z', to: '2026-11-04T08:45:00Z', minutes: 45 }] }, 'en');
+    expect(two.time).toBe('Time at the event, from entry and exit scans: 3 November 2026, 09:12 to 17:40 (6 h 28 min); 4 November 2026, 09:00 to 09:45 (45 min). Total 7 h 13 min.');
+    expect(certText({ ...CERT, visits: [{ day: '2026-11-03', from: 'x', to: 'y', minutes: 0 }] }, 'en').time).toBe('');
+    expect(fmtMinutes(60, 'de')).toBe('1 Std. 0 Min.');
+    expect(certText({ ...CERT, visits: [{ day: '2026-11-03', from: '2026-11-03T08:12:00Z', to: '2026-11-03T16:40:00Z', minutes: 448 }] }, 'pl').time)
+      .toBe('Czas na wydarzeniu według skanów wejścia i wyjścia: od 09:12 do 17:40 (7 godz. 28 min).');
   });
   it('leaves out what it does not know', () => {
     const x = certText({ ...CERT, venue: null, date: null, company: null, rooms: [], white_label: true }, 'en');

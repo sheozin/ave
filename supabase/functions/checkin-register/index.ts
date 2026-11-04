@@ -223,8 +223,14 @@ Deno.serve(async (req) => {
         on_sale: t.price_cents === 0 || payable,
       })
     }
+    // (158) A host told by name when their guests arrive: the page says so.
+    const { count: namedHosts, error: hErr } = await sb.from('leod_checkin_hosts').select('id', { count: 'exact', head: true })
+      .eq('event_id', ent.event_id).is('stopped_at', null).eq('detail', 'names')
+    if (hErr) console.error('checkin-register: hosts read failed', hErr.code)
     return json({
       state, test, places_left: placesLeft, approval: !!ent.registration_approval, tickets,
+      // On a failed read, say it: telling guests too much beats too little.
+      hosts_notice: hErr ? true : (namedHosts ?? 0) > 0,
       plus_ones: ent.registration_plus_ones ?? 0,
       // (116) 'invite': the form takes requests only with approval on.
       mode: ent.registration_mode ?? 'open',

@@ -215,6 +215,8 @@ function renderEvent() {
   $('left').hidden = config.places_left == null || wl;
   $('left').textContent = config.places_left == null ? '' : config.places_left === 1 ? tr('1 place left') : tr('{n} places left', { n: config.places_left });
   $('test-note').hidden = !config.test;
+  // (158) Hosts told by name when guests arrive: the guest hears it first.
+  $('host-note').hidden = !config.hosts_notice;
   // The consent names "the organizer", not the host shown on the page: the
   // host may be a client brand, while the organizer is the data controller.
 

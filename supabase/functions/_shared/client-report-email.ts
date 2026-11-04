@@ -27,7 +27,8 @@ function fmtDate(ymd: string): string {
   return new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 }
 
-export function clientReportEmail(r: ClientReportData, host: string | null): { subject: string; html: string; text: string } {
+// pageUrl (migration 158): the same numbers as a page to save as a PDF.
+export function clientReportEmail(r: ClientReportData, host: string | null, pageUrl?: string | null): { subject: string; html: string; text: string } {
   const h = headline(r)
   const event = line(r.event.name) || 'your event'
   const by = line(host) || 'The organizer'
@@ -45,6 +46,7 @@ export function clientReportEmail(r: ClientReportData, host: string | null): { s
     intro, '',
     ...lines.map(l => '- ' + l),
     ...(tickets.length ? ['', 'By ticket type:', ...tickets.map(t => '- ' + line(t.ticket_type, 60) + ': ' + t.checked_in + ' of ' + t.registered)] : []),
+    ...(pageUrl ? ['', 'Save it as a PDF: ' + pageUrl] : []),
     '', 'Reply to this email to reach ' + by + '.', '', 'Sent by CueDeck Check-in',
   ].join('\n')
   const cell = 'padding:8px 12px;border-bottom:1px solid #e5e5ea;font-size:14px'
@@ -62,6 +64,7 @@ ${tickets.length ? `<table role="presentation" style="width:100%;border-collapse
 <tr><th style="${cell};text-align:left;color:#6e6e73;font-weight:600">Ticket type</th><th style="${cell};text-align:right;color:#6e6e73;font-weight:600">Checked in</th></tr>
 ${tickets.map(t => `<tr><td style="${cell}">${esc(line(t.ticket_type, 60))}</td><td style="${cell};text-align:right">${t.checked_in} of ${t.registered}</td></tr>`).join('\n')}
 </table>` : ''}
+${pageUrl ? `<p style="margin:20px 0 0"><a href="${esc(pageUrl)}" style="display:inline-block;background:#1d1d1f;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 18px;border-radius:10px">Open as a page to save as PDF</a></p>` : ''}
 <p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#6e6e73">Reply to this email to reach ${esc(by)}.</p>
 </div>
 <p style="margin:16px 0 0;font-size:12px;color:#86868b;text-align:center">Sent by CueDeck Check-in because ${esc(by)} added your address to this event's report.</p>
