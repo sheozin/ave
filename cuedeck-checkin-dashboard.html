@@ -5,124 +5,289 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Check-in dashboard</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+// Theme before first paint: a saved choice wins, otherwise the system setting.
+try { const t = localStorage.getItem('ck-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (_) {}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
-<link rel="stylesheet" href="/checkin-app.css">
 <style>
-.crumb{font-weight:500;font-size:13px;color:var(--t2);border-left:1px solid var(--bd2);padding-left:10px;margin-left:2px}
-.crumb a{color:var(--t2);text-decoration:none}.crumb b{color:var(--t1);font-weight:600}
-.banner{margin:20px 28px 0;padding:12px 16px;border-radius:12px;background:var(--amsf);border:1px solid var(--ambd);color:var(--am);font-size:13px}
-.banner b{color:#7A4700}
-.dash{max-width:1240px;margin:0 auto;padding:20px 28px 40px}
-.meta-line{font-size:13px;color:var(--t2);margin:0 0 14px}
-.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-bottom:14px}
-.tile{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);min-width:0}
-.tile span{display:block;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em}
-.tile b{display:block;font-size:30px;letter-spacing:-1px;margin-top:6px}
-.tile small{display:block;font-size:12.5px;color:var(--t2);margin-top:2px}
-.charts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.chart{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);min-width:0}
-.chart.wide{grid-column:1 / -1}
-.chart h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}
-.cv{position:relative;height:240px}
-.cl{min-height:100vh;display:flex;flex-direction:column;padding:4vh 5vw;background:#fff}
-.cl-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.cl h1{margin:0;font-size:clamp(26px,3.6vw,52px);letter-spacing:-1px;overflow-wrap:anywhere}
-.cl-test{font-size:clamp(14px,1.4vw,20px);font-weight:600;color:var(--am);background:var(--amsf);border:1px solid var(--ambd);border-radius:999px;padding:6px 14px;white-space:nowrap}
-.big{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3vw;margin-top:4vh}
-.big b{display:block;font-size:clamp(48px,9vw,140px);letter-spacing:-3px;line-height:1}
-.big span{display:block;font-size:clamp(16px,1.8vw,26px);color:var(--t2);margin-top:1vh}
-.cl .cv{flex:1;min-height:30vh;height:auto;margin-top:4vh}
-.cl-foot{font-size:clamp(14px,1.5vw,22px);color:var(--t2);margin:2vh 0 0}
+@font-face{font-family:'Geist';src:url('/fonts/geist-var.woff2') format('woff2');font-weight:100 900;font-display:swap}
+/* Ink side rail, light workspace; the arrivals hero is the one loud thing. */
+:root{
+  --ink:#13233F;--ink2:#1C2F52;--ink-t:#AFC0DC;--ink-t2:#6F84A8;
+  --bg:#F2F5F9;--card:#FFFFFF;--soft:#F2F5F9;--line:#E3E8F0;--line2:#D3DBE7;
+  --t1:#14213D;--t2:#5B6B85;--t3:#8C9AB0;
+  --blue:#0B63E5;--blue-s:#E8F0FD;--blue-t:#0B63E5;
+  --in:#12A150;--in-s:#E5F6EC;--in-t:#0B7A3B;
+  --exp:#E3A008;--exp-s:#FDF4DE;--exp-t:#8A6100;
+  --alert:#E5484D;--alert-s:#FDECEC;--alert-t:#B42328;
+  --hero1:#0B63E5;--hero2:#0A4FC0;
+  --c-soft:#BFD5F8;--c-grid:#EDF1F6;--c-ink:#13233F;--c-light:#8FB6F2;--c-track:#D3DBE7;
+  --font:'Geist',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0A1220;--card:#121D33;--soft:#0E1830;--line:#1F2E4C;--line2:#2A3D63;
+  --t1:#EAF0FA;--t2:#9DB0CF;--t3:#6F84A8;
+  --blue:#3D8BFF;--blue-s:rgba(61,139,255,.16);--blue-t:#7DB0FF;
+  --in:#34D27B;--in-s:rgba(52,210,123,.14);--in-t:#5BE39A;
+  --exp:#F2B84B;--exp-s:rgba(242,184,75,.14);--exp-t:#F6C76B;
+  --alert:#FF6B6F;--alert-s:rgba(255,107,111,.14);--alert-t:#FF8D90;
+  --hero1:#1E5FD0;--hero2:#173F92;--ink:#0D1729;--ink2:#14223D;
+  --c-soft:#2C4E86;--c-grid:#1A2945;--c-ink:#8FA6CC;--c-light:#4F86D6;--c-track:#24375A;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0A1220;--card:#121D33;--soft:#0E1830;--line:#1F2E4C;--line2:#2A3D63;
+  --t1:#EAF0FA;--t2:#9DB0CF;--t3:#6F84A8;
+  --blue:#3D8BFF;--blue-s:rgba(61,139,255,.16);--blue-t:#7DB0FF;
+  --in:#34D27B;--in-s:rgba(52,210,123,.14);--in-t:#5BE39A;
+  --exp:#F2B84B;--exp-s:rgba(242,184,75,.14);--exp-t:#F6C76B;
+  --alert:#FF6B6F;--alert-s:rgba(255,107,111,.14);--alert-t:#FF8D90;
+  --hero1:#1E5FD0;--hero2:#173F92;--ink:#0D1729;--ink2:#14223D;
+  --c-soft:#2C4E86;--c-grid:#1A2945;--c-ink:#8FA6CC;--c-light:#4F86D6;--c-track:#24375A;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.5 var(--font);color:var(--t1);background:var(--bg);-webkit-font-smoothing:antialiased;font-feature-settings:"tnum" 1}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+[hidden]{display:none!important}
+.small{font-size:13px;color:var(--t2)}
+.err{color:var(--alert-t);font-size:13.5px}
 #page-err:empty,#err:empty,#cl-err:empty{display:none}
-.ops{background:#fff;border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:14px}
-.ops[hidden]{display:none}
-.ops h2{margin:0 0 10px;font-size:15px;letter-spacing:-.2px}.ops h3{margin:18px 0 6px;font-size:13.5px}
-.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
-.tbl th{text-align:left;font-size:11.5px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px;border-bottom:1px solid #F0F0F3}
-.tbl td{padding:10px;border-bottom:1px solid #F5F5F7;overflow-wrap:anywhere}
-.s-online{color:var(--gn);font-weight:600}.s-syncing{color:var(--am);font-weight:600}.s-offline{color:var(--rd);font-weight:600}
-.msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin-bottom:8px;background:var(--acsf);color:var(--ac)}
-.msg.warn{background:var(--amsf);color:var(--am)}
+
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}
+/* rail */
+.rail{background:var(--ink);color:var(--ink-t);display:flex;flex-direction:column;gap:18px;padding:18px 14px;position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;font-size:16px;padding:4px 8px;text-decoration:none}
+.brand .mk{width:28px;height:28px;border-radius:9px;background:var(--blue);display:grid;place-items:center;flex:none}
+.brand small{font-weight:500;color:var(--ink-t);font-size:12px}
+.evsw{background:var(--ink2);border-radius:14px;padding:12px;display:grid;gap:3px;min-width:0}
+.evsw b{color:#fff;font-size:14px;overflow-wrap:anywhere}
+.evsw span{font-size:12px;overflow-wrap:anywhere}
+.state{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.state i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.state.live{color:#7EE2A8}.state.live i{animation:ping 1.8s infinite}
+.state.test{color:#F6C76B}.state.done{color:var(--ink-t)}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(61,220,132,.6)}70%{box-shadow:0 0 0 7px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
+@media (prefers-reduced-motion:reduce){.state.live i{animation:none}}
+.menu{display:grid;gap:2px}
+.menu p{font-size:11.5px;color:var(--ink-t2);margin:10px 10px 4px}
+.menu a{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;color:var(--ink-t);text-decoration:none;font-weight:500}
+.menu a svg{width:18px;height:18px;flex:none;opacity:.85}
+.menu a:hover{background:var(--ink2);color:#fff}
+.menu a[aria-current="page"]{background:#fff;color:#13233F}
+:root[data-theme="dark"] .menu a[aria-current="page"]{background:var(--blue);color:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .menu a[aria-current="page"]{background:var(--blue);color:#fff}}
+.rail-foot{margin-top:auto;display:grid;gap:8px}
+.modet{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:10px;border:1px solid var(--ink2);background:transparent;color:var(--ink-t);font-weight:600;font-size:13px}
+.modet:hover{background:var(--ink2);color:#fff}
+.modet svg{width:16px;height:16px}
+
+/* workspace */
+main{min-width:0}
+.top{display:flex;align-items:center;gap:14px;padding:16px 28px;border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:0;z-index:5}
+.top h1{font-size:20px;margin:0;letter-spacing:-.3px}
+.top .sub{color:var(--t2);font-size:13px}
+.banner{margin:18px 28px 0;padding:12px 16px;border-radius:12px;background:var(--exp-s);color:var(--exp-t);font-size:13px}
+.dash{padding:20px 28px 48px;display:grid;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;min-width:0}
+.card h2{font-size:15px;margin:0;letter-spacing:-.1px}
+.hint{color:var(--t2);font-size:12.5px;margin:2px 0 0}
+.ch{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.ch .sp{flex:1}
+.cv{position:relative;height:230px}
+
+/* hero */
+.pulse{display:grid;grid-template-columns:300px minmax(0,1fr);padding:0;overflow:hidden}
+.count{background:linear-gradient(160deg,var(--hero1) 0%,var(--hero2) 100%);color:#fff;padding:24px;display:flex;flex-direction:column;gap:16px}
+.count .big{font-size:76px;font-weight:800;letter-spacing:-3px;line-height:.9}
+.count .of{font-size:15px;opacity:.88}
+.count .of b{font-weight:700}
+.ring{display:flex;align-items:center;gap:14px}
+.ring svg{width:72px;height:72px;flex:none}
+.ring b{font-size:20px;display:block}
+.ring span{opacity:.85;font-size:13px}
+.mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:auto}
+.mini div{background:rgba(255,255,255,.13);border-radius:12px;padding:10px 12px;min-width:0}
+.mini span{display:block;font-size:12px;opacity:.82}
+.mini b{font-size:21px;display:block}
+.pulse .chart{padding:20px 22px 16px;min-width:0}
+.pulse .cv{height:260px}
+.callouts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.callout{font-size:12.5px;background:var(--soft);border-radius:99px;padding:5px 12px;color:var(--t2)}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;gap:4px;min-width:0}
+.kpi span{color:var(--t2);font-size:12.5px}
+.kpi b{font-size:28px;letter-spacing:-.8px;line-height:1.1}
+.kpi small{font-size:12px;color:var(--t2)}
+.kpi.warn small{color:var(--exp-t)}
+
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+
+/* ops */
+.msg{padding:10px 12px;border-radius:12px;font-size:13px;margin-bottom:8px;background:var(--blue-s);color:var(--blue-t)}
+.msg.warn{background:var(--exp-s);color:var(--exp-t)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--t2);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);font-size:13.5px;overflow-wrap:anywhere}
+tr:last-child td{border-bottom:0}
+td[class^="s-"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px;background:currentColor}
+.s-online{color:var(--in-t);font-weight:600}.s-syncing{color:var(--exp-t);font-weight:600}.s-offline{color:var(--alert-t);font-weight:600}
+h3{margin:18px 0 6px;font-size:13.5px}
 .gaps{margin:0;padding-left:18px;font-size:13px;line-height:1.6}
-#alert-list li.undone{color:var(--t3,#A1A1A6)}
-.undone-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--t2,#6E6E73);background:var(--pg,#F5F5F7);border-radius:6px;padding:1px 6px;margin-right:6px}
-.cb-f{display:flex;gap:6px;flex-wrap:wrap}
-.chip{height:32px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:600;border:0;background:var(--pg);color:var(--t2);cursor:pointer}
-.chip[aria-pressed="true"]{background:var(--t1);color:#fff}
-@media (max-width:900px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}.dash{padding:16px}.banner{margin:16px 16px 0}.nav{padding:14px 16px;flex-wrap:wrap;gap:10px}.crumb{display:none}.nav-r{gap:6px}.nav-r .btn{padding:0 10px}}
+.meta-line{font-size:13px;color:var(--t2);margin:6px 0 0}
+
+/* alerts */
+#alert-list{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+#alert-list li{padding:10px 12px;border-radius:12px;background:var(--soft);font-size:13px;border-left:3px solid var(--alert)}
+#alert-list li.undone{color:var(--t3);border-left-color:var(--line2)}
+.undone-tag{display:inline-block;font-size:11px;font-weight:700;color:var(--t2);background:var(--card);border-radius:6px;padding:1px 6px;margin-right:6px}
+
+/* companies */
+.seg{display:inline-flex;background:var(--soft);border-radius:10px;padding:3px;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--t2)}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--t1);box-shadow:0 1px 2px rgba(20,33,61,.1)}
+
+/* client view: a screen across the room */
+.cl{min-height:100vh;display:flex;flex-direction:column;padding:4vh 5vw;background:#13233F;color:#fff}
+.cl-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cl h1{margin:0;font-size:clamp(24px,3vw,44px);letter-spacing:-1px;color:#AFC0DC;font-weight:600;overflow-wrap:anywhere}
+.cl-test{font-size:clamp(14px,1.4vw,20px);font-weight:600;color:#F6C76B;border:1px solid rgba(246,199,107,.5);border-radius:999px;padding:6px 14px;white-space:nowrap}
+.cl .bigrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3vw;margin-top:4vh}
+.cl .bigrow b{display:block;font-size:clamp(48px,9vw,150px);font-weight:800;letter-spacing:-4px;line-height:.9}
+.cl .bigrow span{display:block;font-size:clamp(16px,1.8vw,26px);color:#AFC0DC;margin-top:1vh}
+.cl .cv{flex:1;min-height:30vh;height:auto;margin-top:4vh}
+.cl-foot{font-size:clamp(14px,1.5vw,22px);color:#AFC0DC;margin:2vh 0 0}
+.cl .err{color:#FF8D90}
+
+@media (min-width:761px){.app{background:linear-gradient(90deg,var(--ink) 240px,var(--bg) 240px)}}
+@media (max-width:1100px){.pulse{grid-template-columns:1fr}.g2,.g3{grid-template-columns:1fr}}
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  .rail{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 16px}
+  .evsw,.menu p{display:none}
+  .menu{display:flex;overflow-x:auto;gap:4px;width:100%;order:3}
+  .menu a{white-space:nowrap;padding:7px 10px}
+  .rail-foot{margin:0 0 0 auto}
+  .top,.dash{padding-left:16px;padding-right:16px}.banner{margin:16px 16px 0}
+  .kpis{grid-template-columns:1fr 1fr}.kpi:last-child{grid-column:1 / -1}
+  .count .big{font-size:60px}
+  .cl .bigrow{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 <p class="small" id="page-loading" style="margin:40px auto;text-align:center">Loading the dashboard…</p>
 <div class="err" id="page-err" style="margin:16px 28px"></div>
 
-<div id="full" hidden>
-  <nav class="nav">
-    <div class="logo"><a class="mk" href="/checkin" style="display:grid"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></a>CueDeck<span class="crumb"><a href="/checkin">Your events</a> / <b id="crumb-ev"></b></span></div>
-    <div class="nav-r">
-      <a class="btn btn-s" id="client-link" href="#">Client view</a>
-      <a class="btn btn-s" id="report-link" href="#" hidden>Report</a>
-      <a class="btn btn-s" id="setup-link" href="#" hidden>Event admin</a>
-      <a class="btn btn-s" id="desk-link" href="#" hidden>Desk</a>
+<div id="full" class="app" hidden>
+  <aside class="rail">
+    <a class="brand" href="/checkin"><span class="mk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck <small>Check-in</small></a>
+    <div class="evsw">
+      <span class="state" id="ev-state"><i></i><span id="ev-state-t"></span></span>
+      <b id="crumb-ev"></b>
+      <span id="meta"></span>
     </div>
-  </nav>
-  <div class="banner" id="banner" hidden><b>Test mode.</b> These numbers include test check-ins and are cleared when the event goes live.</div>
-  <main class="dash">
-    <p class="meta-line" id="meta"></p>
-    <div class="err" id="err"></div>
-    <section class="tiles" aria-label="Totals">
-      <div class="tile"><span>Registered</span><b id="t-reg"></b><small>on the guest list</small></div>
-      <div class="tile"><span>Checked in</span><b id="t-in"></b><small id="t-turn"></small></div>
-      <div class="tile"><span id="t-exp-l">Still expected</span><b id="t-exp"></b><small id="t-exp-s"></small></div>
-      <div class="tile"><span>Walk-ins</span><b id="t-walk"></b><small>kiosk and desk</small></div>
-      <div class="tile"><span>Peak arrivals</span><b id="t-peak"></b><small id="t-peak-s"></small></div>
-    </section>
-    <p class="meta-line" id="rate"></p>
-    <section class="ops" id="ops" hidden aria-label="Desks and pace">
-      <h2>Desks and pace</h2>
-      <div id="pace"></div>
-      <table class="tbl"><thead><tr><th>Desk</th><th>Who</th><th>Status</th></tr></thead><tbody id="desk-body"></tbody></table>
-      <p class="meta-line" id="desk-empty" hidden>No desk has reported in yet. A desk appears here once it opens this event.</p>
-      <h3>Offline gaps</h3>
-      <ul class="gaps" id="gaps"></ul>
-      <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
-    </section>
-    <section class="ops" id="plan" hidden aria-label="Plan against arrivals">
-      <h2>Plan against arrivals</h2>
-      <p class="meta-line" id="plan-line"></p>
-      <div class="cv"><canvas id="c-plan" role="img" aria-label="Planned and real arrivals per 15 minutes"></canvas></div>
-    </section>
-    <section class="ops" id="alerts" hidden aria-label="Arrival alerts">
-      <h2>Arrival alerts</h2>
-      <ul class="gaps" id="alert-list" aria-live="polite"></ul>
-      <p class="meta-line" id="alert-empty" hidden></p>
-    </section>
-    <section class="ops" id="board" hidden aria-label="Companies">
-      <h2>Companies</h2>
-      <div class="cb-f" role="group" aria-label="Filter companies">
-        <button class="chip" type="button" data-cb="all" aria-pressed="true">All</button>
-        <button class="chip" type="button" data-cb="missing" aria-pressed="false">Not here yet</button>
-        <button class="chip" type="button" data-cb="partly" aria-pressed="false">Partly here</button>
+    <nav class="menu" aria-label="Event">
+      <p>Event day</p>
+      <a href="#" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 13h4v8H3zM10 3h4v18h-4zM17 9h4v12h-4z"/></svg>Dashboard</a>
+      <a id="desk-link" href="#" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Check-in desk</a>
+      <a id="client-link" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M7 21h10"/></svg>Client view</a>
+      <p>Before and after</p>
+      <a id="setup-link" href="#" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/></svg>Event admin</a>
+      <a id="report-link" href="#" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h7M9 17h5"/></svg>Report</a>
+      <a href="/checkin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>Your events</a>
+    </nav>
+    <div class="rail-foot">
+      <button class="modet" id="theme" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Dark mode</span></button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="top"><div><h1>Dashboard</h1><div class="sub" id="updated"></div></div></div>
+    <div class="banner" id="banner" hidden><b>Test mode.</b> These numbers include test check-ins and are cleared when the event goes live.</div>
+    <div class="dash">
+      <div class="err" id="err"></div>
+
+      <section class="card pulse" aria-label="Arrivals">
+        <div class="count">
+          <div><div class="big" id="t-in"></div><div class="of">checked in of <b id="t-reg"></b> registered</div></div>
+          <div class="ring"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="4"/><circle id="ring" cx="18" cy="18" r="15.5" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 18 18)" pathLength="100"/></svg><div><b id="t-turn"></b></div></div>
+          <div class="mini">
+            <div><span>Arriving now</span><b id="h-rate">–</b><span>per minute</span></div>
+            <div><span>Walk-ins</span><b id="t-walk"></b><span>kiosk and desk</span></div>
+          </div>
+        </div>
+        <div class="chart">
+          <div class="ch"><div><h2>Arrivals over time</h2><p class="hint">Arrivals every 15 minutes, and the running total</p></div></div>
+          <div class="cv"><canvas id="c-arrivals" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div>
+          <div class="callouts"><span class="callout" id="rate"></span></div>
+        </div>
+      </section>
+
+      <section class="kpis" aria-label="Totals">
+        <div class="kpi warn"><span id="t-exp-l">Still expected</span><b id="t-exp"></b><small id="t-exp-s"></small></div>
+        <div class="kpi"><span>Peak arrivals</span><b id="t-peak"></b><small id="t-peak-s"></small></div>
+        <div class="kpi"><span>QR emails sent</span><b id="t-qr"></b><small id="t-qr-s"></small></div>
+      </section>
+
+      <section class="card" id="ops" hidden aria-label="Desks and pace">
+        <div class="ch"><div><h2>Desks and pace</h2><p class="hint">Live status of every desk, kiosk and print station</p></div></div>
+        <div id="pace"></div>
+        <div class="tw"><table><thead><tr><th>Desk</th><th>Who</th><th>Status</th></tr></thead><tbody id="desk-body"></tbody></table></div>
+        <p class="meta-line" id="desk-empty" hidden>No desk has reported in yet. A desk appears here once it opens this event.</p>
+        <h3>Offline gaps</h3>
+        <ul class="gaps" id="gaps"></ul>
+        <p class="meta-line" id="gaps-empty" hidden>No desk has synced check-ins late.</p>
+      </section>
+
+      <section class="card" id="plan" hidden aria-label="Plan against arrivals">
+        <div class="ch"><div><h2>Plan against arrivals</h2><p class="hint" id="plan-line"></p></div></div>
+        <div class="cv"><canvas id="c-plan" role="img" aria-label="Planned and real arrivals per 15 minutes"></canvas></div>
+      </section>
+
+      <div class="g2">
+        <section class="card" id="alerts" hidden aria-label="Arrival alerts">
+          <div class="ch"><div><h2>Arrival alerts</h2><p class="hint">Guests on the ticket types you watch</p></div></div>
+          <ul id="alert-list" aria-live="polite"></ul>
+          <p class="meta-line" id="alert-empty" hidden></p>
+        </section>
+        <section class="card"><div class="ch"><div><h2>By ticket type</h2><p class="hint">Who has arrived, against who registered</p></div></div><div class="cv"><canvas id="c-ticket" role="img" aria-label="Registered and checked in per ticket type"></canvas></div></section>
       </div>
-      <table class="tbl"><thead><tr><th>Company</th><th>Arrived</th><th>Still missing</th><th>Last arrival</th></tr></thead><tbody id="cb-body"></tbody></table>
-      <p class="meta-line" id="cb-empty" hidden></p>
-    </section>
-    <section class="charts">
-      <div class="chart wide"><h2>Arrivals over time</h2><div class="cv"><canvas id="c-arrivals" role="img" aria-label="Arrivals per 15 minutes and the running total"></canvas></div></div>
-      <div class="chart"><h2>Registration status</h2><div class="cv"><canvas id="c-status" role="img" aria-label="Checked in against still expected"></canvas></div></div>
-      <div class="chart"><h2>By ticket type</h2><div class="cv"><canvas id="c-ticket" role="img" aria-label="Registered and checked in per ticket type"></canvas></div></div>
-      <div class="chart"><h2>How people registered</h2><div class="cv"><canvas id="c-source" role="img" aria-label="Imported, kiosk and walk-in registrations"></canvas></div></div>
-      <div class="chart"><h2>QR email status</h2><div class="cv"><canvas id="c-qr" role="img" aria-label="QR emails sent, not sent and without an email address"></canvas></div></div>
-    </section>
-    <p class="meta-line" id="updated" style="margin-top:14px"></p>
+
+      <section class="card" id="board" hidden aria-label="Companies">
+        <div class="ch"><div><h2>Companies</h2><p class="hint">Which teams are here, and who is still missing</p></div><span class="sp"></span>
+          <div class="seg" role="group" aria-label="Filter companies">
+            <button type="button" data-cb="all" aria-pressed="true">All</button>
+            <button type="button" data-cb="missing" aria-pressed="false">Not here yet</button>
+            <button type="button" data-cb="partly" aria-pressed="false">Partly here</button>
+          </div></div>
+        <div class="tw"><table><thead><tr><th>Company</th><th>Arrived</th><th>Still missing</th><th>Last arrival</th></tr></thead><tbody id="cb-body"></tbody></table></div>
+        <p class="meta-line" id="cb-empty" hidden></p>
+      </section>
+
+      <div class="g3">
+        <section class="card"><div class="ch"><div><h2>Registration status</h2><p class="hint">Checked in against everyone on the list</p></div></div><div class="cv"><canvas id="c-status" role="img" aria-label="Checked in against still expected"></canvas></div></section>
+        <section class="card"><div class="ch"><div><h2>How people registered</h2><p class="hint">Where every guest on the list came from</p></div></div><div class="cv"><canvas id="c-source" role="img" aria-label="Imported, registration page, kiosk and walk-in registrations"></canvas></div></section>
+        <section class="card"><div class="ch"><div><h2>QR email status</h2><p class="hint">Guests who got their QR code by email</p></div></div><div class="cv"><canvas id="c-qr" role="img" aria-label="QR emails sent, not sent and without an email address"></canvas></div></section>
+      </div>
+    </div>
   </main>
 </div>
 
 <div id="client" class="cl" hidden>
   <div class="cl-top"><h1 id="cl-name"></h1><span class="cl-test" id="cl-test" hidden>Test mode</span></div>
   <div class="err" id="cl-err"></div>
-  <div class="big">
+  <div class="bigrow">
     <div><b id="cl-in"></b><span>checked in</span></div>
     <div><b id="cl-reg"></b><span>registered</span></div>
     <div><b id="cl-turn"></b><span>turnout</span></div>
@@ -158,54 +323,82 @@ const el = (t, c, x) => { const e = document.createElement(t); if (c) e.classNam
 const params = new URLSearchParams(location.search);
 const EVENT_ID = params.get('event');
 const REFRESH_MS = 30000;
-// The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
-const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
 let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, PLAN = null, STATIONS = [];
-let CB_FILTER = 'all', BOARD = null, alertChan = null;
+let CB_FILTER = 'all', BOARD = null, alertChan = null, LAST = null;
 const charts = {};
 
+// Chart.js cannot read CSS variables: colours are read from the page's
+// tokens at build time, and every chart is rebuilt when the theme changes.
+let C = {};
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (n) => cs.getPropertyValue(n).trim();
+  C = { blue: v('--blue'), in: v('--in'), exp: v('--exp'), alert: v('--alert'), soft: v('--c-soft'), ink: v('--c-ink'),
+        light: v('--c-light'), track: v('--c-track'), grid: v('--c-grid'), t2: v('--t2'), font: v('--font') };
+  Chart.defaults.font.family = C.font;
+  Chart.defaults.color = C.t2;
+  Chart.defaults.borderColor = C.grid;
+}
 const fmtDate = (ymd) => new Date(ymd + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const BASE = { responsive: true, maintainAspectRatio: false, animation: false,
-  plugins: { legend: { labels: { boxWidth: 12, font: { size: 12 } } } } };
+const BASE = () => ({ responsive: true, maintainAspectRatio: false, animation: false,
+  plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 3, font: { size: 12 } } },
+             tooltip: { padding: 10, cornerRadius: 8 } } });
+const NOGRID = { display: false };
 
-// One Chart per canvas for the life of the page; a refresh swaps the data.
+// One Chart per canvas until the theme changes; a refresh swaps the data
+// (and the bar colours, which follow the peak).
 function upsertChart(id, config) {
   const prev = charts[id];
   if (prev) {
     prev.data.labels = config.data.labels;
-    prev.data.datasets.forEach((ds, i) => { ds.data = config.data.datasets[i].data; });
+    prev.data.datasets.forEach((ds, i) => {
+      ds.data = config.data.datasets[i].data;
+      ds.backgroundColor = config.data.datasets[i].backgroundColor;
+    });
     prev.update('none');
     return;
   }
   charts[id] = new Chart($(id), config);
 }
+function dropCharts() { for (const id of Object.keys(charts)) { charts[id].destroy(); delete charts[id]; } }
 
-// big: the client view, shown on a screen across a room.
+// big: the client view, shown on a screen across a room (always dark).
 function arrivalsConfig(series, big = false) {
-  const tick = big ? { precision: 0, font: { size: 18 } } : { precision: 0 };
-  const opts = big ? { ...BASE, plugins: { legend: { labels: { boxWidth: 18, font: { size: 20 } } } } } : BASE;
+  const peak = series.bars.length ? Math.max(...series.bars) : 0;
+  const tick = big ? { precision: 0, color: '#AFC0DC', font: { size: 18 } } : { precision: 0 };
+  const base = BASE();
+  if (big) base.plugins.legend.labels = { ...base.plugins.legend.labels, color: '#AFC0DC', boxWidth: 16, boxHeight: 16, font: { size: 20 } };
+  const grid = big ? { color: 'rgba(175,192,220,.15)' } : { color: C.grid };
   return { type: 'bar', data: { labels: series.labels, datasets: [
-    { type: 'bar', label: 'Arrived in these 15 minutes', data: series.bars, backgroundColor: C.ac, borderRadius: 4, yAxisID: 'y' },
-    { type: 'line', label: 'Checked in so far', data: series.cumulative, borderColor: C.gn, backgroundColor: C.gn, pointRadius: 0, tension: 0.25, yAxisID: 'y2' },
-  ] }, options: { ...opts, scales: {
-    ...(big ? { x: { ticks: { font: { size: 18 } } } } : {}),
-    y: { beginAtZero: true, ticks: tick },
-    y2: { position: 'right', beginAtZero: true, ticks: tick, grid: { drawOnChartArea: false } },
+    { type: 'bar', label: 'Arrived in these 15 minutes', data: series.bars, order: 2, borderRadius: 6, yAxisID: 'y',
+      backgroundColor: series.bars.map(n => (peak > 0 && n === peak ? (big ? '#3D8BFF' : C.blue) : (big ? '#2C4E86' : C.soft))) },
+    { type: 'line', label: 'Checked in so far', data: series.cumulative, order: 1, borderColor: big ? '#34D27B' : C.in,
+      backgroundColor: big ? 'rgba(52,210,123,.12)' : 'rgba(18,161,80,.08)', fill: true, borderWidth: 2.5, pointRadius: 0, tension: 0.35, yAxisID: 'y2' },
+  ] }, options: { ...base, interaction: { mode: 'index', intersect: false }, scales: {
+    x: { grid: NOGRID, ticks: big ? tick : {} },
+    y: { beginAtZero: true, ticks: tick, grid },
+    y2: { position: 'right', beginAtZero: true, ticks: tick, grid: NOGRID },
   } } };
 }
 function statusConfig(d) {
-  return { type: 'doughnut', data: { labels: d.labels, datasets: [{ data: d.data, backgroundColor: [C.gn, C.bd2], borderWidth: 0 }] },
-           options: { ...BASE, cutout: '62%' } };
+  return { type: 'doughnut', data: { labels: d.labels, datasets: [{ data: d.data, backgroundColor: [C.in, C.track], borderWidth: 0 }] },
+           options: { ...BASE(), cutout: '70%' } };
 }
 function ticketConfig(t) {
   return { type: 'bar', data: { labels: t.labels, datasets: [
-    { label: 'Registered', data: t.registered, backgroundColor: C.bd2, borderRadius: 4 },
-    { label: 'Checked in', data: t.checkedIn, backgroundColor: C.ac, borderRadius: 4 },
-  ] }, options: { ...BASE, indexAxis: 'y', scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } } };
+    { label: 'Registered', data: t.registered, backgroundColor: C.track, borderRadius: 6, barPercentage: 0.7 },
+    { label: 'Checked in', data: t.checkedIn, backgroundColor: C.in, borderRadius: 6, barPercentage: 0.7 },
+  ] }, options: { ...BASE(), indexAxis: 'y', scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, y: { grid: NOGRID } } } };
+}
+function sourceConfig(b) {
+  const base = BASE();
+  return { type: 'doughnut', data: { labels: b.labels, datasets: [{ data: b.data, backgroundColor: [C.ink, C.blue, C.light, C.exp], borderWidth: 0 }] },
+           options: { ...base, cutout: '68%' } };
 }
 function barsConfig(b, colors) {
-  return { type: 'bar', data: { labels: b.labels, datasets: [{ label: 'People', data: b.data, backgroundColor: colors, borderRadius: 4 }] },
-           options: { ...BASE, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } };
+  const base = BASE(); base.plugins.legend.display = false;
+  return { type: 'bar', data: { labels: b.labels, datasets: [{ label: 'People', data: b.data, backgroundColor: colors, borderRadius: 6 }] },
+           options: { ...base, indexAxis: 'y', scales: { x: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } }, y: { grid: NOGRID } } } };
 }
 
 async function loadEvent() {
@@ -268,15 +461,24 @@ function renderFull(s, closed) {
   $('t-peak-s').textContent = t.peak
     ? fmtClock(t.peak.t * 1000, EV.timezone) + ' to ' + fmtClock((t.peak.t + BUCKET_S) * 1000, EV.timezone)
     : 'No arrivals yet';
+  $('ring').setAttribute('stroke-dasharray', Math.min(100, t.turnout ?? 0) + ' 100');
+  const q = s.qr || {};
+  $('t-qr').textContent = String(q.sent || 0);
+  $('t-qr-s').textContent = (q.not_sent || 0) + ' not sent, ' + (q.no_email || 0) + ' without an email address';
   const r = arrivalRate(s.last_25_min);
-  $('rate').textContent = s.checked_in >= PACE_MIN_CHECKINS && r !== null
+  const paced = s.checked_in >= PACE_MIN_CHECKINS && r !== null;
+  $('h-rate').textContent = paced ? fmtRate(r) : '–';
+  $('rate').textContent = paced
     ? 'Arriving now: ' + fmtRate(r) + ' per minute over the last 15 minutes.'
     : 'Pace appears after the first 10 check-ins.';
+  const st = s.status !== 'test' && closed ? ['done', 'Finished'] : s.status === 'test' ? ['test', 'Test mode'] : ['live', 'Live'];
+  $('ev-state').className = 'state ' + st[0];
+  $('ev-state-t').textContent = st[1];
   upsertChart('c-arrivals', arrivalsConfig(arrivalSeries(s.arrivals, EV.timezone)));
   upsertChart('c-status', statusConfig(statusDoughnut(s, closed)));
   upsertChart('c-ticket', ticketConfig(ticketBars(s)));
-  upsertChart('c-source', barsConfig(sourceBars(s), C.ac));
-  upsertChart('c-qr', barsConfig(qrBars(s), [C.gn, C.am, C.bd2]));
+  upsertChart('c-source', sourceConfig(sourceBars(s)));
+  upsertChart('c-qr', barsConfig(qrBars(s), [C.in, C.exp, C.track]));
   renderOps(s);
   renderPlan(s);
 }
@@ -296,9 +498,9 @@ function renderPlan(s) {
     : 'So far the plan expected about ' + fmt(v.expectedByNow) + ' and ' + v.arrivedByNow + ' arrived.'
       + (v.arrivedByNow > v.expectedByNow * 1.2 + 5 ? ' Busier than planned.' : v.arrivedByNow < v.expectedByNow * 0.8 - 5 ? ' Quieter than planned.' : '');
   upsertChart('c-plan', { type: 'bar', data: { labels: v.labels, datasets: [
-    { type: 'bar', label: 'Arrived', data: v.actual, backgroundColor: C.ac, borderRadius: 4 },
-    { type: 'line', label: 'Planned', data: v.plan, borderColor: C.am, backgroundColor: C.am, borderDash: [5, 4], pointRadius: 0, tension: 0.3 },
-  ] }, options: { ...BASE, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } } });
+    { type: 'bar', label: 'Arrived', data: v.actual, backgroundColor: C.blue, borderRadius: 6, order: 2 },
+    { type: 'line', label: 'Planned', data: v.plan, borderColor: C.exp, backgroundColor: C.exp, borderDash: [5, 4], borderWidth: 2.5, pointRadius: 0, tension: 0.3, order: 1 },
+  ] }, options: { ...BASE(), scales: { x: { grid: NOGRID }, y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: C.grid } } } } });
 }
 
 function renderClient(s) {
@@ -371,6 +573,32 @@ function subscribeAlerts() {
         () => { loadAlerts(); loadBoard(); })
     .subscribe();
 }
+// Dark mode: the system setting until someone picks one here; the choice
+// is kept on this device. Charts are rebuilt in the new colours.
+const darkNow = () => {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+};
+function showTheme() {
+  const on = darkNow();
+  $('theme').setAttribute('aria-pressed', String(on));
+  $('theme').querySelector('span').textContent = on ? 'Light mode' : 'Dark mode';
+}
+function retheme() {
+  readTokens(); showTheme();
+  if (!LAST || CLIENT) return;
+  dropCharts();
+  renderFull(LAST.data, LAST.closed);
+}
+$('theme').addEventListener('click', () => {
+  const next = darkNow() ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('ck-theme', next); } catch (_) {}
+  retheme();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!document.documentElement.dataset.theme) retheme(); });
+readTokens(); showTheme();
+
 document.querySelectorAll('[data-cb]').forEach(b => b.addEventListener('click', () => {
   CB_FILTER = b.dataset.cb;
   document.querySelectorAll('[data-cb]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
@@ -401,6 +629,7 @@ async function refresh() {
     errEl.textContent = '';
     shown = true;
     const closed = isWindowClosed(EV.date, EV.timezone, new Date(now));
+    LAST = { data, closed };
     if (CLIENT) renderClient(data); else { renderFull(data, closed); loadBoard(); loadAlerts(); }
     $(CLIENT ? 'cl-upd' : 'updated').textContent = 'Updated ' + fmtClock(now, EV.timezone) + '. Refreshes every 30 seconds.';
   } finally {
