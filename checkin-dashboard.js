@@ -143,6 +143,26 @@ export function deskRows(ops, timeZone) {
   ];
 }
 
+// Print stations (migration 155): online means heard from in the last 45
+// seconds (the station checks in every 20). waiting is badges queued for it.
+export function stationRows(stations, timeZone) {
+  return (stations || []).map(st => {
+    const n = st.waiting || 0, w = n ? ', ' + n + ' waiting' : '';
+    if (st.online) return { label: st.label, who: 'Print station', state: n ? { kind: 'syncing', text: 'Online' + w } : { kind: 'online', text: 'Online' } };
+    if (st.last_seen_at) return { label: st.label, who: 'Print station', state: { kind: 'offline', text: 'Not answering since ' + fmtClock(Date.parse(st.last_seen_at), timeZone) + w } };
+    return { label: st.label, who: 'Print station', state: { kind: 'offline', text: 'Not connected yet' } };
+  });
+}
+// A station that was in use in the last 12 hours, or has badges waiting,
+// and is not answering now: badges sent to it are not printing.
+export const STATION_IN_USE_H = 12;
+export function stationWarnings(stations, nowMs) {
+  return (stations || []).filter(st => !st.online && ((st.waiting || 0) > 0
+    || (st.last_seen_at && nowMs - Date.parse(st.last_seen_at) < STATION_IN_USE_H * 3600e3)))
+    .map(st => st.label + ' is not answering, so badges sent to it are not printing'
+      + (st.waiting ? ' (' + st.waiting + ' waiting)' : '') + '. Check its laptop is open, awake and on the network.');
+}
+
 // "0 lost" is claimed only when that desk's latest heartbeat reported an
 // empty queue (event-day spec, feature 1).
 export function gapLines(ops, timeZone) {

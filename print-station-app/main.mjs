@@ -3,7 +3,7 @@
 // same station as the command line (core/station-core.mjs, copied from
 // print-helper/ by `npm run sync`). Closing the window keeps it printing;
 // Quit is in the menu-bar icon.
-import { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, shell, nativeImage, powerSaveBlocker, powerMonitor } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,13 +18,25 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null, tray = null, station = null, server = null;
 const ui = { version: VERSION, phase: 'setup', printer: null, code: null, label: null, online: false,
-             printedToday: 0, lastPrinted: null, error: null, openAtLogin: false, lan: null };
+             printedToday: 0, lastPrinted: null, error: null, openAtLogin: false, lan: null,
+             mac: process.platform === 'darwin', onBattery: false };
+
+// A sleeping computer prints nothing, and badges for it wait in CueDeck.
+// While the station is paired the app keeps the computer from sleeping on
+// its own (an idle timer). It cannot stop sleep when a laptop lid is
+// closed, so the window says so.
+let awakeId = null;
+function keepAwake(on) {
+  if (on && awakeId === null) awakeId = powerSaveBlocker.start('prevent-app-suspension');
+  else if (!on && awakeId !== null) { powerSaveBlocker.stop(awakeId); awakeId = null; }
+}
 
 const file = (name) => path.join(app.getPath('userData'), name);
 const readJson = (name) => { try { return JSON.parse(fs.readFileSync(file(name), 'utf8')); } catch (_) { return null; } };
 const writeJson = (name, v) => fs.writeFileSync(file(name), JSON.stringify(v, null, 2), { mode: 0o600 });
 
 function push() {
+  keepAwake(ui.phase === 'ready');
   if (win && !win.isDestroyed()) win.webContents.send('state', ui);
   if (tray) {
     tray.setToolTip('CueDeck Print Station: ' + statusLine());
@@ -34,7 +46,8 @@ function push() {
 function statusLine() {
   if (ui.phase === 'setup') return 'choose a printer';
   if (ui.phase === 'code') return 'waiting to be paired (code ' + ui.code + ')';
-  if (ui.phase === 'ready') return ui.error ? 'problem: ' + ui.error : ui.online ? 'ready, ' + ui.printedToday + ' printed today' : 'cannot reach CueDeck';
+  if (ui.phase === 'ready') return ui.error ? 'problem: ' + ui.error : !ui.online ? 'cannot reach CueDeck'
+    : 'ready, ' + ui.printedToday + ' printed today' + (ui.onBattery ? ' (on battery: plug in)' : '');
   return 'starting';
 }
 
@@ -135,7 +148,7 @@ ipcMain.handle('open-pair', () => {
 ipcMain.handle('login', (_e, on) => setLogin(on));
 
 // Cmd+Q, the Dock and the tray's Quit all go through here: let the window close.
-app.on('before-quit', () => { app.isQuitting = true; if (station) station.stop(); });
+app.on('before-quit', () => { app.isQuitting = true; keepAwake(false); if (station) station.stop(); });
 app.on('second-instance', showWindow);
 app.on('activate', showWindow);
 app.on('window-all-closed', () => {});   // keep printing from the menu bar
@@ -149,6 +162,12 @@ app.whenReady().then(() => {
   tray = new Tray(img);
   if (!mac) tray.on('click', showWindow);
   ui.openAtLogin = app.getLoginItemSettings().openAtLogin;
+  ui.onBattery = powerMonitor.isOnBatteryPower();
+  powerMonitor.on('on-battery', () => { ui.onBattery = true; push(); });
+  powerMonitor.on('on-ac', () => { ui.onBattery = false; push(); });
+  // After sleep the open connection to CueDeck is dead: start again at
+  // once rather than wait for it to time out.
+  powerMonitor.on('resume', () => { if (ui.printer && ui.phase === 'ready') startStation(); });
   const s = readJson('settings.json');
   ui.printer = s && s.printer ? s.printer : null;
   startStation();

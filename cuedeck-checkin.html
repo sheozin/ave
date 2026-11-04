@@ -952,6 +952,12 @@ a.ck-quiet{text-decoration:none}a.ck-quiet:hover{text-decoration:underline}
   window.CK_BADGE = { normalizeDesign, badgeElement, pageCss, loadBadgeFonts, badgePng, fitsRoll, fitsPrinter };
   window.CK_CLOCK = { bestOffset, correctedIso, skewNotice };
 </script>
+<!-- Its own script: a desk that cannot load it (an old saved copy, no
+     internet) loses only the iPad print sheet, never the badges above. -->
+<script type="module">
+  import { badgePdf, rollPage, isIOS } from '/checkin-badge-pdf.js';
+  window.CK_PDF = { badgePdf, rollPage, isIOS };
+</script>
 <script>
 // ═══════════════════════════════════════════════════
 // CREDENTIALS (hardcoded — same project as console/display)
@@ -2464,7 +2470,7 @@ async function initPrinting() {
   else if (pref === 'local' || pref === 'browser') S.printTo = pref;
   else S.printTo = S.stations.length === 1 ? 'station:' + S.stations[0].id : 'browser';
   if (S.printTo === 'local') await probePrintHelper(); else renderPrinterChip();
-  if (!S.stationTimer) S.stationTimer = setInterval(() => { loadPrintStations().then(renderPrinterChip); }, 30000);
+  if (!S.stationTimer) S.stationTimer = setInterval(() => { loadPrintStations().then(renderPrinterChip); }, 15000);
 }
 // The list is kept on this device too: a desk reloaded while the internet
 // is down still knows its print stations and where to reach them on the
@@ -2475,13 +2481,14 @@ async function loadPrintStations() {
   const cached = () => { try { const c = JSON.parse(localStorage.getItem(key) || '[]'); if (Array.isArray(c)) S.stations = c; } catch (_) {} };
   if (!navigator.onLine || noServer) return cached();
   const { data, error } = await within(8000, sb.rpc('checkin_print_stations', { p_event_id: S.event.id }));
-  if (error) { console.warn('checkin: print stations not loaded', error.message); return cached(); }
+  if (error) { console.warn('checkin: print stations not loaded', error.message); cached(); return false; }
   S.stations = Array.isArray(data) ? data : [];
   try { localStorage.setItem(key, JSON.stringify(S.stations)); } catch (_) {}
   // A station online now reports where it is now: that beats a typed address.
   for (const st of S.stations) {
     if (st.online && st.printer_info && st.printer_info.lan) { try { localStorage.removeItem(STATION_ADDR_KEY(st.id)); } catch (_) {} }
   }
+  return true;
 }
 // Straight to the station over the venue network, for when CueDeck cannot
 // be reached. Chrome asks once whether this page may reach devices on the
@@ -2530,7 +2537,7 @@ function renderPrinterChip() {
   const d = S.badge && S.badge.design;
   const fits = S.printTo === 'browser' ? !!d && window.CK_BADGE.fitsRoll(d) : routeFits(S.printTo);
   let chip = document.getElementById('ck-printer');
-  if (!S.stations.length && !fits && S.printTo === 'browser') { if (chip) chip.remove(); return; }
+  if (!S.stations.length && !fits && S.printTo === 'browser') { if (chip) chip.remove(); renderStationDown(null); return; }
   if (!chip) {
     chip = document.createElement('div'); chip.id = 'ck-printer';
     chip.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:40;width:300px;max-width:calc(100vw - 28px);padding:10px 12px;border-radius:12px;background:#fff;'
@@ -2550,7 +2557,7 @@ function renderPrinterChip() {
     document.body.appendChild(chip);
   }
   const sel = document.getElementById('ck-print-to');
-  const opts = S.stations.map(st => ['station:' + st.id, st.label + (st.online ? '' : ' (offline)')]);
+  const opts = S.stations.map(st => ['station:' + st.id, st.label + (st.online ? '' : ' (not answering)') + (st.waiting ? ', ' + st.waiting + ' waiting' : '')]);
   if (fits || S.printTo === 'local') opts.push(['local', 'Print helper on this computer']);
   opts.push(['browser', 'Print dialog']);
   sel.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; }));
@@ -2560,9 +2567,10 @@ function renderPrinterChip() {
   const st = stationOf(S.printTo);
   let tone = 'ok', text;
   if (S.printMsg) ({ tone, text } = S.printMsg);
+  else if (S.printTo === 'browser' && fits && pdfRoute()) { tone = 'muted'; text = 'Badges open the iPad print sheet at the label size (' + labelSize() + '). Tap Print there and choose the Brother.'; }
   else if (S.printTo === 'browser') { tone = 'muted'; text = fits && !S.stations.length ? 'Any device can print to a Brother label printer: pair a print station under Kiosk or scanner.' : 'Badges open the print dialog.'; }
   else if (!fits) { tone = 'warn'; text = 'This badge (' + d.w + ' x ' + d.h + ' mm) is wider than ' + ((routePrinter(S.printTo) || {}).model === 'zebra' ? 'this printer' : 'the 62 mm label roll') + ', so it opens the print dialog.'; }
-  else if (st) { tone = st.online ? 'ok' : 'warn'; text = st.online ? 'Ready: badges go to ' + st.label + '.' : st.label + ' is offline. Is the print station running?'; }
+  else if (st) { tone = st.online ? 'ok' : 'warn'; text = st.online ? 'Ready: badges go to ' + st.label + '.' : st.label + ' is not answering. Is its laptop open, awake and on the network?'; }
   else if (S.printTo === 'local') {
     const h = S.helper;
     tone = !h || h.error ? 'warn' : 'ok';
@@ -2574,6 +2582,75 @@ function renderPrinterChip() {
   msg.textContent = text || '';
   msg.style.color = { ok: '#1D8348', warn: '#9A5B00', err: '#B3261E', muted: '#6E6E73' }[tone];
   renderStationAddr(st && fits ? st : null);
+  renderUnprinted(chip, st);
+  renderStationDown(st && fits && navigator.onLine && !noServer && !st.online ? st : null);
+}
+
+// ── a print station that stopped (its laptop closed, the app quit) ──
+// Said across the top of the desk, not only in the corner: badges are not
+// printing, and the person at the desk is looking at the guest.
+function renderStationDown(st) {
+  let bar = document.getElementById('ck-station-down');
+  if (!st) { if (bar) { bar.remove(); document.body.style.paddingTop = ''; } return; }
+  if (!bar) {
+    bar = document.createElement('div'); bar.id = 'ck-station-down'; bar.setAttribute('role', 'alert');
+    bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:60;padding:10px 16px;background:#B3261E;color:#fff;font:600 14px/1.4 system-ui,sans-serif;text-align:center';
+    document.body.appendChild(bar);
+  }
+  bar.textContent = st.label + ' is not answering, so badges are not printing. Check its laptop is open, awake and on the network'
+    + (pdfRoute() ? ', or pick Print dialog to print from this iPad.' : ', or pick Print dialog under Badges print on.');
+  document.body.style.paddingTop = bar.offsetHeight + 'px';   // never over the desk header
+}
+
+// ── badges that did not print (kept on this device) ─────────────────
+// A badge refused because its station was down, taken back because the
+// station never picked it up, or failed at the printer, goes on this list,
+// so nothing is forgotten once the station is back. It drops off when the
+// badge prints, here or at another desk.
+const unprintedKey = () => 'ck-unprinted:' + (S.event ? S.event.id : '');
+function readUnprinted() {
+  try { const v = JSON.parse(localStorage.getItem(unprintedKey()) || '[]'); return Array.isArray(v) ? v.filter(x => x && typeof x.id === 'string') : []; } catch (_) { return []; }
+}
+function writeUnprinted(list) { try { localStorage.setItem(unprintedKey(), JSON.stringify(list.slice(-500))); } catch (_) {} }
+function addUnprinted(attendees) {
+  const at = deskNowIso(), ids = new Set(attendees.map(a => a.id));
+  writeUnprinted(readUnprinted().filter(x => !ids.has(x.id)).concat(attendees.map(a => ({ id: a.id, at }))));
+  renderPrinterChip();
+}
+function dropUnprinted(ids) {
+  const gone = new Set(ids), list = readUnprinted(), keep = list.filter(x => !gone.has(x.id));
+  if (keep.length !== list.length) writeUnprinted(keep);
+}
+function unprintedNow() {
+  const byId = new Map((S.roster || []).map(a => [a.id, a]));
+  return readUnprinted().map(x => ({ x, a: byId.get(x.id) }))
+    .filter(({ x, a }) => a && !(a.badge_printed_at && Date.parse(a.badge_printed_at) > Date.parse(x.at)))
+    .map(({ a }) => a);
+}
+function renderUnprinted(chip, st) {
+  let box = document.getElementById('ck-unprinted');
+  const list = unprintedNow();
+  if (!list.length) { if (box) box.remove(); return; }
+  if (!box) {
+    box = document.createElement('div'); box.id = 'ck-unprinted';
+    box.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #E5E5EA;display:flex;flex-wrap:wrap;align-items:center;gap:6px';
+    const t = document.createElement('div'); t.id = 'ck-unprinted-t'; t.style.cssText = 'flex:1 1 100%;font-weight:700;color:#9A5B00';
+    const go = document.createElement('button'); go.type = 'button'; go.id = 'ck-unprinted-go';
+    go.style.cssText = 'font:inherit;font-weight:700;padding:6px 10px;border-radius:8px;border:0;background:#0071E3;color:#fff;cursor:pointer';
+    go.addEventListener('click', () => { const l = unprintedNow(); if (l.length) printBadges(l); });
+    const clr = document.createElement('button'); clr.type = 'button'; clr.id = 'ck-unprinted-clear'; clr.textContent = 'Clear the list';
+    clr.style.cssText = 'font:inherit;padding:6px 10px;border-radius:8px;border:1px solid #D2D2D7;background:#fff;cursor:pointer';
+    clr.addEventListener('click', () => { writeUnprinted([]); renderPrinterChip(); });
+    box.append(t, go, clr);
+    chip.appendChild(box);
+  }
+  document.getElementById('ck-unprinted-t').textContent = (list.length === 1 ? '1 badge' : list.length + ' badges') + ' not printed: '
+    + list.slice(0, 3).map(fullName).join(', ') + (list.length > 3 ? ' and ' + (list.length - 3) + ' more' : '');
+  const go = document.getElementById('ck-unprinted-go');
+  const waiting = st && navigator.onLine && !noServer && !st.online;
+  go.disabled = !!waiting;
+  go.style.background = waiting ? '#E5E5EA' : '#0071E3'; go.style.color = waiting ? '#6E6E73' : '#fff'; go.style.cursor = waiting ? 'default' : 'pointer';
+  go.textContent = waiting ? 'Waiting for ' + st.label : (list.length === 1 ? 'Print it' : 'Print all ' + list.length);
 }
 
 // ── station address typed in (a venue with no internet at all) ─────
@@ -2668,6 +2745,7 @@ const printNote = (tone, text) => { S.printMsg = { tone, text }; renderPrinterCh
 // Marks badges printed: optimistic locally, then on the server.
 async function markPrinted(attendees) {
   if (!attendees.length) return;
+  dropUnprinted(attendees.map(a => a.id));
   const now = deskNowIso();
   for (const a of attendees) {
     a.badge_printed_at = now;      // optimistic, exactly like checked_in_at
@@ -2680,20 +2758,50 @@ async function markPrinted(attendees) {
 // Station jobs are watched in the background: the desk moves on to the next
 // guest while the badge travels. Only a confirmed print is marked printed.
 async function watchPrintJobs(ids, attendees, label) {
-  const until = Date.now() + 45000;
-  while (Date.now() < until) {
+  // Counted in polls, not by the clock: a desk clock can jump.
+  let picked = false, cancelled = false;
+  for (let poll = 1; poll <= WATCH_POLLS; poll++) {
     await new Promise(r => setTimeout(r, 1200));
     const { data, error } = await sb.from('leod_checkin_print_jobs').select('id, status, error').in('id', ids);
     if (error || !Array.isArray(data)) continue;
+    // Picked up: the station started or finished it. Failed after the desk
+    // took it back is the desk's doing, not the station's.
+    if (data.some(j => j.status === 'printing' || j.status === 'done' || (j.status === 'failed' && !cancelled))) picked = true;
+    // A running station takes a badge within a second or two. Fifteen
+    // seconds untouched means it has stopped: take the badges back, so they
+    // do not print by surprise later, after the desk printed them another way.
+    if (!picked && !cancelled && poll >= PICKUP_POLLS) {
+      const { error: cErr } = await within(8000, sb.rpc('checkin_cancel_print', { p_event_id: S.event.id, p_job_ids: ids }));
+      if (!cErr) cancelled = true;
+      continue;
+    }
     if (data.some(j => j.status === 'queued' || j.status === 'printing')) continue;
-    const done = attendees.filter((_, i) => (data.find(j => j.id === ids[i]) || {}).status === 'done');
+    const statusOf = (i) => (data.find(j => j.id === ids[i]) || {}).status;
+    const done = attendees.filter((_, i) => statusOf(i) === 'done');
+    const notDone = attendees.filter((_, i) => statusOf(i) !== 'done');
     const failed = data.find(j => j.status === 'failed');
     await markPrinted(done);
-    printNote(failed ? 'err' : 'ok', failed ? 'Badge not printed: ' + (failed.error || 'the printer did not print') : (done.length === 1 ? 'Printed on ' : done.length + ' badges printed on ') + label + '.');
+    if (notDone.length) addUnprinted(notDone);
+    if (cancelled && !picked) printNote('err', 'Badge not printed: ' + label + ' did not pick it up, so it was taken back. It is on the not printed list below.');
+    else printNote(failed ? 'err' : 'ok', failed ? 'Badge not printed: ' + (failed.error || 'the printer did not print') + '. It is on the not printed list below.' : (done.length === 1 ? 'Printed on ' : done.length + ' badges printed on ') + label + '.');
+    loadPrintStations().then(renderPrinterChip);
     return;
   }
-  printNote('warn', 'Still waiting for ' + label + '. Is the print station running?');
+  // Out of time with badges unresolved (a station that stopped halfway
+  // through a batch, or CueDeck not answering the cancel): take back what
+  // is still queued, best effort, and list every badge not confirmed, so
+  // none is forgotten. One still printing may yet come out: check before
+  // printing it again.
+  const { data: last } = await within(8000, sb.from('leod_checkin_print_jobs').select('id, status').in('id', ids));
+  await within(8000, sb.rpc('checkin_cancel_print', { p_event_id: S.event.id, p_job_ids: ids }));
+  const done = attendees.filter((_, i) => ((last || []).find(j => j.id === ids[i]) || {}).status === 'done');
+  const open = attendees.filter(a => !done.includes(a));
+  await markPrinted(done);
+  if (open.length) addUnprinted(open);
+  printNote('warn', label + ' did not confirm ' + (open.length === 1 ? 'this badge' : open.length + ' badges') + '. Listed below as not printed; check the printer before printing again.');
+  loadPrintStations().then(renderPrinterChip);
 }
+const PICKUP_POLLS = 13, WATCH_POLLS = 38;   // about 15 and 45 seconds
 
 function badgeNode(attendee) {
   if (window.CK_BADGE && S.badge) {
@@ -2815,8 +2923,18 @@ async function printBadges(attendees) {
     let labels;
     try {
       labels = await Promise.all(attendees.map(a => window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' }, { printer: routePrinter(route) })));
-    } catch (e) { printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
-    const st = stationOf(route);
+    } catch (e) { addUnprinted(attendees); printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
+    let st = stationOf(route);
+    // The list can be 15 seconds old: ask again before refusing.
+    let fresh = false;
+    if (st && navigator.onLine && !noServer && !st.online) { fresh = await loadPrintStations(); st = stationOf(route) || st; renderPrinterChip(); }
+    // Refused only on a list CueDeck just sent: a saved copy may be old, and
+    // with CueDeck out of reach the venue-network path below may still work.
+    if (st && fresh && !st.online) {
+      addUnprinted(attendees);
+      printNote('err', 'Badge not printed: ' + st.label + ' is not answering. It is on the not printed list below, to print once the station is back' + (pdfRoute() ? ', or pick Print dialog to print from this iPad.' : '.'));
+      return;
+    }
     if (st) {
       let ids = null, error = null;
       // After one badge found CueDeck unreachable, the next ones in the
@@ -2832,14 +2950,14 @@ async function printBadges(attendees) {
       if (!navigator.onLine || (error && !error.code)) {
         lanFirstUntil = Date.now() + 60000;
         const lan = await printOverLan(st, labels);
-        if (!lan.ok) { printNote('err', 'Badge not printed: ' + lan.error); return; }
+        if (!lan.ok) { addUnprinted(attendees); printNote('err', 'Badge not printed: ' + lan.error); return; }
         printNote('ok', (attendees.length === 1 ? 'Printed on ' : attendees.length + ' badges printed on ') + st.label + ' over the venue network.');
         await markPrinted(attendees);
         return;
       }
       // Never fall back to the print dialog here: on this printer that is
       // a wrong-size badge. The guest is checked in either way.
-      if (error || !Array.isArray(ids)) { printNote('err', 'Badge not printed: ' + ((error && error.message) || 'CueDeck did not take it')); return; }
+      if (error || !Array.isArray(ids)) { addUnprinted(attendees); printNote('err', 'Badge not printed: ' + ((error && error.message) || 'CueDeck did not take it')); return; }
       printNote('muted', (ids.length === 1 ? 'Sent to ' : ids.length + ' badges sent to ') + st.label + '…');
       watchPrintJobs(ids, attendees, st.label);
       return;
@@ -2851,7 +2969,7 @@ async function printBadges(attendees) {
         const j = await r.json().catch(() => ({}));
         // The helper answered but the printer did not print: say so, and do
         // not mark the badge printed. Never fall back to a wrong-size print.
-        if (!r.ok) { printNote('err', 'Badge not printed: ' + (j.error || 'the printer refused the job')); return; }
+        if (!r.ok) { addUnprinted(attendees); printNote('err', 'Badge not printed: ' + (j.error || 'the printer refused the job')); return; }
         S.printMsg = null; renderPrinterChip();
         await markPrinted(attendees);
         return;
@@ -2860,8 +2978,87 @@ async function printBadges(attendees) {
       }
     }
   }
+  if (pdfRoute() && S.badge && window.CK_BADGE.fitsRoll(S.badge.design)) { await printBadgePdf(attendees); return; }
   window.print();
   await markPrinted(attendees);
+}
+
+// ── iPad: badges as a PDF the size of the label ─────────────────────
+// iPad Safari prints a web page on whatever paper the printer offers, and
+// on the Brother's continuous roll that is a long strip. A PDF page carries
+// its size, and the Brother cuts at the end of each page, so the badge
+// comes out the length it should (checkin-badge-pdf.js). The share sheet
+// has Print, and reaches the Brother over the venue Wi-Fi with or without
+// internet. Sharing needs a fresh tap, so when the tap that started the
+// print has expired the desk asks for one.
+const pdfRoute = () => !!(window.CK_PDF && window.CK_PDF.isIOS(navigator));
+function labelSize() {
+  const d = S.badge && S.badge.design;
+  return d ? Math.min(d.w, d.h) + ' x ' + Math.max(d.w, d.h) + ' mm' : '62 mm';
+}
+async function badgePdfFile(attendees) {
+  const pages = [];
+  for (const a of attendees) {
+    const { png, cut_mm } = await window.CK_BADGE.badgePng(a, { ...S.badge, test: S.status === 'test' }, { printer: null });
+    const img = new Image(); img.src = png; await img.decode();
+    const pg = window.CK_PDF.rollPage(img.naturalWidth, img.naturalHeight, cut_mm);
+    const c = document.createElement('canvas'); c.width = pg.px[0]; c.height = pg.px[1];
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    if (pg.turn) { g.translate(c.width, 0); g.rotate(Math.PI / 2); }
+    g.drawImage(img, 0, 0);
+    const blob = await new Promise((ok, no) => c.toBlob(b => b ? ok(b) : no(new Error('no image')), 'image/jpeg', 0.92));
+    pages.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), px: pg.px, mm: pg.mm });
+  }
+  return new File([window.CK_PDF.badgePdf(pages)], attendees.length === 1 ? 'badge.pdf' : 'badges.pdf', { type: 'application/pdf' });
+}
+async function printBadgePdf(attendees) {
+  // A sheet still waiting for its tap is for other guests: keep them listed.
+  if (S.pdfWaiting) { addUnprinted(S.pdfWaiting); pdfSheet(null); }
+  let file;
+  try { file = await badgePdfFile(attendees); }
+  catch (e) { addUnprinted(attendees); printNote('err', 'Badge not printed: could not draw it (' + (e && e.message) + ')'); return; }
+  const send = async () => {
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file] });
+      else { const u = URL.createObjectURL(file); window.open(u, '_blank'); setTimeout(() => URL.revokeObjectURL(u), 60000); }
+    } catch (e) {
+      if (e && e.name === 'NotAllowedError') { pdfSheet(attendees, send); return; }
+      pdfSheet(null);
+      addUnprinted(attendees);
+      printNote('warn', e && e.name === 'AbortError' ? 'Badge not printed: the print sheet was closed. It is on the not printed list below.'
+        : 'Badge not printed: ' + ((e && e.message) || 'the print sheet did not open') + '. It is on the not printed list below.');
+      return;
+    }
+    pdfSheet(null);
+    printNote('ok', (attendees.length === 1 ? 'Badge' : attendees.length + ' badges') + ' sent to the print sheet.');
+    await markPrinted(attendees);
+  };
+  await send();
+}
+function pdfSheet(attendees, send) {
+  let sh = document.getElementById('ck-pdf-sheet');
+  S.pdfWaiting = attendees || null;
+  if (!attendees) { if (sh) sh.remove(); return; }
+  if (!sh) {
+    sh = document.createElement('div'); sh.id = 'ck-pdf-sheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Print badge');
+    sh.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(sh);
+  }
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:16px;padding:20px;max-width:360px;width:100%;font:500 15px/1.45 system-ui,sans-serif;color:#1D1D1F;text-align:center';
+  const h = document.createElement('div'); h.style.cssText = 'font-weight:700;font-size:17px;margin-bottom:6px';
+  h.textContent = attendees.length === 1 ? 'Badge ready for ' + fullName(attendees[0]) : attendees.length + ' badges ready';
+  const p = document.createElement('p'); p.style.cssText = 'margin:0 0 16px;color:#6E6E73';
+  p.textContent = labelSize() + '. Tap Print, then Print again and choose the Brother.';
+  const go = document.createElement('button'); go.type = 'button'; go.id = 'ck-pdf-go'; go.textContent = 'Print';
+  go.style.cssText = 'display:block;width:100%;font:inherit;font-weight:700;padding:12px;border-radius:12px;border:0;background:#0071E3;color:#fff;margin-bottom:8px';
+  go.addEventListener('click', () => send());
+  const no = document.createElement('button'); no.type = 'button'; no.textContent = 'Not now';
+  no.style.cssText = 'display:block;width:100%;font:inherit;padding:10px;border-radius:12px;border:1px solid #D2D2D7;background:#fff';
+  no.addEventListener('click', () => { pdfSheet(null); addUnprinted(attendees); printNote('warn', 'Badge not printed. It is on the not printed list below.'); });
+  card.append(h, p, go, no);
+  sh.replaceChildren(card);
 }
 
 // A check-in is durable the moment it is queued, not when the server

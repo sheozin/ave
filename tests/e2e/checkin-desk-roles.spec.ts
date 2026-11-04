@@ -1608,3 +1608,119 @@ test('a code another desk just issued is found by reading the list again', async
   await page.locator('#scan').press('Enter');
   await expect(page.locator('#verdict')).toContainText('Ben Probe is on the list');
 });
+
+// ── a print station that stops (feature 6: laptop closed, app quit) ───────
+const JOB = 'bbbbbbbb-0000-4000-8000-0000000000f1';
+async function stationThatCanStop(page, state: { online: boolean; job: string; queued: unknown[]; cancelled: unknown[] }) {
+  await page.addInitScript(() => { (window as unknown as { __prints: number }).__prints = 0; window.print = () => { (window as unknown as { __prints: number }).__prints++; }; });
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 }, before: async () => {
+    await rpc(page, 'checkin_print_stations', () => [{ id: ST_ID, label: 'Desk printer', last_seen_at: FIXED_NOW.toISOString(), online: state.online, waiting: 0, printer_info: { model: 'brother-ql' } }]);
+    await rpc(page, 'checkin_queue_print', (a) => { state.queued.push(a); return [JOB]; });
+    await rpc(page, 'checkin_cancel_print', (a) => { state.cancelled.push(a); state.job = 'failed'; return 1; });
+    await page.route(/\/rest\/v1\/leod_checkin_print_jobs(\?|$)/, r => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ id: JOB, status: state.job, error: state.job === 'failed' ? 'Cancelled at the desk: the print station did not pick it up' : null }]) }));
+  } });
+}
+
+test('a station that is not answering: the desk says so across the top, sends nothing, and keeps the badge on a list', async ({ page }) => {
+  const state = { online: false, job: 'done', queued: [] as unknown[], cancelled: [] as unknown[] };
+  await stationThatCanStop(page, state);
+  await expect(page.locator('#ck-station-down')).toContainText('Desk printer is not answering, so badges are not printing');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge not printed: Desk printer is not answering');
+  expect(state.queued).toHaveLength(0);
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+  await expect(page.locator('#ck-unprinted-t')).toHaveText('1 badge not printed: Ben Probe');
+  await expect(page.locator('#ck-unprinted-go')).toBeDisabled();
+  await expect(page.locator('#ck-unprinted-go')).toHaveText('Waiting for Desk printer');
+  // The station is back: the banner goes, and the list prints in one tap.
+  state.online = true;
+  await page.evaluate(() => (window as unknown as { loadPrintStations: () => Promise<void>; renderPrinterChip: () => void }).loadPrintStations().then(() => (window as unknown as { renderPrinterChip: () => void }).renderPrinterChip()));
+  await expect(page.locator('#ck-station-down')).toHaveCount(0);
+  await expect(page.locator('#ck-unprinted-go')).toHaveText('Print it');
+  await page.locator('#ck-unprinted-go').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Printed on Desk printer.', { timeout: 10000 });
+  expect(state.queued).toHaveLength(1);
+  await expect(page.locator('#ck-unprinted')).toHaveCount(0);
+});
+
+test('a badge the station never picks up is taken back after about 15 seconds and listed', async ({ page }) => {
+  test.setTimeout(60000);
+  const state = { online: true, job: 'queued', queued: [] as unknown[], cancelled: [] as unknown[] };
+  await stationThatCanStop(page, state);
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Sent to Desk printer');
+  await expect(page.locator('#ck-print-msg')).toContainText('Desk printer did not pick it up, so it was taken back', { timeout: 30000 });
+  expect(state.cancelled).toEqual([{ p_event_id: EVENT_ID, p_job_ids: [JOB] }]);
+  await expect(page.locator('#ck-unprinted-t')).toHaveText('1 badge not printed: Ben Probe');
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+// ── iPad: the print dialog is a PDF the size of the label ────────────────
+async function asIPad(page, firstShare: 'ok' | 'needs-tap' = 'ok') {
+  await page.addInitScript((first) => {
+    const w = window as unknown as { __prints: number; __shares: string[]; __shareCalls: number };
+    w.__prints = 0; w.__shares = []; w.__shareCalls = 0;
+    window.print = () => { w.__prints++; };
+    Object.defineProperty(Navigator.prototype, 'userAgent', { get: () => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15' });
+    Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel' });
+    Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 5 });
+    (navigator as unknown as { canShare: (d: { files: File[] }) => boolean }).canShare = (d) => !!(d && d.files && d.files.length);
+    (navigator as unknown as { share: (d: { files: File[] }) => Promise<void> }).share = async (d) => {
+      w.__shareCalls++;
+      if (first === 'needs-tap' && w.__shareCalls === 1) throw new DOMException('needs a tap', 'NotAllowedError');
+      const f = d.files[0];
+      const b = new Uint8Array(await f.arrayBuffer());
+      w.__shares.push(f.type + '|' + f.name + '|' + new TextDecoder('latin1').decode(b.slice(0, 900)));
+    };
+  }, firstShare);
+}
+
+test('on an iPad, Print dialog hands the share sheet a PDF the size of the label, not a page', async ({ page }) => {
+  await asIPad(page);
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await expect(page.locator('#ck-print-msg')).toContainText('Badges open the iPad print sheet at the label size (62 x 76 mm)');
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge sent to the print sheet.', { timeout: 10000 });
+  const shares = await page.evaluate(() => (window as unknown as { __shares: string[] }).__shares);
+  expect(shares).toHaveLength(1);
+  const [type, name, head] = shares[0].split('|');
+  expect(type).toBe('application/pdf');
+  expect(name).toBe('badge.pdf');
+  expect(head.startsWith('%PDF-1.4')).toBe(true);
+  expect(head).toContain('/MediaBox [0 0 175.75 215.43]');   // 62 x 76 mm, standing as it leaves the roll
+  expect(await page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBe(0);
+});
+
+test('on an iPad, when the tap has expired the desk asks for one, and Not now keeps the badge on the list', async ({ page }) => {
+  await asIPad(page, 'needs-tap');
+  await open(page, { role: 'crew', badgeDesign: { template: 'visa-next-full', w: 76, h: 62 } });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-pdf-sheet')).toContainText('Badge ready for Ben Probe');
+  await page.locator('#ck-pdf-go').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Badge sent to the print sheet.');
+  await expect(page.locator('#ck-pdf-sheet')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __shareCalls: number }).__shareCalls)).toBe(2);
+});
+
+test('a badge the station started but never confirmed is listed when the desk stops waiting', async ({ page }) => {
+  test.setTimeout(90000);
+  const state = { online: true, job: 'printing', queued: [] as unknown[], cancelled: [] as unknown[] };
+  await stationThatCanStop(page, state);
+  // A station that picked the badge up and then went to sleep: never 'done'.
+  await page.route(/\/rpc\/checkin_cancel_print/, r => { state.cancelled.push(r.request().postDataJSON()); return r.fulfill({ status: 200, contentType: 'application/json', body: '0' }); });
+  await search(page, 'Ben');
+  await page.locator('.ck-res-row', { hasText: 'Ben Probe' }).locator('.ck-res-btn').click();
+  await page.locator('#primary').click();
+  await expect(page.locator('#ck-print-msg')).toContainText('Desk printer did not confirm this badge. Listed below as not printed', { timeout: 60000 });
+  await expect(page.locator('#ck-unprinted-t')).toHaveText('1 badge not printed: Ben Probe');
+  expect(state.cancelled).toHaveLength(1);
+});

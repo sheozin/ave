@@ -329,3 +329,30 @@ describe('alertLine and newAlertIds', () => {
     expect(d.newAlertIds(new Set(), null)).toEqual([]);
   });
 });
+
+describe('print stations on the dashboard (migration 155)', () => {
+  const NOW = Date.parse('2026-11-03T09:10:00Z');
+  const st = [
+    { label: 'Station 1', online: true, waiting: 0, last_seen_at: '2026-11-03T09:09:50Z' },
+    { label: 'Station 2', online: true, waiting: 3, last_seen_at: '2026-11-03T09:09:55Z' },
+    { label: 'Station 3', online: false, waiting: 2, last_seen_at: '2026-11-03T09:03:00Z' },
+    { label: 'Old station', online: false, waiting: 0, last_seen_at: '2026-10-30T17:03:00Z' },
+    { label: 'Never paired', online: false, waiting: 0, last_seen_at: null },
+  ];
+  it('rows say online, waiting, or since when it has not answered', () => {
+    expect(d.stationRows(st, WAW)).toEqual([
+      { label: 'Station 1', who: 'Print station', state: { kind: 'online', text: 'Online' } },
+      { label: 'Station 2', who: 'Print station', state: { kind: 'syncing', text: 'Online, 3 waiting' } },
+      { label: 'Station 3', who: 'Print station', state: { kind: 'offline', text: 'Not answering since 10:03, 2 waiting' } },
+      { label: 'Old station', who: 'Print station', state: { kind: 'offline', text: 'Not answering since 18:03' } },
+      { label: 'Never paired', who: 'Print station', state: { kind: 'offline', text: 'Not connected yet' } },
+    ]);
+  });
+  it('warns only for a station in use today or with badges waiting', () => {
+    expect(d.stationWarnings(st, NOW)).toEqual([
+      'Station 3 is not answering, so badges sent to it are not printing (2 waiting). Check its laptop is open, awake and on the network.',
+    ]);
+    expect(d.stationWarnings([{ label: 'S', online: false, waiting: 0, last_seen_at: '2026-11-03T08:00:00Z' }], NOW)).toHaveLength(1);
+    expect(d.stationWarnings(null, NOW)).toEqual([]);
+  });
+});

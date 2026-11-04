@@ -28,6 +28,7 @@ p{margin:0 0 14px;color:var(--t2)}
 .code{font:700 34px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:4px;text-align:center;background:var(--pg);border-radius:12px;padding:16px;margin:4px 0 16px;user-select:text}
 .dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
 .ok{background:var(--gn)}.warn{background:var(--am)}.bad{background:var(--rd)}
+.awake{font-size:13px;line-height:1.45;padding:10px 12px;border-radius:10px;background:#F5F5F7;margin:0 0 14px}.awake.warn-t{background:#FFF4E0;color:#7A4A00;font-weight:600}
 .state{font-size:16px;font-weight:700;margin-bottom:4px}
 .facts{margin:14px 0;display:grid;gap:6px;font-size:13px}
 .facts div{display:flex;justify-content:space-between;gap:12px}.facts span{color:var(--t2)}
@@ -74,6 +75,8 @@ function render() {
       h('div', { class: 'state' }, h('span', { class: 'dot ' + tone }), S.error ? 'Badge not printed' : S.online ? 'Ready' : 'Cannot reach CueDeck'),
       h('p', {}, S.online ? 'Badges from every desk and kiosk of "' + S.label + '" print here. You can close this window; it keeps printing from the menu bar.' : 'Check the internet connection. Badges wait in CueDeck and print when it is back.'),
       err,
+      h('p', { class: 'awake' + (S.onBattery ? ' warn-t' : '') }, (S.onBattery ? 'On battery: plug this ' + (S.mac ? 'Mac' : 'computer') + ' in. ' : '')
+        + 'Keep it open and awake while guests arrive. ' + (S.mac ? 'Closing the lid' : 'Sleep') + ' stops printing; desks show the badges as not printed until it is back.'),
       h('div', { class: 'facts' },
         h('div', {}, h('span', {}, 'Paired as'), S.label || ''),
         h('div', {}, h('span', {}, 'Printer'), S.printer.name + ' (' + S.printer.host + ')'),

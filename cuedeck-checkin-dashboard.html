@@ -138,7 +138,7 @@ import { effectiveRole, can } from '/checkin-roles.js';
 import {
   tiles, arrivalSeries, statusDoughnut, ticketBars, sourceBars, qrBars,
   arrivalRate, fmtRate, clientView, fmtClock, BUCKET_S, PACE_MIN_CHECKINS,
-  deskRows, gapLines, paceMessages, eventStartUtc, companyRows, alertLine,
+  deskRows, stationRows, stationWarnings, gapLines, paceMessages, eventStartUtc, companyRows, alertLine,
 } from '/checkin-dashboard.js';
 import { buildPlan, planVsActual } from '/checkin-forecast.js';
 
@@ -160,7 +160,7 @@ const EVENT_ID = params.get('event');
 const REFRESH_MS = 30000;
 // The checkin-app.css tokens, for the canvas (Chart.js cannot read CSS variables).
 const C = { ac: '#0071E3', gn: '#1D8348', am: '#9A5B00', bd2: '#D2D2D7' };
-let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, PLAN = null;
+let EV = null, ROLE = null, CLIENT = false, busy = false, START_MS = null, shown = false, PLAN = null, STATIONS = [];
 let CB_FILTER = 'all', BOARD = null, alertChan = null;
 const charts = {};
 
@@ -234,11 +234,14 @@ function renderOps(s) {
   // s.generated_at; Date.now() is only its fallback.
   const msgs = s.checked_in >= PACE_MIN_CHECKINS
     ? paceMessages({ stats: s, nowMs: Date.now(), eventStartMs: START_MS, timeZone: EV.timezone }) : [];
+  for (const line of stationWarnings(STATIONS, Date.parse(s.generated_at) || Date.now())) {
+    pace.appendChild(el('div', 'msg warn', line));
+  }
   for (const m of msgs) {
     pace.appendChild(el('div', 'msg' + (m.tone === 'warn' ? ' warn' : ''), m.text));
   }
   const body = $('desk-body'); body.replaceChildren();
-  const rows = deskRows(s.ops, EV.timezone);
+  const rows = [...deskRows(s.ops, EV.timezone), ...stationRows(STATIONS, EV.timezone)];
   for (const r of rows) {
     const tr = el('tr');
     tr.append(el('td', null, r.label), el('td', null, r.who), el('td', 's-' + r.state.kind, r.state.text));
@@ -381,7 +384,15 @@ async function refresh() {
     const errEl = CLIENT ? $('cl-err') : $('err');
     // A failed call leaves the last good numbers on screen; say so once there are some.
     const fail = (why) => { errEl.textContent = 'Could not refresh the numbers' + (shown ? ' (showing the last update)' : '') + ': ' + why; };
-    const { data, error } = await sb.rpc('checkin_event_stats', { p_event_id: EVENT_ID });
+    // Print stations sit with the desks (migration 155). A failure keeps the
+    // last list: a station is never shown as fine because the call failed.
+    const wantStations = !CLIENT && can(ROLE, 'desk_health');
+    const [{ data, error }, st] = await Promise.all([
+      sb.rpc('checkin_event_stats', { p_event_id: EVENT_ID }),
+      wantStations ? sb.rpc('checkin_print_stations', { p_event_id: EVENT_ID }) : Promise.resolve(null),
+    ]);
+    if (st && st.error) console.warn('[checkin] print stations not loaded:', st.error.message);
+    else if (st && Array.isArray(st.data)) STATIONS = st.data;
     if (error) { fail(error.message); return; }
     // "Now" is the server's generated_at, never the device clock: a laptop
     // with a wrong clock must not turn Still expected into No-shows.

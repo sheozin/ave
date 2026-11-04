@@ -364,3 +364,27 @@ test('without a saved plan the plan panel stays hidden', async ({ page }) => {
   await expect(page.locator('#t-reg')).toHaveText('120');
   await expect(page.locator('#plan')).toBeHidden();
 });
+
+test('a print station that stopped answering is a row and a warning above the desks', async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_NOW);
+  await signedIn(page);
+  await rpc(page, 'checkin_my_events', [myEventsRow({ role: 'lead' })]);
+  await rpc(page, 'checkin_event_stats', STATS({ role: 'lead', ops: OPS, last_25_min: Array(25).fill(12) }));
+  await rpc(page, 'checkin_print_stations', [
+    { id: 'aaaaaaaa-0000-4000-8000-0000000000d1', label: 'Station 1', online: false, waiting: 2, last_seen_at: new Date(new Date(FIXED_NOW).getTime() - 4 * 60e3).toISOString() },
+  ]);
+  await page.goto(URL_);
+  await expect(page.locator('#desk-body tr')).toHaveCount(4);
+  await expect(page.locator('#desk-body tr').nth(3)).toContainText('Station 1Print stationNot answering since');
+  await expect(page.locator('#desk-body tr').nth(3)).toContainText('2 waiting');
+  await expect(page.locator('#pace .msg.warn').first()).toHaveText('Station 1 is not answering, so badges sent to it are not printing (2 waiting). Check its laptop is open, awake and on the network.');
+});
+
+test('the client view never asks for print stations', async ({ page }) => {
+  let asked = false;
+  await page.route(/\/rest\/v1\/rpc\/checkin_print_stations/, r => { asked = true; return r.fulfill({ status: 200, body: '[]' }); });
+  await open(page, 'viewer');
+  await expect(page.locator('#client')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(asked).toBe(false);
+});
