@@ -8,18 +8,116 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" integrity="sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok" crossorigin="anonymous"></script>
 <script src="/cuedeck-auth.js"></script>
-<link rel="stylesheet" href="/checkin-app.css">
+<link rel="stylesheet" href="/checkin-ui.css">
+<link rel="preload" href="/fonts/geist-var.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+try { const t = localStorage.getItem('ck-theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (_) {}
+</script>
+<style>
+/* signed out and set password: a top bar and one page */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid var(--line)}
+.topbar .brand{color:var(--t1);padding:0}.topbar .brand small{color:var(--t2)}
+.link{background:none;border:0;color:var(--blue-t);font-weight:600;font-size:13px;cursor:pointer;padding:0;text-decoration:none}
+.wrap{max-width:1100px;margin:0 auto;padding:40px 28px 56px}
+.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:40px;align-items:stretch}
+.pitch{background:var(--ink);color:#fff;border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:18px}
+.eyebrow{font-size:13px;font-weight:600;color:var(--ink-t)}
+.hero h1{font-size:42px;line-height:1.05;letter-spacing:-1.4px;margin:0}
+.lead{font-size:15.5px;line-height:1.55;margin:0;color:var(--ink-t)}
+.ticks{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.ticks li{display:flex;gap:11px;font-size:14px;line-height:1.45}
+.ticks svg{flex:none;margin-top:1px;color:#5BE39A}
+.price{margin-top:auto;align-self:flex-start;display:inline-flex;align-items:baseline;gap:8px;padding:10px 14px;border-radius:12px;font-size:13px;background:rgba(255,255,255,.08);color:var(--ink-t)}
+.price b{font-size:22px;letter-spacing:-.5px;color:#fff}
+.card h3{margin:0 0 4px;font-size:18px;letter-spacing:-.3px}
+.card .s{margin:0 0 18px;font-size:13px;color:var(--t2)}
+.auth{padding:28px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:10px;margin-bottom:18px;background:var(--soft)}
+.tabs button{border:0;background:none;padding:7px 4px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--t2);white-space:nowrap}
+.tabs button[aria-selected="true"]{background:var(--card);color:var(--t1);box-shadow:0 1px 3px rgba(20,33,61,.12)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}
+.field input,.field select{width:100%;height:40px;border-radius:10px;padding:0 12px;border:1px solid var(--line2);background:var(--soft);color:var(--t1);font:inherit;font-size:14px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-s)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.err{min-height:18px;margin-top:8px;font-size:13px}
+.ok{color:var(--in-t);font-size:13px;margin-top:8px}
+#ev-err:empty{display:none}
+.fine{font-size:12px;text-align:center;margin-top:12px;color:var(--t2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 16px;border-radius:10px;font-weight:600;font-size:13.5px;border:1px solid transparent;cursor:pointer;white-space:nowrap;text-decoration:none;font-family:inherit}
+.btn-p{background:var(--blue);color:#fff}.btn-s{background:var(--card);color:var(--t1);border-color:var(--line2)}.btn-g{background:var(--blue-s);color:var(--blue-t)}
+.btn:disabled{opacity:.55;cursor:default}
+.full{width:100%;height:42px}
+.pwrap{position:relative}.pwrap input{padding-right:62px}
+.pw-t{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--blue-t);font-size:12px;font-weight:600;padding:6px 8px}
+.meter{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:7px}
+.meter i{height:4px;border-radius:4px;background:var(--line)}
+.meter[data-s="1"] i:nth-child(-n+1){background:var(--alert)}
+.meter[data-s="2"] i:nth-child(-n+2){background:var(--exp)}
+.meter[data-s="3"] i:nth-child(-n+3),.meter[data-s="4"] i{background:var(--in)}
+.meter-l{font-size:12px;color:var(--t2);margin-top:5px;min-height:16px}
+.captcha:not(:empty){margin-top:12px;display:flex;justify-content:center}
+.next{margin:4px 0 16px;padding-left:20px;font-size:13px;line-height:1.5;color:var(--t2);display:grid;gap:6px}
+.next b{color:var(--t1);font-weight:600}
+.small{font-size:12.5px;line-height:1.5;margin:0 0 8px}
+.done-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--blue-s);color:var(--blue-t);margin:4px 0 14px}
+.done-h{margin:0 0 6px}
+.done-t{margin:0 0 6px;font-size:15px;line-height:1.45;overflow-wrap:anywhere}
+.done-s{margin:0 0 16px;font-size:13px;line-height:1.5;color:var(--t2)}
+.done-mail{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.done-next{background:var(--soft);border-radius:12px;padding:12px 14px 2px;margin-bottom:16px}
+.done-next .next{margin:6px 0 10px}
+.done-k{font-size:12px;font-weight:700;color:var(--t2)}
+.done-foot{border-top:1px solid var(--line);padding-top:12px}
+/* signed in */
+.who{display:grid;gap:6px;padding:10px;border-top:1px solid var(--ink2);font-size:12.5px;color:var(--ink-t)}
+.who span{color:#fff;font-weight:600;overflow-wrap:anywhere}
+.who .link{color:var(--ink-t);text-align:left;font-weight:500}.who .link:hover{color:#fff}
+.top .sp{flex:1}
+.hello{font-size:13px;color:var(--t2);margin:0}
+#head-sub{margin:2px 0 0;color:var(--t2);font-size:13px}
+.start ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.start li{display:flex;gap:10px;font-size:13px;line-height:1.4}
+.start li span{color:var(--t2);display:block;font-size:12px}
+.start .dot{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;background:var(--soft);color:var(--t2)}
+.start .done .dot{background:var(--in-s);color:var(--in-t)}
+.start .done b{color:var(--t2);text-decoration:line-through;font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.ev{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ev-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.ev h3{margin:0 0 3px;font-size:17px;letter-spacing:-.3px;overflow-wrap:anywhere}
+.meta{font-size:12.5px;color:var(--t2)}
+.role-l{font-size:12px;font-weight:600;color:var(--t2);margin-top:4px}
+.pill{font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+.pill i{width:6px;height:6px;border-radius:50%;display:inline-block;background:currentColor}
+.p-none,.p-end{background:var(--soft);color:var(--t2)}
+.p-test{background:var(--exp-s);color:var(--exp-t)}
+.p-live{background:var(--in-s);color:var(--in-t)}
+.stats{display:flex;gap:24px}
+.stat b{display:block;font-size:24px;letter-spacing:-.6px}.stat span{font-size:12px;color:var(--t2)}
+.bar{height:6px;border-radius:6px;background:var(--c-track);overflow:hidden}.bar div{height:100%;border-radius:6px}
+.note{font-size:12.5px;color:var(--t2);line-height:1.45}
+.acts{display:flex;gap:8px;margin-top:auto;flex-wrap:wrap}
+.empty{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:36px;text-align:center;color:var(--t2)}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:8px 12px;font-size:13.5px;margin:14px 0 18px}
+.kv dt{color:var(--t2)}.kv dd{margin:0;overflow-wrap:anywhere}
+dialog{border:1px solid var(--line);border-radius:20px;padding:24px;width:min(460px,calc(100vw - 32px));background:var(--card);color:var(--t1);box-shadow:0 30px 80px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(10,18,32,.45)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:820px){.hero,.grid{grid-template-columns:1fr}.hero h1{font-size:32px}.pitch{padding:26px}.wrap{padding:24px 16px 40px}.topbar{padding:14px 16px}.start ol{grid-template-columns:1fr 1fr}}
+@media (max-width:760px){.rail-foot{display:flex;align-items:center;gap:12px}.who{display:flex;gap:12px;border:0;padding:0}.who span{display:none}.top{flex-wrap:wrap}}
+</style>
 </head>
 <body>
-<nav class="nav">
-  <a class="logo" href="/checkin"><span class="mk"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck<span class="tag">Check-in</span></a>
-  <div class="nav-r" id="nav-r"><a class="link" href="https://cuedeck.io">About CueDeck</a></div>
+<nav class="topbar" id="topbar">
+  <a class="brand" href="/checkin"><span class="mk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck <small>Check-in</small></a>
+  <a class="link" href="https://cuedeck.io">About CueDeck</a>
 </nav>
 
 <!-- SIGNED OUT -->
 <main class="wrap" id="v-out" hidden>
   <div class="hero">
-    <div>
+    <div class="pitch">
       <div class="eyebrow">Event check-in</div>
       <h1>Every guest through the door in seconds.</h1>
       <p class="lead">Import your guest list, send each person a QR code, and run the registration desk from any laptop or tablet. Badges print as people arrive.</p>
@@ -30,7 +128,7 @@
       </ul>
       <div class="price" data-price-line hidden><b data-price></b> per event, excl. VAT · set up free</div>
     </div>
-    <div class="card">
+    <div class="card auth">
       <div class="tabs" role="tablist">
         <button type="button" role="tab" id="t-in" aria-selected="true">Sign in</button>
         <button type="button" role="tab" id="t-up" aria-selected="false">Create account</button>
@@ -99,16 +197,33 @@
 </main>
 
 <!-- SIGNED IN -->
-<main class="wrap" id="v-in" hidden>
-  <div class="head">
-    <div><p class="hello" id="hello"></p><h1>Your events</h1><p id="head-sub">Set up for free. <span id="head-price" hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
-    <button class="btn btn-p" id="new-btn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New event</button>
-  </div>
-  <div class="err" id="ev-err"></div>
-  <section class="start" id="start" hidden><h2>Getting started</h2><ol id="start-list"></ol></section>
-  <div class="grid" id="ev-grid"></div>
-  <div class="empty" id="ev-empty" hidden></div>
-</main>
+<div class="app" id="v-in" hidden>
+  <aside class="rail">
+    <a class="brand" href="/checkin"><span class="mk"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M16 6a7 7 0 1 0 0 12"/></svg></span>CueDeck <small>Check-in</small></a>
+    <nav class="menu" aria-label="Main">
+      <p>Check-in</p>
+      <a href="/checkin" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>Your events</a>
+      <a href="https://cuedeck.io"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>About CueDeck</a>
+    </nav>
+    <div class="rail-foot">
+      <div class="who" id="nav-r"></div>
+      <button class="modet" id="theme" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Dark mode</span></button>
+    </div>
+  </aside>
+  <main>
+    <div class="top">
+      <div><p class="hello" id="hello"></p><h1>Your events</h1><p id="head-sub">Set up for free. <span id="head-price" hidden>Go live for <span data-price></span> per event when you're ready.</span></p></div>
+      <span class="sp"></span>
+      <button class="btn btn-p" id="new-btn" hidden><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New event</button>
+    </div>
+    <div class="dash">
+      <div class="err" id="ev-err"></div>
+      <section class="card start" id="start" hidden><div class="ch"><div><h2>Getting started</h2></div></div><ol id="start-list"></ol></section>
+      <div class="grid" id="ev-grid"></div>
+      <div class="empty" id="ev-empty" hidden></div>
+    </div>
+  </main>
+</div>
 
 <dialog id="dlg-acct">
   <h3 style="margin:0">Your account</h3>
@@ -147,6 +262,8 @@
 <script type="module">
 import { checkinWindow, TEST_CAP } from '/checkin-window.js';
 import { effectiveRole, can, roleLabel } from '/checkin-roles.js';
+import { initTheme } from '/checkin-theme.js';
+initTheme();
 
 const SUPABASE_URL = 'https://sawekpguemzvuvvulfbc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJg1ZR0rwYeP3EwQu4xRNA_WqEp4PaB';
@@ -198,7 +315,7 @@ $('up-pass').addEventListener('input', () => {
   $('up-meter-l').textContent = r.label || 'At least ' + cdAuth.PASSWORD_MIN + ' characters. A short sentence works well.';
 });
 
-function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; }
+function show(view) { for (const v of ['v-out', 'v-pass', 'v-in']) $(v).hidden = v !== view; $('topbar').hidden = view === 'v-in'; }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function busy(btn, on, label) { btn.disabled = on; if (label) btn.textContent = label; }
 // The function's own { error } body, not supabase-js's generic non-2xx message.
@@ -493,7 +610,7 @@ function card(r) {
     for (const [n, l] of [[r.arrived, 'checked in'], [r.attendees, 'attendees']]) { const s = el('div', 'stat'); s.append(el('b', null, String(n)), el('span', null, l)); st.appendChild(s); }
     if (r.state === 'ended' && r.attendees) { const s = el('div', 'stat'); s.append(el('b', null, Math.round(100 * r.arrived / r.attendees) + '%'), el('span', null, 'turnout')); st.appendChild(s); }
     c.appendChild(st);
-    if (r.state === 'live') { const bar = el('div', 'bar'); const f = el('div'); f.style.width = (r.attendees ? 100 * r.arrived / r.attendees : 0) + '%'; f.style.background = 'var(--gn)'; bar.appendChild(f); c.appendChild(bar); }
+    if (r.state === 'live') { const bar = el('div', 'bar'); const f = el('div'); f.style.width = (r.attendees ? 100 * r.arrived / r.attendees : 0) + '%'; f.style.background = 'var(--in)'; bar.appendChild(f); c.appendChild(bar); }
   } else if (r.state === 'test') {
     c.appendChild(el('div', 'note', r.attendees + ' attendees imported. ' + r.test_used + ' of ' + TEST_CAP + ' test check-ins used.'));
   } else if (r.is_comp) {
