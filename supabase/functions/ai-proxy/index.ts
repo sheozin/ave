@@ -14,6 +14,12 @@ import { aiAllowed, type PlanRow } from '../_shared/plan.ts'
 
 const NO_AI = 'AI features are not available on your current plan. Upgrade to Pro to unlock AI.'
 
+// (162) Only what the app's three agents send. This was an open proxy: any
+// model, any max_tokens, any payload, unmetered, for every trial account.
+const MODELS = new Set(['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'])
+const MAX_TOKENS = 1500           // agents use 1000 and 1200
+const MAX_PAYLOAD_CHARS = 100_000 // serialized messages
+
 Deno.serve(async (req) => {
   const cors = corsHeaders(req)
   const json = (status: number, payload: unknown) => new Response(JSON.stringify(payload), {
@@ -84,6 +90,28 @@ Deno.serve(async (req) => {
   const messages   = body.messages   as unknown[] | undefined
   if (!model || !max_tokens || !Array.isArray(messages) || messages.length === 0) {
     return json(400, { error: 'Invalid payload: model, max_tokens, messages required' })
+  }
+  if (!MODELS.has(model)) return json(400, { error: 'Model not allowed' })
+  if (!Number.isInteger(max_tokens) || max_tokens < 1 || max_tokens > MAX_TOKENS) {
+    return json(400, { error: `max_tokens must be 1 to ${MAX_TOKENS}` })
+  }
+  if (JSON.stringify(messages).length > MAX_PAYLOAD_CHARS) return json(413, { error: 'Request too large' })
+
+  // (162) Take a slot before calling Anthropic, never after: counting later
+  // lets parallel calls all pass. Trials get the lower limit.
+  const trial = (subRow as PlanRow | null)?.plan === 'trial'
+  const { data: slot, error: slotErr } = await sb.rpc('ai_proxy_reserve', {
+    p_user: user.id, p_trial: trial, p_model: model, p_max_tokens: max_tokens,
+    p_event_id: typeof evId === 'string' ? evId : null,
+  })
+  if (slotErr) {
+    console.error('ai-proxy: usage reserve failed', slotErr.message)
+    return json(503, { error: 'AI service temporarily unavailable' })
+  }
+  if (slot !== 'ok') {
+    return json(429, { error: slot === 'day'
+      ? 'Daily AI limit reached. It resets within 24 hours.'
+      : 'Hourly AI limit reached. Please try again later.' })
   }
 
   // ── Forward to Anthropic ────────────────────────────────────────
