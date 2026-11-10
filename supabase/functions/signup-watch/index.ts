@@ -1,6 +1,7 @@
 // signup-watch: every 10 minutes (pg_cron, migration 165) with the
 // x-cron-secret the welcome-emails job uses. signup_watch_run() suspends
-// accounts in a signup cluster (3+ in an hour sharing a name or sign-in IP)
+// accounts in a signup cluster (3+ in an hour sharing a name AND sign-in IP,
+// migration 167; name-only or IP-only clusters are reported, not suspended)
 // and reports; this emails the report to BILLING_ALERT_EMAIL when there were
 // 5+ signups in the hour or any cluster. One email per burst: the alert key
 // is the hour of the newest signup plus the clusters, so the same burst seen
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
   if (!to) return finish('failed', 'BILLING_ALERT_EMAIL is not set; alert recorded, not emailed', { error: 'no recipient' }, 500)
 
   const clusterHtml = r.clusters.map(c =>
-    `<li><b>${esc(c.kind === 'ip' ? 'Same sign-in IP' : 'Same name')}: ${esc(c.value)}</b><br>${c.emails.map(esc).join('<br>')}</li>`).join('')
+    `<li><b>${esc(c.kind === 'name+ip' ? 'Same name and IP (suspended)' : c.kind === 'ip' ? 'Same sign-in IP (reported only)' : 'Same name (reported only)')}: ${esc(c.value)}</b><br>${c.emails.map(esc).join('<br>')}</li>`).join('')
   const sent = await sendEmail({
     to,
     subject: r.clusters.length
