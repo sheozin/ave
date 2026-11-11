@@ -102,9 +102,12 @@ describe('print helper server', () => {
     expect(job.includes(Buffer.from([0x1b, 0x69, 0x4d, 0x40]))).toBe(true);
   });
   it('says so when the printer cannot be reached', async () => {
-    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17842', '--config', '/nonexistent/cuedeck-station.json', '--no-station']);
+    // Not 17842: the shared helper above (17841) holds 0.0.0.0:17842 for its
+    // venue-network route. macOS lets 127.0.0.1:17842 bind beside it, Linux
+    // does not, so on CI this request reached the unpaired route (503).
+    const h = spawn(process.execPath, ['print-helper/cuedeck-print-helper.mjs', '--printer', '127.0.0.1', '--printer-port', '1', '--port', '17852', '--config', '/nonexistent/cuedeck-station.json', '--no-station']);
     await new Promise(r => setTimeout(r, 600));
-    const r = await fetch('http://127.0.0.1:17842/print', { method: 'POST', headers: { Origin: 'https://app.cuedeck.io', 'Content-Type': 'application/json' }, body: JSON.stringify({ png: PNG.toString('base64') }) });
+    const r = await fetch('http://127.0.0.1:17852/print', { method: 'POST', headers: { Origin: 'https://app.cuedeck.io', 'Content-Type': 'application/json' }, body: JSON.stringify({ png: PNG.toString('base64') }) });
     h.kill();
     expect(r.status).toBe(502);
     expect((await r.json()).error).toMatch(/cannot reach the printer/);
