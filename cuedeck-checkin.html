@@ -555,6 +555,7 @@ button,input{font-family:inherit;font-size:inherit;color:inherit}
    appears, so it discloses nothing about which branch ran, and it
    turns the dead end — a code that never arrives — into a short walk
    instead of a person standing at a screen with no next move.      */
+.kk-qr{display:block;width:220px;height:220px;margin:22px 0 0;image-rendering:pixelated;background:#fff;border:1px solid var(--line);border-radius:12px}
 .kk-fallback{
   font-size:15px;color:var(--t2);margin-top:20px;
   padding-top:16px;border-top:1px solid var(--bd);
@@ -5795,7 +5796,7 @@ async function kioskSubmit() {
     return;
   }
 
-  kioskResult(data.status, typeof data.code === 'string' ? data.code : '', data.test === true);
+  kioskResult(data.status, typeof data.code === 'string' ? data.code : '', data.test === true, typeof data.qr === 'string' ? data.qr : '');
 }
 
 // ── THE TWO OUTCOMES ───────────────────────────────────────────────
@@ -5823,7 +5824,7 @@ async function kioskSubmit() {
 // branch, so an attacker who can read a response already knows which
 // one ran. The control against enumeration is the server's rate limit,
 // not secrecy about the branch.
-function kioskResult(status, code, isTest) {
+function kioskResult(status, code, isTest, qr = '') {
   // PII is cleared BEFORE the outcome is drawn. From this line on,
   // nothing the person typed is on the screen, in this page's storage,
   // or in any variable that outlives this call.
@@ -5839,6 +5840,17 @@ function kioskResult(status, code, isTest) {
     h.textContent = "You're registered";
     body.appendChild(h);
 
+    // Their ticket as a QR, to photograph and show at the door scanner. Drawn
+    // here from the token (same library as the badges), so nothing is fetched.
+    if (qr && typeof qrcode === 'function') {
+      const q = qrcode(0, 'M'); q.addData(qr); q.make();
+      const img = document.createElement('img');
+      img.className = 'kk-qr';
+      img.alt = 'Your check-in QR code';
+      img.src = q.createDataURL(8, 4);
+      body.appendChild(img);
+    }
+
     const codeEl = document.createElement('div');
     codeEl.className = 'kk-code';
     codeEl.textContent = code;
@@ -5848,9 +5860,10 @@ function kioskResult(status, code, isTest) {
     p.className = 'kk-p';
     // A test registration sends no email (the server skips it), so do
     // not promise one.
-    p.textContent = isTest
-      ? 'Show this code at the registration desk to collect your badge.'
-      : 'Show this code at the registration desk to collect your badge. We have emailed you a copy as well.';
+    const how = qr
+      ? 'Take a photo of the QR code to scan at the entrance, or show the code at the registration desk to collect your badge.'
+      : 'Show this code at the registration desk to collect your badge.';
+    p.textContent = isTest ? how : how + ' We have emailed you a copy as well.';
     body.appendChild(p);
 
     if (isTest) {

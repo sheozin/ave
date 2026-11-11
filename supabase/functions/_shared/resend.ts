@@ -13,7 +13,8 @@ export interface EmailPayload {
   // Resend drops a repeat send with the same key for 24 hours, so a
   // response lost after Resend accepted the email cannot cause a duplicate.
   idempotencyKey?: string
-  attachments?: { filename: string; content: string; content_type?: string }[]   // content base64
+  // content base64. content_id makes it an inline image: <img src="cid:<content_id>">.
+  attachments?: { filename: string; content: string; content_type?: string; content_id?: string }[]
 }
 
 export interface ResendResponse {

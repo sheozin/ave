@@ -14,7 +14,7 @@
 //
 // Exactly two success bodies exist and nothing may be added to either:
 //
-//   { status: 'registered', code: 'B4K2C7' }
+//   { status: 'registered', code: 'B4K2C7', qr: '<qr token>', test: false }
 //   { status: 'already_registered' }
 //
 // The second one is why this function exists as a function rather than
@@ -443,5 +443,8 @@ Deno.serve(async (req) => {
 
   console.log('checkin-self-register: outcome registered, device', device.id)
   await padTo(startedAt)
-  return json({ status: 'registered', code: shortCode(created.qr_token), test: isTest })
+  // qr: the guest's own ticket, drawn as a QR on the kiosk screen so they can
+  // photograph it for the door scanner. New-registration branch only: the
+  // collision branch still returns nothing (see above).
+  return json({ status: 'registered', code: shortCode(created.qr_token), qr: created.qr_token, test: isTest })
 })

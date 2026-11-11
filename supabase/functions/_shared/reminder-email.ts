@@ -5,7 +5,7 @@
 // guest typed is escaped; the organizer's link is https only (checked in
 // checkin_set_reminders and again here).
 
-import { escapeHtml, generateQrDataUrl, type QrEmailEvent } from './qr-email.ts'
+import { escapeHtml, qrAttachment, QR_SRC, type QrEmailEvent } from './qr-email.ts'
 import { et, emailDate, zoneName, dirOf, sepOf, alignOf, type Lang } from './email-i18n.ts'
 
 export type ReminderEvent = QrEmailEvent & {
@@ -49,7 +49,9 @@ function frame(e: QrEmailEvent, title: string, body: string, lang: Lang = 'en', 
 </body></html>`
 }
 
-export function reminderEmail(e: ReminderEvent, g: ReminderGuest, lang: Lang = 'en'): { subject: string; html: string } {
+export type GuestMail = { subject: string; html: string; attachments?: ReturnType<typeof qrAttachment>[] }
+
+export function reminderEmail(e: ReminderEvent, g: ReminderGuest, lang: Lang = 'en'): GuestMail {
   const accent = accentOf(e)
   const day = lang === 'en' ? longDate(e.date) : emailDate(lang, e.date)
   const zone = lang === 'en' ? tzLabel(e.timezone) : zoneName(lang, e.timezone)
@@ -72,16 +74,16 @@ export function reminderEmail(e: ReminderEvent, g: ReminderGuest, lang: Lang = '
         ${e.reminder_message ? `<div style="border-left:3px solid ${accent};padding:4px 0 4px 12px;margin:0 0 18px;color:#374151;"><div style="font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">${escapeHtml(et(lang, 'From the organizer'))}</div><div dir="auto" style="text-align:${alignOf(lang)}">${note(e.reminder_message)}</div></div>` : ''}
       </div>
       <div style="padding:4px 24px 28px;text-align:center;">
-        <img src="${generateQrDataUrl(g.qr_token)}" width="160" height="160" alt="${escapeHtml(et(lang, 'Your check-in QR code'))}" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
+        <img src="${QR_SRC}" width="160" height="160" alt="${escapeHtml(et(lang, 'Your check-in QR code'))}" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
         <div style="font-family:ui-monospace,Menlo,monospace;font-weight:600;font-size:16px;letter-spacing:.18em;color:#111827;margin-top:8px;">${code}</div>
         <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(et(lang, 'Show this at the entrance. The code works if the QR will not scan.'))}</p>
       </div>`
-  return { subject: et(lang, 'Reminder: {event}, {date}', { event: e.name, date: day }), html: frame(e, e.name, body, lang) }
+  return { subject: et(lang, 'Reminder: {event}, {date}', { event: e.name, date: day }), html: frame(e, e.name, body, lang), attachments: [qrAttachment(g.qr_token)] }
 }
 
 // certUrl: the guest's certificate of attendance (migration 156), when the
 // organizer switched certificates on.
-export function thankyouEmail(e: ReminderEvent, g: Pick<ReminderGuest, 'first_name'>, lang: Lang = 'en', certUrl: string | null = null): { subject: string; html: string } {
+export function thankyouEmail(e: ReminderEvent, g: Pick<ReminderGuest, 'first_name'>, lang: Lang = 'en', certUrl: string | null = null): GuestMail {
   const accent = accentOf(e)
   const link = safeLink(e.thankyou_link)
   const body = `

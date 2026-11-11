@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       if (g) { try { sampleCert = await certUrl(sb, g.id, 'en') } catch (e) { return json({ error: (e as Error).message }, 500) } }
     }
     const m = kind === 'reminder' ? reminderEmail(ev, { first_name: first, qr_token: 'SAMPLE' + crypto.randomUUID().replace(/-/g, '') }) : thankyouEmail(ev, { first_name: first }, 'en', sampleCert)
-    const { error } = await sendEmail({ to: user.email, subject: '[Test] ' + m.subject, html: m.html, fromName: fromName(ev.name) })
+    const { error } = await sendEmail({ to: user.email, subject: '[Test] ' + m.subject, html: m.html, attachments: m.attachments, fromName: fromName(ev.name) })
     if (error) return json({ error: 'The email could not be sent: ' + error }, 502)
     return json({ ok: true, to: user.email })
   }
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
         const lang = langs.get(d.event_id)?.get(String(d.email).toLowerCase()) ?? 'en'
         const cert = d.kind === 'thankyou' && ev.certificates ? await certUrl(sb, d.attendee_id, lang) : null
         const m = d.kind === 'reminder' ? reminderEmail(ev, d, lang) : thankyouEmail(ev, d, lang, cert)
-        const { error } = await sendEmail({ to: d.email, subject: m.subject, html: m.html, fromName: fromName(ev.name) })
+        const { error } = await sendEmail({ to: d.email, subject: m.subject, html: m.html, attachments: m.attachments, fromName: fromName(ev.name) })
         if (error) throw new Error(error)
         counts[d.kind]++
       } catch (e) {

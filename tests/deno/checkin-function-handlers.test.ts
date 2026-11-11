@@ -1532,7 +1532,7 @@ Deno.test(`${RM}: sends each claimed guest their email, escaped, with the QR`, a
   assert(r.status === 200 && r.body.detail === 'reminders 1, thank-yous 1', JSON.stringify(r))
   const [rem, thx] = world.emails as { to: string; subject: string; html: string }[]
   assert(rem.to === 'ann@stub.test' && rem.subject.startsWith('Reminder: Stub event'), rem.subject)
-  assert(rem.html.includes('Ann&lt;i&gt;') && rem.html.includes('Bring &lt;b&gt;ID&lt;/b&gt;') && rem.html.includes('data:image/gif;base64') && rem.html.includes('doors open 09:00'), 'reminder body')
+  assert(rem.html.includes('Ann&lt;i&gt;') && rem.html.includes('Bring &lt;b&gt;ID&lt;/b&gt;') && rem.html.includes('src="cid:checkin-qr"') && rem.html.includes('doors open 09:00'), 'reminder body')
   assert(rem.html.includes('query=Hall%2C%20Main%20St%201'), 'maps link')
   assert(thx.to === 'ben@stub.test' && thx.html.includes('href="https://example.com/slides"'), 'thank-you body')
   assert(world.tables.leod_checkin_job_runs?.[0]?.status === 'ok', 'run not ok')
@@ -2379,4 +2379,35 @@ Deno.test(`${DR}: purges what is due and records the run`, async () => {
   assert(!(world.emails?.length), 'emailed on a purge')
   const run = world.tables.leod_checkin_job_runs[0]
   assert(run && run.job_name === DR && run.status === 'ok' && String(run.detail).includes('1 deleted'), JSON.stringify(run))
+})
+
+// Gmail (web, iOS, Android) and Outlook for Windows show no data: image, so
+// a QR embedded that way reached most guests as an email with no QR in it.
+// Guest emails attach the QR inline and point at it with cid:.
+Deno.test('guest emails carry the QR as an inline attachment, never a data: image', async () => {
+  const { renderQrEmailHtml, qrAttachment, QR_SRC } = await import('../../supabase/functions/_shared/qr-email.ts')
+  const att = { id: 'a1', first_name: 'Ada', email: 'ada@example.com', qr_token: 'tokABCDEF1234567890' }
+  const a = qrAttachment(att.qr_token)
+  assert(a.content_id === 'checkin-qr' && a.content_type === 'image/gif', JSON.stringify(a).slice(0, 120))
+  assert(atob(a.content).startsWith('GIF8'), 'attachment is not a GIF')
+  const ev = { name: 'Summit', date: '2026-11-03', venue: 'Hall A' }
+  const html = renderQrEmailHtml(ev, att, QR_SRC, undefined, 'en')
+  assert(html.includes('src="cid:checkin-qr"') && !html.includes('data:image'), 'QR email html')
+  assert(html.includes('TOKABC'), 'the short code is printed under the QR')
+
+  setup('owner')
+  world.emails = []
+  const r = await call('checkin-reminders', { event_id: EVENT, action: 'test', kind: 'reminder' })
+  assert(r.status === 200, JSON.stringify(r))
+  const sent = world.emails![world.emails!.length - 1] as { html: string; attachments?: { content_id?: string }[] }
+  assert(sent && sent.html.includes('cid:checkin-qr') && !sent.html.includes('data:image'), 'reminder html: ' + String(sent?.html).slice(0, 80))
+  assert(sent.attachments?.[0]?.content_id === 'checkin-qr', 'reminder attachment: ' + JSON.stringify(sent.attachments))
+})
+
+Deno.test('no email template builds a data: QR image', async () => {
+  for await (const f of Deno.readDir(new URL('../../supabase/functions/_shared/', import.meta.url))) {
+    if (!f.name.endsWith('.ts') || f.name === 'qr-email.ts') continue
+    const src = await Deno.readTextFile(new URL('../../supabase/functions/_shared/' + f.name, import.meta.url))
+    assert(!src.includes('generateQrDataUrl('), f.name + ' puts a data: QR into an email')
+  }
 })

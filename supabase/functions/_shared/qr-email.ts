@@ -71,6 +71,18 @@ export function generateQrDataUrl(token: string): string {
   return qr.createDataURL()
 }
 
+// Emails carry the QR as an inline attachment, never a data: URL: Gmail (web,
+// iOS, Android) and Outlook for Windows show no data: image at all, so the
+// guest got an email with no QR in it. <img src="cid:checkin-qr"> instead.
+export const QR_CID = 'checkin-qr'
+export const QR_SRC = 'cid:' + QR_CID
+export function qrAttachment(token: string) {
+  return { filename: 'check-in-qr.gif', content: generateQrDataUrl(token).replace(/^data:[^,]*,/, ''),
+           content_type: 'image/gif', content_id: QR_CID }
+}
+// The short code printed under the QR, as on the ticket page and the reminder.
+export const shortCode = (token: string) => token.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()
+
 export function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee, qrDataUrl: string, guestOf?: string, lang: Lang = 'en'): string {
   const safeName = escapeHtml(event.name)
   const safeFirstName = escapeHtml(attendee.first_name)
@@ -103,6 +115,8 @@ export function renderQrEmailHtml(event: QrEmailEvent, attendee: QrEmailAttendee
         <p style="margin:0 0 20px;font-size:15px;line-height:1.5;">${escapeHtml(et(lang, 'Show this QR code at the entrance to check in. No need to print anything: your phone screen works fine.'))}</p>`}
         <div style="text-align:center;margin:0 0 20px;">
           <img src="${qrDataUrl}" width="160" height="160" alt="${escapeHtml(et(lang, 'Your check-in QR code'))}" style="display:inline-block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;">
+          <div style="font-family:ui-monospace,Menlo,monospace;font-weight:600;font-size:16px;letter-spacing:.18em;color:#111827;margin-top:8px;">${escapeHtml(shortCode(attendee.qr_token))}</div>
+          <p style="margin:8px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(et(lang, 'Show this at the entrance. The code works if the QR will not scan.'))}</p>
         </div>
         <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">${escapeHtml(et(lang, 'Lost this email? Just show your name at the entrance instead.'))}</p>
       </div>
@@ -152,15 +166,15 @@ export async function sendQrEmailsForAttendees(
     // would silently drop every remaining attendee's email.
     try {
       const safeFrom = event.name.replace(/[\r\n]+/g, ' ').replace(/[<>"]/g, '').trim().slice(0, 64) || 'CueDeck'
-      const qrDataUrl = generateQrDataUrl(attendee.qr_token)
       const lang = langs.get(to.toLowerCase()) ?? 'en'
-      const html = renderQrEmailHtml(event, attendee, qrDataUrl, opts.guestOf, lang)
+      const html = renderQrEmailHtml(event, attendee, QR_SRC, opts.guestOf, lang)
 
       const { error, id: resendId } = await sendEmail({
         to,
         subject: opts.guestOf ? et(lang, 'Ticket for {name}: {event}', { name: attendee.first_name, event: event.name })
           : et(lang, 'Your check-in QR code: {event}', { event: event.name }),
         html,
+        attachments: [qrAttachment(attendee.qr_token)],
         fromName: `${safeFrom} Check-in`,
       })
 

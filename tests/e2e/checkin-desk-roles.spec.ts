@@ -1724,3 +1724,19 @@ test('a badge the station started but never confirmed is listed when the desk st
   await expect(page.locator('#ck-unprinted-t')).toHaveText('1 badge not printed: Ben Probe');
   expect(state.cancelled).toHaveLength(1);
 });
+
+// A guest who registers at the kiosk gets their QR on screen to photograph for
+// the door scanner, with the short code under it. The already-registered
+// screen still shows nothing of the record.
+test('kiosk: a new registration shows the QR and the code; already registered shows neither', async ({ page }) => {
+  await page.goto('/cuedeck-checkin.html?mode=kiosk');
+  await page.evaluate(() => (window as unknown as { kioskResult: (...a: unknown[]) => void }).kioskResult('registered', 'B4K2C7', false, 'tok' + 'q'.repeat(29)));
+  const qr = page.locator('#kk-result .kk-qr');
+  await expect(qr).toBeVisible();
+  expect(await qr.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0)).toBe(true);
+  await expect(page.locator('#kk-result .kk-code')).toHaveText('B4K2C7');
+  await expect(page.locator('#kk-result')).toContainText('Take a photo of the QR code');
+  await page.evaluate(() => (window as unknown as { kioskResult: (...a: unknown[]) => void }).kioskResult('already_registered', '', false, ''));
+  await expect(page.locator('#kk-result .kk-qr')).toHaveCount(0);
+  await expect(page.locator('#kk-result .kk-code')).toHaveCount(0);
+});
