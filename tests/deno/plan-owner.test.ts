@@ -60,6 +60,9 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
   const tbl = url.pathname.match(/^\/rest\/v1\/(.+)$/)
   if (!tbl) return reply(404, { message: 'no route' })
   const table = tbl[1]
+  // ai-proxy reserves a usage slot first (migration 162); these tests are about
+  // whose plan applies, so the slot is always free.
+  if (method === 'POST' && table === 'rpc/ai_proxy_reserve') return reply(200, 'ok')
   const rows = (tables[table] ??= [])
   const match = rowFilter(url)
   if (method === 'GET') {
