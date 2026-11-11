@@ -50,14 +50,13 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        # --with-deps runs apt, and the runner's Ubuntu mirror sometimes
-        # fails to resolve (2026-11-11, twice): retry before failing the run.
+        # The runner image already has Chromium's libraries; --with-deps only
+        # adds font packages from the Ubuntu mirror, which failed to resolve
+        # on every attempt on 2026-11-11. The browser itself must install;
+        # the extra packages are best effort.
         run: |
-          for i in 1 2 3; do
-            npx playwright install --with-deps chromium && exit 0
-            echo "install failed (attempt $i), retrying in 20 s"; sleep 20
-          done
-          exit 1
+          npx playwright install chromium
+          npx playwright install-deps chromium || echo "::warning::system packages for Playwright did not install (Ubuntu mirror); running with the runner image's"
 
       - name: Start preview server
         run: |
