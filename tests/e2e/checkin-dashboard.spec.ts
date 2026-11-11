@@ -77,7 +77,10 @@ test('a viewer only ever gets the client view, numbers only', async ({ page }) =
   await expect(page.locator('#cl-reg')).toHaveText('120');
   await expect(page.locator('#cl-turn')).toHaveText('38%');
   await expect(page.locator('#cl-foot')).toHaveText('Busiest 15 minutes: 25 arrived from 10:15. Arriving now: 2 per minute.');
-  await expect(page.locator('a:visible')).toHaveCount(0);
+  // Their way out: the report and their events, nothing operational.
+  await expect(page.locator('a:visible')).toHaveText(['Report', 'Your events']);
+  await expect(page.locator('#cl-report')).toHaveAttribute('href', '/checkin/report?event=' + EVENT_ID);
+  await expect(page.locator('#cl-events')).toHaveAttribute('href', '/checkin');
   await expect.poll(() => page.evaluate(() => Object.keys((window as any).Chart.instances).length)).toBe(1);
 });
 
@@ -85,6 +88,29 @@ test('anyone can open the client view with view=client', async ({ page }) => {
   await open(page, 'organizer', {}, {}, URL_ + '&view=client');
   await expect(page.locator('#client')).toBeVisible();
   await expect(page.locator('#full')).toBeHidden();
+});
+
+test('an organizer in the client view gets back to the dashboard by link or Escape', async ({ page }) => {
+  await open(page, 'organizer', {}, {}, URL_ + '&view=client');
+  await expect(page.locator('a:visible')).toHaveText(['Back to dashboard']);
+  await expect(page.locator('#cl-back')).toHaveAttribute('href', '/checkin/dashboard?event=' + EVENT_ID);
+  // Faint on a big screen until pointed at, and never printed.
+  expect(Number(await page.locator('.cl-nav').evaluate(e => getComputedStyle(e).opacity))).toBeLessThan(0.5);
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.cl-nav')).toBeHidden();
+  await page.emulateMedia({ media: 'screen' });
+  // /checkin/* is a Vercel rewrite the static test server does not have.
+  let went = '';
+  await page.route('**/checkin/dashboard**', r => { went = r.request().url(); r.fulfill({ body: 'ok' }); });
+  await page.keyboard.press('Escape');
+  await expect.poll(() => went).toContain('/checkin/dashboard?event=' + EVENT_ID);
+  expect(went).not.toContain('view=client');
+});
+
+test('the Client view link opens in a new tab, so the dashboard stays open', async ({ page }) => {
+  await open(page, 'organizer');
+  await expect(page.locator('#client-link')).toHaveAttribute('target', '_blank');
+  await expect(page.locator('#client-link')).toHaveAttribute('href', '/checkin/dashboard?event=' + EVENT_ID + '&view=client');
 });
 
 test('an event not in my list shows a plain error', async ({ page }) => {
