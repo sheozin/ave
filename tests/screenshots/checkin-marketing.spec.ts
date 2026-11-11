@@ -52,11 +52,14 @@ test('desk: one scan brings up a whole company', async ({ page }) => {
   await page.locator('#scan').fill('Contoso');
   await page.locator('.ck-res-row', { hasText: 'Maya Lindqvist' }).locator('.ck-res-btn').click();
   await page.locator('#party').waitFor();
+  // The badge preview runs past the fold; the shot is about the group arrival
+  // and the buttons that check it in.
+  await page.locator('#preview').evaluate(el => { (el as HTMLElement).hidden = true; });
   await shot(page, 'checkin-desk-group-arrival');
 });
 
 test('dashboard: arrivals, desks, companies and VIP alerts', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 1500 });
+  await page.setViewportSize({ width: 1440, height: 1700 });
   await page.clock.setFixedTime(FIXED_NOW);
   await signedIn(page);
   const t0 = Math.floor(FIXED_NOW.getTime() / 1000 / 900) * 900 - 900 * 6;
@@ -92,7 +95,8 @@ test('dashboard: arrivals, desks, companies and VIP alerts', async ({ page }) =>
   await page.goto('/cuedeck-checkin-dashboard.html?event=' + EVENT_ID);
   await page.locator('#full').waitFor();
   await page.locator('#cb-body tr').first().waitFor();
-  await shot(page, 'checkin-dashboard-live', 1250);
+  // Down to the end of the company board: hero, desks, alerts, tickets, companies.
+  await shot(page, 'checkin-dashboard-live', 1652);
 });
 
 test('door scanner phone: checked in', async ({ page }) => {
@@ -124,6 +128,10 @@ test('setup: guest list', async ({ page }) => {
   await table(page, 'leod_checkin_attendees', ROSTER);
   await fn(page, 'checkin-invite-staff', () => ({ body: { ok: true, staff: [] } }));
   await fn(page, 'checkin-price', () => ({ body: { amount: 24900, currency: 'eur' } }));
+  await rpc(page, 'checkin_email_status', { guests: {}, staff: {} });
+  await rpc(page, 'checkin_held_list', []);
+  await rpc(page, 'checkin_invite_status', {});
+  await rpc(page, 'checkin_speaker_links', { enabled: false, people: [] });
   await page.goto('/cuedeck-checkin-setup.html?event=' + EVENT_ID + '&step=attendees');
   await page.locator('#p-attendees').waitFor();
   await shot(page, 'checkin-setup-guest-list');
