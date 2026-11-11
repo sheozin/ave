@@ -1911,7 +1911,10 @@ const cantReach = (error) => !navigator.onLine || (error && !error.code);
 // only briefly: a desk opening on a router with no uplink must not wait
 // out every call's full limit in turn.
 const NO_ANSWER = { data: null, error: { message: 'CueDeck did not answer', code: '' } };
-const QUICK_MS = 2000, QUICK_FOR_MS = 60000;
+// 1 s when the page itself came from the saved copy: two signs in a row
+// that there is no uplink, and the desk asks three things one after
+// another before it opens (events, plan, then guests and stations).
+const QUICK_MS = window.CK_FROM_SAVED ? 1000 : 2000, QUICK_FOR_MS = 60000;
 // The service worker served this page from its saved copy: CueDeck is
 // almost certainly unreachable too (checkin-sw.js).
 let unreachableAt = window.CK_FROM_SAVED ? Date.now() : 0;

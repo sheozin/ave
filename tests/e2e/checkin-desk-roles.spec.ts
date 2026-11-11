@@ -1000,7 +1000,7 @@ test('the Terminal route is still one click away for a print station', async ({ 
   await page.getByRole('button', { name: /Setting it up from Terminal/ }).click();
   await page.locator('#ks-label').fill('Desk printer');
   await page.locator('#ks-mint').click();
-  expect(minted).toEqual({ action: 'mint', event_id: EVENT_ID, label: 'Desk printer', device_kind: 'printer' });
+  await expect.poll(() => minted).toEqual({ action: 'mint', event_id: EVENT_ID, label: 'Desk printer', device_kind: 'printer' });
   await expect(page.locator('.ks-url')).toHaveText(/install\.sh \| sh -s -- WXYZ-2345$/);
 });
 
@@ -1246,13 +1246,16 @@ test('a slow sign-in check at start (a browser just restarted) does not put an o
   expect(st.queued).toHaveLength(1);
 });
 
-test('on a router with no uplink, where requests hang, the desk reopens within seconds', async ({ page, context }) => {
+test('on a router with no uplink, where requests hang, the desk reopens within seconds', async ({ page, context, baseURL }) => {
   test.setTimeout(60000);
   await open(page, { role: 'crew' });
   await untilWorkerControls(page);
   // Nothing answers: page files and CueDeck both hang (navigator.onLine stays true).
   await context.route(/supabase\.co\//, () => {});
-  await context.route(/127\.0\.0\.1:7231\/(?!favicon)/, () => {});
+  // From baseURL, not a fixed port: CI serves on 7230, local runs on 7231, and a
+  // route for the wrong port leaves page files answering, so nothing is offline.
+  const origin = new URL(baseURL!).origin;
+  await context.route(url => url.origin === origin && url.pathname !== '/favicon.ico', () => {});
   await page.close();
   const desk = await context.newPage();
   const started = Date.now();
