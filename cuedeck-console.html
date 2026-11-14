@@ -7956,6 +7956,16 @@ async function submitSessModal() {
       // Realtime will push the new session into S.sessions automatically
       closeSessModal();
     } else {
+      // The timer, list and screens run on scheduled_*. New times must reach
+      // them too, moved by whatever delay the session already carries, or an
+      // edit during the show changes nothing on stage. Untouched times leave
+      // scheduled_* alone so a delay applied meanwhile is not overwritten.
+      const cur = S.sessions.find(x => x.id === sessModalId);
+      if (cur && (start !== hm(cur.planned_start) || end !== hm(cur.planned_end))) {
+        const offset = (sched, planned) => sched && planned ? toMins(sched) - toMins(planned) : 0;
+        fields.scheduled_start = addMinutes(start, offset(cur.scheduled_start, cur.planned_start));
+        fields.scheduled_end   = addMinutes(end,   offset(cur.scheduled_end,   cur.planned_end));
+      }
       const { error } = await sb.from('leod_sessions')
         .update(fields)
         .eq('id', sessModalId);

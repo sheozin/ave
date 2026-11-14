@@ -453,3 +453,40 @@ test.describe('Setup wizard', () => {
   });
 
 });
+
+test.describe('Session editor: times reach the running schedule', () => {
+
+  const patch = (writes: Write[]) => writes.find(w => w.method === 'PATCH')?.body as Record<string, unknown>;
+
+  test('SE1 a new end on an on-time session moves the scheduled end the timer counts to', async ({ page }) => {
+    const writes = await mockRest(page);
+    await openEditor(page);   // 10:00 to 11:00, not delayed
+    await page.locator('#smv-end').fill('10:50');
+    await page.locator('#sess-modal button.primary').click();
+    await expect(page.locator('#sess-modal')).toBeHidden();
+    expect(patch(writes)).toMatchObject({ planned_start: '10:00', planned_end: '10:50',
+                                          scheduled_start: '10:00', scheduled_end: '10:50' });
+  });
+
+  test('SE2 a delayed session keeps its delay: the new times move by the same minutes', async ({ page }) => {
+    const writes = await mockRest(page);
+    await openEditor(page, { ...PANEL, scheduled_start: '10:15:00', scheduled_end: '11:15:00' });
+    await page.locator('#smv-end').fill('10:50');
+    await page.locator('#sess-modal button.primary').click();
+    await expect(page.locator('#sess-modal')).toBeHidden();
+    expect(patch(writes)).toMatchObject({ planned_end: '10:50', scheduled_start: '10:15', scheduled_end: '11:05' });
+  });
+
+  test('SE3 an edit that leaves the times alone does not touch the running schedule', async ({ page }) => {
+    const writes = await mockRest(page);
+    await openEditor(page, { ...PANEL, scheduled_start: '10:15:00', scheduled_end: '11:15:00' });
+    await page.locator('#smv-title').fill('Panel: renamed');
+    await page.locator('#sess-modal button.primary').click();
+    await expect(page.locator('#sess-modal')).toBeHidden();
+    const body = patch(writes);
+    expect(body.title).toBe('Panel: renamed');
+    expect(body).not.toHaveProperty('scheduled_start');
+    expect(body).not.toHaveProperty('scheduled_end');
+  });
+
+});
