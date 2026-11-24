@@ -618,7 +618,7 @@ test('tickets tab: the owner connects Stripe, adds a ticket, and refunds an orde
   // Back from Stripe, connected.
   charges = true;
   await page.goto('/cuedeck-checkin-setup.html?event=' + EVENT_ID + '&step=tickets&connect=done');
-  await expect(page.locator('#tk-pay-s')).toHaveText('Connected. Ticket payments go straight to your Stripe account.');
+  await expect(page.locator('#tk-pay-s')).toContainText('Connected. Ticket payments go straight to your Stripe account. For tickets in PLN, guests can also pay with BLIK');
   await expect(page.locator('#tk-connect')).toBeHidden();
   await page.click('#tk-add');
   await page.fill('#tk-name', 'Standard');
