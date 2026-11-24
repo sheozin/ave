@@ -27,7 +27,7 @@ export type SessionView = { status: string | null; payment_status: string | null
 
 // What one Checkout session means for its order. Pure, so it is tested
 // without Stripe. 'pending': completed but the money has not cleared (a
-// delayed method). Sessions are card only, so this should not happen, but
+// delayed method). Sessions take card and BLIK, which settle at once, so this should not happen, but
 // such an order is never expired or reopened: it would orphan a payment.
 export function sessionVerdict(s: SessionView): 'paid' | 'open' | 'pending' | 'expired' {
   if (s.payment_status === 'paid' || s.payment_status === 'no_payment_required') return 'paid'
@@ -67,11 +67,23 @@ const view = (s: any): SessionView => ({
 export async function openCheckout(st: StripeClient, sb: Sb, order: Order, ctx: { code: string; eventName: string }): Promise<string> {
   const expiresAt = sessionExpiry(order.expires_at, Date.now())
   if (expiresAt === null) throw new Error('hold too short for a checkout session')
+  // Card (with Apple Pay and Google Pay) and BLIK both settle at once.
+  // Delayed methods would complete unpaid and clear after the hold. BLIK is
+  // PLN only, from 2.00 PLN, and Stripe refuses a session asking for it on
+  // an account that has not turned it on, so the owner's account is asked
+  // first. If it cannot be asked, the guest pays by card.
+  const methods = ['card']
+  if (order.currency === 'pln' && order.amount_cents >= 200) {
+    try {
+      const acct = await st.accounts.retrieve(order.stripe_account_id)
+      if (acct.capabilities?.blik_payments === 'active') methods.push('blik')
+    } catch (e) {
+      console.error('checkin-tickets: account read for BLIK failed, card only', order.id, (e as Error).message)
+    }
+  }
   const session = await st.checkout.sessions.create({
     mode: 'payment',
-    // Card (with Apple Pay and Google Pay): settles at once. Delayed methods
-    // would complete unpaid and clear after the hold.
-    payment_method_types: ['card'],
+    payment_method_types: methods,
     customer_email: order.email,
     client_reference_id: order.id,
     line_items: [{

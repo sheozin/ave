@@ -40,6 +40,7 @@ type World = {
   stripe?: { method: string; path: string; account: string | null; body: string }[]
   stripeSession?: Row
   stripeSessions?: Record<string, Row>
+  stripeCapabilities?: Record<string, string> | 'fail'
 }
 let world: World
 
@@ -103,7 +104,10 @@ globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) =>
     if (method === 'GET' && p.startsWith('/v1/checkout/sessions/')) return reply(200, world.stripeSessions?.[p.split('/').pop()!] ?? world.stripeSession ?? { id: p.split('/').pop(), object: 'checkout.session', status: 'open', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/x', client_reference_id: ORDER })
     if (method === 'POST' && p === '/v1/refunds') return reply(200, { id: 're_1', object: 'refund', status: 'succeeded' })
     if (method === 'POST' && p === '/v1/accounts') return reply(200, { id: 'acct_test123456', object: 'account' })
-    if (method === 'GET' && p.startsWith('/v1/accounts/')) return reply(200, { id: p.split('/').pop(), object: 'account', charges_enabled: true, details_submitted: true, default_currency: 'eur' })
+    if (method === 'GET' && p.startsWith('/v1/accounts/')) {
+      if (world.stripeCapabilities === 'fail') return reply(500, { error: { message: 'stub: account read failed' } })
+      return reply(200, { id: p.split('/').pop(), object: 'account', charges_enabled: true, details_submitted: true, default_currency: 'eur', capabilities: world.stripeCapabilities ?? { card_payments: 'active' } })
+    }
     if (method === 'POST' && p === '/v1/account_links') return reply(200, { object: 'account_link', url: 'https://connect.stripe.com/setup/s/stub' })
     return reply(404, { error: { message: 'stub: no stripe route ' + method + ' ' + p } })
   }
@@ -1398,6 +1402,39 @@ Deno.test(`${RG} confirm: a paid ticket opens Checkout on the owner's account`, 
   const exp = Number(/expires_at=(\d+)/.exec(b)![1])
   assert(exp === Math.floor(Date.parse(String(world.tables.leod_checkin_web_orders[0].expires_at)) / 1000) - 60, 'expiry ' + exp)
   assert(world.tables.leod_checkin_web_orders[0].checkout_session_id === 'cs_test_1', 'session not recorded')
+})
+// BLIK: offered on PLN tickets of 2.00 or more, and only when the owner's
+// account has it active (Stripe refuses a session asking for a method the
+// account cannot take).
+async function checkoutMethods(order: Row, caps: World['stripeCapabilities']): Promise<string> {
+  regSetup()
+  world.stripeCapabilities = caps
+  world.rpcResult.checkin_web_confirm = { status: 'payment_required', order_id: ORDER }
+  world.tables.leod_checkin_web_orders = [paidOrder({ status: 'open', checkout_session_id: null, payment_intent: null,
+    expires_at: new Date(Date.now() + 35 * 60000).toISOString(), ...order })]
+  const r = await guest({ action: 'confirm', code: 'VTQBZ3ENFV', token: LINK_TOKEN })
+  assert(r.status === 200 && r.body.status === 'payment', JSON.stringify(r))
+  const b = decodeURIComponent(world.stripe!.find(x => x.path === '/v1/checkout/sessions')!.body)
+  return [...b.matchAll(/payment_method_types\[\d+\]=(\w+)/g)].map(m => m[1]).join(',')
+}
+Deno.test(`${RG} confirm: a PLN ticket offers BLIK when the owner's account has it`, async () => {
+  const m = await checkoutMethods({ currency: 'pln', amount_cents: 15000 }, { card_payments: 'active', blik_payments: 'active' })
+  assert(m === 'card,blik', m)
+})
+Deno.test(`${RG} confirm: no BLIK when the account has not turned it on`, async () => {
+  const m = await checkoutMethods({ currency: 'pln', amount_cents: 15000 }, { card_payments: 'active', blik_payments: 'inactive' })
+  assert(m === 'card', m)
+})
+Deno.test(`${RG} confirm: no BLIK below 2.00 PLN or in another currency`, async () => {
+  const caps = { card_payments: 'active', blik_payments: 'active' }
+  assert(await checkoutMethods({ currency: 'pln', amount_cents: 199 }, caps) === 'card', 'below minimum')
+  assert(await checkoutMethods({ currency: 'eur', amount_cents: 4900 }, caps) === 'card', 'eur')
+  // EUR never needs the account read.
+  assert(!world.stripe!.some(x => x.method === 'GET' && x.path.startsWith('/v1/accounts/')), 'account read for eur')
+})
+Deno.test(`${RG} confirm: if Stripe will not say, the guest still pays by card`, async () => {
+  const m = await checkoutMethods({ currency: 'pln', amount_cents: 15000 }, 'fail')
+  assert(m === 'card', m)
 })
 Deno.test(`${RG} confirm: back from Stripe, a paid order shows the ticket`, async () => {
   regSetup()
