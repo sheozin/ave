@@ -2178,7 +2178,7 @@ async function openTickets() {
 function renderTickets() {
   if (!TIX) return;
   const p = TIX.payout, paidTypes = TIX.types.filter(t => t.price_cents > 0 && t.active);
-  $('tk-pay-s').textContent = p.charges_enabled ? 'Connected. Ticket payments go straight to your Stripe account.'
+  $('tk-pay-s').textContent = p.charges_enabled ? 'Connected. Ticket payments go straight to your Stripe account. For tickets in PLN, guests can also pay with BLIK once you turn it on under Payment methods in your Stripe dashboard.'
     : p.connected ? (p.details_submitted ? 'Stripe is reviewing your account. Paid tickets go on sale as soon as it is approved.' : 'Stripe setup is not finished yet. Continue where you left off.')
     : TIX.is_owner ? 'Connect your Stripe account to sell paid tickets. Free tickets work without it.' : 'The event owner connects their Stripe account to sell paid tickets.';
   $('tk-connect').hidden = !TIX.is_owner || p.charges_enabled;
